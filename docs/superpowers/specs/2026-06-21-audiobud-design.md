@@ -8,7 +8,7 @@
 
 ## Summary
 
-AudioBud is a local global dictation app for Windows (with macOS/Linux following from the upstream codebase). You press a hotkey, speak, and the transcribed text is typed into whatever app currently has focus. It replaces the Windows built-in Win+H voice typing with a faster, private, local speech-to-text engine. Audio never leaves the machine; transcription runs on-device.
+AudioBud is a local global dictation app for Windows (with macOS/Linux following from the upstream codebase). You press a hotkey, speak, and the transcribed text is typed into the focused app — standard editable text fields in normal-privilege apps (see "Injection limits" for the cases Windows blocks). It replaces the Windows built-in Win+H voice typing with a faster, private, local speech-to-text engine. Audio never leaves the machine; transcription runs on-device.
 
 AudioBud is a rebranded fork of [Handy](https://github.com/cjpais/Handy) (cjpais/Handy, MIT, Tauri 2 + Rust). We adopt Handy's working pipeline rather than rebuild it, then rebrand, repoint its infrastructure off the upstream's servers, ship two STT backends (Parakeet V3, Whisper large-v3-turbo), and wire up the full repo treatment we use across the jawn projects.
 
@@ -16,7 +16,7 @@ This is a desktop dictation tool, not a terminal. It has no PTY, no xterm, no sh
 
 ## Goals
 
-- Press a hotkey anywhere in Windows, speak, get accurate text typed into the focused app.
+- Press a hotkey anywhere in Windows, speak, get accurate text typed into the focused app (standard editable fields; see "Injection limits").
 - On-device transcription: no audio ever leaves the machine, no API keys, no per-use cost. Runs fully offline after the one-time first-run model download (see "Model delivery").
 - Two STT engines selectable in settings: Parakeet V3 and Whisper large-v3-turbo (default decided by a Windows smoke benchmark — see "STT backends").
 - User-customizable shortcuts, with a reliable working default and an opt-in path to use Win+H.
@@ -47,6 +47,13 @@ The Codex review surfaced four decisions that change implementation. These are f
 3. **Model delivery.** Download the default model on first run (smaller installer, needs network once) — recommend; or bundle the default model in the installer (larger installer, works offline immediately).
 4. **Scope of this loop.** Confirm the loop targets milestone A (working local prototype) and that packaging/public-release (milestones B/C) follow after. Recommend yes.
 
+## Locked decisions (one-way doors)
+
+These are one-way doors per house rules, so they are decided here (with rationale) rather than left floating in Risks. Surfaced in the review for your override; if unobjected, they are locked before the first build.
+
+- **Bundle identifier: `tech.amditis.audiobud`.** Keys the app-data dir, single-instance lock, autostart registration, and updater install path — changing it after release strands existing installs. Rationale: matches the `amditis.tech` namespace, distinct from `com.pais.handy`. This is the last point it can change cheaply (before any install exists), so it is set now.
+- **Model host: Cloudflare R2 `pi-transfer` (mirror), with HuggingFace originals as fallback.** Rationale: we control uptime, the required model attribution travels with the mirrored blobs, and R2 is already provisioned for cross-node transfer. HF originals stay configured as a fallback URL so a mirror outage degrades gracefully rather than breaking first-run download. (Milestone A uses the existing upstream/HF URLs unchanged; the R2 mirror + `MODEL_BASE_URL` repointing lands in milestone B — see Milestones.)
+
 ## Background: why fork Handy
 
 Global dictation is a solved problem; the work is integration and polish, not invention. Handy is the best-fit base:
@@ -63,7 +70,7 @@ Two background research agents (codebase + web/repo) ran on 2026-06-21. Full tra
 
 - **Build prerequisites (Windows, RTX 4080):** Rust stable MSVC, Bun (Handy's only documented package manager), VS C++ Build Tools, Vulkan SDK (hard runtime dep — see Handy issue #99), WebView2. End users also need the VC++ x64 redistributable at runtime (Handy issue #1527: `MSVCP140.dll` crash without it) — installer must detect/install it (see "Packaging"). No git submodules, but `Cargo.toml` pins git forks (`rdev` from rustdesk-org, `vad-rs`/`rodio` from cjpais) and a patched Tauri runtime via `[patch.crates-io]` (`cjpais/tauri.git` branch `handy-2.10.2`). These pins must be preserved or the build breaks. Build: `bun install` then `bun run tauri build` (produces MSI + NSIS .exe + updater artifacts).
 
-- **The Win+H constraint:** rdev/handy-keys cannot cleanly claim Super+H on Windows. handy-keys does map `win`/`super`/`meta` to a CMD modifier flag, but Handy's own issue #917 documents the exact failure: with a `Win+key` hotkey the bare WIN keydown propagates before the combo is recognized, and on release Windows sees a lone WIN press and opens the Start menu. The low-level hook can suppress the matched keystroke but cannot retroactively swallow the lone WIN. Disabling native Win+H via `HKCU\Software\Microsoft\Input\Settings\IsVoiceTypingKeyEnabled=0` only frees the shortcut from the OS voice-typing handler; it does not fix the Start-menu-on-WIN-release behavior. The clean fix is an AutoHotkey v2 technique (`~LWin::Send("{Blind}{vkE8}")` to absorb the lone WIN, plus `#h::Run(...)` to bind Win+H), which can be compiled to a standalone helper exe so users need not install AHK.
+- **The Win+H constraint:** rdev/handy-keys cannot cleanly claim Super+H on Windows. handy-keys does map `win`/`super`/`meta` to a CMD modifier flag, but Handy's own issue #917 documents the exact failure: with a `Win+key` hotkey the bare WIN keydown propagates before the combo is recognized, and on release Windows sees a lone WIN press and opens the Start menu. The low-level hook can suppress the matched keystroke but cannot retroactively swallow the lone WIN. Disabling native Win+H via `HKCU\Software\Microsoft\Input\Settings\IsVoiceTypingKeyEnabled=0` only frees the shortcut from the OS voice-typing handler; it does not fix the Start-menu-on-WIN-release behavior. The known-working technique is the AutoHotkey v2 pattern (`~LWin::Send("{Blind}{vkE8}")` to absorb the lone WIN, plus `#h::Run(...)` to bind Win+H). We reimplement this pattern as a Win32 `WH_KEYBOARD_LL` hook in Rust (the same OS mechanism AHK uses) to avoid AHK's GPLv2 license; AHK stays an optional user-installed script, never bundled.
 
 - **Rebrand surface (one-way doors flagged):** the bundle `identifier` in `tauri.conf.json` (`com.pais.handy` -> e.g. `tech.amditis.audiobud`) is a one-way door — it keys the app-data dir, single-instance lock, autostart registration, and updater install path. The updater needs our own minisign keypair (`bun tauri signer generate`) and a repointed `endpoints` URL; the upstream `signCommand` (cjpais's Azure Trusted Signing) must be removed. Model downloads are hardcoded to `https://blob.handy.computer/...` across 15+ URLs in `src-tauri/src/managers/model.rs` with no base-URL constant — we introduce a `MODEL_BASE_URL` const and mirror the model blobs to our own host (Cloudflare R2 `pi-transfer`) or point at the HuggingFace originals. About-page links (`AboutSettings.tsx`), tray tooltip (`tray.rs`), window title (`lib.rs`), crate name (`Cargo.toml`), icons, NSIS template, and locale JSON all carry Handy branding. No telemetry/analytics exist in Handy — outbound calls are only model downloads, the updater endpoint, and donate/GitHub links; repointing those three makes AudioBud self-contained.
 
@@ -111,11 +118,13 @@ Win+H cannot be cleanly owned by the in-app hotkey backend (research above; Hand
 
 Three options:
 
-1. **Reliable default + one-click Win+H opt-in (recommended).** Ship `Ctrl+Alt+Space` as the working default (rdev handles it cleanly). In settings, offer "Replace Windows Win+H dictation" that (a) writes `IsVoiceTypingKeyEnabled=0`, and (b) installs and runs a bundled, compiled helper (AHK v2 logic compiled to an exe, no AHK install needed) that neutralizes the lone WIN and routes Win+H to AudioBud via `--toggle-transcription`. Reversible toggle.
-2. **Win+H by default via the helper.** Same helper, enabled out of the box. Higher first-run friction (registry write + helper process + a sign-out/reboot for the registry change to take) and a background hook process always running.
+1. **Reliable default + one-click Win+H opt-in (recommended).** Ship `Ctrl+Alt+Space` as the working default (rdev handles it cleanly). In settings, offer "Replace Windows Win+H dictation" that (a) writes `IsVoiceTypingKeyEnabled=0`, and (b) enables the Win+H hook that neutralizes the lone WIN and routes Win+H to AudioBud via `--toggle-transcription`. Reversible toggle.
+2. **Win+H by default via the hook.** Same hook, enabled out of the box. Higher first-run friction (registry write + a sign-out/reboot for the registry change to take) and an always-on keyboard hook.
 3. **No Win+H, customizable only.** Ship `Ctrl+Alt+Space`, let users bind anything rdev supports, document why Win+H is special.
 
-Codex finding 2 (blocker): the Win+H helper is not a small toggle — it is a compiled helper exe with install, autostart, uninstall, and crash-recovery behavior, plus a registry edit that needs a sign-out to take effect. Therefore Win+H is **not** part of the prototype (milestone A). Milestone A ships `Ctrl+Alt+Space` only. The chosen Win+H option is built and hardened in milestone B (packaging), where the helper's full lifecycle is prototyped and smoke-tested before it ships. This keeps the prototype reliable and quarantines the risky surface.
+**The Win+H hook is implemented in Rust/Win32, not compiled AutoHotkey (Codex finding 3).** AutoHotkey is GPLv2; compiling a script with Ahk2Exe embeds the GPLv2 interpreter, and distributing that exe would pull GPLv2 obligations into our otherwise-MIT product. Instead we replicate the lone-WIN-absorb technique directly with a Win32 low-level keyboard hook (`WH_KEYBOARD_LL`) — the same mechanism AHK itself uses — either inside the AudioBud process or as a small first-party Rust helper exe, both MIT. AutoHotkey remains only as an optional power-user script that a user installs themselves (their GPL use, not our distribution), documented in the manual. Milestone B must prove the Rust hook actually defeats the Start-menu-on-WIN-release behavior on this machine; if it cannot, fall back to documenting the user-installed AHK script rather than bundling it.
+
+Codex finding 2 (blocker): the Win+H hook is not a small toggle — it is a hook with install, autostart, uninstall, and crash-recovery behavior, plus a registry edit that needs a sign-out to take effect, and a background hook can trip antivirus/SmartScreen. Therefore Win+H is **not** part of the prototype (milestone A). Milestone A ships `Ctrl+Alt+Space` only. The chosen Win+H option is built and hardened in milestone B (packaging), where the hook's full lifecycle (install/autostart/uninstall/crash) and an antivirus/SmartScreen smoke pass are verified before it ships. This keeps the prototype reliable and quarantines the risky surface.
 
 ## STT backends
 
@@ -156,8 +165,8 @@ Models (Codex finding 4 — must not be skipped if we mirror/redistribute):
 
 The repo deliverables are too wide for a single prototype loop. Three milestones:
 
-- **Milestone A — working local prototype (this loop's target).** Detached repo with upstream remote; unmodified upstream build verified (`bun tauri dev`); minimal rebrand to run as AudioBud (identifier, productName, window title, crate name); `Ctrl+Alt+Space` default hotkey; both engines wired and benchmarked, default chosen; model download-on-first-run working with integrity check; text injection verified into a focused app; seam-level tests passing; the Windows manual smoke gate passing. No Win+H helper, no signing, no docs site, no release automation yet.
-- **Milestone B — packaging.** `MODEL_BASE_URL` + model host (R2 or HF), `MODEL_NOTICES.md`; the chosen Win+H option and its helper lifecycle (install/autostart/uninstall/crash), hardened and smoke-tested; VC++ redist detection/install in the installer; minisign updater key + repointed endpoints; updater end-to-end test; CHANGELOG seeded.
+- **Milestone A — working local prototype (this loop's target).** Detached repo with upstream remote; unmodified upstream build verified (`bun tauri dev`); minimal rebrand to run as AudioBud (identifier, productName, window title, crate name); `Ctrl+Alt+Space` default hotkey; both engines benchmarked on this machine and the default chosen. Models are fetched via Handy's existing downloader against the existing upstream/HF URLs (no repointing yet — `MODEL_BASE_URL`, the R2 mirror, and added integrity tests are milestone B); text injection verified into a focused editor; seam-level tests passing; the milestone-A portion of the Windows manual smoke gate passing. No own model host, no Win+H helper, no signing, no docs site, no release automation yet.
+- **Milestone B — packaging.** `MODEL_BASE_URL` + R2 mirror (HF fallback) + `MODEL_NOTICES.md`; the chosen Win+H option and its Rust/Win32 hook lifecycle (install/autostart/uninstall/crash), hardened and smoke-tested including an antivirus/SmartScreen pass; VC++ redist detection/install in the installer; minisign updater key + repointed endpoints; updater end-to-end test; CHANGELOG seeded.
 - **Milestone C — public release.** README/NOTICE/CLAUDE.md/.claude rules; docs GitHub Pages marketing site; `.github` CI (light) + release workflow (tag-only); branch protection on `main`; signing posture per decision 2; first tagged draft release reviewed and published by Joe.
 
 The `/loop` runs until milestone A is met (a working, tested prototype). B and C are separate, sequenced work after you review the prototype.
@@ -181,7 +190,7 @@ Mirrors the AudioBash conventions, adapted for Rust/Tauri/Bun.
 - Tech stack: Rust/Tauri 2 backend, React + TypeScript frontend, `transcribe-rs` (Vulkan + DirectML), Bun.
 - Directory map (Handy's layout + our docs/.github/.claude additions).
 - Build/run: `bun install`, `bun tauri dev`, `bun run tauri build`; Windows prereqs (Vulkan SDK, VC++ redist, VS Build Tools, WebView2).
-- The Win+H mechanism and the helper (registry key + compiled helper exe), and its lifecycle.
+- The Win+H mechanism and the Rust/Win32 hook (registry key + `WH_KEYBOARD_LL` hook, no bundled AHK), and its lifecycle.
 - Injection limits (elevated apps, password fields, RDP, clipboard monitors).
 - Model host: `MODEL_BASE_URL`, where blobs live, integrity checks, model licenses.
 - Updater: minisign key, endpoints, signing secrets, and the Authenticode distinction.
@@ -200,7 +209,7 @@ Mirrors the AudioBash conventions, adapted for Rust/Tauri/Bun.
 CI is split so day-to-day work runs cheap and the expensive cross-platform build only fires on releases. GitHub bills macOS runners at 10x and Windows at 2x a Linux minute, so: light checks on every PR/push (Linux only), heavy installer build on tags only.
 
 - `workflows/ci.yml` (light, every PR + push to `main`): runs on `ubuntu-latest` (1x). Steps: `cargo fmt --check`, `cargo clippy -- -D warnings` (lint-only; no full Tauri build), frontend `bun run lint` + typecheck, and fast `cargo test` / `bun test` for the units we touch. Concurrency group cancels superseded runs. Path filters skip CI for docs-only changes. Target: ~1-3 Linux minutes per PR.
-- `workflows/release.yml` (heavy, tags `v*` only): `tauri-action@v0` matrix (Windows first; macOS/Linux as upstream supports), Vulkan SDK install, long-path handling, `releaseDraft: true`, `includeUpdaterJson: true`, signing secrets. The only workflow that does a full Tauri build; runs only when we cut a release.
+- `workflows/release.yml` (heavy, tags `v*` only): for v1 the matrix is **Windows-only** (the macOS/Linux matrix entries are present but commented-out placeholders, enabled per-platform only after that platform passes its own smoke gate — consistent with the cross-platform risk note). `tauri-action@v0`, Vulkan SDK install, long-path handling, `releaseDraft: true`, `includeUpdaterJson: true`, signing secrets. The only workflow that does a full Tauri build; runs only when we cut a release.
 - `FUNDING.yml` — GitHub Sponsors (jamditis) + Venmo.
 - Issue/PR templates.
 
@@ -291,11 +300,18 @@ Reviewed 2026-06-21, `gpt-5.5`, high reasoning. Twelve findings; resolutions:
 11. (minor) cross-platform scope -> non-Windows releases disabled until each has a smoke pass (see "Risks").
 12. (minor) tests miss real hotkey/helper/injection/download -> added the Windows manual smoke gate with exact cases.
 
+Pass 2 (re-review of the incorporated spec) raised five more; resolutions:
+
+1. (major) two one-way doors (identifier, model host) still floating in Risks -> added "Locked decisions" locking `tech.amditis.audiobud` and R2-with-HF-fallback, with rationale.
+2. (major) Milestone A needs models but host work is in B -> clarified A uses Handy's existing upstream/HF model URLs; only `MODEL_BASE_URL`/R2/integrity tests are B.
+3. (major) compiled-AHK helper is GPLv2 -> Win+H hook reimplemented as a Rust/Win32 `WH_KEYBOARD_LL` hook (MIT); AHK only as an optional user-installed script; added AV/SmartScreen smoke pass.
+4. (minor) summary still said "whatever app has focus" -> qualified top-level claims to "standard editable fields" and pointed to Injection limits.
+5. (minor) release.yml still implied mac/linux -> v1 release workflow made explicitly Windows-only with commented placeholders.
+
 ## Risks and open questions
 
 - **The four open decisions** above (Win+H default, signing posture, model delivery, loop scope).
-- **Model hosting (one-way-ish):** R2 `pi-transfer` vs HuggingFace originals. R2 gives control/uptime and lets attribution travel with the blobs; HF avoids hosting cost. Lean R2; decided in milestone B.
-- **Identifier (one-way door):** propose `tech.amditis.audiobud`. Confirm before first build; it keys app-data/updater paths.
+- **Two locked one-way doors** (identifier, model host) are in "Locked decisions" — surfaced for override, otherwise set before first build.
 - **Marketing domain:** `audiobud.app` vs a path under an existing domain. Two-way door; decide at docs-site time.
 - **Upstream patched-Tauri pin:** Handy depends on a forked Tauri runtime branch; bumping Tauri later inherits that maintenance. Acceptable for v1; noted.
 - **Cross-platform scope:** v1 is Windows-only (Win+H, registry, DirectML, VC++ redist are Windows-specific). macOS/Linux release jobs stay disabled until each platform passes its own smoke gate (Codex finding 11).
