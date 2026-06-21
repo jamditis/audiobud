@@ -18,6 +18,7 @@ use serde::Serialize;
 use specta::Type;
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_autostart::ManagerExt;
+use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
 use crate::settings::APPLE_INTELLIGENCE_DEFAULT_MODEL_ID;
@@ -678,10 +679,38 @@ pub fn change_paste_delay_ms_setting(app: AppHandle, ms: u64) -> Result<(), Stri
     Ok(())
 }
 
+/// The external-script paste method runs an arbitrary program with the
+/// transcript as an argument (see `clipboard::paste_via_external_script`), so
+/// arming it - selecting the method or setting a non-empty script path -
+/// requires an out-of-band confirmation the webview cannot satisfy on its own.
+/// Clearing the path (None/empty) is always safe and needs no prompt.
+pub(crate) fn external_script_path_requires_confirmation(path: &Option<String>) -> bool {
+    matches!(path, Some(p) if !p.trim().is_empty())
+}
+
+/// Show a native, modal OK/Cancel dialog and return whether the user confirmed.
+///
+/// `MessageDialog::blocking_show` parks the calling thread until the user
+/// answers, so it must never run on the webview/main thread. We dispatch it onto
+/// the blocking pool (same pattern as the transcription and accelerator commands)
+/// and await the result; a join error fails closed (treated as "not confirmed").
+async fn confirm_external_script(app: &AppHandle, message: String) -> bool {
+    let app = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        app.dialog()
+            .message(message)
+            .title("AudioBud security check")
+            .kind(MessageDialogKind::Warning)
+            .buttons(MessageDialogButtons::OkCancel)
+            .blocking_show()
+    })
+    .await
+    .unwrap_or(false)
+}
+
 #[tauri::command]
 #[specta::specta]
-pub fn change_paste_method_setting(app: AppHandle, method: String) -> Result<(), String> {
-    let mut settings = settings::get_settings(&app);
+pub async fn change_paste_method_setting(app: AppHandle, method: String) -> Result<(), String> {
     let parsed = match method.as_str() {
         "ctrl_v" => PasteMethod::CtrlV,
         "direct" => PasteMethod::Direct,
@@ -694,6 +723,19 @@ pub fn change_paste_method_setting(app: AppHandle, method: String) -> Result<(),
             PasteMethod::CtrlV
         }
     };
+    if matches!(parsed, PasteMethod::ExternalScript) {
+        let message = "AudioBud's external-script paste method runs your configured \
+            external program every time it pastes a transcription. Only enable this \
+            if you placed that script yourself and trust it. Enable it?"
+            .to_string();
+        if !confirm_external_script(&app, message).await {
+            info!("External-script paste method not confirmed; leaving paste method unchanged");
+            // Err (not Ok) so the frontend rolls back its optimistic selection
+            // instead of showing the unpersisted method as saved.
+            return Err("External-script paste was not enabled (confirmation declined)".to_string());
+        }
+    }
+    let mut settings = settings::get_settings(&app);
     settings.paste_method = parsed;
     settings::write_settings(&app, settings);
     Ok(())
@@ -735,10 +777,24 @@ pub fn change_typing_tool_setting(app: AppHandle, tool: String) -> Result<(), St
 
 #[tauri::command]
 #[specta::specta]
-pub fn change_external_script_path_setting(
+pub async fn change_external_script_path_setting(
     app: AppHandle,
     path: Option<String>,
 ) -> Result<(), String> {
+    if external_script_path_requires_confirmation(&path) {
+        let script = path.as_deref().unwrap_or_default();
+        let message = format!(
+            "AudioBud will run this program every time it pastes a transcription:\n\n\
+            {script}\n\n\
+            Only allow this if you placed this script yourself and trust it. Allow it to run?"
+        );
+        if !confirm_external_script(&app, message).await {
+            info!("External-script path not confirmed; leaving script path unchanged");
+            // Err (not Ok) so the frontend rolls back its optimistic value
+            // instead of showing the unpersisted path as saved.
+            return Err("External-script path was not set (confirmation declined)".to_string());
+        }
+    }
     let mut settings = settings::get_settings(&app);
     settings.external_script_path = path;
     settings::write_settings(&app, settings);
@@ -1154,4 +1210,30 @@ pub async fn get_available_accelerators() -> crate::managers::transcription::Ava
     tauri::async_runtime::spawn_blocking(crate::managers::transcription::get_available_accelerators)
         .await
         .expect("get_available_accelerators panicked")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn external_script_path_requires_confirmation_when_armed() {
+        assert!(external_script_path_requires_confirmation(&Some(
+            "paste.ps1".to_string()
+        )));
+        assert!(external_script_path_requires_confirmation(&Some(
+            "C:\\tools\\paste.exe".to_string()
+        )));
+    }
+
+    #[test]
+    fn external_script_path_requires_no_confirmation_when_cleared() {
+        assert!(!external_script_path_requires_confirmation(&None));
+        assert!(!external_script_path_requires_confirmation(&Some(
+            String::new()
+        )));
+        assert!(!external_script_path_requires_confirmation(&Some(
+            "   ".to_string()
+        )));
+    }
 }
