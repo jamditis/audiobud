@@ -986,4 +986,16 @@ mod tests {
         assert!(!out.contains("secret"));
         assert!(out.contains("[REDACTED]"));
     }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn windows_transcribe_default_is_ctrl_alt_space() {
+        let settings = get_default_settings();
+        let binding = settings
+            .bindings
+            .get("transcribe")
+            .expect("transcribe binding should exist");
+        assert_eq!(binding.default_binding, "ctrl+alt+space");
+        assert_eq!(binding.current_binding, "ctrl+alt+space");
+    }
 }
