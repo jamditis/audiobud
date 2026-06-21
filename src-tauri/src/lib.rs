@@ -165,6 +165,20 @@ fn initialize_core_logic(app_handle: &AppHandle) {
     app_handle.manage(transcription_manager.clone());
     app_handle.manage(history_manager.clone());
 
+    // Asset-protocol scope: the static config scope is narrowed to the
+    // $APPDATA recordings dir, but recordings actually live under a
+    // portable-aware data dir (next to the exe in portable mode). Allow exactly
+    // the resolved recordings directory at runtime so playback works in both
+    // modes without re-opening the asset protocol to the whole filesystem.
+    // Recording file names are also validated in HistoryManager before they
+    // reach convertFileSrc, so nothing outside this dir can be requested.
+    if let Err(e) = app_handle
+        .asset_protocol_scope()
+        .allow_directory(history_manager.recordings_dir(), true)
+    {
+        log::warn!("Failed to allow recordings dir in asset-protocol scope: {e}");
+    }
+
     // Note: Shortcuts are NOT initialized here.
     // The frontend is responsible for calling the `initialize_shortcuts` command
     // after permissions are confirmed (on macOS) or after onboarding completes.
