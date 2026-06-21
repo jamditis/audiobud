@@ -72,11 +72,28 @@ milestone-A security pass (TDD, commits noted inline); the sub-threshold ones ar
       `use super::*;` in its test module (warns on every `cargo test`/`clippy`). Trivial; remove or `#[allow]`.
       Inherited from upstream; surfaces once CI runs clippy with warnings-as-errors.
 
-- [ ] **CI - `bun test` (bare) collides with the Playwright specs.** `tests/app.spec.ts` calls
-      `test.describe`, which Bun's built-in runner picks up and errors on; the unit tests live in `scripts/`
-      and `src/`. There is no `test` script in `package.json`. Until CI lands, run unit tests with
-      `bun test scripts src`. Fix in #30 (CI): add a `test` script scoped to `scripts src` and keep
-      Playwright on `test:playwright`, so a bare `bun test` does not fail.
+- [x] **CI - `bun test` (bare) collides with the Playwright specs.** Fixed in the CI bootstrap
+      (`9c7e843`). Added a `test` script scoped to `scripts src`; Playwright stays on `test:playwright`,
+      so a bare `bun test` no longer trips on `tests/app.spec.ts`. CI runs `bun run test`.
+
+### Milestone B (release pipeline + native packaging CI)
+
+Surfaced by the Codex 5.4 low review of the CI bootstrap (2026-06-21). The CI bootstrap (`9c7e843`)
+removed the inherited cjpais release/build workflows. That is deliberate for milestone A (local
+prototype, no releases). These rebuild in milestone B with AudioBud's own provenance - do not restore
+the cjpais versions (they carry upstream's signing identity + updater feed, the provenance finding above).
+
+- [ ] **Release + updater pipeline (was inherited `release.yml`).** Milestone A ships no installers, so
+      the cjpais release workflow was removed. Milestone B builds a fresh signed-release + `latest.json`
+      updater pipeline using AudioBud's Authenticode/Tauri signing identity (pairs with the provenance
+      item above: `tauri.conf.json` `signCommand` + updater `pubkey`/`endpoints`).
+
+- [ ] **Native build/packaging validation in CI (was inherited `build.yml`/`main-build.yml`).** The
+      current `ci.yml` runs `cargo test` against the mock transcription backend, so it does not compile
+      the real native deps (whisper/Vulkan, ONNX) or run `tauri build`. A Cargo.toml/native-dep or
+      packaging regression could merge unseen. Covered today by local dev builds (`audiobud-build.bat`)
+      and the manual Windows smoke gate. Milestone B adds a Windows `tauri build` (or at least a real
+      `cargo build` with the Vulkan SDK) job so packaging regressions are caught in CI.
 
 ### Codex local review (pre-PR, 2026-06-21)
 
