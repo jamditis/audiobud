@@ -732,7 +732,9 @@ pub async fn change_paste_method_setting(app: AppHandle, method: String) -> Resu
             info!("External-script paste method not confirmed; leaving paste method unchanged");
             // Err (not Ok) so the frontend rolls back its optimistic selection
             // instead of showing the unpersisted method as saved.
-            return Err("External-script paste was not enabled (confirmation declined)".to_string());
+            return Err(
+                "External-script paste was not enabled (confirmation declined)".to_string(),
+            );
         }
     }
     let mut settings = settings::get_settings(&app);

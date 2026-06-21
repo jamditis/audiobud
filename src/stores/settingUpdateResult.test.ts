@@ -12,7 +12,9 @@ describe("settingUpdateError", () => {
   });
 
   test("falls back to a generic message when error is empty or missing", () => {
-    expect(settingUpdateError({ status: "error" })).toBe("Setting was not saved");
+    expect(settingUpdateError({ status: "error" })).toBe(
+      "Setting was not saved",
+    );
     expect(settingUpdateError({ status: "error", error: "" })).toBe(
       "Setting was not saved",
     );
