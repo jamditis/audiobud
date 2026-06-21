@@ -1,0 +1,79 @@
+name: CI
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend:
+    name: Frontend (lint, format, types, unit tests)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Check translation consistency
+        run: bun run check:translations
+
+      - name: Lint
+        run: bun run lint
+
+      - name: Prettier + cargo fmt check
+        run: bun run format:check
+
+      - name: Typecheck
+        run: bunx tsc --noEmit
+
+      - name: Unit tests
+        run: bun run test
+
+  rust-tests:
+    name: Rust tests (mock transcription, no GPU)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev libasound2-dev libssl-dev libgtk-layer-shell-dev
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./src-tauri -> target"
+
+      - name: Use mock TranscriptionManager (CI only)
+        working-directory: src-tauri
+        run: |
+          # Swap to the mock adapter so cargo test does not compile whisper/Vulkan/ONNX.
+          cp src/managers/transcription_mock.rs src/managers/transcription.rs
+          sed -i '/^transcribe-rs/d' Cargo.toml
+
+      - name: Run Rust tests
+        working-directory: src-tauri
+        run: cargo test
+
+  secret-scan:
+    name: Secret scan (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
