@@ -764,6 +764,14 @@ pub fn get_default_settings() -> AppSettings {
         },
     );
 
+    // Default engine: Parakeet V3 on Windows (milestone-A benchmark winner, see
+    // bench/RESULTS.md). Other platforms keep upstream's empty default, which opens
+    // the model picker on first run.
+    #[cfg(target_os = "windows")]
+    let default_model = "parakeet-tdt-0.6b-v3";
+    #[cfg(not(target_os = "windows"))]
+    let default_model = "";
+
     AppSettings {
         bindings,
         push_to_talk: true,
@@ -773,7 +781,7 @@ pub fn get_default_settings() -> AppSettings {
         start_hidden: default_start_hidden(),
         autostart_enabled: default_autostart_enabled(),
         update_checks_enabled: default_update_checks_enabled(),
-        selected_model: "".to_string(),
+        selected_model: default_model.to_string(),
         always_on_microphone: false,
         selected_microphone: None,
         clamshell_microphone: None,
@@ -997,5 +1005,14 @@ mod tests {
             .expect("transcribe binding should exist");
         assert_eq!(binding.default_binding, "ctrl+alt+space");
         assert_eq!(binding.current_binding, "ctrl+alt+space");
+    }
+
+    // Default engine chosen from the milestone-A benchmark (see bench/RESULTS.md):
+    // Parakeet V3 is the smallest model that transcribes reliably on the DirectML path.
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn windows_default_model_is_parakeet_v3() {
+        let settings = get_default_settings();
+        assert_eq!(settings.selected_model, "parakeet-tdt-0.6b-v3");
     }
 }
