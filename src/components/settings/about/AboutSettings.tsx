@@ -29,7 +29,7 @@ export const AboutSettings: React.FC = () => {
 
   const handleDonateClick = async () => {
     try {
-      await openUrl("https://handy.computer/donate");
+      await openUrl("https://github.com/sponsors/jamditis");
     } catch (error) {
       console.error("Failed to open donate link:", error);
     }
@@ -66,7 +66,7 @@ export const AboutSettings: React.FC = () => {
           <Button
             variant="secondary"
             size="md"
-            onClick={() => openUrl("https://github.com/cjpais/Handy")}
+            onClick={() => openUrl("https://github.com/jamditis/audiobud")}
           >
             {t("settings.about.sourceCode.button")}
           </Button>
@@ -77,16 +77,56 @@ export const AboutSettings: React.FC = () => {
       </SettingsGroup>
 
       <SettingsGroup title={t("settings.about.acknowledgments.title")}>
-        <SettingContainer
-          title={t("settings.about.acknowledgments.whisper.title")}
-          description={t("settings.about.acknowledgments.whisper.description")}
-          grouped={true}
-          layout="stacked"
-        >
-          <div className="text-sm text-mid-gray">
-            {t("settings.about.acknowledgments.whisper.details")}
-          </div>
-        </SettingContainer>
+        {[
+          {
+            key: "handy",
+            links: [
+              { label: "handy.computer", url: "https://handy.computer" },
+              { label: "cjpais", url: "https://github.com/cjpais" },
+            ],
+          },
+          {
+            key: "parakeet",
+            links: [
+              { label: "NVIDIA NeMo", url: "https://github.com/NVIDIA/NeMo" },
+            ],
+          },
+          {
+            key: "whisper",
+            links: [
+              {
+                label: "whisper.cpp",
+                url: "https://github.com/ggerganov/whisper.cpp",
+              },
+            ],
+          },
+        ].map(({ key, links }) => (
+          <SettingContainer
+            key={key}
+            title={t(`settings.about.acknowledgments.${key}.title`)}
+            description={t(`settings.about.acknowledgments.${key}.description`)}
+            grouped={true}
+            layout="stacked"
+          >
+            <div className="flex flex-col gap-1.5">
+              <div className="text-sm text-mid-gray">
+                {t(`settings.about.acknowledgments.${key}.details`)}
+              </div>
+              <div className="flex flex-wrap gap-x-4 gap-y-1">
+                {links.map((link) => (
+                  <button
+                    key={link.url}
+                    type="button"
+                    onClick={() => openUrl(link.url)}
+                    className="text-sm font-semibold text-logo-primary hover:underline cursor-pointer text-start"
+                  >
+                    {link.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </SettingContainer>
+        ))}
       </SettingsGroup>
     </div>
   );
