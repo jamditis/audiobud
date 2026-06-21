@@ -60,11 +60,15 @@ milestone-A security pass (TDD, commits noted inline); the sub-threshold ones ar
       `pubkey` + `endpoints` = `github.com/cjpais/Handy`). A detached fork would pull/trust upstream's
       signed releases, not AudioBud's. Not an egress/crypto vuln (TLS + minisign chain intact), but wrong
       provenance. Fix in milestone B (release pipeline) - cross-ref the Milestone B section.
-      Mitigated for milestone A: `default_update_checks_enabled()` now returns `false`
-      (`src-tauri/src/settings.rs`), so a default build never queries the upstream feed or offers an
-      upstream Handy release - the updater is inert until opted in. The portable-update dialog's hardcoded
-      `github.com/cjpais/Handy/releases/latest` link (`UpdateChecker.tsx`) is likewise dormant; repoint it
-      with the feed in milestone B.
+      Mitigated for milestone A: update checks are gated off at settings load (`gate_update_checks` in
+      `src-tauri/src/settings.rs`, called from both `load_or_create_app_settings` and `get_settings`), and
+      the field default is `false`. No build queries the upstream feed regardless of any stored
+      `update_checks_enabled: true` left by an earlier build, so the updater never offers an upstream Handy
+      release. The gate forces the flag off in memory only - the stored preference is preserved, so a user's
+      opt-in is restored when milestone B removes the gate and repoints the feed. The Settings update-checks
+      toggle is therefore inert until milestone B (hide/disable it as part of that work), and the
+      portable-update dialog's hardcoded `github.com/cjpais/Handy/releases/latest` link (`UpdateChecker.tsx`)
+      is dormant for the same reason.
 
 - [ ] **Hardening - self-host the Bungee/Fredoka fonts.** `index.html:7-9` loads the wordmark/body
       fonts from `fonts.googleapis.com`/`fonts.gstatic.com`, which forced those hosts into the CSP

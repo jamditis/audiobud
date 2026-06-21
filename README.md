@@ -6,7 +6,7 @@ AudioBud is a detached fork of [Handy](https://github.com/cjpais/Handy) by CJ Pa
 
 ## Status
 
-Milestone A: a working local prototype. Build it from source and run it on Windows. There are no packaged AudioBud releases yet. Update checks are turned off by default, because the inherited updater still points at upstream Handy's release feed; repointing that feed and signing AudioBud's own builds are milestone B. The cross-platform code is inherited from Handy, but AudioBud has only been validated on Windows so far.
+Milestone A: a working local prototype. Build it from source and run it on Windows. There are no packaged AudioBud releases yet. Automatic update checks are disabled, because the inherited updater still points at upstream Handy's release feed; they return once that feed is repointed to AudioBud and its builds are signed, in milestone B. The cross-platform code is inherited from Handy, but AudioBud has only been validated on Windows so far.
 
 ## How it works
 
