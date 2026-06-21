@@ -1,11 +1,8 @@
 import { listen } from "@tauri-apps/api/event";
 import React, { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import {
-  MicrophoneIcon,
-  TranscriptionIcon,
-  CancelIcon,
-} from "../components/icons";
+import { CancelIcon } from "../components/icons";
+import FrogMascot from "../components/icons/FrogMascot";
 import "./RecordingOverlay.css";
 import { commands } from "@/bindings";
 import i18n, { syncLanguageFromSettings } from "@/i18n";
@@ -62,24 +59,25 @@ const RecordingOverlay: React.FC = () => {
     setupEventListeners();
   }, []);
 
-  const getIcon = () => {
-    if (state === "recording") {
-      return <MicrophoneIcon />;
-    } else {
-      return <TranscriptionIcon />;
-    }
-  };
+  // Drive the frog's vocal sac from the loudest live mic band -- he croaks
+  // along with your voice while recording, and rests while transcribing.
+  const amp =
+    state === "recording" && levels.length
+      ? Math.min(1, Math.max(0, ...levels) * 1.4)
+      : 0;
 
   return (
     <div
       dir={direction}
       className={`recording-overlay ${isVisible ? "fade-in" : ""}`}
     >
-      <div className="overlay-left">{getIcon()}</div>
+      <div className="overlay-left">
+        <FrogMascot size={30} sacScale={amp} />
+      </div>
 
-      <div className="overlay-middle">
+      <div className="overlay-middle" role="status" aria-live="polite">
         {state === "recording" && (
-          <div className="bars-container">
+          <div className="bars-container" aria-hidden="true">
             {levels.map((v, i) => (
               <div
                 key={i}
@@ -91,6 +89,7 @@ const RecordingOverlay: React.FC = () => {
                 }}
               />
             ))}
+            <span className="sr-only">{t("overlay.recording")}</span>
           </div>
         )}
         {state === "transcribing" && (
@@ -103,14 +102,16 @@ const RecordingOverlay: React.FC = () => {
 
       <div className="overlay-right">
         {state === "recording" && (
-          <div
+          <button
+            type="button"
             className="cancel-button"
+            aria-label={t("overlay.cancel")}
             onClick={() => {
               commands.cancelOperation();
             }}
           >
             <CancelIcon />
-          </div>
+          </button>
         )}
       </div>
     </div>
