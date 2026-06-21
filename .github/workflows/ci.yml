@@ -80,6 +80,12 @@ jobs:
   secret-scan:
     name: Secret scan (gitleaks)
     runs-on: ubuntu-latest
+    # gitleaks-action lists the PR's commits to scope its scan, which needs
+    # pull-requests: read; the default GITHUB_TOKEN does not grant it. Keep the
+    # token read-only and turn off PR comments so it never needs write access.
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
       - uses: actions/checkout@v4
         with:
@@ -89,3 +95,4 @@ jobs:
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_ENABLE_COMMENTS: false
