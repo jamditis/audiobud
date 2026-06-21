@@ -60,18 +60,16 @@ milestone-A security pass (TDD, commits noted inline); the sub-threshold ones ar
       `pubkey` + `endpoints` = `github.com/cjpais/Handy`). A detached fork would pull/trust upstream's
       signed releases, not AudioBud's. Not an egress/crypto vuln (TLS + minisign chain intact), but wrong
       provenance. Fix in milestone B (release pipeline) - cross-ref the Milestone B section.
-      Mitigated for milestone A: update checks are gated off at settings load (`gate_update_checks` in
-      `src-tauri/src/settings.rs`, called from both `load_or_create_app_settings` and `get_settings`), and
-      the field default is `false`. No build queries the upstream feed regardless of any stored
-      `update_checks_enabled: true` left by an earlier build, so the updater never offers an upstream Handy
-      release. The backend gate forces the flag off in memory only - the stored preference is preserved. A
-      second gate on the frontend, `UPDATER_FEED_READY` in `src/lib/updater.ts` (consumed by
-      `UpdateChecker.tsx`), stops `check()` from ever running even when the toggle is flipped optimistically,
-      which bypasses the backend load gate; the Settings toggle is disabled while the feed is upstream
-      (`UpdateChecksToggle.tsx`). Milestone B: flip `UPDATER_FEED_READY` to true, repoint the feed/signing,
-      remove the backend load gate (restoring the user's stored preference), and repoint the portable-update
-      dialog's hardcoded `github.com/cjpais/Handy/releases/latest` link (`UpdateChecker.tsx`), dormant until
-      then.
+      Mitigated for milestone A by a frontend gate: `UPDATER_FEED_READY` in `src/lib/updater.ts` (consumed
+      by `UpdateChecker.tsx` via `updateChecksActive`) stops `check()` from ever running while the feed is
+      upstream, regardless of the stored setting or an optimistic toggle. `check()` is the only place the
+      updater queries the feed, so this is the single chokepoint. The Settings toggle is disabled
+      (`UpdateChecksToggle.tsx`) and the field default is `false` for fresh installs. The stored
+      `update_checks_enabled` value is left untouched on the backend (no load-time mutation), so a user's
+      prior preference is preserved and takes effect again once milestone B flips `UPDATER_FEED_READY` to
+      true and repoints the feed/signing. The portable-update dialog's hardcoded
+      `github.com/cjpais/Handy/releases/latest` link (`UpdateChecker.tsx`) is dormant until then; repoint it
+      with the feed.
 
 - [ ] **Hardening - self-host the Bungee/Fredoka fonts.** `index.html:7-9` loads the wordmark/body
       fonts from `fonts.googleapis.com`/`fonts.gstatic.com`, which forced those hosts into the CSP

@@ -453,29 +453,12 @@ fn default_autostart_enabled() -> bool {
 }
 
 fn default_update_checks_enabled() -> bool {
-    // Off by default until the updater feed and signing are repointed from
-    // upstream Handy to AudioBud (milestone B; see DEFERRED-issues.md
-    // "Provenance"). This default only applies to fresh settings; existing
-    // stores are handled by gate_update_checks below.
+    // Off by default for fresh settings until the updater feed and signing are
+    // repointed from upstream Handy to AudioBud (milestone B; see
+    // DEFERRED-issues.md "Provenance"). Existing stored values are left
+    // untouched and gated in the UI (src/lib/updater.ts) so no build queries the
+    // upstream feed, which preserves the user's preference for milestone B.
     false
-}
-
-/// Milestone A gate: the updater feed still points at upstream Handy and
-/// verifies against upstream's key (see DEFERRED-issues.md "Provenance"), so
-/// AudioBud must never run an update check yet. The `default_*` above only
-/// covers absent fields; a store written by an earlier build can still hold
-/// `update_checks_enabled: true`, which deserializes as-is. Force the flag off
-/// in memory on every load so no build queries the upstream feed regardless of
-/// the stored value. The store is left untouched, so the user's preference is
-/// restored once the feed is repointed in milestone B and this gate is removed.
-/// Returns true if the in-memory value was changed.
-fn gate_update_checks(settings: &mut AppSettings) -> bool {
-    if settings.update_checks_enabled {
-        settings.update_checks_enabled = false;
-        true
-    } else {
-        false
-    }
 }
 
 fn default_selected_language() -> String {
@@ -918,9 +901,6 @@ pub fn load_or_create_app_settings(app: &AppHandle) -> AppSettings {
         store.set("settings", serde_json::to_value(&settings).unwrap());
     }
 
-    // Milestone A: never query the upstream Handy updater feed (see above).
-    gate_update_checks(&mut settings);
-
     settings
 }
 
@@ -944,9 +924,6 @@ pub fn get_settings(app: &AppHandle) -> AppSettings {
     if ensure_post_process_defaults(&mut settings) {
         store.set("settings", serde_json::to_value(&settings).unwrap());
     }
-
-    // Milestone A: never query the upstream Handy updater feed (see above).
-    gate_update_checks(&mut settings);
 
     settings
 }
@@ -1049,30 +1026,12 @@ mod tests {
     // DEFERRED-issues.md "Provenance"), so a default build must not offer to
     // install an upstream Handy release over AudioBud. Re-enable once the feed
     // and signing are repointed to AudioBud in milestone B.
+    // Fresh settings default update checks off. Existing stored values are left
+    // untouched (preserved for milestone B) and gated in the UI - see
+    // src/lib/updater.test.ts for the milestone-A "never active" invariant.
     #[test]
     fn default_settings_disable_update_checks() {
         let settings = get_default_settings();
-        assert!(!settings.update_checks_enabled);
-    }
-
-    // Regression: a store written by an earlier build can hold
-    // update_checks_enabled: true, which bypasses the serde default. The load
-    // gate must force it off so no build queries the upstream Handy feed.
-    #[test]
-    fn gate_forces_stored_update_checks_off() {
-        let mut settings = get_default_settings();
-        settings.update_checks_enabled = true; // simulate an inherited stored value
-        let changed = gate_update_checks(&mut settings);
-        assert!(changed);
-        assert!(!settings.update_checks_enabled);
-    }
-
-    #[test]
-    fn gate_leaves_disabled_update_checks_untouched() {
-        let mut settings = get_default_settings();
-        settings.update_checks_enabled = false;
-        let changed = gate_update_checks(&mut settings);
-        assert!(!changed);
         assert!(!settings.update_checks_enabled);
     }
 }
