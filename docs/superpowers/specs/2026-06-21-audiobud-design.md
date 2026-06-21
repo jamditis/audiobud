@@ -94,7 +94,7 @@ hotkey pressed (push-to-talk)
        - Whisper large-v3-turbo via whisper.cpp on Vulkan
   -> transcribed text
   -> enigo: snapshot clipboard, set text, send Ctrl+V (layout-independent VK), restore clipboard
-  -> text appears in whatever app has focus
+  -> text appears in the focused app (standard editable field; see injection limits)
 ```
 
 Components (Handy's modules, rebranded):
