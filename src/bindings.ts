@@ -642,6 +642,19 @@ async getMicrophoneMode() : Promise<Result<boolean, string>> {
     else return { status: "error", error: e  as any };
 }
 },
+/**
+ * Enable or disable the live input level meter shown on the settings screen.
+ * While enabled the mic stream stays open so `mic-level` events flow, without
+ * capturing or transcribing any audio.
+ */
+async setMicMonitor(enable: boolean) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("set_mic_monitor", { enable }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async getWindowsMicrophonePermissionStatus() : Promise<WindowsMicrophonePermissionStatus> {
     return await TAURI_INVOKE("get_windows_microphone_permission_status");
 },
@@ -802,10 +815,8 @@ async updateRecordingRetentionPeriod(period: string) : Promise<Result<null, stri
 }
 },
 /**
- * Checks if the Mac is a laptop by detecting battery presence
- * 
- * This uses pmset to check for battery information.
- * Returns true if a battery is detected (laptop), false otherwise (desktop)
+ * Stub implementation for non-macOS platforms
+ * Always returns false since laptop detection is macOS-specific
  */
 async isLaptop() : Promise<Result<boolean, string>> {
     try {

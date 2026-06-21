@@ -176,6 +176,17 @@ pub fn get_microphone_mode(app: AppHandle) -> Result<bool, String> {
     Ok(settings.always_on_microphone)
 }
 
+/// Enable or disable the live input level meter shown on the settings screen.
+/// While enabled the mic stream stays open so `mic-level` events flow, without
+/// capturing or transcribing any audio.
+#[tauri::command]
+#[specta::specta]
+pub fn set_mic_monitor(app: AppHandle, enable: bool) -> Result<(), String> {
+    let rm = app.state::<Arc<AudioRecordingManager>>();
+    rm.set_monitoring(enable)
+        .map_err(|e| format!("Failed to toggle microphone monitor: {}", e))
+}
+
 #[tauri::command]
 #[specta::specta]
 pub fn get_available_microphones() -> Result<Vec<AudioDevice>, String> {

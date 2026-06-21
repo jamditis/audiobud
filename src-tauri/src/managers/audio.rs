@@ -151,6 +151,9 @@ pub struct AudioRecordingManager {
     recorder: Arc<Mutex<Option<AudioRecorder>>>,
     is_open: Arc<Mutex<bool>>,
     is_recording: Arc<Mutex<bool>>,
+    // True when the live settings-screen level meter opened the stream itself
+    // (so it knows it owns the close on the way out).
+    monitoring: Arc<Mutex<bool>>,
     did_mute: Arc<Mutex<bool>>,
     close_generation: Arc<AtomicU64>,
 }
@@ -174,6 +177,7 @@ impl AudioRecordingManager {
             recorder: Arc::new(Mutex::new(None)),
             is_open: Arc::new(Mutex::new(false)),
             is_recording: Arc::new(Mutex::new(false)),
+            monitoring: Arc::new(Mutex::new(false)),
             did_mute: Arc::new(Mutex::new(false)),
             close_generation: Arc::new(AtomicU64::new(0)),
         };
@@ -356,6 +360,38 @@ impl AudioRecordingManager {
 
         *open_flag = false;
         debug!("Microphone stream stopped");
+    }
+
+    /* ---------- live level monitoring (settings meter) --------------------- */
+
+    /// Toggle the live input meter used by the settings screen. Enabling opens
+    /// the mic stream (which makes `mic-level` events flow) without starting a
+    /// recording; disabling closes the stream only if this monitor opened it and
+    /// nothing else still needs it (no active recording, not always-on mode).
+    pub fn set_monitoring(&self, enable: bool) -> Result<(), anyhow::Error> {
+        if enable {
+            // Cancel any pending lazy close from a just-finished recording so our
+            // fresh monitor stream is not torn down underneath us.
+            self.close_generation.fetch_add(1, Ordering::SeqCst);
+            // We own the close only if the stream was not already open for some
+            // other reason (always-on mode, or a recording in progress).
+            let already_open = *self.is_open.lock().unwrap();
+            *self.monitoring.lock().unwrap() = !already_open;
+            if !already_open {
+                self.start_microphone_stream()?;
+            }
+        } else {
+            let we_opened = *self.monitoring.lock().unwrap();
+            *self.monitoring.lock().unwrap() = false;
+            let recording = *self.is_recording.lock().unwrap();
+            let on_demand = matches!(*self.mode.lock().unwrap(), MicrophoneMode::OnDemand);
+            // Never close a stream we did not open, one feeding a live recording,
+            // or the persistent always-on stream.
+            if we_opened && !recording && on_demand {
+                self.stop_microphone_stream();
+            }
+        }
+        Ok(())
     }
 
     /* ---------- mode switching --------------------------------------------- */

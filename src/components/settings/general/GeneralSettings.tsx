@@ -2,9 +2,11 @@ import React from "react";
 import { useTranslation } from "react-i18next";
 import { type } from "@tauri-apps/plugin-os";
 import { MicrophoneSelector } from "../MicrophoneSelector";
+import { InputLevelMeter } from "../InputLevelMeter";
 import { ShortcutInput } from "../ShortcutInput";
 import { SettingsGroup } from "../../ui/SettingsGroup";
 import { OutputDeviceSelector } from "../OutputDeviceSelector";
+import { OutputTest } from "../OutputTest";
 import { PushToTalk } from "../PushToTalk";
 import { AudioFeedback } from "../AudioFeedback";
 import { useSettings } from "../../../hooks/useSettings";
@@ -30,6 +32,7 @@ export const GeneralSettings: React.FC = () => {
       <ModelSettingsCard />
       <SettingsGroup title={t("settings.sound.title")}>
         <MicrophoneSelector descriptionMode="tooltip" grouped={true} />
+        <InputLevelMeter descriptionMode="tooltip" grouped={true} />
         <MuteWhileRecording descriptionMode="tooltip" grouped={true} />
         <AudioFeedback descriptionMode="tooltip" grouped={true} />
         <OutputDeviceSelector
@@ -38,6 +41,11 @@ export const GeneralSettings: React.FC = () => {
           disabled={!audioFeedbackEnabled}
         />
         <VolumeSlider disabled={!audioFeedbackEnabled} />
+        <OutputTest
+          descriptionMode="tooltip"
+          grouped={true}
+          disabled={!audioFeedbackEnabled}
+        />
       </SettingsGroup>
     </div>
   );

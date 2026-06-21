@@ -402,6 +402,7 @@ pub fn run(cli_args: CliArgs) {
             commands::models::has_any_models_or_downloads,
             commands::audio::update_microphone_mode,
             commands::audio::get_microphone_mode,
+            commands::audio::set_mic_monitor,
             commands::audio::get_windows_microphone_permission_status,
             commands::audio::open_microphone_privacy_settings,
             commands::audio::get_available_microphones,
