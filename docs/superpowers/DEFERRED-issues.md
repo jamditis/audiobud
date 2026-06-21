@@ -8,6 +8,58 @@ Status legend: `[ ]` open, `[x]` resolved (with the resolving commit/date noted 
 
 ---
 
+## Security review findings (full-codebase audit, 2026-06-21)
+
+Six-agent security review of the whole tree (our diff + inherited Handy code) before going public.
+Our diff introduced no findings; all of the below are inherited from cjpais/Handy 0.8.3 (already public
+upstream, so publishing our fork adds no net-new exposure). The three HIGH items are being fixed in the
+milestone-A security pass before publish; the sub-threshold one is tracked.
+
+### Fixing now (milestone-A security pass)
+
+- [ ] **HIGH - arbitrary code execution via external-script paste setting.**
+  `src-tauri/src/shortcut/mod.rs:683-700` (`change_paste_method_setting`) + `:738-746`
+  (`change_external_script_path_setting`) let the webview silently arm
+  `Command::new(script_path).arg(text)` (`src-tauri/src/clipboard.rs:507`). Pointing the path at an
+  interpreter (e.g. `powershell.exe`) turns the transcript into executed code; a renderer compromise
+  becomes native RCE, and the setting persists. Fix (decided 2026-06-21): native OS confirmation
+  dialog on arm - persist the external-script method/path only after the user confirms in a backend
+  dialog the webview cannot satisfy on its own.
+
+- [ ] **HIGH - path traversal -> arbitrary file read via `get_audio_file_path`.**
+  `src-tauri/src/managers/history.rs:584-586` joins a webview-supplied `file_name` with no validation;
+  `src-tauri/src/commands/history.rs:36-47` exposes it; the wide `assetProtocol` scope (below) then
+  serves any path on disk via `convertFileSrc`. A `..\..\` or absolute `file_name` reads arbitrary
+  files, including `settings_store.json` (stored LLM API keys). Fix: extract a pure
+  `is_safe_recording_filename` (reject separators, `..`, absolute/drive prefixes, empty), return
+  `Result<PathBuf>`, validate before join. **Failing test first.**
+
+- [ ] **HIGH (defense-in-depth) - CSP disabled + wildcard asset scope.**
+  `src-tauri/tauri.conf.json:16` `csp: null` and `:17-23` `assetProtocol.scope.allow: ["**"]`. No CSP
+  means an injected-content/XSS foothold has nothing blocking inline/`eval`/external loads - the
+  multiplier that makes the two HIGH exploits above realistic. Fix: set a restrictive CSP (allow the
+  Bungee/Fredoka font hosts `fonts.googleapis.com`/`fonts.gstatic.com`, `asset:`/`ipc:` sources,
+  `style-src 'unsafe-inline'` for Tailwind/Vite) and narrow the asset scope to the app-data dir.
+  Verify the renderer still loads at the smoke gate (fonts, recording playback).
+
+### Tracked (not blocking publish)
+
+- [ ] **MEDIUM - custom post-process provider base_url SSRF / API-key exfil.**
+  `src-tauri/src/shortcut/mod.rs:827-854` lets the webview set the `custom` provider `base_url`;
+  `src-tauri/src/llm_client.rs:63-96,147-194` then sends the stored API key there. Under a webview
+  compromise the key/transcript can be exfiltrated to an attacker host. Built-in provider hosts are
+  correctly locked (non-`custom` edits rejected). Confidence 7 (reviewers split: intended for a
+  user-chosen custom host vs. exploitable under XSS). Fix later: confirm/validate the destination
+  before attaching a stored key. Largely mitigated once the CSP lands.
+
+- [ ] **Provenance - updater feed + signing still point at cjpais/Handy.**
+  `src-tauri/tauri.conf.json:61` (`signCommand` ... `Handy`, `cjpais-dev`) and `:69-72` (updater
+  `pubkey` + `endpoints` = `github.com/cjpais/Handy`). A detached fork would pull/trust upstream's
+  signed releases, not AudioBud's. Not an egress/crypto vuln (TLS + minisign chain intact), but wrong
+  provenance. Fix in milestone B (release pipeline) - cross-ref the Milestone B section.
+
+---
+
 ## Inherited upstream bugs (cjpais/Handy audit, 2026-06-21)
 
 We are a detached fork of Handy 0.8.3. Of Handy's ~80 open bugs, the ones below are present in
