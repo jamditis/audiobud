@@ -18,7 +18,9 @@
   transform: scale(0.2);
   transform-origin: 100px 118px;
   opacity: 0;
-  transition: transform 0.2s ease-out, opacity 0.2s;
+  transition:
+    transform 0.2s ease-out,
+    opacity 0.2s;
 }
 .frog.croak .sac {
   transform: scale(1);
@@ -41,7 +43,9 @@
   transform: scaleX(0);
   transform-origin: 100px 150px;
   opacity: 0;
-  transition: transform 0.12s ease-out, opacity 0.12s;
+  transition:
+    transform 0.12s ease-out,
+    opacity 0.12s;
 }
 .frog.lick .tongue {
   transform: scaleX(1);

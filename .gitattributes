@@ -1,0 +1,19 @@
+# Normalize all text files to LF in the repository and on checkout.
+# Keeps prettier (endOfLine: lf) and cargo fmt consistent across Windows/Linux CI.
+* text=auto eol=lf
+
+# Binary assets - never normalize or diff as text.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.icns binary
+*.wav binary
+*.mp3 binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.otf binary
+*.onnx binary

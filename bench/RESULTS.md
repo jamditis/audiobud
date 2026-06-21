@@ -5,11 +5,11 @@ Read set: `bench/passage.txt` (6 diverse sentences: pangram, proper nouns, homop
 
 ## Results
 
-| Engine (model id) | Backend | Size on disk | Avg latency (warm) | Avg WER | Reliable over the run? |
-|---|---|---|---|---|---|
-| Parakeet V3 (`parakeet-tdt-0.6b-v3`) | DirectML/ONNX | 640 MB | 594 ms (422-1092) | 0.0595 | Yes - 6/6 transcribed |
-| Canary 180M flash (`canary-180m-flash`) | DirectML/ONNX | 204 MB | n/a | n/a | NO - 7/7 empty output (broken) |
-| Whisper turbo (`turbo`) | Vulkan/whisper.cpp | 1549 MB | ~290 ms (172-484; cold 4051) | ~0.044 | Works, but hallucinated on silence once |
+| Engine (model id)                       | Backend            | Size on disk | Avg latency (warm)           | Avg WER | Reliable over the run?                  |
+| --------------------------------------- | ------------------ | ------------ | ---------------------------- | ------- | --------------------------------------- |
+| Parakeet V3 (`parakeet-tdt-0.6b-v3`)    | DirectML/ONNX      | 640 MB       | 594 ms (422-1092)            | 0.0595  | Yes - 6/6 transcribed                   |
+| Canary 180M flash (`canary-180m-flash`) | DirectML/ONNX      | 204 MB       | n/a                          | n/a     | NO - 7/7 empty output (broken)          |
+| Whisper turbo (`turbo`)                 | Vulkan/whisper.cpp | 1549 MB      | ~290 ms (172-484; cold 4051) | ~0.044  | Works, but hallucinated on silence once |
 
 Parakeet V3 per-sentence WER: s1 0.000, s2 0.214 ("Joe Amditis" -> "Jo M Dietz"), s3 0.143 ("They're" -> "They are"), s4 0.000, s5 0.000, s6 0.000. The two non-zero scores are a proper-noun miss and a contraction expansion; on ordinary content WER is effectively 0.
 
@@ -18,6 +18,7 @@ Cold-start (first transcription after model load): Parakeet V3 ~2456 ms, Whisper
 ## Default chosen: `parakeet-tdt-0.6b-v3`
 
 Reasons:
+
 1. It is the smallest engine that actually works on this machine. Canary (the only smaller model, 204 MB) produces empty output on this build's DirectML path; Whisper turbo works but is 1.5 GB - a poor default for a lightweight local dictation app.
 2. Accuracy is strong (5.95% avg WER, ~0% on non-proper-noun content) and latency is sub-second warm.
 3. Confirmed by the user (2026-06-21): "lets stick with parakeet v3."

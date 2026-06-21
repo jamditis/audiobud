@@ -148,6 +148,7 @@ Either way, the README/marketing copy says "runs offline after first-run model d
 Two licensing layers: the app code, and the models.
 
 App code:
+
 - Keep `LICENSE` (MIT) with cjpais's original copyright line intact (MIT requires retaining the notice).
 - Add a `NOTICE` file plus a README attribution block:
   > AudioBud is a fork of [Handy](https://github.com/cjpais/Handy) by CJ Pais, used under the MIT License. AudioBud is an independent project and is not affiliated with or endorsed by the Handy authors.
@@ -155,6 +156,7 @@ App code:
 - `tauri.conf.json` `bundle.license` and `Cargo.toml` `license` stay MIT.
 
 Models (Codex finding 4 — must not be skipped if we mirror/redistribute):
+
 - **Parakeet-TDT 0.6B V3:** NVIDIA, CC BY 4.0. Redistributing or mirroring it requires attribution to NVIDIA and a copy of the license terms.
 - **Whisper large-v3-turbo:** OpenAI, MIT.
 - Add `MODEL_NOTICES.md` (or a `licenses/` dir) listing each model, its source, license, and required attribution, and surface model attribution in the app's about page and the docs. If we mirror the blobs to R2, the attribution travels with them.
@@ -237,12 +239,18 @@ Applied once the repo is pushed to GitHub (push needs your approval per house ru
 - Single source of version truth: `src-tauri/tauri.conf.json` `version`, mirrored to `Cargo.toml`, `package.json`, `docs/js/version.js`.
 - Flow: bump versions -> update `CHANGELOG.md` -> `cargo test` + `bun test` green -> commit + tag `vX.Y.Z` -> CI builds a draft release with artifacts + `latest.json` -> review -> Joe publishes. Never auto-merge, never auto-publish.
 - Patch-notes template (release body):
+
   ```markdown
   ## AudioBud vX.Y.Z — YYYY-MM-DD
+
   ### New
+
   ### Improved
+
   ### Fixed
+
   ### Known issues
+
   Auto-update installs this automatically. Manual: download below.
   ```
 
@@ -257,10 +265,12 @@ Applied once the repo is pushed to GitHub (push needs your approval per house ru
 TDD throughout, per house rules. Because this is a fork of working software, automated tests focus on the seams we change; the OS-level behaviors get a documented manual gate (Codex finding 12).
 
 Automated:
+
 - **Rust unit tests (`cargo test`):** `MODEL_BASE_URL` URL construction (every model resolves to our host); model-download integrity check (size/checksum verification logic, with a mocked download); hotkey-config parsing for default and customized bindings; the Win+H registry-toggle helper's enable/disable reversibility (mock the registry write) — milestone B.
 - **Frontend tests (`bun test`/Vitest):** settings rendering for engine selection (correct default selected), shortcut-customization UI, the Win+H opt-in toggle state — milestone B.
 
 Windows manual smoke gate (exact pass/fail; run on this RTX 4080):
+
 - Install produces a launchable app; VC++ redist present or installed by the installer (no `MSVCP140.dll` crash).
 - Default hotkey (`Ctrl+Alt+Space`) starts/stops capture.
 - Both engines load: Parakeet on DirectML, Whisper turbo on Vulkan; each transcribes a fixed spoken sample to expected text.

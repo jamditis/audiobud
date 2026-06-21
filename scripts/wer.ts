@@ -20,7 +20,11 @@ export function wer(reference: string, hypothesis: string): number {
   for (let i = 1; i <= r.length; i++) {
     for (let j = 1; j <= h.length; j++) {
       const cost = r[i - 1] === h[j - 1] ? 0 : 1;
-      d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + cost);
+      d[i][j] = Math.min(
+        d[i - 1][j] + 1,
+        d[i][j - 1] + 1,
+        d[i - 1][j - 1] + cost,
+      );
     }
   }
   return d[r.length][h.length] / r.length;
