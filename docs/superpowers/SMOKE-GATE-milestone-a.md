@@ -80,8 +80,10 @@ Expected:
       asset-scope allow cover the recordings dir under the narrowed `$APPDATA/recordings/**` scope).
 - [ ] No CSP violation errors in the console during normal use.
 - [ ] (dev only) Editing a frontend file hot-reloads (confirms `devCsp` allows the
-      Vite HMR websocket `ws://localhost:1420`). If HMR is blocked, align the dev
-      `connect-src` host/port with `vite.config` and re-test.
+      Vite HMR websocket). The dev `connect-src` allows the `ws:`/`wss:` schemes, so
+      HMR works on default localhost and on a `TAURI_DEV_HOST` (`ws://<host>:1421`)
+      setup alike. If HMR is ever blocked, confirm the dev policy still lists `ws:`
+      and re-test.
 
 ## Test 6: external-script paste confirmation gate (security pass)
 
