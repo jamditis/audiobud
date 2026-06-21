@@ -1,7 +1,7 @@
 # AudioBud design spec
 
 - Date: 2026-06-21
-- Status: draft, Codex 5.5 high reviewed (findings incorporated); four open decisions pending your call, then ready for sign-off
+- Status: Codex 5.5 high converged across four passes (no actionable findings). Pending: the four open decisions below, then sign-off and writing-plans.
 - Owner: Joe Amditis
 - Repo: `github.com/jamditis/audiobud` (public, to be created)
 - Local path: `C:\Users\amdit\OneDrive\Desktop\Crimes\playground\audiobud`
