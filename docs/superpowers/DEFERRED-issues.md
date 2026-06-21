@@ -76,6 +76,15 @@ milestone-A security pass (TDD, commits noted inline); the sub-threshold ones ar
       (`9c7e843`). Added a `test` script scoped to `scripts src`; Playwright stays on `test:playwright`,
       so a bare `bun test` no longer trips on `tests/app.spec.ts`. CI runs `bun run test`.
 
+- [ ] **Localization - 34 milestone-A keys are English-only across 19 locales.** The a11y/autosave/
+      sound-test keys added during milestone A (`sidebar.navLabel`, `settings.autosave.saved`,
+      `settings.sound.inputLevel.*`, `settings.sound.outputTest.*`, ...) exist only in
+      `src/i18n/locales/en/translation.json`. `check:translations` reports 0/19 locales complete.
+      Not a functional bug: i18next `fallbackLng: "en"` shows English for missing keys at runtime. The CI
+      translation step is `continue-on-error: true` so it annotates the gap without blocking merges.
+      Surfaced by the Codex 5.5 high review of the CI bootstrap (2026-06-21). Fix via community
+      translations (`CONTRIBUTING_TRANSLATIONS.md`) or a reviewed CLI pass, then flip continue-on-error off.
+
 ### Milestone B (release pipeline + native packaging CI)
 
 Surfaced by the Codex 5.4 low review of the CI bootstrap (2026-06-21). The CI bootstrap (`9c7e843`)
