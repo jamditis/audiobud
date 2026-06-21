@@ -1,3 +1,9 @@
+# AudioBud CI (milestone A): fast correctness checks on every push/PR - lint,
+# formatting, types, and unit tests (frontend) plus cargo test against a mock
+# transcription backend (no GPU). Native packaging/bundling and the signed
+# release + updater pipeline are deliberately milestone B: they need AudioBud's
+# own signing identity and provenance, not the inherited cjpais/Handy config.
+# See docs/superpowers/DEFERRED-issues.md ("Milestone B" section).
 name: CI
 
 on:
