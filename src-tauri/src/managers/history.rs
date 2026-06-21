@@ -1,6 +1,6 @@
 use anyhow::{anyhow, Result};
 use chrono::{DateTime, Local, Utc};
-use log::{debug, error, info};
+use log::{debug, error, info, warn};
 use rusqlite::{params, Connection, OptionalExtension};
 use rusqlite_migration::{Migrations, M};
 use serde::{Deserialize, Serialize};
@@ -626,25 +626,7 @@ impl HistoryManager {
     pub async fn delete_entry(&self, id: i64) -> Result<()> {
         let conn = self.get_connection()?;
 
-        // Get the entry to find the file name
-        if let Some(entry) = self.get_entry_by_id(id).await? {
-            // Delete the audio file first. file_name is server-generated, so the
-            // validation here never rejects a legitimate entry; it only guards
-            // against a corrupted/tampered DB row.
-            let file_path = self.get_audio_file_path(&entry.file_name)?;
-            if file_path.exists() {
-                if let Err(e) = fs::remove_file(&file_path) {
-                    error!("Failed to delete audio file {}: {}", entry.file_name, e);
-                    // Continue with database deletion even if file deletion fails
-                }
-            }
-        }
-
-        // Delete from database
-        conn.execute(
-            "DELETE FROM transcription_history WHERE id = ?1",
-            params![id],
-        )?;
+        Self::delete_entry_with_conn(&conn, &self.recordings_dir, id)?;
 
         debug!("Deleted history entry with id: {}", id);
 
@@ -652,6 +634,48 @@ impl HistoryManager {
         if let Err(e) = (HistoryUpdatePayload::Deleted { id }).emit(&self.app_handle) {
             error!("Failed to emit history-updated event: {}", e);
         }
+
+        Ok(())
+    }
+
+    /// Remove a history row and best-effort delete its audio file.
+    ///
+    /// Extracted with an explicit connection + recordings dir so it can be
+    /// unit-tested without an `AppHandle`. The audio file is unlinked only when
+    /// the stored `file_name` passes `is_safe_recording_filename`; a corrupted
+    /// or tampered name (e.g. one containing path separators) skips the unlink
+    /// but the database row is always removed, so a bad row can never get stuck
+    /// in history. A failed file unlink is likewise logged and tolerated.
+    fn delete_entry_with_conn(conn: &Connection, recordings_dir: &Path, id: i64) -> Result<()> {
+        let file_name: Option<String> = conn
+            .query_row(
+                "SELECT file_name FROM transcription_history WHERE id = ?1",
+                [id],
+                |row| row.get(0),
+            )
+            .optional()?;
+
+        if let Some(file_name) = file_name {
+            if is_safe_recording_filename(&file_name) {
+                let file_path = recordings_dir.join(&file_name);
+                if file_path.exists() {
+                    if let Err(e) = fs::remove_file(&file_path) {
+                        error!("Failed to delete audio file {}: {}", file_name, e);
+                        // Continue with database deletion even if file deletion fails
+                    }
+                }
+            } else {
+                warn!(
+                    "History entry {} has an invalid file name {:?}; skipping audio-file deletion but removing the row",
+                    id, file_name
+                );
+            }
+        }
+
+        conn.execute(
+            "DELETE FROM transcription_history WHERE id = ?1",
+            params![id],
+        )?;
 
         Ok(())
     }
@@ -771,5 +795,61 @@ mod tests {
         assert!(!is_safe_recording_filename("C:\\Windows\\win.ini"));
         assert!(!is_safe_recording_filename("\\\\server\\share\\payload"));
         assert!(!is_safe_recording_filename("handy\0.wav"));
+    }
+
+    fn insert_entry_with_file_name(conn: &Connection, file_name: &str, timestamp: i64) {
+        conn.execute(
+            "INSERT INTO transcription_history (
+                file_name, timestamp, saved, title, transcription_text,
+                post_processed_text, post_process_prompt, post_process_requested
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            params![
+                file_name,
+                timestamp,
+                false,
+                format!("Recording {}", timestamp),
+                "text",
+                Option::<String>::None,
+                Option::<String>::None,
+                false,
+            ],
+        )
+        .expect("insert history entry");
+    }
+
+    fn row_count(conn: &Connection, id: i64) -> i64 {
+        conn.query_row(
+            "SELECT COUNT(*) FROM transcription_history WHERE id = ?1",
+            [id],
+            |row| row.get(0),
+        )
+        .expect("count rows")
+    }
+
+    #[test]
+    fn delete_entry_removes_row_with_valid_file_name() {
+        let conn = setup_conn();
+        insert_entry(&conn, 100, "completed", None);
+        let dir = std::env::temp_dir();
+
+        // The audio file does not exist on disk, so this only removes the row.
+        HistoryManager::delete_entry_with_conn(&conn, &dir, 1).expect("delete entry");
+
+        assert_eq!(row_count(&conn, 1), 0);
+    }
+
+    #[test]
+    fn delete_entry_removes_row_with_invalid_file_name() {
+        // A tampered/corrupted row with a traversal file_name must still be
+        // deletable: the audio-file unlink is skipped, but the row is removed
+        // so the user is not stuck with an undeletable history entry.
+        let conn = setup_conn();
+        insert_entry_with_file_name(&conn, "../../evil.wav", 200);
+        let dir = std::env::temp_dir();
+
+        HistoryManager::delete_entry_with_conn(&conn, &dir, 1)
+            .expect("delete entry with invalid file name");
+
+        assert_eq!(row_count(&conn, 1), 0);
     }
 }
