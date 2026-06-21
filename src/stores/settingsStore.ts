@@ -10,6 +10,7 @@ import type {
 import { commands } from "@/bindings";
 import { toast } from "sonner";
 import i18n from "@/i18n";
+import { settingUpdateError } from "./settingUpdateResult";
 
 // Auto-save acknowledgment. Settings persist immediately (there is no Save
 // button), so a brief toast confirms each write. A shared toast id plus a short
@@ -307,7 +308,13 @@ export const useSettingsStore = create<SettingsStore>()(
 
         const updater = settingUpdaters[key];
         if (updater) {
-          await updater(value);
+          // tauri-specta bindings resolve to { status: "error" } on a Rust Err
+          // instead of throwing (e.g. a declined external-script confirmation),
+          // so inspect the result explicitly to drive the rollback in catch.
+          const errorMessage = settingUpdateError(await updater(value));
+          if (errorMessage) {
+            throw new Error(errorMessage);
+          }
           notifySaved();
         } else if (key !== "bindings" && key !== "selected_model") {
           console.warn(`No handler for setting: ${String(key)}`);
