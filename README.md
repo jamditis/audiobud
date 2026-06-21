@@ -6,7 +6,7 @@ AudioBud is a detached fork of [Handy](https://github.com/cjpais/Handy) by CJ Pa
 
 ## Status
 
-Milestone A: a working local prototype. Build it from source and run it on Windows. There are no packaged releases yet, signed installers and the auto-updater are milestone B. The cross-platform code is inherited from Handy, but AudioBud has only been validated on Windows so far.
+Milestone A: a working local prototype. Build it from source and run it on Windows. There are no packaged AudioBud releases yet. Update checks are turned off by default, because the inherited updater still points at upstream Handy's release feed; repointing that feed and signing AudioBud's own builds are milestone B. The cross-platform code is inherited from Handy, but AudioBud has only been validated on Windows so far.
 
 ## How it works
 
@@ -31,7 +31,7 @@ bun run tauri dev      # run in development
 bun run tauri build    # produce a local build
 ```
 
-On first run, AudioBud downloads the default model. Grant microphone permission (and, on macOS, accessibility) when prompted.
+On first run, AudioBud opens onboarding, where you pick a model and download it. Grant microphone permission (and, on macOS, accessibility) when prompted.
 
 ## AudioBud defaults
 

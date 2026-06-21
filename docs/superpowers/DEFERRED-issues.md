@@ -60,6 +60,11 @@ milestone-A security pass (TDD, commits noted inline); the sub-threshold ones ar
       `pubkey` + `endpoints` = `github.com/cjpais/Handy`). A detached fork would pull/trust upstream's
       signed releases, not AudioBud's. Not an egress/crypto vuln (TLS + minisign chain intact), but wrong
       provenance. Fix in milestone B (release pipeline) - cross-ref the Milestone B section.
+      Mitigated for milestone A: `default_update_checks_enabled()` now returns `false`
+      (`src-tauri/src/settings.rs`), so a default build never queries the upstream feed or offers an
+      upstream Handy release - the updater is inert until opted in. The portable-update dialog's hardcoded
+      `github.com/cjpais/Handy/releases/latest` link (`UpdateChecker.tsx`) is likewise dormant; repoint it
+      with the feed in milestone B.
 
 - [ ] **Hardening - self-host the Bungee/Fredoka fonts.** `index.html:7-9` loads the wordmark/body
       fonts from `fonts.googleapis.com`/`fonts.gstatic.com`, which forced those hosts into the CSP
