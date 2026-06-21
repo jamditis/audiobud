@@ -6,9 +6,22 @@ use rusqlite_migration::{Migrations, M};
 use serde::{Deserialize, Serialize};
 use specta::Type;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Component, Path, PathBuf};
 use tauri::AppHandle;
 use tauri_specta::Event;
+
+/// Returns true only for a single, plain filename with no path navigation.
+/// Recording names are always server-generated (`handy-<timestamp>.wav`), so this
+/// rejects any webview-supplied `file_name` that contains a separator, `..`, an
+/// absolute/drive/UNC prefix, or an embedded NUL. Combined with the join in
+/// `HistoryManager::get_audio_file_path`, a path can never escape `recordings_dir`.
+pub(crate) fn is_safe_recording_filename(name: &str) -> bool {
+    if name.is_empty() || name.contains('/') || name.contains('\\') || name.contains('\0') {
+        return false;
+    }
+    let mut components = Path::new(name).components();
+    matches!(components.next(), Some(Component::Normal(_))) && components.next().is_none()
+}
 
 /// Database migrations for transcription history.
 /// Each migration is applied in order. The library tracks which migrations
@@ -581,8 +594,11 @@ impl HistoryManager {
         Ok(())
     }
 
-    pub fn get_audio_file_path(&self, file_name: &str) -> PathBuf {
-        self.recordings_dir.join(file_name)
+    pub fn get_audio_file_path(&self, file_name: &str) -> Result<PathBuf> {
+        if !is_safe_recording_filename(file_name) {
+            return Err(anyhow!("Invalid recording file name: {file_name}"));
+        }
+        Ok(self.recordings_dir.join(file_name))
     }
 
     pub async fn get_entry_by_id(&self, id: i64) -> Result<Option<HistoryEntry>> {
@@ -612,8 +628,10 @@ impl HistoryManager {
 
         // Get the entry to find the file name
         if let Some(entry) = self.get_entry_by_id(id).await? {
-            // Delete the audio file first
-            let file_path = self.get_audio_file_path(&entry.file_name);
+            // Delete the audio file first. file_name is server-generated, so the
+            // validation here never rejects a legitimate entry; it only guards
+            // against a corrupted/tampered DB row.
+            let file_path = self.get_audio_file_path(&entry.file_name)?;
             if file_path.exists() {
                 if let Err(e) = fs::remove_file(&file_path) {
                     error!("Failed to delete audio file {}: {}", entry.file_name, e);
@@ -733,5 +751,25 @@ mod tests {
 
         assert_eq!(entry.timestamp, 100);
         assert_eq!(entry.transcription_text, "completed");
+    }
+
+    #[test]
+    fn is_safe_recording_filename_accepts_generated_names() {
+        // Recording names are always server-generated as handy-<timestamp>.wav.
+        assert!(is_safe_recording_filename("handy-1700000000.wav"));
+        assert!(is_safe_recording_filename("custom_start.wav"));
+    }
+
+    #[test]
+    fn is_safe_recording_filename_rejects_traversal_and_absolute() {
+        assert!(!is_safe_recording_filename(""));
+        assert!(!is_safe_recording_filename(".."));
+        assert!(!is_safe_recording_filename("../secret.txt"));
+        assert!(!is_safe_recording_filename("..\\..\\Windows\\win.ini"));
+        assert!(!is_safe_recording_filename("sub/handy.wav"));
+        assert!(!is_safe_recording_filename("sub\\handy.wav"));
+        assert!(!is_safe_recording_filename("C:\\Windows\\win.ini"));
+        assert!(!is_safe_recording_filename("\\\\server\\share\\payload"));
+        assert!(!is_safe_recording_filename("handy\0.wav"));
     }
 }

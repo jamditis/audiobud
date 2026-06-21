@@ -40,7 +40,9 @@ pub async fn get_audio_file_path(
     history_manager: State<'_, Arc<HistoryManager>>,
     file_name: String,
 ) -> Result<String, String> {
-    let path = history_manager.get_audio_file_path(&file_name);
+    let path = history_manager
+        .get_audio_file_path(&file_name)
+        .map_err(|e| e.to_string())?;
     path.to_str()
         .ok_or_else(|| "Invalid file path".to_string())
         .map(|s| s.to_string())
@@ -73,7 +75,9 @@ pub async fn retry_history_entry_transcription(
         .map_err(|e| e.to_string())?
         .ok_or_else(|| format!("History entry {} not found", id))?;
 
-    let audio_path = history_manager.get_audio_file_path(&entry.file_name);
+    let audio_path = history_manager
+        .get_audio_file_path(&entry.file_name)
+        .map_err(|e| e.to_string())?;
     let samples = crate::audio_toolkit::read_wav_samples(&audio_path)
         .map_err(|e| format!("Failed to load audio: {}", e))?;
 
