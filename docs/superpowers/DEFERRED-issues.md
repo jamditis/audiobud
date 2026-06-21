@@ -58,6 +58,17 @@ milestone-A security pass before publish; the sub-threshold one is tracked.
   signed releases, not AudioBud's. Not an egress/crypto vuln (TLS + minisign chain intact), but wrong
   provenance. Fix in milestone B (release pipeline) - cross-ref the Milestone B section.
 
+- [ ] **Hardening - self-host the Bungee/Fredoka fonts.** `index.html:7-9` loads the wordmark/body
+  fonts from `fonts.googleapis.com`/`fonts.gstatic.com`, which forced those hosts into the CSP
+  `style-src`/`font-src`. For a local-first dictation app this is a per-launch request to Google (a
+  privacy/telemetry leak and an offline failure: no network -> fallback fonts). Vendor the woff2 files
+  under `src/assets/fonts/`, add `@font-face` rules, drop the `<link>`s, and tighten the CSP to
+  `font-src 'self'` / `style-src 'self' 'unsafe-inline'`. Two-way door.
+
+- [ ] **Lint - inherited unused import warning.** `src-tauri/src/helpers/clamshell.rs:66` has an unused
+  `use super::*;` in its test module (warns on every `cargo test`/`clippy`). Trivial; remove or `#[allow]`.
+  Inherited from upstream; surfaces once CI runs clippy with warnings-as-errors.
+
 ---
 
 ## Inherited upstream bugs (cjpais/Handy audit, 2026-06-21)

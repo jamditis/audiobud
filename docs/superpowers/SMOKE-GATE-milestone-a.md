@@ -62,6 +62,46 @@ Expected:
 - [ ] Pressing Win+H still invokes Windows' own voice typing, not AudioBud.
 - [ ] Pressing Win alone does not trigger AudioBud.
 
+## Test 5: CSP and asset scope do not break the UI (security pass)
+
+The security pass set a strict production CSP plus a looser `devCsp`, and narrowed
+the asset-protocol scope to the recordings dir (with a runtime allow for the
+portable-aware path). Confirm the renderer still works under it.
+
+1. Launch the dev app (uses `devCsp`).
+2. Open DevTools (`Ctrl+Shift+D` debug mode, then the console) and watch for
+   `Content-Security-Policy` violation errors.
+3. Go to Settings -> History and play back a saved recording.
+
+Expected:
+- [ ] The Bungee wordmark and Fredoka body text render in their real fonts, not a
+      system fallback (confirms `style-src`/`font-src` allow the Google Fonts hosts).
+- [ ] Audio playback of a saved recording works (confirms `media-src` + the runtime
+      asset-scope allow cover the recordings dir under the narrowed `$APPDATA/recordings/**` scope).
+- [ ] No CSP violation errors in the console during normal use.
+- [ ] (dev only) Editing a frontend file hot-reloads (confirms `devCsp` allows the
+      Vite HMR websocket `ws://localhost:1420`). If HMR is blocked, align the dev
+      `connect-src` host/port with `vite.config` and re-test.
+
+## Test 6: external-script paste confirmation gate (security pass)
+
+Arming the external-script paste method (which runs an external program on every
+paste) now requires a native OS confirmation that a compromised webview cannot satisfy.
+
+1. Settings -> paste method -> select "external script".
+
+Expected:
+- [ ] A native OS dialog appears asking to confirm enabling external-script paste.
+- [ ] Cancel/No leaves the paste method unchanged (does NOT switch to external script)
+      and shows a "couldn't save" toast (the optimistic selection rolls back).
+- [ ] OK/Yes enables it.
+
+2. With external-script enabled, set or change the script path field.
+
+Expected:
+- [ ] Setting a non-empty path pops the confirm dialog again, naming the path.
+- [ ] Cancel leaves the path unchanged; OK persists it.
+
 ## Notes
 
 - Model download path: verified earlier this session -- the user downloaded
