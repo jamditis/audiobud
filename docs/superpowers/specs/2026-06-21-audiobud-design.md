@@ -1,7 +1,7 @@
 # AudioBud design spec
 
 - Date: 2026-06-21
-- Status: Codex 5.5 high converged across four passes (no actionable findings). Pending: the four open decisions below, then sign-off and writing-plans.
+- Status: Codex 5.5 high converged across four passes (no actionable findings); all four decisions resolved with the user (see "Decisions"). Ready for sign-off and writing-plans.
 - Owner: Joe Amditis
 - Repo: `github.com/jamditis/audiobud` (public, to be created)
 - Local path: `C:\Users\amdit\OneDrive\Desktop\Crimes\playground\audiobud`
@@ -38,14 +38,14 @@ This is a desktop dictation tool, not a terminal. It has no PTY, no xterm, no sh
 - STT: ship both Parakeet V3 and Whisper large-v3-turbo.
 - License: preserve Handy's MIT license and attribution.
 
-## Open decisions (need your call before sign-off)
+## Decisions (resolved 2026-06-21)
 
-The Codex review surfaced four decisions that change implementation. These are flagged here and asked via AskUserQuestion; answers fold back into this spec.
+The Codex review surfaced four decisions; resolved with the user via AskUserQuestion:
 
-1. **Win+H default.** Win+H cannot be cleanly owned by the in-app hotkey backend (see "The Win+H problem"). Options: (1) ship `Ctrl+Alt+Space` default with a one-click Win+H opt-in; (2) Win+H on by default via a bundled helper; (3) no Win+H, customizable only. Recommend option 1.
-2. **Windows code-signing posture for v1.** Tauri's updater signature is not Windows Authenticode (see "Signing"). Options: ship unsigned installers (SmartScreen "more info -> run anyway" on first launch) plus signed updater payloads — free, recommend for v1; or buy an Authenticode/OV-or-EV cert (recurring cost — requires your approval, never purchased without it).
-3. **Model delivery.** Download the default model on first run (smaller installer, needs network once) — recommend; or bundle the default model in the installer (larger installer, works offline immediately).
-4. **Scope of this loop.** Confirm the loop targets milestone A (working local prototype) and that packaging/public-release (milestones B/C) follow after. Recommend yes.
+1. **Win+H default -> `Ctrl+Alt+Space` default + one-click Win+H opt-in.** Reliable default hotkey ships in milestone A; the Win+H opt-in (Rust/Win32 `WH_KEYBOARD_LL` hook + registry tweak) is built and hardened in milestone B. See "The Win+H problem."
+2. **Code signing -> ship v1 with Windows Authenticode signing.** v1 installers will be Authenticode-signed (no SmartScreen "unknown publisher" warning), in addition to the free Tauri updater-payload signing. The certificate purchase and its delivery method (OV with hardware token / cloud HSM, or EV) are an explicit approval gate at milestone C — no cert is purchased without that go. See "Signing."
+3. **Model delivery -> download on first run.** Small installer; the default model is fetched on first launch with a progress UI and integrity check (size/checksum). Fully offline after that one download. See "Model delivery."
+4. **Loop scope -> prototype first.** This `/loop` stops at milestone A (a working, tested local prototype). Packaging (B) and public release (C) are separate, sequenced work you review between.
 
 ## Locked decisions (one-way doors)
 
@@ -114,9 +114,9 @@ Clipboard-paste injection types into the focused app, but not universally. By Wi
 
 ## The Win+H problem
 
-Win+H cannot be cleanly owned by the in-app hotkey backend (research above; Handy issue #917). This affects both the default-hotkey decision (open decision 1) and scope.
+Win+H cannot be cleanly owned by the in-app hotkey backend (research above; Handy issue #917).
 
-Three options:
+**Decision: option 1** — `Ctrl+Alt+Space` default in milestone A, Win+H opt-in built in milestone B. The three options considered:
 
 1. **Reliable default + one-click Win+H opt-in (recommended).** Ship `Ctrl+Alt+Space` as the working default (rdev handles it cleanly). In settings, offer "Replace Windows Win+H dictation" that (a) writes `IsVoiceTypingKeyEnabled=0`, and (b) enables the Win+H hook that neutralizes the lone WIN and routes Win+H to AudioBud via `--toggle-transcription`. Reversible toggle.
 2. **Win+H by default via the hook.** Same hook, enabled out of the box. Higher first-run friction (registry write + a sign-out/reboot for the registry change to take) and an always-on keyboard hook.
@@ -135,12 +135,11 @@ Both are already supported by `transcribe-rs` and present in Handy's model regis
 
 **Default is decided by a Windows smoke benchmark, not assumed (Codex finding 6).** Parakeet's model card centers Linux/NeMo, and Handy has recent Parakeet-on-Windows failure reports. So milestone A benchmarks both engines on this RTX 4080 (latency, accuracy on a fixed dictation sample, and stability across repeated runs). Parakeet is the intended default and ships as default only if it passes; otherwise Whisper large-v3-turbo becomes the default and Parakeet stays selectable. The decision and its numbers are recorded in the spec/changelog.
 
-## Model delivery (open decision 3)
+## Model delivery
 
-Models are 478 MB (Parakeet) to ~1.6 GB (Whisper turbo). "Offline" means after a one-time download, not at install. Two options:
+Models are 478 MB (Parakeet) to ~1.6 GB (Whisper turbo). "Offline" means after a one-time download, not at install.
 
-- **Download on first run (recommended):** small installer; AudioBud fetches the default model from `MODEL_BASE_URL` on first launch with a progress UI (Handy already does this). Needs network once. Download integrity is verified (size + checksum) before the model is marked ready.
-- **Bundle the default model:** installer carries the default model so it works offline immediately, at the cost of a much larger installer. Non-default models still download on demand.
+**Decision: download on first run.** Small installer; AudioBud fetches the default model from `MODEL_BASE_URL` on first launch with a progress UI (Handy already does this). Needs network once. Download integrity is verified (size + checksum) before the model is marked ready. (Bundling the default model in the installer was considered and rejected for v1 — it works offline immediately but balloons the installer; revisit if first-run download proves a friction point.)
 
 Either way, the README/marketing copy says "runs offline after first-run model download," never "offline by default" (Codex finding 3).
 
@@ -250,8 +249,8 @@ Applied once the repo is pushed to GitHub (push needs your approval per house ru
 ## Signing (Codex finding 5 — two different things)
 
 - **Updater payload signing (Tauri minisign):** signs the update bundle so the installed app verifies an update came from us before applying it. Free; uses our `TAURI_SIGNING_PRIVATE_KEY`. This is what "signed auto-updates" means here.
-- **Windows Authenticode code signing:** what removes the SmartScreen "unknown publisher" warning on download/first-launch. This is separate, needs an OV or EV certificate (recurring cost), and the upstream Azure Trusted Signing `signCommand` cannot be reused.
-- v1 posture is open decision 2: recommend unsigned installers (documented SmartScreen step) + signed updater payloads for v1; revisit Authenticode later. Any cert purchase needs your explicit approval.
+- **Windows Authenticode code signing:** what removes the SmartScreen "unknown publisher" warning on download/first-launch. This is separate, needs an OV or EV certificate (recurring cost), and the upstream Azure Trusted Signing `signCommand` cannot be reused (we configure our own).
+- **v1 posture (decided): ship Authenticode-signed installers** plus the free updater-payload signing. The cert purchase + delivery method (OV via hardware token / cloud HSM, or EV) is an explicit approval gate at milestone C; no cert is bought without that go, and CI signing is wired to whatever delivery method is chosen. Until the cert is in hand, dev/prototype builds are unsigned (milestone A is local-only, so SmartScreen is irrelevant there).
 
 ## Testing strategy
 
@@ -310,7 +309,7 @@ Pass 2 (re-review of the incorporated spec) raised five more; resolutions:
 
 ## Risks and open questions
 
-- **The four open decisions** above (Win+H default, signing posture, model delivery, loop scope).
+- **The four decisions** (Win+H default, signing posture, model delivery, loop scope) are resolved in "Decisions"; the only residual risk is the milestone-C cert-purchase approval gate for Authenticode signing.
 - **Two locked one-way doors** (identifier, model host) are in "Locked decisions" — surfaced for override, otherwise set before first build.
 - **Marketing domain:** `audiobud.app` vs a path under an existing domain. Two-way door; decide at docs-site time.
 - **Upstream patched-Tauri pin:** Handy depends on a forked Tauri runtime branch; bumping Tauri later inherits that maintenance. Acceptable for v1; noted.
@@ -318,4 +317,4 @@ Pass 2 (re-review of the incorporated spec) raised five more; resolutions:
 
 ## Out of scope for v1 (revisit later)
 
-- Cloud STT providers, agent/LLM transcript post-processing, a custom-built settings UI, custom-dictionary/vocabulary support (the related AudioBash bug is filed as jamditis/audiobash#41), Windows Authenticode signing (pending decision 2), and non-Windows release automation.
+- Cloud STT providers, agent/LLM transcript post-processing, a custom-built settings UI, custom-dictionary/vocabulary support (the related AudioBash bug is filed as jamditis/audiobash#41), and non-Windows release automation. (Windows Authenticode signing is in scope for the v1 public release per the decisions above, gated on cert-purchase approval at milestone C.)
