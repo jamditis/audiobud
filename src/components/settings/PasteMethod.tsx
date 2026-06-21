@@ -71,6 +71,25 @@ export const PasteMethodSetting: React.FC<PasteMethodProps> = React.memo(
       "ctrl_v") as PasteMethod;
     const externalScriptPath = getSetting("external_script_path") || "";
 
+    // Arming the external script pops a native confirmation dialog in the
+    // backend (a security gate the webview cannot satisfy on its own), so the
+    // path is committed on blur/Enter rather than on every keystroke -
+    // otherwise typing a path would trigger one modal per character. A local
+    // draft holds the in-progress value and resyncs if the persisted value
+    // changes (e.g. a rollback after the user declines the dialog).
+    const [scriptPathDraft, setScriptPathDraft] =
+      React.useState(externalScriptPath);
+
+    React.useEffect(() => {
+      setScriptPathDraft(externalScriptPath);
+    }, [externalScriptPath]);
+
+    const commitScriptPath = () => {
+      if (scriptPathDraft !== externalScriptPath) {
+        updateSetting("external_script_path", scriptPathDraft);
+      }
+    };
+
     const pasteMethodOptions = getPasteMethodOptions(osType);
 
     return (
@@ -93,10 +112,14 @@ export const PasteMethodSetting: React.FC<PasteMethodProps> = React.memo(
           {selectedMethod === "external_script" && (
             <Input
               type="text"
-              value={externalScriptPath}
-              onChange={(e) =>
-                updateSetting("external_script_path", e.target.value)
-              }
+              value={scriptPathDraft}
+              onChange={(e) => setScriptPathDraft(e.target.value)}
+              onBlur={commitScriptPath}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.currentTarget.blur();
+                }
+              }}
               placeholder={t(
                 "settings.advanced.pasteMethod.externalScriptPlaceholder",
               )}
