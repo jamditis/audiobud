@@ -8,6 +8,26 @@ import type {
   OrtAcceleratorSetting,
 } from "@/bindings";
 import { commands } from "@/bindings";
+import { toast } from "sonner";
+import i18n from "@/i18n";
+
+// Auto-save acknowledgment. Settings persist immediately (there is no Save
+// button), so a brief toast confirms each write. A shared toast id plus a short
+// debounce keeps rapid changes (e.g. dragging a slider) from stacking toasts.
+let savedToastTimer: ReturnType<typeof setTimeout> | null = null;
+function notifySaved() {
+  if (savedToastTimer) clearTimeout(savedToastTimer);
+  savedToastTimer = setTimeout(() => {
+    toast.success(i18n.t("settings.autosave.saved"), {
+      id: "settings-saved",
+      duration: 1500,
+    });
+  }, 500);
+}
+function notifySaveError() {
+  if (savedToastTimer) clearTimeout(savedToastTimer);
+  toast.error(i18n.t("settings.autosave.failed"), { id: "settings-saved" });
+}
 
 interface SettingsStore {
   settings: Settings | null;
@@ -288,6 +308,7 @@ export const useSettingsStore = create<SettingsStore>()(
         const updater = settingUpdaters[key];
         if (updater) {
           await updater(value);
+          notifySaved();
         } else if (key !== "bindings" && key !== "selected_model") {
           console.warn(`No handler for setting: ${String(key)}`);
         }
@@ -296,6 +317,7 @@ export const useSettingsStore = create<SettingsStore>()(
         if (settings) {
           set({ settings: { ...settings, [key]: originalValue } });
         }
+        notifySaveError();
       } finally {
         setUpdating(updateKey, false);
       }
@@ -348,6 +370,8 @@ export const useSettingsStore = create<SettingsStore>()(
         if (!result.data.success) {
           throw new Error(result.data.error || "Failed to update binding");
         }
+
+        notifySaved();
       } catch (error) {
         console.error(`Failed to update binding ${id}:`, error);
 
@@ -386,8 +410,10 @@ export const useSettingsStore = create<SettingsStore>()(
       try {
         await commands.resetBinding(id);
         await refreshSettings();
+        notifySaved();
       } catch (error) {
         console.error(`Failed to reset binding ${id}:`, error);
+        notifySaveError();
       } finally {
         setUpdating(updateKey, false);
       }

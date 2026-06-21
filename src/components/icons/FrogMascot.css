@@ -1,0 +1,49 @@
+/* FrogMascot expression states. Lives with the component so the frog animates
+   correctly in any window (main settings AND the standalone recording overlay),
+   without either needing the app-wide swamp stylesheet. */
+.frog .eyeL,
+.frog .eyeR {
+  transition: transform 0.12s ease;
+  transform-origin: center;
+}
+.frog.blink .eyeL,
+.frog.blink .eyeR,
+.frog.winkL .eyeL {
+  transform: scaleY(0.08);
+}
+.frog .iris {
+  transition: transform 0.12s ease-out;
+}
+.frog .sac {
+  transform: scale(0.2);
+  transform-origin: 100px 118px;
+  opacity: 0;
+  transition: transform 0.2s ease-out, opacity 0.2s;
+}
+.frog.croak .sac {
+  transform: scale(1);
+  opacity: 1;
+}
+.frog .mouthOpen {
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.frog .mouthClosed {
+  transition: opacity 0.15s;
+}
+.frog.croak .mouthClosed {
+  opacity: 0;
+}
+.frog.croak .mouthOpen {
+  opacity: 1;
+}
+.frog .tongue {
+  transform: scaleX(0);
+  transform-origin: 100px 150px;
+  opacity: 0;
+  transition: transform 0.12s ease-out, opacity 0.12s;
+}
+.frog.lick .tongue {
+  transform: scaleX(1);
+  opacity: 1;
+}

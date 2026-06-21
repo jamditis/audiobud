@@ -1,14 +1,18 @@
 @import "tailwindcss";
 
 @theme {
-  /* Design tokens */
+  /* Design tokens - frog theme (red-eyed tree frog palette) */
   --color-text: #0f0f0f;
-  --color-background: #fbfbfb;
-  --color-background-ui: #da5893;
-  --color-logo-primary: #faa2ca;
-  --color-logo-stroke: #382731;
+  --color-background: #f3f7ec; /* pale lily-pad */
+  --color-background-ui: #4eaa30; /* leaf-green accent (badges, bars, buttons) */
+  --color-logo-primary: #5fb235; /* wordmark green */
+  --color-logo-stroke: #21421a; /* deep pond green */
   --color-text-stroke: #f6f6f6;
   --color-mid-gray: #808080;
+  --color-frog-eye: #ff5147; /* red-eyed tree frog iris */
+  --color-frog-amber: #ffb23e; /* amber feet/highlights */
+  --color-card: rgba(255, 255, 255, 0.62); /* swamp-glass card (light) */
+  --color-card-rim: rgba(33, 66, 26, 0.18);
 }
 
 :root {
@@ -54,11 +58,13 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    /* Colors - Dark Theme */
-    --color-text: #fbfbfb;
-    --color-background: #2c2b29;
-    --color-logo-primary: #f28cbb;
-    --color-logo-stroke: #fad1ed;
+    /* Colors - Dark Theme (night pond) */
+    --color-text: #f3f7ee;
+    --color-background: #161f17;
+    --color-logo-primary: #84d150;
+    --color-logo-stroke: #d8f0bb;
+    --color-card: rgba(28, 52, 34, 0.5); /* swamp-glass card (night) */
+    --color-card-rim: rgba(140, 210, 120, 0.18);
   }
 }
 
@@ -105,4 +111,193 @@
   fill: var(--color-logo-stroke);
   stroke: var(--color-logo-stroke);
   stroke-width: 1;
+}
+
+/* Frog mascot expression states now live in components/icons/FrogMascot.css
+   (imported by the component) so the frog animates in any window, including the
+   standalone recording overlay. */
+
+/* ---------------------------------------------------------------------------
+   Swamp / wetland atmosphere (rendered by SwampBackground.tsx)
+   --------------------------------------------------------------------------- */
+.swamp-base {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(120% 80% at 50% -10%, rgba(120, 200, 90, 0.18), transparent 55%),
+    radial-gradient(90% 60% at 80% 115%, rgba(43, 178, 163, 0.1), transparent 60%),
+    linear-gradient(180deg, #eaf4dd 0%, #dcecca 55%, #cfe3bb 100%);
+}
+.swamp-rays {
+  position: absolute;
+  inset: 0;
+  opacity: 0.4;
+  mix-blend-mode: screen;
+  background: repeating-linear-gradient(
+    100deg,
+    transparent 0 60px,
+    rgba(150, 210, 90, 0.06) 60px 64px
+  );
+  -webkit-mask: radial-gradient(70% 50% at 50% 0%, #000 0%, transparent 70%);
+  mask: radial-gradient(70% 50% at 50% 0%, #000 0%, transparent 70%);
+}
+.swamp-mist {
+  position: absolute;
+  inset: -20% -10%;
+  opacity: 0.4;
+  background:
+    radial-gradient(40% 30% at 20% 30%, rgba(200, 230, 180, 0.12), transparent 60%),
+    radial-gradient(50% 35% at 75% 60%, rgba(120, 200, 150, 0.1), transparent 60%);
+  animation: swamp-drift 40s ease-in-out infinite alternate;
+}
+@keyframes swamp-drift {
+  from {
+    transform: translate3d(-2%, 0, 0) scale(1);
+  }
+  to {
+    transform: translate3d(3%, -2%, 0) scale(1.08);
+  }
+}
+.swamp-fireflies {
+  position: absolute;
+  inset: 0;
+  opacity: 0; /* fireflies are a night thing; revealed in dark theme */
+}
+.ff {
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    var(--color-frog-amber) 0%,
+    rgba(255, 178, 62, 0.5) 40%,
+    transparent 70%
+  );
+  filter: drop-shadow(0 0 6px var(--color-frog-amber));
+  animation: ff-flit linear infinite, ff-glow 2.4s ease-in-out infinite;
+}
+@keyframes ff-glow {
+  0%, 100% { opacity: 0.12; }
+  50% { opacity: 1; }
+}
+@keyframes ff-flit {
+  0% { transform: translate(0, 0); }
+  25% { transform: translate(18px, -22px); }
+  50% { transform: translate(-12px, -40px); }
+  75% { transform: translate(14px, -62px); }
+  100% { transform: translate(0, -86px); }
+}
+.swamp-pads,
+.swamp-reeds {
+  position: absolute;
+  pointer-events: none;
+}
+.swamp-pads {
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 160px;
+  width: 100%;
+  opacity: 0.5;
+}
+
+/* konami frog rain */
+.frog-rain {
+  position: fixed;
+  top: -56px;
+  z-index: 60;
+  pointer-events: none;
+  animation: frog-fall 2.8s linear forwards;
+}
+@keyframes frog-fall {
+  to {
+    transform: translateY(112vh) rotate(var(--rot, 360deg));
+    opacity: 0.12;
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  .swamp-base {
+    background:
+      radial-gradient(120% 80% at 50% -10%, rgba(120, 200, 90, 0.16), transparent 55%),
+      radial-gradient(90% 60% at 80% 115%, rgba(43, 178, 163, 0.1), transparent 60%),
+      linear-gradient(180deg, #101b13 0%, #16271a 45%, #0c130e 100%);
+  }
+  .swamp-fireflies {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .swamp-mist,
+  .ff {
+    animation: none;
+  }
+  .swamp-fireflies {
+    opacity: 0;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Swamp-glass surfaces
+   --------------------------------------------------------------------------- */
+/* NOTE: deliberately no backdrop-filter -- it would create a per-card stacking
+   context and trap open dropdowns behind the next card. The translucent tint
+   over the swamp still reads as glass. */
+.swamp-card {
+  background: var(--color-card);
+  border: 1px solid var(--color-card-rim);
+  box-shadow:
+    0 6px 22px rgba(0, 0, 0, 0.18),
+    inset 0 1px 0 rgba(160, 220, 140, 0.1);
+}
+
+/* active sidebar item: a lit lily pad (color + glow, not an edge sliver) */
+.nav-pad {
+  box-shadow:
+    0 4px 16px rgba(78, 170, 48, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+/* footer reads as the waterline */
+.swamp-waterline {
+  position: relative;
+}
+.swamp-waterline::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, rgba(43, 178, 163, 0.6), transparent);
+  background-size: 300px 100%;
+  animation: water-ripple 6s linear infinite;
+}
+@keyframes water-ripple {
+  0% { background-position: -300px 0; }
+  100% { background-position: 300px 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .swamp-waterline::before {
+    animation: none;
+  }
+}
+
+/* Output-test playback indicator: little equalizer bars that bounce while a
+   test sound is playing through the selected output device. */
+@keyframes eqbar {
+  0%, 100% { transform: scaleY(0.25); }
+  50% { transform: scaleY(1); }
+}
+.eqbar {
+  transform-origin: bottom;
+  animation: eqbar 0.55s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .eqbar {
+    animation: none;
+    transform: scaleY(0.6);
+  }
 }
