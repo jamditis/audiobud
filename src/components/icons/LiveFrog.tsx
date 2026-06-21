@@ -29,11 +29,14 @@ const LiveFrog = ({
     if (!idleBlink) return;
     let timer: ReturnType<typeof setTimeout>;
     const schedule = () => {
-      timer = setTimeout(() => {
-        setBlink(true);
-        setTimeout(() => setBlink(false), 130);
-        schedule();
-      }, 3000 + Math.random() * 3000);
+      timer = setTimeout(
+        () => {
+          setBlink(true);
+          setTimeout(() => setBlink(false), 130);
+          schedule();
+        },
+        3000 + Math.random() * 3000,
+      );
     };
     schedule();
     return () => clearTimeout(timer);
@@ -69,7 +72,10 @@ const LiveFrog = ({
     <span
       ref={ref}
       onClick={handleClick}
-      style={{ display: "inline-flex", cursor: clickCroak ? "pointer" : undefined }}
+      style={{
+        display: "inline-flex",
+        cursor: clickCroak ? "pointer" : undefined,
+      }}
     >
       <FrogMascot
         size={size}

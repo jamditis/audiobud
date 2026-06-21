@@ -93,8 +93,18 @@ const SwampBackground = () => {
         viewBox="0 0 120 260"
         xmlns="http://www.w3.org/2000/svg"
       >
-        <path d="M30 260 C20 160 26 90 18 20" stroke="#2c5234" strokeWidth="5" fill="none" />
-        <path d="M58 260 C52 150 60 70 70 14" stroke="#365f3c" strokeWidth="5" fill="none" />
+        <path
+          d="M30 260 C20 160 26 90 18 20"
+          stroke="#2c5234"
+          strokeWidth="5"
+          fill="none"
+        />
+        <path
+          d="M58 260 C52 150 60 70 70 14"
+          stroke="#365f3c"
+          strokeWidth="5"
+          fill="none"
+        />
         <rect x="60" y="6" width="14" height="34" rx="7" fill="#7a5a2a" />
         <rect x="10" y="14" width="13" height="30" rx="6" fill="#8a6630" />
       </svg>
@@ -106,8 +116,18 @@ const SwampBackground = () => {
         viewBox="0 0 120 260"
         xmlns="http://www.w3.org/2000/svg"
       >
-        <path d="M30 260 C20 160 26 90 18 20" stroke="#2c5234" strokeWidth="5" fill="none" />
-        <path d="M58 260 C52 150 60 70 70 14" stroke="#365f3c" strokeWidth="5" fill="none" />
+        <path
+          d="M30 260 C20 160 26 90 18 20"
+          stroke="#2c5234"
+          strokeWidth="5"
+          fill="none"
+        />
+        <path
+          d="M58 260 C52 150 60 70 70 14"
+          stroke="#365f3c"
+          strokeWidth="5"
+          fill="none"
+        />
         <rect x="60" y="6" width="14" height="34" rx="7" fill="#7a5a2a" />
       </svg>
 

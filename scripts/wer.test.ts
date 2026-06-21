@@ -6,7 +6,10 @@ test("identical strings have 0 WER", () => {
 });
 
 test("one substitution in four words is 0.25", () => {
-  expect(wer("the quick brown fox", "the quick green fox")).toBeCloseTo(0.25, 5);
+  expect(wer("the quick brown fox", "the quick green fox")).toBeCloseTo(
+    0.25,
+    5,
+  );
 });
 
 test("case and punctuation are normalized", () => {

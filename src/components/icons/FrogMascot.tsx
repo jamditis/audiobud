@@ -116,7 +116,14 @@ const FrogMascot = ({
         <circle cx="64" cy="56" r="21" fill="#fff" />
         <g className="iris" style={irisStyle}>
           <circle cx="64" cy="57" r="15" fill="#ff5147" />
-          <circle cx="64" cy="57" r="15" fill="none" stroke="#ffd24a" strokeWidth="2" />
+          <circle
+            cx="64"
+            cy="57"
+            r="15"
+            fill="none"
+            stroke="#ffd24a"
+            strokeWidth="2"
+          />
           <ellipse cx="64" cy="57" rx="3.4" ry="11" fill="#160c06" />
           <circle cx="59" cy="50" r="3.4" fill="#fff" />
         </g>
@@ -125,7 +132,14 @@ const FrogMascot = ({
         <circle cx="136" cy="56" r="21" fill="#fff" />
         <g className="iris" style={irisStyle}>
           <circle cx="136" cy="57" r="15" fill="#ff5147" />
-          <circle cx="136" cy="57" r="15" fill="none" stroke="#ffd24a" strokeWidth="2" />
+          <circle
+            cx="136"
+            cy="57"
+            r="15"
+            fill="none"
+            stroke="#ffd24a"
+            strokeWidth="2"
+          />
           <ellipse cx="136" cy="57" rx="3.4" ry="11" fill="#160c06" />
           <circle cx="131" cy="50" r="3.4" fill="#fff" />
         </g>
@@ -144,7 +158,14 @@ const FrogMascot = ({
         strokeWidth="5"
         strokeLinecap="round"
       />
-      <ellipse className="mouthOpen" cx="100" cy="130" rx="19" ry="13" fill="#3a1f14" />
+      <ellipse
+        className="mouthOpen"
+        cx="100"
+        cy="130"
+        rx="19"
+        ry="13"
+        fill="#3a1f14"
+      />
 
       {/* tongue flick + fly */}
       <g className="tongue">

@@ -5,9 +5,13 @@ const fail: string[] = [];
 
 const tauri = JSON.parse(readFileSync("src-tauri/tauri.conf.json", "utf8"));
 if (tauri.identifier !== "tech.amditis.audiobud")
-  fail.push(`tauri.conf.json identifier = ${tauri.identifier} (want tech.amditis.audiobud)`);
+  fail.push(
+    `tauri.conf.json identifier = ${tauri.identifier} (want tech.amditis.audiobud)`,
+  );
 if (tauri.productName !== "AudioBud")
-  fail.push(`tauri.conf.json productName = ${tauri.productName} (want AudioBud)`);
+  fail.push(
+    `tauri.conf.json productName = ${tauri.productName} (want AudioBud)`,
+  );
 
 const cargo = readFileSync("src-tauri/Cargo.toml", "utf8");
 if (!/^name\s*=\s*"audiobud"\s*$/m.test(cargo))
@@ -20,7 +24,9 @@ if (pkg.name !== "audiobud")
   fail.push(`package.json name = ${pkg.name} (want audiobud)`);
 
 if (fail.length) {
-  console.error("REBRAND CHECK FAILED:\n" + fail.map((f) => " - " + f).join("\n"));
+  console.error(
+    "REBRAND CHECK FAILED:\n" + fail.map((f) => " - " + f).join("\n"),
+  );
   process.exit(1);
 }
 console.log("REBRAND CHECK PASSED");

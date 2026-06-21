@@ -124,8 +124,16 @@
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(120% 80% at 50% -10%, rgba(120, 200, 90, 0.18), transparent 55%),
-    radial-gradient(90% 60% at 80% 115%, rgba(43, 178, 163, 0.1), transparent 60%),
+    radial-gradient(
+      120% 80% at 50% -10%,
+      rgba(120, 200, 90, 0.18),
+      transparent 55%
+    ),
+    radial-gradient(
+      90% 60% at 80% 115%,
+      rgba(43, 178, 163, 0.1),
+      transparent 60%
+    ),
     linear-gradient(180deg, #eaf4dd 0%, #dcecca 55%, #cfe3bb 100%);
 }
 .swamp-rays {
@@ -146,8 +154,16 @@
   inset: -20% -10%;
   opacity: 0.4;
   background:
-    radial-gradient(40% 30% at 20% 30%, rgba(200, 230, 180, 0.12), transparent 60%),
-    radial-gradient(50% 35% at 75% 60%, rgba(120, 200, 150, 0.1), transparent 60%);
+    radial-gradient(
+      40% 30% at 20% 30%,
+      rgba(200, 230, 180, 0.12),
+      transparent 60%
+    ),
+    radial-gradient(
+      50% 35% at 75% 60%,
+      rgba(120, 200, 150, 0.1),
+      transparent 60%
+    );
   animation: swamp-drift 40s ease-in-out infinite alternate;
 }
 @keyframes swamp-drift {
@@ -175,18 +191,35 @@
     transparent 70%
   );
   filter: drop-shadow(0 0 6px var(--color-frog-amber));
-  animation: ff-flit linear infinite, ff-glow 2.4s ease-in-out infinite;
+  animation:
+    ff-flit linear infinite,
+    ff-glow 2.4s ease-in-out infinite;
 }
 @keyframes ff-glow {
-  0%, 100% { opacity: 0.12; }
-  50% { opacity: 1; }
+  0%,
+  100% {
+    opacity: 0.12;
+  }
+  50% {
+    opacity: 1;
+  }
 }
 @keyframes ff-flit {
-  0% { transform: translate(0, 0); }
-  25% { transform: translate(18px, -22px); }
-  50% { transform: translate(-12px, -40px); }
-  75% { transform: translate(14px, -62px); }
-  100% { transform: translate(0, -86px); }
+  0% {
+    transform: translate(0, 0);
+  }
+  25% {
+    transform: translate(18px, -22px);
+  }
+  50% {
+    transform: translate(-12px, -40px);
+  }
+  75% {
+    transform: translate(14px, -62px);
+  }
+  100% {
+    transform: translate(0, -86px);
+  }
 }
 .swamp-pads,
 .swamp-reeds {
@@ -220,8 +253,16 @@
 @media (prefers-color-scheme: dark) {
   .swamp-base {
     background:
-      radial-gradient(120% 80% at 50% -10%, rgba(120, 200, 90, 0.16), transparent 55%),
-      radial-gradient(90% 60% at 80% 115%, rgba(43, 178, 163, 0.1), transparent 60%),
+      radial-gradient(
+        120% 80% at 50% -10%,
+        rgba(120, 200, 90, 0.16),
+        transparent 55%
+      ),
+      radial-gradient(
+        90% 60% at 80% 115%,
+        rgba(43, 178, 163, 0.1),
+        transparent 60%
+      ),
       linear-gradient(180deg, #101b13 0%, #16271a 45%, #0c130e 100%);
   }
   .swamp-fireflies {
@@ -271,13 +312,22 @@
   right: 0;
   top: 0;
   height: 2px;
-  background: linear-gradient(90deg, transparent, rgba(43, 178, 163, 0.6), transparent);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(43, 178, 163, 0.6),
+    transparent
+  );
   background-size: 300px 100%;
   animation: water-ripple 6s linear infinite;
 }
 @keyframes water-ripple {
-  0% { background-position: -300px 0; }
-  100% { background-position: 300px 0; }
+  0% {
+    background-position: -300px 0;
+  }
+  100% {
+    background-position: 300px 0;
+  }
 }
 @media (prefers-reduced-motion: reduce) {
   .swamp-waterline::before {
@@ -288,8 +338,13 @@
 /* Output-test playback indicator: little equalizer bars that bounce while a
    test sound is playing through the selected output device. */
 @keyframes eqbar {
-  0%, 100% { transform: scaleY(0.25); }
-  50% { transform: scaleY(1); }
+  0%,
+  100% {
+    transform: scaleY(0.25);
+  }
+  50% {
+    transform: scaleY(1);
+  }
 }
 .eqbar {
   transform-origin: bottom;

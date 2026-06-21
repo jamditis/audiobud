@@ -26,6 +26,7 @@ clean profile -- not just that the unit test passes.
 4. Inspect the freshly written `settings_store.json`.
 
 Expected:
+
 - [ ] A new `tech.amditis.audiobud\` dir is created (confirms the rebranded identifier is live).
 - [ ] Window title bar reads `AudioBud`.
 - [ ] Tray icon present.
@@ -40,6 +41,7 @@ Expected:
 4. Hold the transcribe hotkey, say a sentence, release.
 
 Expected:
+
 - [ ] Recording overlay appears while held.
 - [ ] On release, the transcribed text is injected into Notepad.
 - [ ] Text matches the spoken sentence (allowing for proper-noun/number quirks; see bench/RESULTS.md).
@@ -50,6 +52,7 @@ Expected:
 2. Press the cancel binding (default `escape`) before releasing.
 
 Expected:
+
 - [ ] Recording aborts.
 - [ ] No text is injected into the focused field.
 
@@ -59,6 +62,7 @@ Milestone A does not hook Win+H (that is milestone B). AudioBud uses
 Ctrl+Alt+Space, a distinct chord.
 
 Expected:
+
 - [ ] Pressing Win+H still invokes Windows' own voice typing, not AudioBud.
 - [ ] Pressing Win alone does not trigger AudioBud.
 
@@ -74,6 +78,7 @@ portable-aware path). Confirm the renderer still works under it.
 3. Go to Settings -> History and play back a saved recording.
 
 Expected:
+
 - [ ] The Bungee wordmark and Fredoka body text render in their real fonts, not a
       system fallback (confirms `style-src`/`font-src` allow the Google Fonts hosts).
 - [ ] Audio playback of a saved recording works (confirms `media-src` + the runtime
@@ -103,6 +108,7 @@ On Linux:
 1. Settings -> paste method -> select "external script".
 
 Expected:
+
 - [ ] A native OS dialog appears asking to confirm enabling external-script paste.
 - [ ] Cancel/No leaves the paste method unchanged (does NOT switch to external script)
       and shows a "couldn't save" toast (the optimistic selection rolls back).
@@ -111,6 +117,7 @@ Expected:
 2. With external-script enabled, type a script path, then blur or press Enter.
 
 Expected:
+
 - [ ] The confirm dialog pops once on commit (blur/Enter), naming the path - NOT once
       per character typed.
 - [ ] Cancel reverts the field to its previous value (rollback); OK persists it.

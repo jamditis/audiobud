@@ -35,6 +35,7 @@
 - Create `docs/superpowers/SMOKE-GATE-milestone-a.md` — the manual smoke checklist.
 
 A note on the build environment (both apply for every build/test step below):
+
 - Redirect the Rust target dir out of OneDrive to avoid sync thrash and Windows long-path limits. Set once per shell: `export CARGO_TARGET_DIR="C:/cargo-target/audiobud"` (Bash) — and the plan's cargo/tauri commands inherit it.
 - Work on a branch, not `master`: `git checkout -b milestone-a` (Task 0).
 
@@ -43,40 +44,49 @@ A note on the build environment (both apply for every build/test step below):
 ### Task 0: Prerequisites and build environment
 
 **Files:**
+
 - None (environment + branch only).
 
 - [ ] **Step 1: Verify the toolchain is present**
 
 Run:
+
 ```bash
 rustc --version && cargo --version && bun --version && node --version
 ```
+
 Expected: versions print for all four (rustc stable MSVC, cargo, bun, node). If `bun` is missing, stop and install Bun before continuing.
 
 - [ ] **Step 2: Verify Windows native build prerequisites**
 
 Run:
+
 ```bash
 where cl 2>/dev/null || echo "MSVC cl not on PATH (ok if VS Build Tools installed; tauri finds it)"
 ls "C:/VulkanSDK" 2>/dev/null && echo "Vulkan SDK present" || echo "Vulkan SDK MISSING - install from https://vulkan.lunarg.com/ before Task 2"
 reg query "HKLM\\SOFTWARE\\WOW6432Node\\Microsoft\\EdgeUpdate\\Clients\\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}" >/dev/null 2>&1 && echo "WebView2 present" || echo "WebView2 check inconclusive (preinstalled on Win11)"
 ```
+
 Expected: Vulkan SDK present. If missing, install the Vulkan SDK before Task 2 (it is a hard build+runtime dependency for the Whisper engine). VS Build Tools "Desktop development with C++" must be installed.
 
 - [ ] **Step 3: Set the cargo target dir out of OneDrive (this shell)**
 
 Run:
+
 ```bash
 mkdir -p "C:/cargo-target/audiobud" && export CARGO_TARGET_DIR="C:/cargo-target/audiobud" && echo "CARGO_TARGET_DIR=$CARGO_TARGET_DIR"
 ```
+
 Expected: prints the path. Re-export this in any new shell used for building.
 
 - [ ] **Step 4: Create the working branch**
 
 Run:
+
 ```bash
 cd "C:/Users/amdit/OneDrive/Desktop/Crimes/playground/audiobud" && git checkout -b milestone-a && git branch --show-current
 ```
+
 Expected: `milestone-a`.
 
 ---
@@ -84,44 +94,54 @@ Expected: `milestone-a`.
 ### Task 1: Import Handy 0.8.3 as a detached fork
 
 **Files:**
+
 - Create: the entire Handy source tree under the repo root (alongside existing `docs/`).
 - Create: `src-tauri/resources/models/silero_vad_v4.onnx` (downloaded, gitignored later).
 
 - [ ] **Step 1: Clone upstream to a temp dir and capture the SHA**
 
 Run:
+
 ```bash
 rm -rf /tmp/handy-import && git clone --depth 1 https://github.com/cjpais/Handy /tmp/handy-import && git -C /tmp/handy-import rev-parse HEAD
 ```
+
 Expected: clone succeeds; prints a commit SHA (record it for the commit message).
 
 - [ ] **Step 2: Copy Handy's tree into the repo (excluding its .git)**
 
 Run:
+
 ```bash
 cd /tmp/handy-import && rm -rf .git && cp -r ./. "C:/Users/amdit/OneDrive/Desktop/Crimes/playground/audiobud/"
 ```
+
 Expected: no error. Handy's files now sit alongside the existing `docs/superpowers/` (no path collisions — Handy has no `docs/superpowers`).
 
 - [ ] **Step 3: Confirm the key files landed**
 
 Run:
+
 ```bash
 cd "C:/Users/amdit/OneDrive/Desktop/Crimes/playground/audiobud" && ls src-tauri/tauri.conf.json src-tauri/Cargo.toml package.json src-tauri/src/settings.rs src-tauri/src/managers/model.rs && grep -c '"identifier": "com.pais.handy"' src-tauri/tauri.conf.json
 ```
+
 Expected: all paths listed; grep prints `1`.
 
 - [ ] **Step 4: Add the upstream remote and clean OneDrive artifacts**
 
 Run:
+
 ```bash
 cd "C:/Users/amdit/OneDrive/Desktop/Crimes/playground/audiobud" && git remote add upstream https://github.com/cjpais/Handy && git remote -v && find .git -name desktop.ini -delete 2>/dev/null; echo done
 ```
+
 Expected: `upstream` listed (fetch + push); `done`.
 
 - [ ] **Step 5: Append build-output ignores to .gitignore**
 
 Add these lines to `.gitignore` (create the file if Handy didn't supply one; if it did, append):
+
 ```gitignore
 # AudioBud additions
 /target/
@@ -132,17 +152,21 @@ src-tauri/resources/models/silero_vad_v4.onnx
 ```
 
 Run:
+
 ```bash
 cd "C:/Users/amdit/OneDrive/Desktop/Crimes/playground/audiobud" && grep -q "AudioBud additions" .gitignore && echo "ignore added"
 ```
+
 Expected: `ignore added`.
 
 - [ ] **Step 6: Commit the import**
 
 Run (substitute the SHA from Step 1):
+
 ```bash
 cd "C:/Users/amdit/OneDrive/Desktop/Crimes/playground/audiobud" && git add -A && git commit --no-gpg-sign -m "Import Handy 0.8.3 source (upstream <SHA>)"
 ```
+
 Expected: commit created with the full Handy tree.
 
 ---
@@ -152,30 +176,37 @@ Expected: commit created with the full Handy tree.
 This proves the fork is buildable on this machine before any changes. No code changes here.
 
 **Files:**
+
 - None (build verification).
 
 - [ ] **Step 1: Install frontend dependencies**
 
 Run:
+
 ```bash
 cd "C:/Users/amdit/OneDrive/Desktop/Crimes/playground/audiobud" && bun install
 ```
+
 Expected: completes without error (the `postinstall` nix-deps check is a no-op on Windows or prints a skip).
 
 - [ ] **Step 2: Fetch the Silero VAD model (required before building)**
 
 Run:
+
 ```bash
 cd "C:/Users/amdit/OneDrive/Desktop/Crimes/playground/audiobud" && mkdir -p src-tauri/resources/models && curl -L -o src-tauri/resources/models/silero_vad_v4.onnx https://blob.handy.computer/silero_vad_v4.onnx && ls -la src-tauri/resources/models/silero_vad_v4.onnx
 ```
+
 Expected: file downloaded, non-zero size.
 
 - [ ] **Step 3: Launch the dev build**
 
 Run (with `CARGO_TARGET_DIR` exported from Task 0):
+
 ```bash
 cd "C:/Users/amdit/OneDrive/Desktop/Crimes/playground/audiobud" && bun tauri dev
 ```
+
 Expected: Rust compiles (first build is slow — pulls cjpais's patched Tauri + native deps), then the AudioBud-to-be (still "Handy") window opens. If it crashes on `MSVCP140.dll`, install the VC++ x64 redistributable and retry. Leave it running for Step 4.
 
 - [ ] **Step 4: Manually confirm end-to-end transcription on upstream**
@@ -194,12 +225,14 @@ No commit (no file changes). Note in your working log: "Upstream Handy 0.8.3 bui
 Handy has no Rust tests; this adds the first `#[cfg(test)]` module.
 
 **Files:**
+
 - Modify: `src-tauri/src/settings.rs` (append a test module at end of file)
 - Test: same file
 
 - [ ] **Step 1: Write the failing test**
 
 Append to the end of `src-tauri/src/settings.rs`:
+
 ```rust
 #[cfg(test)]
 mod tests {
@@ -222,17 +255,21 @@ mod tests {
 - [ ] **Step 2: Run the test to verify it fails**
 
 Run:
+
 ```bash
 cd "C:/Users/amdit/OneDrive/Desktop/Crimes/playground/audiobud/src-tauri" && cargo test --lib windows_transcribe_default_is_ctrl_alt_space
 ```
+
 Expected: FAIL — `assertion failed: left: "ctrl+space", right: "ctrl+alt+space"` (the current default is still `ctrl+space`).
 
 - [ ] **Step 3: Commit the failing test**
 
 Run:
+
 ```bash
 cd "C:/Users/amdit/OneDrive/Desktop/Crimes/playground/audiobud" && git add src-tauri/src/settings.rs && git commit --no-gpg-sign -m "test: assert Windows transcribe default is ctrl+alt+space (failing)"
 ```
+
 Expected: commit created.
 
 ---
@@ -240,36 +277,45 @@ Expected: commit created.
 ### Task 4: Change the default hotkey to Ctrl+Alt+Space (make it pass)
 
 **Files:**
+
 - Modify: `src-tauri/src/settings.rs` (the Windows `default_shortcut` line in `get_default_settings()`)
 
 - [ ] **Step 1: Edit the Windows default**
 
 In `src-tauri/src/settings.rs`, inside `get_default_settings()`, change:
+
 ```rust
 #[cfg(target_os = "windows")]
 let default_shortcut = "ctrl+space";
 ```
+
 to:
+
 ```rust
 #[cfg(target_os = "windows")]
 let default_shortcut = "ctrl+alt+space";
 ```
+
 Leave the macOS/Linux defaults and the `transcribe_with_post_process` / `cancel` bindings unchanged.
 
 - [ ] **Step 2: Run the test to verify it passes**
 
 Run:
+
 ```bash
 cd "C:/Users/amdit/OneDrive/Desktop/Crimes/playground/audiobud/src-tauri" && cargo test --lib windows_transcribe_default_is_ctrl_alt_space
 ```
+
 Expected: PASS (1 passed).
 
 - [ ] **Step 3: Commit**
 
 Run:
+
 ```bash
 cd "C:/Users/amdit/OneDrive/Desktop/Crimes/playground/audiobud" && git add src-tauri/src/settings.rs && git commit --no-gpg-sign -m "feat: default Windows hotkey to ctrl+alt+space"
 ```
+
 Expected: commit created.
 
 ---
@@ -279,11 +325,13 @@ Expected: commit created.
 A Bun script that fails while the product still identifies as Handy.
 
 **Files:**
+
 - Create: `scripts/check-rebrand.ts`
 
 - [ ] **Step 1: Write the failing check script**
 
 Create `scripts/check-rebrand.ts`:
+
 ```typescript
 // Asserts AudioBud's brand identity across config files. Exits non-zero on any mismatch.
 import { readFileSync } from "node:fs";
@@ -292,9 +340,13 @@ const fail: string[] = [];
 
 const tauri = JSON.parse(readFileSync("src-tauri/tauri.conf.json", "utf8"));
 if (tauri.identifier !== "tech.amditis.audiobud")
-  fail.push(`tauri.conf.json identifier = ${tauri.identifier} (want tech.amditis.audiobud)`);
+  fail.push(
+    `tauri.conf.json identifier = ${tauri.identifier} (want tech.amditis.audiobud)`,
+  );
 if (tauri.productName !== "AudioBud")
-  fail.push(`tauri.conf.json productName = ${tauri.productName} (want AudioBud)`);
+  fail.push(
+    `tauri.conf.json productName = ${tauri.productName} (want AudioBud)`,
+  );
 
 const cargo = readFileSync("src-tauri/Cargo.toml", "utf8");
 if (!/^name\s*=\s*"audiobud"\s*$/m.test(cargo))
@@ -307,7 +359,9 @@ if (pkg.name !== "audiobud")
   fail.push(`package.json name = ${pkg.name} (want audiobud)`);
 
 if (fail.length) {
-  console.error("REBRAND CHECK FAILED:\n" + fail.map((f) => " - " + f).join("\n"));
+  console.error(
+    "REBRAND CHECK FAILED:\n" + fail.map((f) => " - " + f).join("\n"),
+  );
   process.exit(1);
 }
 console.log("REBRAND CHECK PASSED");
@@ -316,17 +370,21 @@ console.log("REBRAND CHECK PASSED");
 - [ ] **Step 2: Run it to verify it fails**
 
 Run:
+
 ```bash
 cd "C:/Users/amdit/OneDrive/Desktop/Crimes/playground/audiobud" && bun scripts/check-rebrand.ts; echo "exit=$?"
 ```
+
 Expected: prints `REBRAND CHECK FAILED` listing identifier/productName/Cargo/package mismatches; `exit=1`.
 
 - [ ] **Step 3: Commit the failing check**
 
 Run:
+
 ```bash
 cd "C:/Users/amdit/OneDrive/Desktop/Crimes/playground/audiobud" && git add scripts/check-rebrand.ts && git commit --no-gpg-sign -m "test: add rebrand-identity check (failing)"
 ```
+
 Expected: commit created.
 
 ---
@@ -334,6 +392,7 @@ Expected: commit created.
 ### Task 6: Apply the minimal rebrand (make it pass)
 
 **Files:**
+
 - Modify: `src-tauri/tauri.conf.json` (`identifier`, `productName`)
 - Modify: `src-tauri/Cargo.toml` (`name`, `default-run`, `description`, `authors`)
 - Modify: `package.json` (`name`)
@@ -342,18 +401,20 @@ Expected: commit created.
 - [ ] **Step 1: Edit tauri.conf.json**
 
 In `src-tauri/tauri.conf.json`:
+
 - change `"productName": "Handy"` to `"productName": "AudioBud"`
 - change `"identifier": "com.pais.handy"` to `"identifier": "tech.amditis.audiobud"`
-Leave `version`, `bundle`, `plugins.updater`, and `signCommand` unchanged for milestone A (updater/signing are milestone B/C).
+  Leave `version`, `bundle`, `plugins.updater`, and `signCommand` unchanged for milestone A (updater/signing are milestone B/C).
 
 - [ ] **Step 2: Edit Cargo.toml**
 
 In `src-tauri/Cargo.toml` `[package]`:
+
 - `name = "handy"` to `name = "audiobud"`
 - `default-run = "handy"` to `default-run = "audiobud"`
 - `description = "Handy"` to `description = "AudioBud — local voice dictation"`
 - `authors = ["cjpais"]` to `authors = ["Joe Amditis"]`
-Leave `[lib] name = "handy_app_lib"` unchanged (internal; referenced by `main.rs` — renaming is out of scope for milestone A).
+  Leave `[lib] name = "handy_app_lib"` unchanged (internal; referenced by `main.rs` — renaming is out of scope for milestone A).
 
 - [ ] **Step 3: Edit package.json**
 
@@ -362,33 +423,41 @@ In `package.json`, change `"name": "handy-app"` to `"name": "audiobud"`.
 - [ ] **Step 4: Locate and edit the Rust window title**
 
 Run to find it:
+
 ```bash
 cd "C:/Users/amdit/OneDrive/Desktop/Crimes/playground/audiobud" && grep -rn '\.title("Handy")' src-tauri/src/
 ```
+
 Expected: one or more hits (research indicates `src-tauri/src/lib.rs`). In each hit, change `.title("Handy")` to `.title("AudioBud")`. If the grep returns nothing, search broader: `grep -rn '"Handy"' src-tauri/src/ | grep -i title` and update the window-title string only (do not mass-replace every "Handy" string in milestone A — locale/about text is milestone C).
 
 - [ ] **Step 5: Run the rebrand check to verify it passes**
 
 Run:
+
 ```bash
 cd "C:/Users/amdit/OneDrive/Desktop/Crimes/playground/audiobud" && bun scripts/check-rebrand.ts; echo "exit=$?"
 ```
+
 Expected: `REBRAND CHECK PASSED`; `exit=0`.
 
 - [ ] **Step 6: Rebuild to confirm the app still compiles and launches as AudioBud**
 
 Run:
+
 ```bash
 cd "C:/Users/amdit/OneDrive/Desktop/Crimes/playground/audiobud" && bun tauri dev
 ```
+
 Expected: compiles; window opens titled "AudioBud". The first build after the crate rename recompiles the binary as `audiobud.exe`. Stop the dev server when confirmed.
 
 - [ ] **Step 7: Commit**
 
 Run:
+
 ```bash
 cd "C:/Users/amdit/OneDrive/Desktop/Crimes/playground/audiobud" && git add src-tauri/tauri.conf.json src-tauri/Cargo.toml package.json src-tauri/src/ Cargo.lock src-tauri/Cargo.lock 2>/dev/null; git commit --no-gpg-sign -m "feat: minimal rebrand to AudioBud (identifier, productName, crate, window title)"
 ```
+
 Expected: commit created.
 
 ---
@@ -398,6 +467,7 @@ Expected: commit created.
 The default engine is chosen from real numbers on this machine. First build a tested scorer, then run both engines on a fixed sample.
 
 **Files:**
+
 - Create: `scripts/wer.ts` (word error rate)
 - Create: `scripts/wer.test.ts` (Bun test)
 - Create: `bench/reference.txt`, `bench/RESULTS.md`
@@ -405,6 +475,7 @@ The default engine is chosen from real numbers on this machine. First build a te
 - [ ] **Step 1: Write the failing WER test**
 
 Create `scripts/wer.test.ts`:
+
 ```typescript
 import { test, expect } from "bun:test";
 import { wer } from "./wer";
@@ -414,7 +485,10 @@ test("identical strings have 0 WER", () => {
 });
 
 test("one substitution in four words is 0.25", () => {
-  expect(wer("the quick brown fox", "the quick green fox")).toBeCloseTo(0.25, 5);
+  expect(wer("the quick brown fox", "the quick green fox")).toBeCloseTo(
+    0.25,
+    5,
+  );
 });
 
 test("case and punctuation are normalized", () => {
@@ -425,14 +499,17 @@ test("case and punctuation are normalized", () => {
 - [ ] **Step 2: Run the test to verify it fails**
 
 Run:
+
 ```bash
 cd "C:/Users/amdit/OneDrive/Desktop/Crimes/playground/audiobud" && bun test scripts/wer.test.ts; echo "exit=$?"
 ```
+
 Expected: FAIL — cannot resolve `./wer` (module does not exist yet); `exit` non-zero.
 
 - [ ] **Step 3: Implement the WER scorer**
 
 Create `scripts/wer.ts`:
+
 ```typescript
 // Word error rate via Levenshtein distance over normalized word tokens.
 function normalize(s: string): string[] {
@@ -456,7 +533,11 @@ export function wer(reference: string, hypothesis: string): number {
   for (let i = 1; i <= r.length; i++) {
     for (let j = 1; j <= h.length; j++) {
       const cost = r[i - 1] === h[j - 1] ? 0 : 1;
-      d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + cost);
+      d[i][j] = Math.min(
+        d[i - 1][j] + 1,
+        d[i][j - 1] + 1,
+        d[i - 1][j - 1] + cost,
+      );
     }
   }
   return d[r.length][h.length] / r.length;
@@ -466,29 +547,33 @@ export function wer(reference: string, hypothesis: string): number {
 - [ ] **Step 4: Run the test to verify it passes**
 
 Run:
+
 ```bash
 cd "C:/Users/amdit/OneDrive/Desktop/Crimes/playground/audiobud" && bun test scripts/wer.test.ts; echo "exit=$?"
 ```
+
 Expected: 3 pass; `exit=0`.
 
 - [ ] **Step 5: Create the fixed benchmark reference**
 
 Create `bench/reference.txt` with a single known sentence to read aloud during the benchmark:
+
 ```
 The quick brown fox jumps over the lazy dog while the engine transcribes every word.
 ```
 
 Create `bench/RESULTS.md`:
+
 ```markdown
 # AudioBud engine benchmark (milestone A)
 
 Machine: Legion, RTX 4080 Super, Windows 11. Date: <fill>.
 Reference sentence: see bench/reference.txt. Read it aloud 5 times per engine.
 
-| Engine (model id) | Backend | Avg latency (s) | WER | Stable over 5 runs? |
-|---|---|---|---|---|
-| Parakeet V3 (parakeet-tdt-0.6b-v3) | DirectML/ONNX | | | |
-| Whisper turbo (turbo) | Vulkan/whisper.cpp | | | |
+| Engine (model id)                  | Backend            | Avg latency (s) | WER | Stable over 5 runs? |
+| ---------------------------------- | ------------------ | --------------- | --- | ------------------- |
+| Parakeet V3 (parakeet-tdt-0.6b-v3) | DirectML/ONNX      |                 |     |                     |
+| Whisper turbo (turbo)              | Vulkan/whisper.cpp |                 |     |                     |
 
 Default chosen: <model id> — reason: <one line>.
 ```
@@ -496,6 +581,7 @@ Default chosen: <model id> — reason: <one line>.
 - [ ] **Step 6: Run the benchmark (measurement gate)**
 
 Procedure (with `bun tauri dev` running):
+
 1. In settings, select the Parakeet model (`parakeet-tdt-0.6b-v3`); download if needed.
 2. Read `bench/reference.txt` aloud 5 times via `Ctrl+Alt+Space` into Notepad; for each, note transcription latency (use the app log timestamps or a stopwatch) and capture the transcript.
 3. Score each transcript: `bun -e "import {wer} from './scripts/wer'; console.log(wer(require('fs').readFileSync('bench/reference.txt','utf8'), '<paste transcript>'))"`.
@@ -507,9 +593,11 @@ Expected: `bench/RESULTS.md` fully filled with real numbers and a chosen default
 - [ ] **Step 7: Commit the scorer and results**
 
 Run:
+
 ```bash
 cd "C:/Users/amdit/OneDrive/Desktop/Crimes/playground/audiobud" && git add scripts/wer.ts scripts/wer.test.ts bench/ && git commit --no-gpg-sign -m "feat: WER scorer + engine benchmark results"
 ```
+
 Expected: commit created.
 
 ---
@@ -519,11 +607,13 @@ Expected: commit created.
 Make the benchmark-chosen model the default for fresh installs. Below uses `parakeet-tdt-0.6b-v3` as the placeholder; **substitute the actual winner from `bench/RESULTS.md`** in both the test and the implementation.
 
 **Files:**
+
 - Modify: `src-tauri/src/settings.rs` (`selected_model` default + test module)
 
 - [ ] **Step 1: Write the failing test**
 
 Add to the `tests` module in `src-tauri/src/settings.rs`:
+
 ```rust
     #[test]
     fn default_selected_model_is_the_benchmarked_default() {
@@ -531,42 +621,53 @@ Add to the `tests` module in `src-tauri/src/settings.rs`:
         assert_eq!(settings.selected_model, "parakeet-tdt-0.6b-v3");
     }
 ```
+
 (Replace `"parakeet-tdt-0.6b-v3"` with the winner if Whisper turbo won: `"turbo"`.)
 
 - [ ] **Step 2: Run the test to verify it fails**
 
 Run:
+
 ```bash
 cd "C:/Users/amdit/OneDrive/Desktop/Crimes/playground/audiobud/src-tauri" && cargo test --lib default_selected_model_is_the_benchmarked_default
 ```
+
 Expected: FAIL — `left: "", right: "parakeet-tdt-0.6b-v3"` (default is currently empty).
 
 - [ ] **Step 3: Set the default**
 
 In `src-tauri/src/settings.rs` `get_default_settings()`, change:
+
 ```rust
         selected_model: "".to_string(),
 ```
+
 to:
+
 ```rust
         selected_model: "parakeet-tdt-0.6b-v3".to_string(),
 ```
+
 (or `"turbo"` if it won the benchmark).
 
 - [ ] **Step 4: Run the test to verify it passes**
 
 Run:
+
 ```bash
 cd "C:/Users/amdit/OneDrive/Desktop/Crimes/playground/audiobud/src-tauri" && cargo test --lib default_selected_model_is_the_benchmarked_default
 ```
+
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
 Run:
+
 ```bash
 cd "C:/Users/amdit/OneDrive/Desktop/Crimes/playground/audiobud" && git add src-tauri/src/settings.rs && git commit --no-gpg-sign -m "feat: default to benchmarked STT engine"
 ```
+
 Expected: commit created.
 
 ---
@@ -576,11 +677,13 @@ Expected: commit created.
 Integration behaviors that can't be unit-tested get a documented, repeatable checklist.
 
 **Files:**
+
 - Create: `docs/superpowers/SMOKE-GATE-milestone-a.md`
 
 - [ ] **Step 1: Write the smoke checklist**
 
 Create `docs/superpowers/SMOKE-GATE-milestone-a.md`:
+
 ```markdown
 # AudioBud milestone A — Windows smoke gate
 
@@ -605,9 +708,11 @@ Expected: all items ticked PASS. Any FAIL becomes a bug → write a failing test
 - [ ] **Step 3: Commit the executed gate**
 
 Run:
+
 ```bash
 cd "C:/Users/amdit/OneDrive/Desktop/Crimes/playground/audiobud" && git add docs/superpowers/SMOKE-GATE-milestone-a.md && git commit --no-gpg-sign -m "test: milestone A Windows smoke gate (executed, passing)"
 ```
+
 Expected: commit created.
 
 ---
@@ -615,14 +720,17 @@ Expected: commit created.
 ### Task 10: Milestone A acceptance
 
 **Files:**
+
 - Modify: `docs/superpowers/specs/2026-06-21-audiobud-design.md` (status note)
 
 - [ ] **Step 1: Run the full automated suite**
 
 Run:
+
 ```bash
 cd "C:/Users/amdit/OneDrive/Desktop/Crimes/playground/audiobud" && (cd src-tauri && cargo test --lib) && bun test scripts/wer.test.ts && bun scripts/check-rebrand.ts && bun run lint
 ```
+
 Expected: cargo tests pass (hotkey default + engine default), WER tests pass, rebrand check passes, eslint passes.
 
 - [ ] **Step 2: Confirm acceptance criteria**
@@ -634,9 +742,11 @@ Verify all are true: upstream builds (Task 2), hotkey default is Ctrl+Alt+Space 
 In `docs/superpowers/specs/2026-06-21-audiobud-design.md`, append to the status line: `Milestone A complete <date> (branch milestone-a).`
 
 Run:
+
 ```bash
 cd "C:/Users/amdit/OneDrive/Desktop/Crimes/playground/audiobud" && git add docs/superpowers/specs/2026-06-21-audiobud-design.md && git commit --no-gpg-sign -m "docs: mark milestone A complete" && git log --oneline | head -15
 ```
+
 Expected: commit created; log shows the milestone-A task commits. Do NOT push or create a GitHub repo (milestone C; needs Joe's approval).
 
 ---
