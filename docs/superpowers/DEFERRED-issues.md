@@ -81,6 +81,15 @@ the Windows-first target.
 
 ### Fix-now (code defect in our tree, high value)
 
+- [ ] **Latent dead fall-through in `change_binding` cancel branch (inherited).**
+  `src-tauri/src/shortcut/mod.rs` (the `id == "cancel"` block, ~lines 150-161) re-fetches the cancel
+  binding via `settings.bindings.get(&id).cloned()` inside an `if let` after `binding_to_modify` was
+  already resolved above; if that lookup ever missed it would silently fall through to the
+  register/unregister path that the cancel case must never take. Harmless today (the `cancel` key is
+  always present), so deferred. Fix: use the already-resolved `binding_to_modify` and `return`
+  unconditionally; drop the re-fetch and clone. **Write a test for the missing-key case first** since
+  this is a settings-write path. Surfaced by the milestone-A /simplify pass.
+
 - [ ] **#1262 — History Limit / Auto-Delete silently destroys recordings (data loss).**
   `src-tauri/src/commands/history.rs:121` and `:150` call `cleanup_old_entries()` synchronously
   the moment a user lowers the limit or changes retention → `history.rs:330` →
