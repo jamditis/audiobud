@@ -12,12 +12,13 @@ Status legend: `[ ]` open, `[x]` resolved (with the resolving commit/date noted 
 
 Six-agent security review of the whole tree (our diff + inherited Handy code) before going public.
 Our diff introduced no findings; all of the below are inherited from cjpais/Handy 0.8.3 (already public
-upstream, so publishing our fork adds no net-new exposure). The three HIGH items are being fixed in the
-milestone-A security pass before publish; the sub-threshold one is tracked.
+upstream, so publishing our fork adds no net-new exposure). The three HIGH items were fixed in the
+milestone-A security pass (TDD, commits noted inline); the sub-threshold ones are tracked.
 
-### Fixing now (milestone-A security pass)
+### Resolved (milestone-A security pass)
 
-- [ ] **HIGH - arbitrary code execution via external-script paste setting.**
+- [x] **HIGH - arbitrary code execution via external-script paste setting.** Fixed 2026-06-21 (`8a8f3dd`;
+  UX follow-ups `60feb0b`, `d7c8c33`).
   `src-tauri/src/shortcut/mod.rs:683-700` (`change_paste_method_setting`) + `:738-746`
   (`change_external_script_path_setting`) let the webview silently arm
   `Command::new(script_path).arg(text)` (`src-tauri/src/clipboard.rs:507`). Pointing the path at an
@@ -26,7 +27,7 @@ milestone-A security pass before publish; the sub-threshold one is tracked.
   dialog on arm - persist the external-script method/path only after the user confirms in a backend
   dialog the webview cannot satisfy on its own.
 
-- [ ] **HIGH - path traversal -> arbitrary file read via `get_audio_file_path`.**
+- [x] **HIGH - path traversal -> arbitrary file read via `get_audio_file_path`.** Fixed 2026-06-21 (`47ce403`).
   `src-tauri/src/managers/history.rs:584-586` joins a webview-supplied `file_name` with no validation;
   `src-tauri/src/commands/history.rs:36-47` exposes it; the wide `assetProtocol` scope (below) then
   serves any path on disk via `convertFileSrc`. A `..\..\` or absolute `file_name` reads arbitrary
@@ -34,7 +35,9 @@ milestone-A security pass before publish; the sub-threshold one is tracked.
   `is_safe_recording_filename` (reject separators, `..`, absolute/drive prefixes, empty), return
   `Result<PathBuf>`, validate before join. **Failing test first.**
 
-- [ ] **HIGH (defense-in-depth) - CSP disabled + wildcard asset scope.**
+- [x] **HIGH (defense-in-depth) - CSP disabled + wildcard asset scope.** Fixed 2026-06-21 (`32b64f6`;
+  dev-HMR follow-up `681f76b`). Asset scope narrowed to `$APPDATA/recordings/**` plus a runtime
+  `allow_directory` for the portable-aware path; strict prod CSP + looser `devCsp` for Vite HMR.
   `src-tauri/tauri.conf.json:16` `csp: null` and `:17-23` `assetProtocol.scope.allow: ["**"]`. No CSP
   means an injected-content/XSS foothold has nothing blocking inline/`eval`/external loads - the
   multiplier that makes the two HIGH exploits above realistic. Fix: set a restrictive CSP (allow the
@@ -68,6 +71,27 @@ milestone-A security pass before publish; the sub-threshold one is tracked.
 - [ ] **Lint - inherited unused import warning.** `src-tauri/src/helpers/clamshell.rs:66` has an unused
   `use super::*;` in its test module (warns on every `cargo test`/`clippy`). Trivial; remove or `#[allow]`.
   Inherited from upstream; surfaces once CI runs clippy with warnings-as-errors.
+
+- [ ] **CI - `bun test` (bare) collides with the Playwright specs.** `tests/app.spec.ts` calls
+  `test.describe`, which Bun's built-in runner picks up and errors on; the unit tests live in `scripts/`
+  and `src/`. There is no `test` script in `package.json`. Until CI lands, run unit tests with
+  `bun test scripts src`. Fix in #30 (CI): add a `test` script scoped to `scripts src` and keep
+  Playwright on `test:playwright`, so a bare `bun test` does not fail.
+
+### Codex local review (pre-PR, 2026-06-21)
+
+Two-pass local review of the milestone-A security pass per the mandatory pre-PR flow (Codex 5.4 low,
+then 5.5 high on the post-fix code). Core security logic passed; reviewers found UX/config follow-ups,
+all fixed before publish. No outstanding findings.
+
+- [x] **5.4 low - dev CSP did not cover Vite HMR over a non-localhost host/port.** `devCsp` allowed only
+  `ws://localhost:1420`, but `vite.config.ts` uses `ws://<host>:1421` under `TAURI_DEV_HOST`. Fixed by
+  allowing the `ws:`/`wss:` schemes in `devCsp` (dev-only) - `681f76b`.
+- [x] **5.5 high - declined confirmation did not roll back the optimistic UI.** `updateSetting` ignored
+  the tauri-specta `{ status: "error" }` result and showed "saved". Fixed (root cause, all settings) -
+  `60feb0b`.
+- [x] **5.5 high - external-script confirm dialog fired per keystroke.** Path input committed on every
+  `onChange`. Fixed by committing on blur/Enter - `d7c8c33`.
 
 ---
 

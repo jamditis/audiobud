@@ -85,10 +85,20 @@ Expected:
       setup alike. If HMR is ever blocked, confirm the dev policy still lists `ws:`
       and re-test.
 
-## Test 6: external-script paste confirmation gate (security pass)
+## Test 6: external-script paste confirmation gate (security pass) - LINUX ONLY
 
 Arming the external-script paste method (which runs an external program on every
 paste) now requires a native OS confirmation that a compromised webview cannot satisfy.
+
+**Not runnable on this Windows gate.** The external-script option only appears in
+the paste-method dropdown on Linux (`PasteMethod.tsx`), so this test is N/A on
+Legion. The backend confirmation gate itself is cross-platform (it guards a direct
+IPC call from a compromised webview too), but that path has no UI to exercise on
+Windows. Run the steps below whenever a Linux build is exercised; until then this
+test is covered by the Rust unit tests for the gate
+(`shortcut::tests`) and the store rollback unit test (`settingUpdateResult.test.ts`).
+
+On Linux:
 
 1. Settings -> paste method -> select "external script".
 
@@ -98,11 +108,12 @@ Expected:
       and shows a "couldn't save" toast (the optimistic selection rolls back).
 - [ ] OK/Yes enables it.
 
-2. With external-script enabled, set or change the script path field.
+2. With external-script enabled, type a script path, then blur or press Enter.
 
 Expected:
-- [ ] Setting a non-empty path pops the confirm dialog again, naming the path.
-- [ ] Cancel leaves the path unchanged; OK persists it.
+- [ ] The confirm dialog pops once on commit (blur/Enter), naming the path - NOT once
+      per character typed.
+- [ ] Cancel reverts the field to its previous value (rollback); OK persists it.
 
 ## Notes
 
