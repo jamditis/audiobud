@@ -49,3 +49,12 @@ node_modules/
 dist/
 desktop.ini
 src-tauri/resources/models/silero_vad_v4.onnx
+
+# Secrets - never commit
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+settings_store.json
