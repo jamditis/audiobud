@@ -64,11 +64,14 @@ milestone-A security pass (TDD, commits noted inline); the sub-threshold ones ar
       `src-tauri/src/settings.rs`, called from both `load_or_create_app_settings` and `get_settings`), and
       the field default is `false`. No build queries the upstream feed regardless of any stored
       `update_checks_enabled: true` left by an earlier build, so the updater never offers an upstream Handy
-      release. The gate forces the flag off in memory only - the stored preference is preserved, so a user's
-      opt-in is restored when milestone B removes the gate and repoints the feed. The Settings update-checks
-      toggle is therefore inert until milestone B (hide/disable it as part of that work), and the
-      portable-update dialog's hardcoded `github.com/cjpais/Handy/releases/latest` link (`UpdateChecker.tsx`)
-      is dormant for the same reason.
+      release. The backend gate forces the flag off in memory only - the stored preference is preserved. A
+      second gate on the frontend, `UPDATER_FEED_READY` in `src/lib/updater.ts` (consumed by
+      `UpdateChecker.tsx`), stops `check()` from ever running even when the toggle is flipped optimistically,
+      which bypasses the backend load gate; the Settings toggle is disabled while the feed is upstream
+      (`UpdateChecksToggle.tsx`). Milestone B: flip `UPDATER_FEED_READY` to true, repoint the feed/signing,
+      remove the backend load gate (restoring the user's stored preference), and repoint the portable-update
+      dialog's hardcoded `github.com/cjpais/Handy/releases/latest` link (`UpdateChecker.tsx`), dormant until
+      then.
 
 - [ ] **Hardening - self-host the Bungee/Fredoka fonts.** `index.html:7-9` loads the wordmark/body
       fonts from `fonts.googleapis.com`/`fonts.gstatic.com`, which forced those hosts into the CSP
