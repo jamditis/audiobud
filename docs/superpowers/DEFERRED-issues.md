@@ -80,9 +80,10 @@ milestone-A security pass (TDD, commits noted inline); the sub-threshold ones ar
 
 ### Codex local review (pre-PR, 2026-06-21)
 
-Two-pass local review of the milestone-A security pass per the mandatory pre-PR flow (Codex 5.4 low,
-then 5.5 high on the post-fix code). Core security logic passed; reviewers found UX/config follow-ups,
-all fixed before publish. No outstanding findings.
+Multi-pass local review of the milestone-A security pass per the mandatory pre-PR flow (Codex 5.4 low,
+then iterated 5.5 high on the post-fix code). Core security logic passed; reviewers found UX/config
+follow-ups and one regression introduced by an earlier fix, all addressed before publish. The final
+5.5 high pass (base `80ac0db`, through `15d4564`) returned clean - no actionable findings. Converged.
 
 - [x] **5.4 low - dev CSP did not cover Vite HMR over a non-localhost host/port.** `devCsp` allowed only
   `ws://localhost:1420`, but `vite.config.ts` uses `ws://<host>:1421` under `TAURI_DEV_HOST`. Fixed by
@@ -92,6 +93,13 @@ all fixed before publish. No outstanding findings.
   `60feb0b`.
 - [x] **5.5 high - external-script confirm dialog fired per keystroke.** Path input committed on every
   `onChange`. Fixed by committing on blur/Enter - `d7c8c33`.
+- [x] **5.5 high (P3) - long external-script `Err` return left unformatted.** `cargo fmt` brought the
+  multi-line return into shape; the store test was prettier-normalized in the same pass - `5ab8ca9`.
+- [x] **5.5 high (P2) - invalid/tampered history rows became undeletable (regression from #22).** The
+  path-traversal guard made `delete_entry` use `get_audio_file_path(...)?`, so a row whose `file_name`
+  failed validation returned before the DB `DELETE`. Fixed by extracting a testable
+  `delete_entry_with_conn` that skips the audio-file unlink for an unsafe name but always removes the
+  row; security property (no path escape) preserved. TDD red->green, +2 unit tests - `15d4564`.
 
 ---
 
