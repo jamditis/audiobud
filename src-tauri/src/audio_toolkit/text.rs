@@ -64,12 +64,20 @@ fn find_best_match<'a>(
             1.0
         };
 
-        // Calculate phonetic similarity using Soundex
-        let phonetic_match = soundex(candidate, custom_word_nospace);
+        // Calculate phonetic similarity using Soundex.
+        //
+        // Soundex is useful for brand names split by the model, but it is too broad
+        // to trust by itself. Words like "working" and "Workday" can share a
+        // phonetic code while having different meanings, so require a reasonable
+        // raw edit-distance match before applying the phonetic boost.
+        let phonetic_match = soundex(candidate, custom_word_nospace)
+            && first_alphanumeric_matches(candidate, custom_word_nospace)
+            && levenshtein_score <= phonetic_levenshtein_limit(threshold);
 
-        // Combine scores: favor phonetic matches, but also consider string similarity
+        // Combine scores: favor phonetic matches only after the raw spelling
+        // distance is close enough to avoid unrelated custom dictionary rewrites.
         let combined_score = if phonetic_match {
-            levenshtein_score * 0.3 // Give significant boost to phonetic matches
+            levenshtein_score * 0.3
         } else {
             levenshtein_score
         };
@@ -82,6 +90,19 @@ fn find_best_match<'a>(
     }
 
     best_match.map(|m| (m, best_score))
+}
+
+/// Returns true when both strings start with the same alphanumeric character.
+fn first_alphanumeric_matches(left: &str, right: &str) -> bool {
+    let left_first = left.chars().find(|c| c.is_alphanumeric());
+    let right_first = right.chars().find(|c| c.is_alphanumeric());
+
+    matches!((left_first, right_first), (Some(left), Some(right)) if left == right)
+}
+
+/// Caps how much raw spelling difference a phonetic match can hide.
+fn phonetic_levenshtein_limit(threshold: f64) -> f64 {
+    (threshold + 0.12).clamp(0.24, 0.62)
 }
 
 /// Applies custom word corrections to transcribed text using fuzzy matching
@@ -548,6 +569,22 @@ mod tests {
         let custom_words = vec!["MacBook Pro".to_string()];
         let result = apply_custom_words(text, &custom_words, 0.5);
         assert!(result.contains("MacBook"));
+    }
+
+    #[test]
+    fn test_apply_custom_words_does_not_replace_unrelated_phonetic_match() {
+        let text = "we are working on the release";
+        let custom_words = vec!["Workday".to_string()];
+        let result = apply_custom_words(text, &custom_words, 0.18);
+        assert_eq!(result, text);
+    }
+
+    #[test]
+    fn test_apply_custom_words_still_corrects_close_phonetic_brand_match() {
+        let text = "sync it with Charge B today";
+        let custom_words = vec!["ChargeBee".to_string()];
+        let result = apply_custom_words(text, &custom_words, 0.18);
+        assert_eq!(result, "sync it with ChargeBee today");
     }
 
     #[test]
