@@ -8,7 +8,7 @@ AudioBud is a detached fork of [Handy](https://github.com/cjpais/Handy) by CJ Pa
 
 ![AudioBud's general settings: the swamp background, the Bungee wordmark, and the transcription, microphone, and audio controls.](screenshots/app-general.png)
 
-*The shortcuts shown above are customized; AudioBud's Windows default is `Ctrl+Alt+Space`.*
+_The shortcuts shown above are customized; AudioBud's Windows default is `Ctrl+Alt+Space`._
 
 ## Status
 
