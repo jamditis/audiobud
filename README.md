@@ -4,9 +4,15 @@ A local-first, offline speech-to-text app. Press a hotkey, speak, and your words
 
 AudioBud is a detached fork of [Handy](https://github.com/cjpais/Handy) by CJ Pais (MIT). It keeps Handy's local transcription engine and Tauri architecture, with AudioBud's own defaults, a frog/swamp visual identity, and a Windows-first focus.
 
+**Website:** <https://jamditis.github.io/audiobud/> &middot; **Download:** [latest release](https://github.com/jamditis/audiobud/releases/latest) &middot; **Changelog:** [CHANGELOG.md](CHANGELOG.md)
+
+![AudioBud's general settings: the swamp background, the Bungee wordmark, and the transcription, microphone, and audio controls.](screenshots/app-general.png)
+
+*The shortcuts shown above are customized; AudioBud's Windows default is `Ctrl+Alt+Space`.*
+
 ## Status
 
-Milestone A: a working local prototype. Build it from source and run it on Windows. There are no packaged AudioBud releases yet. Automatic update checks are disabled, because the inherited updater still points at upstream Handy's release feed; they return once that feed is repointed to AudioBud and its builds are signed, in milestone B. The cross-platform code is inherited from Handy, but AudioBud has only been validated on Windows so far.
+Milestone A: a working local prototype, packaged as a Windows build (v0.1.0) on the [releases page](https://github.com/jamditis/audiobud/releases/latest). The build is not yet code-signed, so Windows SmartScreen shows a warning on first launch; choose **More info -> Run anyway** to proceed. You can also [build it from source](#build-from-source). Automatic update checks are disabled, because the inherited updater still points at upstream Handy's release feed; they return once that feed is repointed to AudioBud and its builds are signed, in milestone B. The cross-platform code is inherited from Handy, but AudioBud has only been validated on Windows so far.
 
 ## How it works
 
@@ -20,6 +26,21 @@ Everything runs on your machine:
 - Transcription uses your choice of local models:
   - **Parakeet V3** (ONNX, DirectML) is the default on Windows: ~640 MB, sub-second on warm runs, accurate, with automatic language detection.
   - **Whisper** models (small, medium, turbo, large) run through whisper.cpp with Vulkan acceleration.
+
+## Features
+
+- **Local transcription.** Audio never leaves your machine. Silero VAD trims silence before the engine runs.
+- **A choice of engines.** Parakeet (V2/V3, ONNX/DirectML) and Whisper (small through large, whisper.cpp/Vulkan), plus Moonshine, SenseVoice, GigaAM, Canary, and Cohere. Each shows accuracy and speed at a glance, and downloads from inside the app.
+- **Languages.** Parakeet V3 detects and transcribes 25 European languages; Whisper adds many more and can translate to English. The interface itself ships in more than a dozen languages.
+- **Push-to-talk or toggle,** a configurable global hotkey, and an optional auto-submit key.
+- **Optional LLM post-processing.** Send the transcript through a provider of your choice (Claude, Gemini, or a custom endpoint) with your own prompt. It is off by default, and your API key stays on your machine.
+- **Custom words.** Bias the output toward names and jargon it would otherwise miss, with a `.txt` import.
+- **History and retention.** Keep recent transcriptions and recordings, or set them to expire.
+- **Audio feedback** with selectable sound themes, a live input meter, and an output test.
+- **GPU control.** Pick the Whisper and ONNX accelerators (auto, CPU, CUDA, DirectML, ROCm) and the GPU device.
+- **Tray, autostart, and command-line flags** for running it the way you want.
+
+![The model picker, with Parakeet V3 active and other engines available to download.](screenshots/models.png)
 
 ## Build from source
 
