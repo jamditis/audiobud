@@ -7,6 +7,7 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { ProgressBar } from "../shared";
 import { useSettings } from "../../hooks/useSettings";
 import { commands } from "../../bindings";
+import { updateChecksActive } from "../../lib/updater";
 
 interface UpdateCheckerProps {
   className?: string;
@@ -25,7 +26,13 @@ const UpdateChecker: React.FC<UpdateCheckerProps> = ({ className = "" }) => {
 
   const { settings, isLoading } = useSettings();
   const settingsLoaded = !isLoading && settings !== null;
-  const updateChecksEnabled = settings?.update_checks_enabled ?? false;
+  // Milestone A: gate on the updater feed, not just the setting. The toggle
+  // updates the setting optimistically, which would otherwise let check() run
+  // against the upstream Handy feed before the backend load gate applies. See
+  // src/lib/updater.ts.
+  const updateChecksEnabled = updateChecksActive(
+    settings?.update_checks_enabled,
+  );
 
   const upToDateTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
   const isManualCheckRef = useRef(false);

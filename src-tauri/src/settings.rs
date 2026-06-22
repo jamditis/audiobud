@@ -453,7 +453,12 @@ fn default_autostart_enabled() -> bool {
 }
 
 fn default_update_checks_enabled() -> bool {
-    true
+    // Off by default for fresh settings until the updater feed and signing are
+    // repointed from upstream Handy to AudioBud (milestone B; see
+    // DEFERRED-issues.md "Provenance"). Existing stored values are left
+    // untouched and gated in the UI (src/lib/updater.ts) so no build queries the
+    // upstream feed, which preserves the user's preference for milestone B.
+    false
 }
 
 fn default_selected_language() -> String {
@@ -1014,5 +1019,19 @@ mod tests {
     fn windows_default_model_is_parakeet_v3() {
         let settings = get_default_settings();
         assert_eq!(settings.selected_model, "parakeet-tdt-0.6b-v3");
+    }
+
+    // Update checks are off by default. The inherited updater still points at
+    // upstream Handy's release feed and verifies against upstream's key (see
+    // DEFERRED-issues.md "Provenance"), so a default build must not offer to
+    // install an upstream Handy release over AudioBud. Re-enable once the feed
+    // and signing are repointed to AudioBud in milestone B.
+    // Fresh settings default update checks off. Existing stored values are left
+    // untouched (preserved for milestone B) and gated in the UI - see
+    // src/lib/updater.test.ts for the milestone-A "never active" invariant.
+    #[test]
+    fn default_settings_disable_update_checks() {
+        let settings = get_default_settings();
+        assert!(!settings.update_checks_enabled);
     }
 }

@@ -60,6 +60,16 @@ milestone-A security pass (TDD, commits noted inline); the sub-threshold ones ar
       `pubkey` + `endpoints` = `github.com/cjpais/Handy`). A detached fork would pull/trust upstream's
       signed releases, not AudioBud's. Not an egress/crypto vuln (TLS + minisign chain intact), but wrong
       provenance. Fix in milestone B (release pipeline) - cross-ref the Milestone B section.
+      Mitigated for milestone A by a frontend gate: `UPDATER_FEED_READY` in `src/lib/updater.ts` (consumed
+      by `UpdateChecker.tsx` via `updateChecksActive`) stops `check()` from ever running while the feed is
+      upstream, regardless of the stored setting or an optimistic toggle. `check()` is the only place the
+      updater queries the feed, so this is the single chokepoint. The Settings toggle is disabled
+      (`UpdateChecksToggle.tsx`) and the field default is `false` for fresh installs. The stored
+      `update_checks_enabled` value is left untouched on the backend (no load-time mutation), so a user's
+      prior preference is preserved and takes effect again once milestone B flips `UPDATER_FEED_READY` to
+      true and repoints the feed/signing. The portable-update dialog's hardcoded
+      `github.com/cjpais/Handy/releases/latest` link (`UpdateChecker.tsx`) is dormant until then; repoint it
+      with the feed.
 
 - [ ] **Hardening - self-host the Bungee/Fredoka fonts.** `index.html:7-9` loads the wordmark/body
       fonts from `fonts.googleapis.com`/`fonts.gstatic.com`, which forced those hosts into the CSP
