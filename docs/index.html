@@ -1,0 +1,304 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AudioBud - local dictation for Windows</title>
+    <meta
+      name="description"
+      content="AudioBud is a local-first Windows dictation app. Press a hotkey, speak, and paste private speech-to-text into any focused text field."
+    />
+    <link rel="canonical" href="https://jamditis.github.io/audiobud/" />
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <meta
+      property="og:title"
+      content="AudioBud - local dictation for Windows"
+    />
+    <meta
+      property="og:description"
+      content="Private speech-to-text with local models, a global hotkey, offline audio, and dark-mode settings."
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://jamditis.github.io/audiobud/" />
+    <meta
+      property="og:image"
+      content="https://jamditis.github.io/audiobud/assets/og-image.png"
+    />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta
+      name="twitter:title"
+      content="AudioBud - local dictation for Windows"
+    />
+    <meta
+      name="twitter:description"
+      content="Private speech-to-text with local models, a global hotkey, offline audio, and dark-mode settings."
+    />
+    <meta
+      name="twitter:image"
+      content="https://jamditis.github.io/audiobud/assets/og-image.png"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <nav class="nav" aria-label="Primary">
+        <a class="brand" href="#top" aria-label="AudioBud home">
+          <img class="brand-mark" src="./favicon.svg" alt="" />
+          <span>AudioBud</span>
+        </a>
+        <div class="nav-links">
+          <a href="#how">How it works</a>
+          <a href="#features">Features</a>
+          <a href="#models">Models</a>
+          <a href="#install">Install</a>
+        </div>
+      </nav>
+    </header>
+
+    <main id="top">
+      <section class="hero" aria-labelledby="hero-title">
+        <div class="hero-inner">
+          <p class="eyebrow">Milestone A for Windows</p>
+          <h1 id="hero-title">Local dictation that stays on your machine.</h1>
+          <p class="lede">
+            AudioBud turns a hotkey into private speech-to-text. Press, speak,
+            and your words appear in the app or text field that already has
+            focus.
+          </p>
+          <div class="actions">
+            <a
+              class="button primary"
+              href="https://github.com/jamditis/audiobud/releases/latest"
+              >Download for Windows</a
+            >
+            <a class="button" href="https://github.com/jamditis/audiobud"
+              >View source</a
+            >
+          </div>
+          <div class="status-row" aria-label="Project status">
+            <span
+              ><strong>Current release</strong>v0.1.0, packaged for Windows
+              x64.</span
+            >
+            <span
+              ><strong>Audio privacy</strong>Transcription runs locally; audio
+              is not uploaded.</span
+            >
+            <span
+              ><strong>Known caveat</strong>The installer is not code-signed
+              yet.</span
+            >
+          </div>
+        </div>
+      </section>
+
+      <section id="how" class="section">
+        <div class="wrap">
+          <div class="section-head">
+            <h2>Press a shortcut, speak, and keep moving.</h2>
+            <p>
+              The app is built for quick dictation into any focused text field,
+              without switching to a recorder or uploading audio for processing.
+            </p>
+          </div>
+          <div class="steps">
+            <article class="step">
+              <span class="step-number">1</span>
+              <h3>Start recording</h3>
+              <p>
+                Use the Windows default shortcut, Ctrl+Alt+Space, or set your
+                own binding.
+              </p>
+            </article>
+            <article class="step">
+              <span class="step-number">2</span>
+              <h3>Transcribe locally</h3>
+              <p>
+                Silero VAD trims silence, then the selected local model turns
+                speech into text.
+              </p>
+            </article>
+            <article class="step">
+              <span class="step-number">3</span>
+              <h3>Paste the result</h3>
+              <p>
+                AudioBud inserts the transcript into the active app by clipboard
+                or direct typing.
+              </p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section id="features" class="section alt">
+        <div class="wrap">
+          <div class="section-head">
+            <h2>Current app surface</h2>
+            <p>
+              AudioBud is a detached Handy fork with its own defaults, model
+              choice, Windows focus, and frog-themed dark interface.
+            </p>
+          </div>
+          <div class="feature-grid">
+            <article class="feature">
+              <h3>Local models</h3>
+              <p>
+                Download and switch between Parakeet, Whisper, Moonshine,
+                SenseVoice, GigaAM, Canary, and Cohere engines from the Models
+                screen.
+              </p>
+            </article>
+            <article class="feature">
+              <h3>Configurable input</h3>
+              <p>
+                Choose push-to-talk or toggle mode, microphone and output
+                devices, audio feedback, overlay position, and paste behavior.
+              </p>
+            </article>
+            <article class="feature">
+              <h3>Text cleanup controls</h3>
+              <p>
+                Add custom words, deterministic word replacements, raw-output
+                mode, and optional LLM post-processing with your own provider
+                key.
+              </p>
+            </article>
+            <article class="feature">
+              <h3>History and retention</h3>
+              <p>
+                Keep recent transcriptions and recordings, set retention limits,
+                retry entries, and clear data when you do not want it stored.
+              </p>
+            </article>
+          </div>
+          <div class="screens">
+            <figure class="screenshot">
+              <img
+                src="./assets/app-general.png"
+                alt="AudioBud general settings in dark mode with shortcut, sound, microphone, and audio feedback controls."
+              />
+              <figcaption>
+                General settings in dark mode with the current Windows shortcut
+                and sound controls.
+              </figcaption>
+            </figure>
+            <figure class="screenshot">
+              <img
+                src="./assets/models.png"
+                alt="AudioBud model settings in dark mode with Parakeet V3 active and other engines available to download."
+              />
+              <figcaption>
+                Model management with Parakeet V3 active and other local engines
+                available.
+              </figcaption>
+            </figure>
+          </div>
+        </div>
+      </section>
+
+      <section id="models" class="section">
+        <div class="wrap">
+          <div class="section-head">
+            <h2>Pick the local engine that fits the job.</h2>
+            <p>
+              Parakeet V3 is the Windows default for this milestone. Whisper
+              remains available for broad language coverage and translation.
+            </p>
+          </div>
+          <div class="model-list">
+            <article class="model-row">
+              <div class="model-main">
+                <strong>Parakeet V3</strong>
+                <p>
+                  Fast multilingual transcription for 25 European languages.
+                </p>
+              </div>
+              <div class="model-tags">
+                <span class="tag">recommended</span
+                ><span class="tag">DirectML</span>
+              </div>
+              <span class="size">456 MB</span>
+            </article>
+            <article class="model-row">
+              <div class="model-main">
+                <strong>Whisper</strong>
+                <p>
+                  Small, medium, turbo, and large variants through whisper.cpp.
+                </p>
+              </div>
+              <div class="model-tags">
+                <span class="tag">translation</span
+                ><span class="tag">many languages</span>
+              </div>
+              <span class="size">465 MB+</span>
+            </article>
+            <article class="model-row">
+              <div class="model-main">
+                <strong>Specialized engines</strong>
+                <p>
+                  Moonshine, SenseVoice, GigaAM, Canary, and Cohere cover speed
+                  or language niches.
+                </p>
+              </div>
+              <div class="model-tags">
+                <span class="tag">download in app</span
+                ><span class="tag">offline audio</span>
+              </div>
+              <span class="size">31 MB+</span>
+            </article>
+          </div>
+          <div class="notice">
+            <p>
+              <strong>Unsigned release:</strong> Windows SmartScreen warns on
+              first launch because the installer is not signed yet. Choose More
+              info, then Run anyway, or build from source.
+            </p>
+            <a
+              class="button"
+              href="https://github.com/jamditis/audiobud/releases/latest"
+              >Latest release</a
+            >
+          </div>
+        </div>
+      </section>
+
+      <section id="install" class="section alt">
+        <div class="wrap install">
+          <div>
+            <p class="eyebrow">Build from source</p>
+            <h2>Use Rust, Bun, and the platform build tools.</h2>
+            <p class="lede">
+              The current release is validated on Windows x64. macOS and Linux
+              code is inherited from Handy, but this fork has not validated
+              those builds yet.
+            </p>
+            <div class="actions">
+              <a
+                class="button primary"
+                href="https://github.com/jamditis/audiobud/releases/latest"
+                >Download release</a
+              >
+              <a
+                class="button"
+                href="https://github.com/jamditis/audiobud/blob/main/BUILD.md"
+                >Read build notes</a
+              >
+            </div>
+          </div>
+          <pre><code>bun install
+bun run tauri dev
+bun run tauri build</code></pre>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="wrap">
+        <span>AudioBud is a detached fork of Handy by CJ Pais.</span>
+        <span>MIT licensed.</span>
+      </div>
+    </footer>
+  </body>
+</html>
