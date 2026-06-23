@@ -1,70 +1,101 @@
 # AudioBud
 
-A local-first, offline speech-to-text app. Press a hotkey, speak, and your words appear in whatever text field has focus. No audio leaves your machine.
+AudioBud is a local-first dictation app for Windows. Hold a hotkey, speak, and AudioBud types the transcript into the focused text field. Audio stays on your machine unless you explicitly enable optional LLM post-processing.
 
-AudioBud is a detached fork of [Handy](https://github.com/cjpais/Handy) by CJ Pais (MIT). It keeps Handy's local transcription engine and Tauri architecture, with AudioBud's own defaults, a frog/swamp visual identity, and a Windows-first focus.
+AudioBud is a detached fork of [Handy](https://github.com/cjpais/Handy) by CJ Pais. It keeps Handy's Tauri, Rust, React, and local transcription base while adding AudioBud defaults, a dark frog/swamp interface, a Windows-first release path, and local model choices tuned for this fork.
 
-**Website:** <https://jamditis.github.io/audiobud/> &middot; **Download:** [latest release](https://github.com/jamditis/audiobud/releases/latest) &middot; **Changelog:** [CHANGELOG.md](CHANGELOG.md)
+- **Website:** <https://jamditis.github.io/audiobud/>
+- **Download:** [latest release](https://github.com/jamditis/audiobud/releases/latest)
+- **Changelog:** [CHANGELOG.md](CHANGELOG.md)
 
-![AudioBud's general settings: the swamp background, the Bungee wordmark, and the transcription, microphone, and audio controls.](screenshots/app-general.png)
+![AudioBud general settings in dark mode with shortcut, microphone, input level, and audio feedback controls.](screenshots/app-general.png)
 
-_The shortcuts shown above are customized; AudioBud's Windows default is `Ctrl+Alt+Space`._
+## Current status
 
-## Status
+The current release is `v0.1.0`, packaged for Windows x64. The build is not code-signed yet, so Windows SmartScreen warns on first launch. Choose **More info -> Run anyway** if you trust the build, or [build from source](#build-from-source).
 
-Milestone A: a working local prototype, packaged as a Windows build (v0.1.0) on the [releases page](https://github.com/jamditis/audiobud/releases/latest). The build is not yet code-signed, so Windows SmartScreen shows a warning on first launch; choose **More info -> Run anyway** to proceed. You can also [build it from source](#build-from-source). Automatic update checks are disabled, because the inherited updater still points at upstream Handy's release feed; they return once that feed is repointed to AudioBud and its builds are signed, in milestone B. The cross-platform code is inherited from Handy, but AudioBud has only been validated on Windows so far.
+Windows is the validated target for this milestone. macOS and Linux code is inherited from Handy and may work, but this fork has not validated those builds yet.
+
+Automatic update checks are disabled for now because the inherited updater still points at Handy's release feed. They should return after AudioBud has its own signed release and updater feed.
 
 ## How it works
 
-1. Press the hotkey (default `Ctrl+Alt+Space`) to start and stop recording.
-2. Speak while it records.
-3. AudioBud transcribes locally and types the text into the focused field.
+1. Hold the default Windows shortcut, `Ctrl+Alt+Space`, to record. You can switch from push-to-talk to toggle mode in settings.
+2. AudioBud records from your selected microphone and trims silence with Silero VAD.
+3. The selected local model transcribes the audio.
+4. AudioBud inserts the result into the focused app by clipboard paste or direct typing.
 
-Everything runs on your machine:
+## What you can configure
 
-- Silero VAD filters out silence.
-- Transcription uses your choice of local models:
-  - **Parakeet V3** (ONNX, DirectML) is the default on Windows: ~640 MB, sub-second on warm runs, accurate, with automatic language detection.
-  - **Whisper** models (small, medium, turbo, large) run through whisper.cpp with Vulkan acceleration.
+- **Shortcuts:** transcribe, transcribe with post-processing, raw transcript, and cancel bindings.
+- **Recording mode:** push-to-talk or toggle recording.
+- **Audio:** microphone, output device, input meter, audio feedback, volume, and mute-while-recording.
+- **Models:** Parakeet, Whisper, Moonshine, SenseVoice, GigaAM, Canary, Cohere, and custom Whisper GGML `.bin` files.
+- **Text output:** language selection where supported, translation where supported, trailing spaces, paste method, clipboard handling, and raw lowercased output.
+- **Vocabulary:** custom words plus deterministic word replacements for names, jargon, and common mishears.
+- **Post-processing:** optional cleanup through OpenAI, Anthropic, Z.AI, OpenRouter, Groq, Cerebras, AWS Bedrock via Mantle, or a custom OpenAI-compatible endpoint. API keys stay in local settings.
+- **History:** recent transcriptions, recording retention, retry, and saved entries.
+- **Advanced controls:** autostart, tray icon, overlay position, model unload timeout, Whisper acceleration, ONNX acceleration, GPU selection, logging, and debug paths.
 
-## Features
+## Models
 
-- **Local transcription.** Audio never leaves your machine. Silero VAD trims silence before the engine runs.
-- **A choice of engines.** Parakeet (V2/V3, ONNX/DirectML) and Whisper (small through large, whisper.cpp/Vulkan), plus Moonshine, SenseVoice, GigaAM, Canary, and Cohere. Each shows accuracy and speed at a glance, and downloads from inside the app.
-- **Languages.** Parakeet V3 detects and transcribes 25 European languages; Whisper adds many more and can translate to English. The interface itself ships in more than a dozen languages.
-- **Push-to-talk or toggle,** a configurable global hotkey, and an optional auto-submit key.
-- **Optional LLM post-processing.** Send the transcript through a provider of your choice (Claude, Gemini, or a custom endpoint) with your own prompt. It is off by default, and your API key stays on your machine.
-- **Custom words.** Bias the output toward names and jargon it would otherwise miss, with a `.txt` import.
-- **History and retention.** Keep recent transcriptions and recordings, or set them to expire.
-- **Audio feedback** with selectable sound themes, a live input meter, and an output test.
-- **GPU control.** Pick the Whisper and ONNX accelerators (auto, CPU, CUDA, DirectML, ROCm) and the GPU device.
-- **Tray, autostart, and command-line flags** for running it the way you want.
+Parakeet V3 is the Windows default in this fork because it was the best small local engine in the milestone A benchmark. See [bench/RESULTS.md](bench/RESULTS.md).
 
-![The model picker, with Parakeet V3 active and other engines available to download.](screenshots/models.png)
+![AudioBud model settings in dark mode with Parakeet V3 active and other local engines available to download.](screenshots/models.png)
+
+| Engine      | Best fit                                      | Notes                                                         |
+| ----------- | --------------------------------------------- | ------------------------------------------------------------- |
+| Parakeet V3 | Default Windows dictation                     | Fast multilingual ONNX model with DirectML support.           |
+| Whisper     | Broad language coverage                       | Small, medium, turbo, and large variants through whisper.cpp. |
+| Moonshine   | Small English models                          | Very fast English-focused options.                            |
+| SenseVoice  | Chinese, English, Japanese, Korean, Cantonese | Good option for East Asian language coverage.                 |
+| GigaAM      | Russian                                       | Russian speech recognition.                                   |
+| Canary      | Multilingual and translation                  | 180M Flash and 1B v2 options.                                 |
+| Cohere      | Accuracy-first multilingual                   | Larger and slower, but accurate.                              |
+
+## Install
+
+Download the Windows installer from the [latest release](https://github.com/jamditis/audiobud/releases/latest):
+
+- `AudioBud_0.1.0_x64-setup.exe`
+- `AudioBud_0.1.0_x64_en-US.msi`
+
+On first run, choose a model if one is not already installed and grant microphone permission when Windows asks.
 
 ## Build from source
 
-Prerequisites: [Rust](https://rustup.rs/) (stable), [Bun](https://bun.sh/), and the platform build tools. On Windows that means Visual Studio 2022 (v143 toolset), the Vulkan SDK, and Ninja. See [BUILD.md](BUILD.md) for the full, platform-specific setup.
+Prerequisites: [Rust](https://rustup.rs/), [Bun](https://bun.sh/), and the platform build tools. On Windows, install Visual Studio 2022 with the v143 toolset, the Vulkan SDK, and Ninja. See [BUILD.md](BUILD.md) for platform notes.
 
 ```bash
 bun install
-bun run tauri dev      # run in development
-bun run tauri build    # produce a local build
+bun run tauri dev
+bun run tauri build
 ```
 
-On first run, AudioBud opens onboarding, where you pick a model and download it. Grant microphone permission (and, on macOS, accessibility) when prompted.
+For frontend-only work:
 
-## AudioBud defaults
+```bash
+bun run dev
+bun run build
+bun run lint
+bun run test
+```
 
-- **Hotkey:** `Ctrl+Alt+Space` (Handy ships a different default).
-- **Engine on Windows:** `parakeet-tdt-0.6b-v3`, chosen from a local benchmark as the smallest engine that transcribes reliably on this build's DirectML path. The numbers and the decision are in [bench/RESULTS.md](bench/RESULTS.md).
+To re-render the README and website screenshots in dark mode:
+
+```bash
+bun run screenshots
+```
+
+The screenshot script starts Vite, mocks the Tauri command surface with current Windows defaults, captures `screenshots/app-general.png` and `screenshots/models.png`, and refreshes the GitHub Pages image assets.
+It installs Playwright's Chromium browser on first run if needed.
 
 ## Command-line flags
 
-AudioBud accepts flags for controlling a running instance and for customizing startup. Remote-control flags are sent to an already-running instance through the single-instance plugin.
+AudioBud accepts runtime flags for controlling an already-running instance and for changing startup behavior.
 
 ```bash
-audiobud --toggle-transcription   # toggle recording on/off
+audiobud --toggle-transcription   # toggle recording on or off
 audiobud --toggle-post-process    # toggle recording with post-processing
 audiobud --cancel                 # cancel the current operation
 audiobud --start-hidden           # start without showing the main window
@@ -73,43 +104,50 @@ audiobud --debug                  # enable verbose logging
 audiobud --help                   # list all flags
 ```
 
-## Debug mode
-
-Open the debug menu with `Ctrl+Shift+D` (Windows and Linux) or `Cmd+Shift+D` (macOS). It shows the app data directory and other diagnostics.
+Remote-control flags are sent to the running app through Tauri's single-instance plugin, then the second process exits.
 
 ## Manual model installation
 
-If a proxy or firewall blocks the in-app downloader, install models by hand. The model files are hosted by upstream Handy and are publicly reachable from any browser.
+Use the in-app downloader when possible. If a proxy or firewall blocks it, install model files by hand.
 
-1. Find your app data directory. It is shown in **Settings -> About**, or open the debug menu (above). The default paths are:
-   - **Windows:** `C:\Users\{username}\AppData\Roaming\tech.amditis.audiobud\`
-   - **macOS:** `~/Library/Application Support/tech.amditis.audiobud/`
-   - **Linux:** `~/.config/tech.amditis.audiobud/`
-2. Create a `models` folder inside it if one does not exist.
-3. Download the models you want:
-   - Whisper small (487 MB): `https://blob.handy.computer/ggml-small.bin`
-   - Whisper turbo (1600 MB): `https://blob.handy.computer/ggml-large-v3-turbo.bin`
-   - Parakeet V3 (478 MB): `https://blob.handy.computer/parakeet-v3-int8.tar.gz`
-4. Install them:
-   - Whisper `.bin` files go directly into `models/`. Keep the exact filenames.
-   - Parakeet archives are extracted into `models/`; the extracted directory must be named `parakeet-tdt-0.6b-v3-int8`.
-5. Restart AudioBud. The models appear as "Downloaded" under **Settings -> Models**.
+1. Open **Settings -> About** or debug mode to find the app data directory.
+   - Windows: `C:\Users\{username}\AppData\Roaming\tech.amditis.audiobud\`
+   - macOS: `~/Library/Application Support/tech.amditis.audiobud/`
+   - Linux: `~/.config/tech.amditis.audiobud/`
+2. Create a `models` folder inside that directory if needed.
+3. Download the model you want:
+   - Whisper small: `https://blob.handy.computer/ggml-small.bin`
+   - Whisper turbo: `https://blob.handy.computer/ggml-large-v3-turbo.bin`
+   - Parakeet V3: `https://blob.handy.computer/parakeet-v3-int8.tar.gz`
+4. Place Whisper `.bin` files directly in `models/`.
+5. Extract Parakeet archives into `models/`; the extracted folder for Parakeet V3 must be named `parakeet-tdt-0.6b-v3-int8`.
+6. Restart AudioBud. Installed models appear under **Settings -> Models**.
 
-AudioBud also auto-discovers custom Whisper GGML `.bin` models placed in the `models` directory. The display name is derived from the filename.
+Custom Whisper GGML `.bin` files placed in `models/` are auto-discovered. The display name comes from the filename.
 
-## Platform support
+## Debug mode
 
-Windows (x64) is the validated target for milestone A. The macOS and Linux code is inherited from Handy and may work, but AudioBud has not been tested there yet. For platform-specific notes in the meantime, see Handy's [documentation](https://github.com/cjpais/Handy).
+Open debug mode with `Ctrl+Shift+D` on Windows and Linux, or `Cmd+Shift+D` on macOS. It shows app data paths, logs, keyboard implementation settings, recording buffer controls, paste delay, and other diagnostics.
+
+## Project layout
+
+- `src/` - React settings UI, onboarding, model selector, update checker, translations, and overlay frontend.
+- `src-tauri/src/` - Rust app setup, managers, Tauri commands, shortcut handling, audio pipeline, transcription pipeline, history, settings, tray, and CLI flags.
+- `src-tauri/resources/` - default settings, app resources, and tray assets.
+- `docs/` - static GitHub Pages site.
+- `screenshots/` - README screenshots generated by `bun run screenshots`.
+- `bench/` - benchmark notes and model-selection evidence.
 
 ## Acknowledgments
 
-AudioBud builds directly on [Handy](https://github.com/cjpais/Handy) by CJ Pais and its contributors. Thanks also to:
+AudioBud builds on [Handy](https://github.com/cjpais/Handy) by CJ Pais and its contributors. It also uses:
 
-- **OpenAI Whisper** for the speech recognition model
-- **whisper.cpp and ggml** for cross-platform inference and acceleration
-- **Silero** for the lightweight VAD
-- **Tauri** for the Rust-based app framework
+- OpenAI Whisper
+- whisper.cpp and ggml
+- NVIDIA Parakeet
+- Silero VAD
+- Tauri
 
 ## License
 
-MIT, see [LICENSE](LICENSE). AudioBud is a fork of Handy; the original copyright is retained alongside AudioBud's.
+MIT. See [LICENSE](LICENSE). AudioBud is a fork of Handy, and the original copyright notice is retained.

@@ -17,6 +17,7 @@
     "test": "bun test scripts src",
     "test:playwright": "playwright test",
     "test:playwright:ui": "playwright test --ui",
+    "screenshots": "playwright install chromium && bun scripts/capture-readme-screenshots.mjs",
     "check:translations": "bun scripts/check-translations.ts",
     "postinstall": "bun scripts/check-nix-deps.ts"
   },
