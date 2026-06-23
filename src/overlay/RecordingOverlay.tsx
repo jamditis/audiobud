@@ -10,10 +10,15 @@ import { getLanguageDirection } from "@/lib/utils/rtl";
 
 type OverlayState = "recording" | "transcribing" | "processing";
 
+// Payload of the Rust `show-overlay` event (see src-tauri/src/overlay.rs). `raw` reflects
+// whether the current dictation will be emitted as raw transcript.
+type OverlayShowPayload = { state: OverlayState; raw: boolean };
+
 const RecordingOverlay: React.FC = () => {
   const { t } = useTranslation();
   const [isVisible, setIsVisible] = useState(false);
   const [state, setState] = useState<OverlayState>("recording");
+  const [isRaw, setIsRaw] = useState(false);
   const [levels, setLevels] = useState<number[]>(Array(16).fill(0));
   const smoothedLevelsRef = useRef<number[]>(Array(16).fill(0));
   const direction = getLanguageDirection(i18n.language);
@@ -24,14 +29,16 @@ const RecordingOverlay: React.FC = () => {
       const unlistenShow = await listen("show-overlay", async (event) => {
         // Sync language from settings each time overlay is shown
         await syncLanguageFromSettings();
-        const overlayState = event.payload as OverlayState;
-        setState(overlayState);
+        const payload = event.payload as OverlayShowPayload;
+        setState(payload.state);
+        setIsRaw(payload.raw);
         setIsVisible(true);
       });
 
       // Listen for hide-overlay event from Rust
       const unlistenHide = await listen("hide-overlay", () => {
         setIsVisible(false);
+        setIsRaw(false);
       });
 
       // Listen for mic-level updates
@@ -76,6 +83,11 @@ const RecordingOverlay: React.FC = () => {
       </div>
 
       <div className="overlay-middle" role="status" aria-live="polite">
+        {isRaw && (
+          <span className="raw-indicator" title={t("overlay.rawHint")}>
+            {t("overlay.raw")}
+          </span>
+        )}
         {state === "recording" && (
           <div className="bars-container" aria-hidden="true">
             {levels.map((v, i) => (

@@ -678,6 +678,8 @@
     "transcribing": "Transcribing...",
     "processing": "Processing...",
     "recording": "Recording",
-    "cancel": "Cancel recording"
+    "cancel": "Cancel recording",
+    "raw": "RAW",
+    "rawHint": "Raw transcript mode"
   }
 }

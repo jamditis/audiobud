@@ -319,7 +319,15 @@ pub fn create_recording_overlay(app_handle: &AppHandle) {
     }
 }
 
-fn show_overlay_state(app_handle: &AppHandle, state: &str) {
+/// Payload for the `show-overlay` event. `raw` tells the overlay whether the current dictation
+/// will be emitted as raw transcript so it can surface a "RAW" indicator (issue #24).
+#[derive(Clone, serde::Serialize)]
+struct OverlayShowPayload<'a> {
+    state: &'a str,
+    raw: bool,
+}
+
+fn show_overlay_state(app_handle: &AppHandle, state: &str, raw: bool) {
     // Check if overlay should be shown based on position setting
     let settings = settings::get_settings(app_handle);
     if settings.overlay_position == OverlayPosition::None {
@@ -335,23 +343,24 @@ fn show_overlay_state(app_handle: &AppHandle, state: &str) {
         #[cfg(target_os = "windows")]
         force_overlay_topmost(&overlay_window);
 
-        let _ = overlay_window.emit("show-overlay", state);
+        let _ = overlay_window.emit("show-overlay", OverlayShowPayload { state, raw });
     }
 }
 
-/// Shows the recording overlay window with fade-in animation
-pub fn show_recording_overlay(app_handle: &AppHandle) {
-    show_overlay_state(app_handle, "recording");
+/// Shows the recording overlay window with fade-in animation. `raw` reflects whether this
+/// dictation will be emitted as raw transcript so the overlay can show a "RAW" badge.
+pub fn show_recording_overlay(app_handle: &AppHandle, raw: bool) {
+    show_overlay_state(app_handle, "recording", raw);
 }
 
-/// Shows the transcribing overlay window
-pub fn show_transcribing_overlay(app_handle: &AppHandle) {
-    show_overlay_state(app_handle, "transcribing");
+/// Shows the transcribing overlay window. `raw` carries the active output mode for the indicator.
+pub fn show_transcribing_overlay(app_handle: &AppHandle, raw: bool) {
+    show_overlay_state(app_handle, "transcribing", raw);
 }
 
-/// Shows the processing overlay window
-pub fn show_processing_overlay(app_handle: &AppHandle) {
-    show_overlay_state(app_handle, "processing");
+/// Shows the processing overlay window. `raw` carries the active output mode for the indicator.
+pub fn show_processing_overlay(app_handle: &AppHandle, raw: bool) {
+    show_overlay_state(app_handle, "processing", raw);
 }
 
 /// Updates the overlay window position based on current settings
