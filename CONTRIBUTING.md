@@ -1,16 +1,14 @@
-# Contributing to Handy
+# Contributing to AudioBud
 
-Thank you for your interest in contributing to Handy! This guide will help you get started with contributing to this open source speech-to-text application.
+Thank you for your interest in contributing to AudioBud! This guide will help you get started with contributing to this open source speech-to-text application.
 
-## ⚠️ Feature Freeze
+## Priorities
 
-**Handy is currently undergoing a feature freeze.** If you are submitting a PR which is a new feature that the community has not asked for, it will be rejected. If the community has asked for it, or you have explicitly gathered support, it may still be considered.
-
-**Bug fixes are the top priority.** There are 60+ issues to fix. Please focus your contributions on fixing bugs and improving stability.
+AudioBud is a Windows-first fork focused on local dictation. Bug fixes and stability improvements are the most welcome contributions. New features are tracked as issues — open one (or comment on an existing issue) before starting a large change so we can agree on scope first.
 
 ## 📖 Philosophy
 
-Handy aims to be the most forkable speech-to-text app. The goal is to create both a useful tool and a foundation for others to build upon—a well-patterned, simple codebase that serves the community. We prioritize:
+AudioBud builds on [Handy](https://github.com/cjpais/Handy)'s goal of being a simple, forkable speech-to-text app — a well-patterned codebase that is easy to build on. We prioritize:
 
 - **Simplicity**: Clear, maintainable code over clever solutions
 - **Extensibility**: Make it easy for others to fork and customize
@@ -34,8 +32,8 @@ Before you begin, ensure you have the following installed:
 2. **Clone your fork**:
 
    ```bash
-   git clone git@github.com:YOUR_USERNAME/Handy.git
-   cd Handy
+   git clone git@github.com:YOUR_USERNAME/audiobud.git
+   cd audiobud
    ```
 
 3. **Add upstream remote**:
@@ -68,7 +66,7 @@ For detailed platform-specific setup instructions, see [BUILD.md](BUILD.md).
 
 ### Understanding the Codebase
 
-Handy follows a clean architecture pattern:
+AudioBud follows a clean architecture pattern:
 
 **Backend (Rust - `src-tauri/src/`):**
 
@@ -92,10 +90,9 @@ For more details, see the Architecture section in [README.md](README.md) or [AGE
 
 ### Before Submitting a Bug Report
 
-1. **Search existing issues** at [github.com/cjpais/Handy/issues](https://github.com/cjpais/Handy/issues)
-2. **Check discussions** at [github.com/cjpais/Handy/discussions](https://github.com/cjpais/Handy/discussions)
-3. **Try the latest release** to see if the issue has been fixed
-4. **Enable debug mode** (`Cmd/Ctrl+Shift+D`) to gather diagnostic information
+1. **Search existing issues** at [github.com/jamditis/audiobud/issues](https://github.com/jamditis/audiobud/issues), including closed ones
+2. **Try the latest release** to see if the issue has been fixed
+3. **Enable debug mode** (`Cmd/Ctrl+Shift+D`) to gather diagnostic information
 
 ### Submitting a Bug Report
 
@@ -121,25 +118,20 @@ Use the [Bug Report template](.github/ISSUE_TEMPLATE/bug_report.md) when creatin
 
 ## 💡 Suggesting Features
 
-We use GitHub Discussions for feature requests rather than issues. This keeps issues focused on bugs and actionable tasks while allowing more open-ended conversations about features.
+AudioBud has GitHub Discussions disabled, so feature requests are filed as issues with the `enhancement` label. This keeps everything in one tracker.
 
 ### Before Suggesting a Feature
 
-1. **Search existing discussions** at [github.com/cjpais/Handy/discussions](https://github.com/cjpais/Handy/discussions)
-2. **Check common feature requests**:
-   - [Post-processing / Editing Transcripts](https://github.com/cjpais/Handy/discussions/168)
-   - [Keyboard Shortcuts / Hotkeys](https://github.com/cjpais/Handy/discussions/211)
+1. **Search existing issues** at [github.com/jamditis/audiobud/issues](https://github.com/jamditis/audiobud/issues), including closed ones, to avoid duplicates
 
 ### Submitting a Feature Request
 
-1. Go to [Discussions](https://github.com/cjpais/Handy/discussions)
-2. Click "New discussion"
-3. Choose the appropriate category (Ideas, Feature Requests, etc.)
-4. Describe your feature idea including:
+1. Open a [new issue](https://github.com/jamditis/audiobud/issues/new) and add the `enhancement` label
+2. Describe your feature idea including:
    - The problem you're trying to solve
    - Your proposed solution
    - Any alternatives you've considered
-   - How it fits with Handy's philosophy
+   - How it fits with AudioBud's goals
 
 ## 🔧 Making Code Contributions
 
@@ -148,19 +140,14 @@ We use GitHub Discussions for feature requests rather than issues. This keeps is
 **This is critical:** Before writing any code, please do the following:
 
 1. **Search existing issues and PRs** - Check both open AND closed issues and pull requests. Someone may have already addressed this, or there may be a reason it was closed.
-   - [Open issues](https://github.com/cjpais/Handy/issues)
-   - [Closed issues](https://github.com/cjpais/Handy/issues?q=is%3Aissue+is%3Aclosed)
-   - [Open PRs](https://github.com/cjpais/Handy/pulls)
-   - [Closed PRs](https://github.com/cjpais/Handy/pulls?q=is%3Apr+is%3Aclosed)
+   - [Open issues](https://github.com/jamditis/audiobud/issues)
+   - [Closed issues](https://github.com/jamditis/audiobud/issues?q=is%3Aissue+is%3Aclosed)
+   - [Open PRs](https://github.com/jamditis/audiobud/pulls)
+   - [Closed PRs](https://github.com/jamditis/audiobud/pulls?q=is%3Apr+is%3Aclosed)
 
-2. **If something was previously closed** - If you want to revisit a closed issue or PR, you need to:
-   - Provide a strong argument for why it should be reconsidered
-   - Gather community feedback first via [Discussions](https://github.com/cjpais/Handy/discussions)
-   - Link to that discussion in your PR
+2. **If something was previously closed** - If you want to revisit a closed issue or PR, provide a strong argument for why it should be reconsidered and link to the prior issue or PR.
 
-3. **Get community feedback for features** - PRs with demonstrated community interest are **much more likely to be merged**. Start a discussion, get feedback, and link to it in your PR. This helps ensure Handy stays focused and useful for the most people without becoming bloated.
-
-Community feedback is essential to keeping Handy the best it can be for everyone. It helps prioritize what matters most and prevents feature creep.
+3. **Agree on scope for larger changes** - For anything beyond a small fix, open or comment on an issue first so we can agree on the approach before you invest time. This keeps AudioBud focused and avoids feature creep.
 
 ### Development Workflow
 
@@ -215,18 +202,15 @@ Community feedback is essential to keeping Handy the best it can be for everyone
    ```
 
 7. **Create a Pull Request**:
-   - Go to the [Handy repository](https://github.com/cjpais/Handy)
+   - Go to the [AudioBud repository](https://github.com/jamditis/audiobud)
    - Click "New Pull Request"
    - Select your fork and branch
    - Fill out the PR template completely, including:
      - Clear description of changes
-     - Links to related issues or discussions
-     - **Community feedback** (especially important for features)
+     - Links to related issues
      - How you tested the changes
      - Screenshots/videos if applicable
      - Breaking changes (if any)
-
-   **Remember:** PRs with community support are prioritized. If you haven't already, start a [discussion](https://github.com/cjpais/Handy/discussions) to gather feedback before or alongside your PR. It is not explicitly required to gather feedback, but it certainly helps your PR get merged faster.
 
 ### AI Assistance Disclosure
 
@@ -309,14 +293,12 @@ Look for issues labeled `good first issue` or `help wanted` if you're new to the
 
 ## 📞 Getting Help
 
-- **Discord**: Join our [Discord community](https://discord.com/invite/WVBeWsNXK4)
-- **Discussions**: Ask questions in [GitHub Discussions](https://github.com/cjpais/Handy/discussions)
-- **Email**: Reach out at [contact@handy.computer](mailto:contact@handy.computer)
+- **Issues**: Open an issue at [github.com/jamditis/audiobud/issues](https://github.com/jamditis/audiobud/issues) for bugs, questions, or feature requests
 
 ## 📜 License
 
-By contributing to Handy, you agree that your contributions will be licensed under the MIT License. See [LICENSE](LICENSE) for details.
+By contributing to AudioBud, you agree that your contributions will be licensed under the MIT License. See [LICENSE](LICENSE) for details.
 
 ---
 
-**Thank you for contributing to Handy!** Your efforts help make speech-to-text technology more accessible, private, and extensible for everyone.
+**Thank you for contributing to AudioBud!** Your efforts help make speech-to-text technology more accessible, private, and extensible for everyone.
