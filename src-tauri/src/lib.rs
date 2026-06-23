@@ -50,6 +50,16 @@ use crate::settings::get_settings;
 // We use u8 to store the log::LevelFilter as a number
 pub static FILE_LOG_LEVEL: AtomicU8 = AtomicU8::new(log::LevelFilter::Debug as u8);
 
+// Whether AudioBud has its own signed release feed wired up. While this is
+// false the updater plugin must NOT be registered, because tauri_plugin_updater
+// deserializes the `plugins.updater` block from tauri.conf.json when it builds,
+// and that block was removed (it pointed at upstream Handy's feed) -- registering
+// the plugin without it panics before the window opens (issue #32). This mirrors
+// the frontend gate in src/lib/updater.ts; flip both to true and restore the
+// config block together once the feed is AudioBud's own. The `updater_feed_gate`
+// test below ties this flag to the actual config so the two cannot drift.
+const UPDATER_FEED_READY: bool = false;
+
 fn level_filter_from_u8(value: u8) -> log::LevelFilter {
     match value {
         0 => log::LevelFilter::Off,
@@ -496,6 +506,14 @@ pub fn run(cli_args: CliArgs) {
         builder = builder.plugin(tauri_nspanel::init());
     }
 
+    // Only register the updater while AudioBud has a release feed configured.
+    // Registering it without a `plugins.updater` block in tauri.conf.json panics
+    // at startup (issue #32); UPDATER_FEED_READY keeps this in step with the
+    // frontend gate and the config (see the const and test).
+    if UPDATER_FEED_READY {
+        builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
+    }
+
     builder
         .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
             if args.iter().any(|a| a == "--toggle-transcription") {
@@ -512,7 +530,6 @@ pub fn run(cli_args: CliArgs) {
         }))
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_process::init())
-        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_macos_permissions::init())
@@ -631,4 +648,32 @@ pub fn run(cli_args: CliArgs) {
             }
             let _ = (app, event); // suppress unused warnings on non-macOS
         });
+}
+
+#[cfg(test)]
+mod updater_gate_tests {
+    use super::UPDATER_FEED_READY;
+
+    /// Regression guard for issue #32. tauri_plugin_updater deserializes the
+    /// `plugins.updater` block from tauri.conf.json when it builds, so the app
+    /// panics at startup if the plugin is registered while that block is absent.
+    /// `run()` registers the plugin iff UPDATER_FEED_READY, so the flag and the
+    /// presence of the config block must always agree. Compiling alone never
+    /// exercises this -- the plugin config is only read when the app launches --
+    /// which is why CI did not catch the original regression.
+    #[test]
+    fn updater_feed_gate_matches_config() {
+        let config: serde_json::Value = serde_json::from_str(include_str!("../tauri.conf.json"))
+            .expect("tauri.conf.json is valid JSON");
+        let has_updater_config = config
+            .get("plugins")
+            .and_then(|plugins| plugins.get("updater"))
+            .is_some();
+        assert_eq!(
+            UPDATER_FEED_READY, has_updater_config,
+            "UPDATER_FEED_READY ({UPDATER_FEED_READY}) must match the presence of a \
+             `plugins.updater` block in tauri.conf.json ({has_updater_config}); registering \
+             the updater plugin without that config panics at startup (issue #32)."
+        );
+    }
 }
