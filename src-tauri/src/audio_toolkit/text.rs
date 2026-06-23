@@ -1,7 +1,37 @@
-use natural::phonetics::soundex;
+use crate::settings::WordReplacement;
 use once_cell::sync::Lazy;
-use regex::Regex;
-use strsim::levenshtein;
+use regex::{Captures, Regex};
+use rphonetic::{DoubleMetaphone, Encoder, Metaphone};
+use std::collections::HashSet;
+use strsim::{damerau_levenshtein, jaro_winkler};
+
+/// Common English words used as a "do not overwrite a common word" veto in the matcher.
+/// Loaded once from the bundled list; lines starting with `#` are provenance/comments.
+static COMMON_WORDS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
+    include_str!("common_words_en.txt")
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty() && !line.starts_with('#'))
+        .collect()
+});
+
+static METAPHONE: Lazy<Metaphone> = Lazy::new(Metaphone::default);
+static DOUBLE_METAPHONE: Lazy<DoubleMetaphone> = Lazy::new(DoubleMetaphone::default);
+
+/// First alphanumeric character of a string, if any (used as a cheap match anchor).
+fn first_alnum(s: &str) -> Option<char> {
+    s.chars().find(|c| c.is_alphanumeric())
+}
+
+/// ASCII-alphabetic characters only, for phonetic encoding (digits/punctuation dropped).
+fn alpha_only(s: &str) -> String {
+    s.chars().filter(|c| c.is_ascii_alphabetic()).collect()
+}
+
+/// Length (in chars) of the common leading prefix of two strings.
+fn common_prefix_len(a: &str, b: &str) -> usize {
+    a.chars().zip(b.chars()).take_while(|(x, y)| x == y).count()
+}
 
 /// Builds an n-gram string by cleaning and concatenating words
 ///
@@ -18,66 +48,133 @@ fn build_ngram(words: &[&str]) -> String {
         .concat()
 }
 
-/// Finds the best matching custom word for a candidate string
+/// Finds the best matching custom word for a candidate string.
 ///
-/// Uses Levenshtein distance and Soundex phonetic matching to find
-/// the best match above the given threshold.
+/// Precision-first: a wrong correction makes dictation feel unsafe, so a fuzzy match is
+/// only accepted when several independent signals agree. The candidate must clear, in order:
+///   1. a length gate (reject wildly different lengths),
+///   2. a first-alphanumeric anchor (same starting char),
+///   3. a length-bucketed edit-distance floor (Damerau, so transpositions like
+///      "wrold"/"world" still score well), tightened further by `threshold`,
+///   4. a common-word veto (never overwrite an everyday English word with a rare
+///      dictionary entry unless the match is near-exact),
+///   5. two-of-N phonetic/similarity agreement (Metaphone, Double Metaphone, Jaro-Winkler).
 ///
-/// # Arguments
-/// * `candidate` - The cleaned/lowercased candidate string to match
-/// * `custom_words` - Original custom words (for returning the replacement)
-/// * `custom_words_nospace` - Custom words with spaces removed, lowercased (for comparison)
-/// * `threshold` - Maximum similarity score to accept
+/// Exact matches (after lowercasing/space-removal) bypass the fuzzy gate and win outright;
+/// this is what recases brands the user dictated correctly (e.g. "codex" -> "Codex").
+///
+/// `threshold` is the legacy sensitivity dial: lowering it raises the edit-distance floor
+/// (stricter); it can no longer loosen matching below the per-length floors.
 ///
 /// # Returns
-/// The best matching custom word and its score, if any match was found
+/// The best matching custom word and its score (lower is better), if any match was found.
 fn find_best_match<'a>(
     candidate: &str,
     custom_words: &'a [String],
     custom_words_nospace: &[String],
     threshold: f64,
+    multiword: bool,
 ) -> Option<(&'a String, f64)> {
-    if candidate.is_empty() || candidate.len() > 50 {
+    if candidate.is_empty() || candidate.chars().count() > 50 {
         return None;
     }
+
+    let cand_len = candidate.chars().count();
+    let cand_first = first_alnum(candidate);
+    let cand_alpha = alpha_only(candidate);
+    let cand_is_common = COMMON_WORDS.contains(candidate);
 
     let mut best_match: Option<&String> = None;
     let mut best_score = f64::MAX;
 
-    for (i, custom_word_nospace) in custom_words_nospace.iter().enumerate() {
-        // Skip if lengths are too different (optimization + prevents over-matching)
-        // Use percentage-based check: max 25% length difference (prevents n-grams from
-        // matching significantly shorter custom words, e.g., "openaigpt" vs "openai")
-        let len_diff = (candidate.len() as i32 - custom_word_nospace.len() as i32).abs() as f64;
-        let max_len = candidate.len().max(custom_word_nospace.len()) as f64;
-        let max_allowed_diff = (max_len * 0.25).max(2.0); // At least 2 chars difference allowed
-        if len_diff > max_allowed_diff {
+    for (i, target) in custom_words_nospace.iter().enumerate() {
+        if target.is_empty() {
             continue;
         }
 
-        // Calculate Levenshtein distance (normalized by length)
-        let levenshtein_dist = levenshtein(candidate, custom_word_nospace);
-        let max_len = candidate.len().max(custom_word_nospace.len()) as f64;
-        let levenshtein_score = if max_len > 0.0 {
-            levenshtein_dist as f64 / max_len
-        } else {
-            1.0
-        };
+        // Exact match (after lowercasing/space-removal): accept immediately, best score.
+        // This is the recasing path (e.g. "codex" -> "Codex") and bypasses every veto.
+        if candidate == target {
+            return Some((&custom_words[i], 0.0));
+        }
 
-        // Calculate phonetic similarity using Soundex
-        let phonetic_match = soundex(candidate, custom_word_nospace);
+        let target_len = target.chars().count();
+        let max_len = cand_len.max(target_len) as f64;
+        let min_len = cand_len.min(target_len);
 
-        // Combine scores: favor phonetic matches, but also consider string similarity
-        let combined_score = if phonetic_match {
-            levenshtein_score * 0.3 // Give significant boost to phonetic matches
-        } else {
-            levenshtein_score
-        };
+        // 1. Length gate: reject wildly different lengths (with a 1-char floor so short
+        //    words are not over-matched, e.g. "cat"/"chat").
+        let len_diff = (cand_len as i32 - target_len as i32).abs() as f64;
+        if len_diff > (max_len * 0.25).max(1.0) {
+            continue;
+        }
 
-        // Accept if the score is good enough (configurable threshold)
-        if combined_score < threshold && combined_score < best_score {
+        // 2. First-alphanumeric anchor (salvaged from PR #20): kills "region"/"Legion".
+        if cand_first != first_alnum(target) {
+            continue;
+        }
+
+        // 2b. For multi-word n-grams, require a shared prefix so the first spoken word actually
+        //     participates in the match. Without this "my mac book" fuzzily matches "MacBook"
+        //     by suffix and swallows the leading "my". Exact matches already returned above, so
+        //     this only constrains fuzzy multi-word matches; single-word transposition typos
+        //     ("wrold"/"world") are unaffected because they are not multi-word.
+        if multiword && common_prefix_len(candidate, target) < 2 {
+            continue;
+        }
+
+        // 3. Length-bucketed edit-distance floor. Damerau-Levenshtein so a single adjacent
+        //    transposition ("wrold"/"world") stays cheap. Lowering `threshold` tightens it.
+        let dl = damerau_levenshtein(candidate, target);
+        let lev_sim = 1.0 - (dl as f64 / max_len);
+        let bucket_floor: f64 = if max_len <= 6.0 { 0.70 } else { 0.60 };
+        let effective_floor = bucket_floor.max(1.0 - threshold * 3.0);
+        if lev_sim < effective_floor {
+            continue;
+        }
+
+        // 4. Common-word veto: never overwrite an everyday English word with a rare
+        //    dictionary entry unless the match is near-exact ("really"/"rally", "cloud"/"Claude").
+        if cand_is_common && lev_sim < 0.92 {
+            continue;
+        }
+
+        // 5. Multi-signal agreement. Phonetic codes are require-agreement gates, not recall
+        //    boosters, and only safe for candidates of length >= 4 (short words collide
+        //    phonetically far too easily). Accept when two independent signals agree, or when
+        //    string similarity alone is very high (jw >= 0.93): the latter recovers genuine
+        //    typos like "wrold"/"world", where a transposition changes the phonetic skeleton
+        //    (Metaphone makes the leading "wr" silent) and leaves edit distance as the only
+        //    honest signal. The common-word veto above already protects real words.
+        let jw = jaro_winkler(candidate, target);
+        let mut signals = 0;
+        if jw >= 0.90 {
+            signals += 1;
+        }
+        if min_len >= 4 && !cand_alpha.is_empty() {
+            let target_alpha = alpha_only(target);
+            if !target_alpha.is_empty() {
+                if METAPHONE.is_encoded_equals(&cand_alpha, &target_alpha) {
+                    signals += 1;
+                }
+                if DOUBLE_METAPHONE.is_double_metaphone_equal(&cand_alpha, &target_alpha, false)
+                    || DOUBLE_METAPHONE.is_double_metaphone_equal(&cand_alpha, &target_alpha, true)
+                {
+                    signals += 1;
+                }
+            }
+        }
+        if signals < 2 && jw < 0.93 {
+            continue;
+        }
+
+        // Score is the absolute edit distance (lower is better). Using the absolute distance
+        // rather than a length-normalized ratio lets the caller compare matches across n-gram
+        // lengths fairly -- a longer n-gram cannot look "closer" merely by being longer.
+        let score = dl as f64;
+        if score < best_score {
             best_match = Some(&custom_words[i]);
-            best_score = combined_score;
+            best_score = score;
         }
     }
 
@@ -86,11 +183,11 @@ fn find_best_match<'a>(
 
 /// Applies custom word corrections to transcribed text using fuzzy matching
 ///
-/// This function corrects words in the input text by finding the best matches
-/// from a list of custom words using a combination of:
-/// - Levenshtein distance for string similarity
-/// - Soundex phonetic matching for pronunciation similarity
-/// - N-gram matching for multi-word speech artifacts (e.g., "Charge B" -> "ChargeBee")
+/// This function corrects words in the input text by finding the best matches from a list
+/// of custom words using the precision-first multi-signal gate in [`find_best_match`]
+/// (Damerau-Levenshtein + Metaphone/Double Metaphone + Jaro-Winkler, with a common-word
+/// veto). It also matches multi-word speech artifacts via n-grams (e.g. "Charge B" ->
+/// "ChargeBee"), choosing the n-gram with the smallest absolute edit distance.
 ///
 /// # Arguments
 /// * `text` - The input text to correct
@@ -118,35 +215,66 @@ pub fn apply_custom_words(text: &str, custom_words: &[String], threshold: f64) -
     let mut i = 0;
 
     while i < words.len() {
-        let mut matched = false;
+        // Evaluate every n-gram (1..=3) starting at this position and choose the match with the
+        // smallest absolute edit distance. On a tie the direction depends on match quality: an
+        // exact tie (distance 0) prefers the longer phrase, so a more specific dictionary entry
+        // wins over a prefix of it ("New York Times" over "New York"); a fuzzy tie prefers fewer
+        // words, so a longer n-gram cannot swallow an unrelated trailing word just because the
+        // extra characters happened to match the same distance ("Charge B, che" stays as-is).
+        let mut best: Option<(usize, &String, f64)> = None;
 
-        // Try n-grams from longest (3) to shortest (1) - greedy matching
-        for n in (1..=3).rev() {
+        for n in 1..=3 {
             if i + n > words.len() {
-                continue;
+                break;
             }
 
             let ngram_words = &words[i..i + n];
             let ngram = build_ngram(ngram_words);
 
-            if let Some((replacement, _score)) =
-                find_best_match(&ngram, custom_words, &custom_words_nospace, threshold)
-            {
-                // Extract punctuation from first and last words of the n-gram
-                let (prefix, _) = extract_punctuation(ngram_words[0]);
-                let (_, suffix) = extract_punctuation(ngram_words[n - 1]);
-
-                // Preserve case from first word
-                let corrected = preserve_case_pattern(ngram_words[0], replacement);
-
-                result.push(format!("{}{}{}", prefix, corrected, suffix));
-                i += n;
-                matched = true;
-                break;
+            if let Some((replacement, score)) = find_best_match(
+                &ngram,
+                custom_words,
+                &custom_words_nospace,
+                threshold,
+                n >= 2,
+            ) {
+                let is_better = match best {
+                    None => true,
+                    Some((best_n, _, best_score)) => {
+                        if score < best_score - f64::EPSILON {
+                            true
+                        } else if (score - best_score).abs() <= f64::EPSILON {
+                            // Tie on distance: prefer the longer phrase only when both matched
+                            // exactly (distance 0); otherwise prefer fewer words.
+                            if score.abs() <= f64::EPSILON {
+                                n > best_n
+                            } else {
+                                n < best_n
+                            }
+                        } else {
+                            false
+                        }
+                    }
+                };
+                if is_better {
+                    best = Some((n, replacement, score));
+                }
             }
         }
 
-        if !matched {
+        if let Some((n, replacement, _)) = best {
+            let ngram_words = &words[i..i + n];
+
+            // Extract punctuation from first and last words of the n-gram
+            let (prefix, _) = extract_punctuation(ngram_words[0]);
+            let (_, suffix) = extract_punctuation(ngram_words[n - 1]);
+
+            // Preserve case from first word
+            let corrected = preserve_case_pattern(ngram_words[0], replacement);
+
+            result.push(format!("{}{}{}", prefix, corrected, suffix));
+            i += n;
+        } else {
             result.push(words[i].to_string());
             i += 1;
         }
@@ -155,11 +283,114 @@ pub fn apply_custom_words(text: &str, custom_words: &[String], threshold: f64) -
     result.join(" ")
 }
 
-/// Preserves the case pattern of the original word when applying a replacement
+/// A "word" character for whole-word boundary checks: alphanumeric or underscore, matching the
+/// usual `\w` definition (but Unicode-aware via [`char::is_alphanumeric`]).
+fn is_word_char(c: char) -> bool {
+    c.is_alphanumeric() || c == '_'
+}
+
+/// True when the byte range `[start, end)` in `haystack` is a whole-word match -- flanked by a
+/// non-word character or a string boundary on each side. Unlike `\b`, this works for phrases that
+/// begin or end with punctuation (e.g. "C#", ".env").
+fn is_word_boundary_match(haystack: &str, start: usize, end: usize) -> bool {
+    let before_ok = haystack[..start]
+        .chars()
+        .next_back()
+        .is_none_or(|c| !is_word_char(c));
+    let after_ok = haystack[end..]
+        .chars()
+        .next()
+        .is_none_or(|c| !is_word_char(c));
+    before_ok && after_ok
+}
+
+/// Applies deterministic literal replacements, in order, to the text.
+///
+/// Each [`WordReplacement`] maps an exact `from` phrase to an exact `to` output. This is the
+/// safe path for large mishears the fuzzy matcher cannot recover without guessing (the
+/// canonical case being "clawed" -> "Claude": 50% edit distance, phonetically distinct). It
+/// runs for every engine, after fuzzy custom-word correction and before filler removal.
+///
+/// - `whole_word` (default true): matches only on word boundaries, so "cat" -> "dog" does
+///   not corrupt "category".
+/// - `case_sensitive` (default false): matching ignores case and the output mirrors the matched
+///   text when it is ALL CAPS or Capitalized; otherwise the replacement's own casing is kept (so a
+///   lowercase match of `clawed` still yields `Claude`, not `claude`). See [`preserve_case_pattern`].
+/// - An empty `to` deletes the match; spaces left dangling by a deletion (doubled, leading/trailing,
+///   or stranded before punctuation) are cleaned up afterwards.
+pub fn apply_replacements(text: &str, replacements: &[WordReplacement]) -> String {
+    let mut result = text.to_string();
+    let mut deleted_any = false;
+
+    for replacement in replacements {
+        if replacement.from.is_empty() {
+            continue;
+        }
+
+        let escaped = regex::escape(&replacement.from);
+        let pattern = if replacement.case_sensitive {
+            escaped
+        } else {
+            format!("(?i){}", escaped)
+        };
+
+        let Ok(re) = Regex::new(&pattern) else {
+            continue;
+        };
+
+        let to = replacement.to.clone();
+        let case_sensitive = replacement.case_sensitive;
+        let whole_word = replacement.whole_word;
+        if to.is_empty() {
+            deleted_any = true;
+        }
+
+        // The regex crate has no lookaround, and `\b` cannot anchor a phrase that begins or ends
+        // with punctuation (e.g. "C#" or ".env"), so whole-word matching is verified directly
+        // against the surrounding characters rather than baked into the pattern.
+        let source = std::mem::take(&mut result);
+        result = re
+            .replace_all(&source, |caps: &Captures| {
+                let m = caps.get(0).expect("capture group 0 always exists");
+                if whole_word && !is_word_boundary_match(&source, m.start(), m.end()) {
+                    return m.as_str().to_string();
+                }
+                if case_sensitive {
+                    to.clone()
+                } else {
+                    // Adapt the replacement to how the user dictated the source phrase.
+                    preserve_case_pattern(m.as_str(), &to)
+                }
+            })
+            .to_string();
+    }
+
+    if deleted_any {
+        // A deletion can leave "a  b", a leading/trailing space, or a space stranded before
+        // punctuation ("this is basically, fine" -> "this is , fine"); tidy all three without
+        // touching intentional single spaces.
+        result = SPACE_BEFORE_PUNCT_PATTERN
+            .replace_all(&result, "$1")
+            .to_string();
+        result = MULTI_SPACE_PATTERN.replace_all(&result, " ").to_string();
+        result = result.trim().to_string();
+    }
+
+    result
+}
+
+/// Preserves the case pattern of the original word when applying a replacement.
+///
+/// All-caps detection ignores non-alphabetic characters so multi-word phrases are handled
+/// ("CLOUD CODE" -> "CLAUDE CODE", not "Claude Code"); it requires at least one letter so a
+/// digit- or punctuation-only original is not mistaken for all-caps.
 fn preserve_case_pattern(original: &str, replacement: &str) -> String {
-    if original.chars().all(|c| c.is_uppercase()) {
+    let mut letters = original.chars().filter(|c| c.is_alphabetic()).peekable();
+    let all_caps = letters.peek().is_some() && letters.all(|c| c.is_uppercase());
+
+    if all_caps {
         replacement.to_uppercase()
-    } else if original.chars().next().map_or(false, |c| c.is_uppercase()) {
+    } else if original.chars().next().is_some_and(|c| c.is_uppercase()) {
         let mut chars: Vec<char> = replacement.chars().collect();
         if let Some(first_char) = chars.get_mut(0) {
             *first_char = first_char.to_uppercase().next().unwrap_or(*first_char);
@@ -230,6 +461,12 @@ fn get_filler_words_for_language(lang: &str) -> &'static [&'static str] {
 }
 
 static MULTI_SPACE_PATTERN: Lazy<Regex> = Lazy::new(|| Regex::new(r"\s{2,}").unwrap());
+
+// Space(s) stranded before closing punctuation after a deletion replacement (e.g. deleting
+// "basically" from "this is basically, fine" leaves "this is , fine"). Only closing/clause marks
+// are listed; opening brackets keep their leading space ("foo (bar)").
+static SPACE_BEFORE_PUNCT_PATTERN: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"[ \t]+([,.;:!?)\]}])").unwrap());
 
 /// Collapses repeated words (3+ repetitions) to a single instance.
 /// E.g., "wh wh wh wh" -> "wh", "I I I I" -> "I"
@@ -319,6 +556,136 @@ pub fn filter_transcription_output(
     filtered.trim().to_string()
 }
 
+/// True if the token is an all-caps acronym worth preserving (e.g. "API", "GPU", "CJS2026").
+/// Requires at least two letters, all uppercase; digits are allowed alongside.
+fn is_acronym(token: &str) -> bool {
+    let letters: Vec<char> = token.chars().filter(|c| c.is_alphabetic()).collect();
+    letters.len() >= 2 && letters.iter().all(|c| c.is_uppercase())
+}
+
+/// If the token is the English pronoun "I" or one of its contractions (ignoring surrounding
+/// punctuation), returns its canonical capitalized form together with whether the engine already
+/// wrote it capitalized. Raw mode uses both: when the output is known to be English it forces the
+/// capitalized form (lowercasing "I" reads as broken), but for auto-detected or non-English
+/// dictation it only keeps the casing the engine produced -- otherwise a language that uses a
+/// lowercase standalone "i" (e.g. Polish/Croatian "i" = "and") would be wrongly capitalized.
+fn english_i_canonical(token: &str) -> Option<(String, bool)> {
+    let core = token.trim_matches(|c: char| !c.is_alphanumeric() && c != '\'' && c != '\u{2019}');
+    let was_uppercase = core.chars().next().is_some_and(char::is_uppercase);
+    let normalized = core.to_lowercase().replace('\u{2019}', "'");
+    let canonical = match normalized.as_str() {
+        "i" => "I",
+        "i'm" => "I'm",
+        "i'll" => "I'll",
+        "i've" => "I've",
+        "i'd" => "I'd",
+        _ => return None,
+    };
+    Some((canonical.to_string(), was_uppercase))
+}
+
+/// Punctuation a raw transcript drops when it sits at a token boundary: sentence and clause marks,
+/// quotes, and brackets. Technical symbols that are part of a token's meaning (`#`, `+`, `*`, ...)
+/// are deliberately excluded so terms like `C#`, `C++`, and `F#` survive raw mode instead of being
+/// trimmed down to a bare letter.
+fn is_boundary_punctuation(c: char) -> bool {
+    matches!(
+        c,
+        '.' | ','
+            | ';'
+            | ':'
+            | '!'
+            | '?'
+            | '"'
+            | '\''
+            | '`'
+            | '('
+            | ')'
+            | '['
+            | ']'
+            | '{'
+            | '}'
+            | '\u{2026}' // ellipsis
+            | '\u{2018}' // left single quote
+            | '\u{2019}' // right single quote
+            | '\u{201C}' // left double quote
+            | '\u{201D}' // right double quote
+            | '\u{00AB}' // left guillemet
+            | '\u{00BB}' // right guillemet
+            | '\u{2014}' // em dash
+            | '\u{2013}' // en dash
+    )
+}
+
+/// Strips leading and trailing boundary punctuation from a token while preserving everything
+/// interior to it -- that is, every character between the first and last non-boundary character is
+/// kept. This keeps decimals, versions, hyphenated words, dotted filenames, emails, contraction
+/// apostrophes, path separators (including Windows `C:\...` drive separators), and trailing
+/// technical symbols (`C#`, `C++`) intact, while removing only the sentence/clause punctuation a raw
+/// transcript should drop. Optionally lowercases the alphanumerics.
+fn strip_token_punctuation(token: &str, lowercase: bool) -> String {
+    let chars: Vec<char> = token.chars().collect();
+    let (Some(first), Some(last)) = (
+        chars.iter().position(|c| !is_boundary_punctuation(*c)),
+        chars.iter().rposition(|c| !is_boundary_punctuation(*c)),
+    ) else {
+        // The whole token is boundary punctuation, so it is dropped.
+        return String::new();
+    };
+
+    let mut out = String::with_capacity(last - first + 1);
+    for &c in &chars[first..=last] {
+        if c.is_alphanumeric() && lowercase {
+            out.extend(c.to_lowercase());
+        } else {
+            out.push(c);
+        }
+    }
+
+    out
+}
+
+/// Converts text to a raw transcript (issue #19): lowercased and stripped of terminal/clause
+/// punctuation, with two deliberate exceptions that would otherwise read as broken -- all-caps
+/// acronyms keep their case, and the English standalone "I"/"I'm"/"I'll"/"I've"/"I'd" stay
+/// capitalized. Punctuation interior to a token is kept by one script-neutral rule (only
+/// leading/trailing punctuation is stripped), which covers decimals, version strings, `GPT-4`,
+/// `claude.md`, `user@example.com`, `well-known`, and path separators.
+///
+/// `force_english_i` controls the "I" exception. When the output is known to be English (an
+/// explicit English dictation language, or translate-to-English), it is `true` and a standalone
+/// "i" is always capitalized. When the language is unknown (auto-detect; `transcribe-rs` does not
+/// report the detected language) or explicitly non-English, it is `false` and the token keeps the
+/// casing the engine produced: English engines already emit "I" capitalized, so English stays
+/// correct, while a language that uses a lowercase standalone "i" (Polish/Croatian "i" = "and") is
+/// not wrongly capitalized.
+///
+/// This is a pure, deterministic, engine-agnostic transform -- no model, no proper-noun
+/// detection. Worked example:
+/// `Open Claude.md and read GPT-4 notes.` -> `open claude.md and read GPT-4 notes`
+pub fn strip_to_raw_text(text: &str, force_english_i: bool) -> String {
+    let mut out: Vec<String> = Vec::new();
+
+    for token in text.split_whitespace() {
+        if let Some((canonical, was_uppercase)) = english_i_canonical(token) {
+            // Force capitalization for known-English output; otherwise only preserve the casing the
+            // engine already produced so non-English standalone "i" is left lowercase.
+            if force_english_i || was_uppercase {
+                out.push(canonical);
+                continue;
+            }
+        }
+
+        let keep_case = is_acronym(token);
+        let stripped = strip_token_punctuation(token, !keep_case);
+        if !stripped.is_empty() {
+            out.push(stripped);
+        }
+    }
+
+    out.join(" ")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -337,6 +704,15 @@ mod tests {
         let custom_words = vec!["hello".to_string(), "world".to_string()];
         let result = apply_custom_words(text, &custom_words, 0.5);
         assert_eq!(result, "hello world");
+    }
+
+    #[test]
+    fn test_apply_custom_words_prefers_longest_exact_phrase() {
+        // Both "New York" and "New York Times" match exactly (score 0); the longer, more specific
+        // dictionary phrase must win rather than the shorter prefix.
+        let custom_words = vec!["New York".to_string(), "New York Times".to_string()];
+        let result = apply_custom_words("new york times", &custom_words, 0.18);
+        assert_eq!(result, "New York Times");
     }
 
     #[test]
@@ -562,6 +938,226 @@ mod tests {
             !result.contains("GPT-44"),
             "got double-counted result: {}",
             result
+        );
+    }
+
+    // --- Precision-first matcher: regressions the old Soundex matcher introduced (#18) ---
+
+    #[test]
+    fn test_matcher_does_not_overwrite_common_words() {
+        // None of these everyday words may be replaced by the phonetically-near brand.
+        let cases = [
+            ("I deployed to the cloud today", "Claude"),
+            ("we use the region us-east", "Legion"),
+            ("I was working all day", "Workday"),
+            ("that was really good", "rally"),
+        ];
+        for (text, brand) in cases {
+            let custom_words = vec![brand.to_string()];
+            let result = apply_custom_words(text, &custom_words, 0.18);
+            assert_eq!(result, text, "common word was overwritten by {}", brand);
+        }
+    }
+
+    #[test]
+    fn test_matcher_recases_exact_dictation() {
+        // Exact (modulo case) matches still apply -- this is the safe recasing path.
+        let result = apply_custom_words("I opened codex", &["Codex".to_string()], 0.18);
+        assert_eq!(result, "I opened Codex");
+    }
+
+    // --- Deterministic replacement map (#18 / the real "clawed" -> "Claude" fix) ---
+
+    fn repl(from: &str, to: &str) -> WordReplacement {
+        WordReplacement {
+            from: from.to_string(),
+            to: to.to_string(),
+            whole_word: true,
+            case_sensitive: false,
+        }
+    }
+
+    #[test]
+    fn test_apply_replacements_basic() {
+        let result = apply_replacements("Open clawed.md please", &[repl("clawed", "Claude")]);
+        assert_eq!(result, "Open Claude.md please");
+    }
+
+    #[test]
+    fn test_apply_replacements_preserves_case() {
+        assert_eq!(
+            apply_replacements("CLAWED is here", &[repl("clawed", "Claude")]),
+            "CLAUDE is here"
+        );
+        assert_eq!(
+            apply_replacements("Clawed is here", &[repl("clawed", "Claude")]),
+            "Claude is here"
+        );
+    }
+
+    #[test]
+    fn test_apply_replacements_preserves_caps_multiword() {
+        // All-caps detection must ignore the inter-word space so shouted phrases stay shouted.
+        assert_eq!(
+            apply_replacements("CLOUD CODE rocks", &[repl("cloud code", "Claude Code")]),
+            "CLAUDE CODE rocks"
+        );
+    }
+
+    #[test]
+    fn test_apply_replacements_multi_word() {
+        let result =
+            apply_replacements("use cloud code daily", &[repl("cloud code", "Claude Code")]);
+        assert_eq!(result, "use Claude Code daily");
+    }
+
+    #[test]
+    fn test_apply_replacements_whole_word_only() {
+        // "cat" must not corrupt "category".
+        let result = apply_replacements("a category of cat", &[repl("cat", "dog")]);
+        assert_eq!(result, "a category of dog");
+    }
+
+    #[test]
+    fn test_apply_replacements_deletion_cleans_spaces() {
+        let result = apply_replacements("this is basically fine", &[repl("basically", "")]);
+        assert_eq!(result, "this is fine");
+    }
+
+    #[test]
+    fn test_apply_replacements_case_sensitive() {
+        let r = WordReplacement {
+            from: "WIP".to_string(),
+            to: "work in progress".to_string(),
+            whole_word: true,
+            case_sensitive: true,
+        };
+        assert_eq!(
+            apply_replacements("WIP and wip", &[r]),
+            "work in progress and wip"
+        );
+    }
+
+    #[test]
+    fn test_apply_replacements_whole_word_trailing_punctuation() {
+        // A whole-word phrase ending in punctuation still respects the right boundary: "C#" must
+        // not rewrite the prefix inside "C#12", but must fire when the token stands alone.
+        let r = WordReplacement {
+            from: "C#".to_string(),
+            to: "CSharp".to_string(),
+            whole_word: true,
+            case_sensitive: true,
+        };
+        assert_eq!(apply_replacements("C#12 ships", &[r.clone()]), "C#12 ships");
+        assert_eq!(
+            apply_replacements("I love C# code", &[r]),
+            "I love CSharp code"
+        );
+    }
+
+    #[test]
+    fn test_apply_replacements_whole_word_leading_punctuation() {
+        // A whole-word phrase starting with punctuation respects the left boundary: ".env" must not
+        // match inside "foo.env", but must fire when the token stands alone.
+        let r = WordReplacement {
+            from: ".env".to_string(),
+            to: "dotenv".to_string(),
+            whole_word: true,
+            case_sensitive: true,
+        };
+        assert_eq!(
+            apply_replacements("edit foo.env now", &[r.clone()]),
+            "edit foo.env now"
+        );
+        assert_eq!(
+            apply_replacements("edit the .env now", &[r]),
+            "edit the dotenv now"
+        );
+    }
+
+    #[test]
+    fn test_apply_replacements_deletion_before_punctuation() {
+        // Deleting a word adjacent to punctuation must not leave the punctuation detached.
+        let r = WordReplacement {
+            from: "basically".to_string(),
+            to: String::new(),
+            whole_word: true,
+            case_sensitive: false,
+        };
+        assert_eq!(
+            apply_replacements("this is basically, fine", &[r.clone()]),
+            "this is, fine"
+        );
+        assert_eq!(
+            apply_replacements("stop basically. go", &[r.clone()]),
+            "stop. go"
+        );
+        // A deletion not adjacent to punctuation still collapses the doubled space cleanly.
+        assert_eq!(
+            apply_replacements("this is basically fine", &[r]),
+            "this is fine"
+        );
+    }
+
+    // --- Raw mode (#19) ---
+
+    #[test]
+    fn test_strip_to_raw_text_worked_example() {
+        assert_eq!(
+            strip_to_raw_text("Open Claude.md and read GPT-4 notes.", true),
+            "open claude.md and read GPT-4 notes"
+        );
+    }
+
+    #[test]
+    fn test_strip_to_raw_text_preserves_acronyms_and_i() {
+        assert_eq!(
+            strip_to_raw_text("I'm using the API on a GPU now.", true),
+            "I'm using the API on a GPU now"
+        );
+    }
+
+    #[test]
+    fn test_strip_to_raw_text_preserves_structural_punctuation() {
+        assert_eq!(
+            strip_to_raw_text("Email Me@Example.com about v0.1.0, well-known stuff!", true),
+            "email me@example.com about v0.1.0 well-known stuff"
+        );
+    }
+
+    #[test]
+    fn test_strip_to_raw_text_forces_english_i_when_known_english() {
+        // When the output is known to be English, a standalone "i" is always capitalized.
+        assert_eq!(strip_to_raw_text("i am", true), "I am");
+    }
+
+    #[test]
+    fn test_strip_to_raw_text_preserves_engine_casing_when_language_unknown() {
+        // Auto-detect / non-English: keep the engine's casing instead of forcing English rules.
+        // English engines emit a capital "I", so English stays correct...
+        assert_eq!(strip_to_raw_text("I am", false), "I am");
+        // ...but a language that uses a lowercase standalone "i" (Polish/Croatian "i" = "and") is
+        // left lowercase rather than wrongly capitalized.
+        assert_eq!(strip_to_raw_text("kot i pies", false), "kot i pies");
+    }
+
+    #[test]
+    fn test_strip_to_raw_text_preserves_technical_symbols() {
+        // Trailing technical symbols are part of the token, not sentence punctuation, so raw mode
+        // keeps them (lowercased) rather than collapsing "C#"/"C++"/"F#" to "c"/"c"/"f".
+        assert_eq!(
+            strip_to_raw_text("I write C# and C++ and F#.", true),
+            "I write c# and c++ and f#"
+        );
+    }
+
+    #[test]
+    fn test_strip_to_raw_text_preserves_windows_path() {
+        // Interior punctuation is kept, including Windows drive/path separators -- only the
+        // trailing sentence punctuation is stripped.
+        assert_eq!(
+            strip_to_raw_text("Open C:\\Users\\Joe please.", true),
+            "open c:\\users\\joe please"
         );
     }
 }

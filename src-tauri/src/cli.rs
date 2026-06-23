@@ -19,6 +19,10 @@ pub struct CliArgs {
     #[arg(long)]
     pub toggle_post_process: bool,
 
+    /// Toggle raw transcription (lowercase, unpunctuated) on/off (sent to running instance)
+    #[arg(long)]
+    pub toggle_raw: bool,
+
     /// Cancel the current operation (sent to running instance)
     #[arg(long)]
     pub cancel: bool,

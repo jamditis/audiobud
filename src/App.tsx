@@ -45,6 +45,7 @@ function App() {
   const refreshOutputDevices = useSettingsStore(
     (state) => state.refreshOutputDevices,
   );
+  const refreshSettings = useSettingsStore((state) => state.refreshSettings);
   const hasCompletedPostOnboardingInit = useRef(false);
 
   useEffect(() => {
@@ -60,16 +61,40 @@ function App() {
   useEffect(() => {
     if (onboardingStep === "done" && !hasCompletedPostOnboardingInit.current) {
       hasCompletedPostOnboardingInit.current = true;
-      Promise.all([
-        commands.initializeEnigo(),
-        commands.initializeShortcuts(),
-      ]).catch((e) => {
-        console.warn("Failed to initialize:", e);
-      });
+      // These commands return a tauri-specta Result: a Rust-side Err resolves as
+      // { status: "error" } rather than rejecting, so the status must be checked explicitly. The
+      // .catch only fires for transport-level failures (a thrown Error).
+      commands
+        .initializeEnigo()
+        .then((res) => {
+          if (res.status === "error") {
+            console.warn("Failed to initialize Enigo:", res.error);
+          }
+        })
+        .catch((e) => console.warn("Failed to initialize Enigo:", e));
+      // initializeShortcuts may back-fill default bindings added in a newer version into the
+      // persisted settings; refresh the store so they appear in the UI this session instead of only
+      // after a later launch. This is independent of Enigo so a failed Enigo init cannot hide the
+      // newly added binding until restart. Refresh runs regardless of the result so any bindings that
+      // were persisted still surface; a hard error is logged rather than silently swallowed.
+      commands
+        .initializeShortcuts()
+        .then((res) => {
+          if (res.status === "error") {
+            console.warn("Failed to initialize shortcuts:", res.error);
+          }
+          refreshSettings();
+        })
+        .catch((e) => console.warn("Failed to initialize shortcuts:", e));
       refreshAudioDevices();
       refreshOutputDevices();
     }
-  }, [onboardingStep, refreshAudioDevices, refreshOutputDevices]);
+  }, [
+    onboardingStep,
+    refreshAudioDevices,
+    refreshOutputDevices,
+    refreshSettings,
+  ]);
 
   // Handle keyboard shortcuts for debug mode toggle
   useEffect(() => {
