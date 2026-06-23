@@ -97,12 +97,28 @@ pub async fn retry_history_entry_transcription(
         return Err("Recording contains no speech".to_string());
     }
 
-    let processed =
-        process_transcription_output(&app, &transcription, entry.post_process_requested).await;
+    // Reproduce the entry's original output mode. `raw_requested` records whether the dictation was
+    // emitted raw, so passing it (rather than the live `raw_output` setting) keeps a retried entry in
+    // the same mode regardless of whatever raw mode is active now. Retry re-transcribes, so the text
+    // is re-derived rather than restored byte-for-byte; raw casing follows the current language
+    // settings, which is acceptable for a re-transcription.
+    let processed = process_transcription_output(
+        &app,
+        &transcription,
+        entry.post_process_requested,
+        entry.raw_requested,
+    )
+    .await;
+    // Mirror the live save path: in raw mode the emitted raw text is the entry's primary text.
+    let primary_text = if entry.raw_requested {
+        processed.final_text.clone()
+    } else {
+        transcription
+    };
     history_manager
         .update_transcription(
             id,
-            transcription,
+            primary_text,
             processed.post_processed_text,
             processed.post_process_prompt,
         )

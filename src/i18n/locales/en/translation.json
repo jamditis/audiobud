@@ -181,6 +181,10 @@
           "transcribe_with_post_process": {
             "name": "Post-processing hotkey",
             "description": "Optional: A dedicated hotkey that always applies AI post-processing to your transcription."
+          },
+          "transcribe_raw": {
+            "name": "Raw transcript hotkey",
+            "description": "A dedicated hotkey that transcribes to raw, lowercased, unpunctuated text for this dictation only."
           }
         },
         "errors": {
@@ -389,6 +393,27 @@
           "skippedInvalid": "{{count}} too long",
           "readError": "Couldn't read that file"
         }
+      },
+      "wordReplacements": {
+        "title": "Word replacements",
+        "description": "Always replace exact words or phrases, no matter how they sound. Runs on every transcription, for all models, after the custom-word matcher. Leave the replacement blank to delete a word. Use these for fixes the fuzzy matcher can't make safely (for example \"clawed\" to \"Claude\").",
+        "fromPlaceholder": "Heard",
+        "toPlaceholder": "Replace with",
+        "add": "Add",
+        "wholeWord": "Whole word only",
+        "caseSensitive": "Case sensitive",
+        "duplicate": "\"{{word}}\" already has a replacement",
+        "capReached": "Your replacement list is full ({{cap}} entries). Remove some to add more.",
+        "tooLong": "Keep each field under {{max}} characters",
+        "count": "{{count}} / {{cap}} replacements",
+        "deletes": "(deletes the word)",
+        "partialBadge": "partial",
+        "caseBadge": "Aa",
+        "remove": "Remove replacement for {{word}}"
+      },
+      "rawOutput": {
+        "label": "Raw transcript",
+        "description": "Output lowercase text with capitalization and end punctuation removed. Acronyms (API, GPU) and the standalone English \"I\" are kept. Useful for feeding other tools or when the model over-formats. You can also bind a separate shortcut for one-off raw dictations."
       }
     },
     "postProcessing": {

@@ -386,6 +386,7 @@ fn register_all_shortcuts_for_implementation(
     implementation: KeyboardImplementation,
 ) -> Vec<String> {
     let mut reset_bindings = Vec::new();
+    let mut settings_dirty = false;
     let default_bindings = settings::get_default_settings().bindings;
     let mut current_settings = settings::get_settings(app);
 
@@ -400,11 +401,20 @@ fn register_all_shortcuts_for_implementation(
             continue;
         }
 
-        let mut binding = current_settings
-            .bindings
-            .get(id)
-            .cloned()
-            .unwrap_or_else(|| default_binding.clone());
+        // Back-fill bindings introduced in a newer version so they are persisted and appear in the
+        // settings UI, rather than only being registered at runtime for the current session. An
+        // existing user upgrading from before this binding existed would otherwise not see it (and
+        // could not edit it) until a later launch.
+        let mut binding = match current_settings.bindings.get(id) {
+            Some(existing) => existing.clone(),
+            None => {
+                current_settings
+                    .bindings
+                    .insert(id.clone(), default_binding.clone());
+                settings_dirty = true;
+                default_binding.clone()
+            }
+        };
 
         // Validate the shortcut for the target implementation
         if let Err(e) =
@@ -421,6 +431,7 @@ fn register_all_shortcuts_for_implementation(
                 .bindings
                 .insert(id.clone(), binding.clone());
             reset_bindings.push(id.clone());
+            settings_dirty = true;
         }
 
         // Register with the appropriate implementation
@@ -437,8 +448,8 @@ fn register_all_shortcuts_for_implementation(
         }
     }
 
-    // Save settings if any bindings were reset
-    if !reset_bindings.is_empty() {
+    // Persist any newly back-filled or reset bindings.
+    if settings_dirty {
         settings::write_settings(app, current_settings);
     }
 
@@ -1114,6 +1125,27 @@ pub fn change_mute_while_recording_setting(app: AppHandle, enabled: bool) -> Res
 pub fn change_append_trailing_space_setting(app: AppHandle, enabled: bool) -> Result<(), String> {
     let mut settings = settings::get_settings(&app);
     settings.append_trailing_space = enabled;
+    settings::write_settings(&app, settings);
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn change_raw_output_setting(app: AppHandle, enabled: bool) -> Result<(), String> {
+    let mut settings = settings::get_settings(&app);
+    settings.raw_output = enabled;
+    settings::write_settings(&app, settings);
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn update_word_replacements(
+    app: AppHandle,
+    replacements: Vec<crate::settings::WordReplacement>,
+) -> Result<(), String> {
+    let mut settings = settings::get_settings(&app);
+    settings.word_replacements = replacements;
     settings::write_settings(&app, settings);
     Ok(())
 }
