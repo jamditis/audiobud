@@ -376,6 +376,8 @@ pub fn run(cli_args: CliArgs) {
             shortcut::resume_binding,
             shortcut::change_mute_while_recording_setting,
             shortcut::change_append_trailing_space_setting,
+            shortcut::change_raw_output_setting,
+            shortcut::update_word_replacements,
             shortcut::change_lazy_stream_close_setting,
             shortcut::change_app_language_setting,
             shortcut::change_update_checks_setting,
@@ -500,6 +502,8 @@ pub fn run(cli_args: CliArgs) {
                 signal_handle::send_transcription_input(app, "transcribe", "CLI");
             } else if args.iter().any(|a| a == "--toggle-post-process") {
                 signal_handle::send_transcription_input(app, "transcribe_with_post_process", "CLI");
+            } else if args.iter().any(|a| a == "--toggle-raw") {
+                signal_handle::send_transcription_input(app, "transcribe_raw", "CLI");
             } else if args.iter().any(|a| a == "--cancel") {
                 crate::utils::cancel_current_operation(app);
             } else {

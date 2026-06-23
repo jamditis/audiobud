@@ -1,4 +1,4 @@
-use crate::audio_toolkit::{apply_custom_words, filter_transcription_output};
+use crate::audio_toolkit::{apply_custom_words, apply_replacements, filter_transcription_output};
 use crate::managers::audio::AudioRecordingManager;
 use crate::managers::model::{EngineType, ModelManager};
 use crate::settings::{
@@ -698,6 +698,15 @@ impl TranscriptionManager {
             )
         } else {
             result.text
+        };
+
+        // Apply deterministic literal replacements. Unlike the fuzzy dictionary these are exact
+        // and safe, so they run for every engine (Whisper still mishears) -- this is the path
+        // that fixes large mishears like "clawed" -> "Claude".
+        let corrected_result = if settings.word_replacements.is_empty() {
+            corrected_result
+        } else {
+            apply_replacements(&corrected_result, &settings.word_replacements)
         };
 
         // Filter out filler words and hallucinations

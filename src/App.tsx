@@ -45,6 +45,7 @@ function App() {
   const refreshOutputDevices = useSettingsStore(
     (state) => state.refreshOutputDevices,
   );
+  const refreshSettings = useSettingsStore((state) => state.refreshSettings);
   const hasCompletedPostOnboardingInit = useRef(false);
 
   useEffect(() => {
@@ -60,16 +61,28 @@ function App() {
   useEffect(() => {
     if (onboardingStep === "done" && !hasCompletedPostOnboardingInit.current) {
       hasCompletedPostOnboardingInit.current = true;
-      Promise.all([
-        commands.initializeEnigo(),
-        commands.initializeShortcuts(),
-      ]).catch((e) => {
-        console.warn("Failed to initialize:", e);
-      });
+      commands
+        .initializeEnigo()
+        .catch((e) => console.warn("Failed to initialize Enigo:", e));
+      // initializeShortcuts may back-fill default bindings added in a newer version into the
+      // persisted settings; refresh the store so they appear in the UI this session instead of only
+      // after a later launch. This is independent of Enigo so a failed Enigo init cannot hide the
+      // newly added binding until restart.
+      commands
+        .initializeShortcuts()
+        .then(() => {
+          refreshSettings();
+        })
+        .catch((e) => console.warn("Failed to initialize shortcuts:", e));
       refreshAudioDevices();
       refreshOutputDevices();
     }
-  }, [onboardingStep, refreshAudioDevices, refreshOutputDevices]);
+  }, [
+    onboardingStep,
+    refreshAudioDevices,
+    refreshOutputDevices,
+    refreshSettings,
+  ]);
 
   // Handle keyboard shortcuts for debug mode toggle
   useEffect(() => {

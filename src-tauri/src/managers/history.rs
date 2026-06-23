@@ -44,6 +44,7 @@ static MIGRATIONS: &[M] = &[
     M::up("ALTER TABLE transcription_history ADD COLUMN post_processed_text TEXT;"),
     M::up("ALTER TABLE transcription_history ADD COLUMN post_process_prompt TEXT;"),
     M::up("ALTER TABLE transcription_history ADD COLUMN post_process_requested BOOLEAN NOT NULL DEFAULT 0;"),
+    M::up("ALTER TABLE transcription_history ADD COLUMN raw_requested BOOLEAN NOT NULL DEFAULT 0;"),
 ];
 
 #[derive(Clone, Debug, Serialize, Deserialize, Type)]
@@ -76,6 +77,11 @@ pub struct HistoryEntry {
     pub post_processed_text: Option<String>,
     pub post_process_prompt: Option<String>,
     pub post_process_requested: bool,
+    /// Whether this dictation was emitted as raw text (the effective raw decision at creation
+    /// time, after combining the per-dictation request with the persisted `raw_output` toggle).
+    /// Persisted so a retry reproduces the original formatting instead of following whatever raw
+    /// mode is active now.
+    pub raw_requested: bool,
 }
 
 pub struct HistoryManager {
@@ -220,6 +226,7 @@ impl HistoryManager {
             post_processed_text: row.get("post_processed_text")?,
             post_process_prompt: row.get("post_process_prompt")?,
             post_process_requested: row.get("post_process_requested")?,
+            raw_requested: row.get("raw_requested")?,
         })
     }
 
@@ -234,6 +241,7 @@ impl HistoryManager {
         file_name: String,
         transcription_text: String,
         post_process_requested: bool,
+        raw_requested: bool,
         post_processed_text: Option<String>,
         post_process_prompt: Option<String>,
     ) -> Result<HistoryEntry> {
@@ -250,8 +258,9 @@ impl HistoryManager {
                 transcription_text,
                 post_processed_text,
                 post_process_prompt,
-                post_process_requested
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                post_process_requested,
+                raw_requested
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
             params![
                 &file_name,
                 timestamp,
@@ -261,6 +270,7 @@ impl HistoryManager {
                 &post_processed_text,
                 &post_process_prompt,
                 post_process_requested,
+                raw_requested,
             ],
         )?;
 
@@ -274,6 +284,7 @@ impl HistoryManager {
             post_processed_text,
             post_process_prompt,
             post_process_requested,
+            raw_requested,
         };
 
         debug!("Saved history entry with id {}", entry.id);
@@ -321,7 +332,7 @@ impl HistoryManager {
 
         let entry = conn
             .query_row(
-                "SELECT id, file_name, timestamp, saved, title, transcription_text, post_processed_text, post_process_prompt, post_process_requested
+                "SELECT id, file_name, timestamp, saved, title, transcription_text, post_processed_text, post_process_prompt, post_process_requested, raw_requested
                  FROM transcription_history WHERE id = ?1",
                 params![id],
                 Self::map_history_entry,
@@ -472,7 +483,7 @@ impl HistoryManager {
             (Some(cursor_id), Some(lim)) => {
                 let fetch_count = (lim + 1) as i64;
                 let mut stmt = conn.prepare(
-                    "SELECT id, file_name, timestamp, saved, title, transcription_text, post_processed_text, post_process_prompt, post_process_requested
+                    "SELECT id, file_name, timestamp, saved, title, transcription_text, post_processed_text, post_process_prompt, post_process_requested, raw_requested
                      FROM transcription_history
                      WHERE id < ?1
                      ORDER BY id DESC
@@ -486,7 +497,7 @@ impl HistoryManager {
             (None, Some(lim)) => {
                 let fetch_count = (lim + 1) as i64;
                 let mut stmt = conn.prepare(
-                    "SELECT id, file_name, timestamp, saved, title, transcription_text, post_processed_text, post_process_prompt, post_process_requested
+                    "SELECT id, file_name, timestamp, saved, title, transcription_text, post_processed_text, post_process_prompt, post_process_requested, raw_requested
                      FROM transcription_history
                      ORDER BY id DESC
                      LIMIT ?1",
@@ -498,7 +509,7 @@ impl HistoryManager {
             }
             (_, None) => {
                 let mut stmt = conn.prepare(
-                    "SELECT id, file_name, timestamp, saved, title, transcription_text, post_processed_text, post_process_prompt, post_process_requested
+                    "SELECT id, file_name, timestamp, saved, title, transcription_text, post_processed_text, post_process_prompt, post_process_requested, raw_requested
                      FROM transcription_history
                      ORDER BY id DESC",
                 )?;
@@ -529,7 +540,8 @@ impl HistoryManager {
                 transcription_text,
                 post_processed_text,
                 post_process_prompt,
-                post_process_requested
+                post_process_requested,
+                raw_requested
              FROM transcription_history
              ORDER BY timestamp DESC
              LIMIT 1",
@@ -556,7 +568,8 @@ impl HistoryManager {
                 transcription_text,
                 post_processed_text,
                 post_process_prompt,
-                post_process_requested
+                post_process_requested,
+                raw_requested
              FROM transcription_history
              WHERE transcription_text != ''
              ORDER BY timestamp DESC
@@ -613,7 +626,8 @@ impl HistoryManager {
                 transcription_text,
                 post_processed_text,
                 post_process_prompt,
-                post_process_requested
+                post_process_requested,
+                raw_requested
              FROM transcription_history
              WHERE id = ?1",
         )?;
@@ -708,7 +722,8 @@ mod tests {
                 transcription_text TEXT NOT NULL,
                 post_processed_text TEXT,
                 post_process_prompt TEXT,
-                post_process_requested BOOLEAN NOT NULL DEFAULT 0
+                post_process_requested BOOLEAN NOT NULL DEFAULT 0,
+                raw_requested BOOLEAN NOT NULL DEFAULT 0
             );",
         )
         .expect("create transcription_history table");
@@ -725,8 +740,9 @@ mod tests {
                 transcription_text,
                 post_processed_text,
                 post_process_prompt,
-                post_process_requested
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                post_process_requested,
+                raw_requested
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
             params![
                 format!("handy-{}.wav", timestamp),
                 timestamp,
@@ -735,6 +751,7 @@ mod tests {
                 text,
                 post_processed,
                 Option::<String>::None,
+                false,
                 false,
             ],
         )
@@ -761,6 +778,37 @@ mod tests {
         assert_eq!(entry.timestamp, 200);
         assert_eq!(entry.transcription_text, "second");
         assert_eq!(entry.post_processed_text.as_deref(), Some("processed"));
+    }
+
+    #[test]
+    fn raw_requested_round_trips() {
+        // A raw dictation persists raw_requested = true so a later retry can reproduce it.
+        let conn = setup_conn();
+        conn.execute(
+            "INSERT INTO transcription_history (
+                file_name, timestamp, saved, title, transcription_text,
+                post_processed_text, post_process_prompt, post_process_requested, raw_requested
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            params![
+                "handy-300.wav",
+                300,
+                false,
+                "Recording 300",
+                "raw entry",
+                Option::<String>::None,
+                Option::<String>::None,
+                false,
+                true,
+            ],
+        )
+        .expect("insert raw entry");
+
+        let entry = HistoryManager::get_latest_entry_with_conn(&conn)
+            .expect("fetch latest entry")
+            .expect("entry exists");
+
+        assert!(entry.raw_requested);
+        assert!(!entry.post_process_requested);
     }
 
     #[test]
@@ -801,8 +849,8 @@ mod tests {
         conn.execute(
             "INSERT INTO transcription_history (
                 file_name, timestamp, saved, title, transcription_text,
-                post_processed_text, post_process_prompt, post_process_requested
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                post_processed_text, post_process_prompt, post_process_requested, raw_requested
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
             params![
                 file_name,
                 timestamp,
@@ -811,6 +859,7 @@ mod tests {
                 "text",
                 Option::<String>::None,
                 Option::<String>::None,
+                false,
                 false,
             ],
         )

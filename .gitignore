@@ -58,3 +58,10 @@ src-tauri/resources/models/silero_vad_v4.onnx
 *.p12
 *.pfx
 settings_store.json
+
+# Local research + personal transcription data - never commit
+transcript_corpus.json
+/research/
+*.wav
+ground_truth*.json
+codex-*.md

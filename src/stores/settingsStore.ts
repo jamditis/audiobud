@@ -6,6 +6,7 @@ import type {
   AudioDevice,
   WhisperAcceleratorSetting,
   OrtAcceleratorSetting,
+  WordReplacement,
 } from "@/bindings";
 import { commands } from "@/bindings";
 import { toast } from "sonner";
@@ -136,6 +137,8 @@ const settingUpdaters: {
     commands.changeOverlayPositionSetting(value as string),
   debug_mode: (value) => commands.changeDebugModeSetting(value as boolean),
   custom_words: (value) => commands.updateCustomWords(value as string[]),
+  word_replacements: (value) =>
+    commands.updateWordReplacements(value as WordReplacement[]),
   word_correction_threshold: (value) =>
     commands.changeWordCorrectionThresholdSetting(value as number),
   paste_delay_ms: (value) =>
@@ -158,6 +161,7 @@ const settingUpdaters: {
     commands.changeMuteWhileRecordingSetting(value as boolean),
   append_trailing_space: (value) =>
     commands.changeAppendTrailingSpaceSetting(value as boolean),
+  raw_output: (value) => commands.changeRawOutputSetting(value as boolean),
   log_level: (value) => commands.setLogLevel(value as any),
   app_language: (value) => commands.changeAppLanguageSetting(value as string),
   experimental_enabled: (value) =>

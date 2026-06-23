@@ -1,7 +1,9 @@
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
 use crate::apple_intelligence;
 use crate::audio_feedback::{play_feedback_sound, play_feedback_sound_blocking, SoundType};
-use crate::audio_toolkit::{is_microphone_access_denied, is_no_input_device_error};
+use crate::audio_toolkit::{
+    is_microphone_access_denied, is_no_input_device_error, strip_to_raw_text,
+};
 use crate::managers::audio::AudioRecordingManager;
 use crate::managers::history::HistoryManager;
 use crate::managers::transcription::TranscriptionManager;
@@ -47,6 +49,10 @@ pub trait ShortcutAction: Send + Sync {
 // Transcribe Action
 struct TranscribeAction {
     post_process: bool,
+    /// Emit a raw transcript (lowercase, unpunctuated). Mutually exclusive with
+    /// `post_process`; when set it overrides the persisted `raw_output` setting for this
+    /// dictation only. See [`process_transcription_output`].
+    raw: bool,
 }
 
 /// Field name for structured output JSON schema
@@ -346,10 +352,41 @@ pub(crate) struct ProcessedTranscription {
     pub post_process_prompt: Option<String>,
 }
 
+/// Decides whether a dictation is emitted as raw text. Per-dictation requests take precedence over
+/// the persisted `raw_output` toggle: an explicit raw request always forces raw, while an explicit
+/// post-process request suppresses the global toggle so a one-off post-process override still works
+/// even while raw mode is enabled.
+fn effective_raw_output(
+    raw_requested: bool,
+    post_process_requested: bool,
+    raw_output_setting: bool,
+) -> bool {
+    raw_requested || (raw_output_setting && !post_process_requested)
+}
+
+/// Decides whether raw-text formatting should force English casing for the standalone pronoun "I".
+/// This is `true` only when the output is known to be English: translate-to-English makes the engine
+/// emit English regardless of source language, and an explicitly selected English dictation language
+/// is likewise definitely English. For auto-detect (`transcribe-rs` does not report the detected
+/// language) or an explicit non-English language it is `false`, and `strip_to_raw_text` then keeps
+/// the engine's own casing of an "i"/"I" token -- correct for English (engines capitalize "I") yet
+/// not wrongly capitalizing languages that use a lowercase standalone "i".
+fn force_english_i_casing(translate_to_english: bool, selected_language: &str) -> bool {
+    if translate_to_english {
+        return true;
+    }
+    let base = selected_language
+        .split(&['-', '_'][..])
+        .next()
+        .unwrap_or(selected_language);
+    base == "en"
+}
+
 pub(crate) async fn process_transcription_output(
     app: &AppHandle,
     transcription: &str,
     post_process: bool,
+    effective_raw: bool,
 ) -> ProcessedTranscription {
     let settings = get_settings(app);
     let mut final_text = transcription.to_string();
@@ -360,7 +397,15 @@ pub(crate) async fn process_transcription_output(
         final_text = converted_text;
     }
 
-    if post_process {
+    if effective_raw {
+        // Raw output and LLM post-processing are contradictory, so raw wins and post-processing
+        // is skipped. Apply the deterministic raw transform as the final stage. The raw text is the
+        // entry's primary output (see the save sites), so it is left in `final_text` rather than
+        // being recorded as a separate `post_processed_text` variant.
+        let force_english_i =
+            force_english_i_casing(settings.translate_to_english, &settings.selected_language);
+        final_text = strip_to_raw_text(&final_text, force_english_i);
+    } else if post_process {
         if let Some(processed_text) = post_process_transcription(&settings, &final_text).await {
             post_processed_text = Some(processed_text.clone());
             final_text = processed_text;
@@ -512,6 +557,7 @@ impl ShortcutAction for TranscribeAction {
 
         let binding_id = binding_id.to_string(); // Clone binding_id for the async task
         let post_process = self.post_process;
+        let raw = self.raw;
 
         tauri::async_runtime::spawn(async move {
             let _guard = FinishGuard(ah.clone());
@@ -571,6 +617,11 @@ impl ShortcutAction for TranscribeAction {
                         }
                     };
 
+                    // Resolve the raw decision once so the same value drives output and is persisted
+                    // with every history entry (including failed ones) for faithful retries.
+                    let effective_raw =
+                        effective_raw_output(raw, post_process, get_settings(&ah).raw_output);
+
                     match transcription_result {
                         Ok(transcription) => {
                             debug!(
@@ -582,16 +633,29 @@ impl ShortcutAction for TranscribeAction {
                             if post_process {
                                 show_processing_overlay(&ah);
                             }
-                            let processed =
-                                process_transcription_output(&ah, &transcription, post_process)
-                                    .await;
+                            let processed = process_transcription_output(
+                                &ah,
+                                &transcription,
+                                post_process,
+                                effective_raw,
+                            )
+                            .await;
 
-                            // Save to history if WAV was saved
+                            // Save to history if WAV was saved. In raw mode the emitted (raw) text
+                            // is the entry's primary text so history shows and copies what the user
+                            // actually received; other modes keep the verbatim transcription as
+                            // primary and store any LLM-processed variant separately.
                             if wav_saved {
+                                let primary_text = if effective_raw {
+                                    processed.final_text.clone()
+                                } else {
+                                    transcription
+                                };
                                 if let Err(err) = hm.save_entry(
                                     file_name,
-                                    transcription,
+                                    primary_text,
                                     post_process,
+                                    effective_raw,
                                     processed.post_processed_text.clone(),
                                     processed.post_process_prompt.clone(),
                                 ) {
@@ -635,6 +699,7 @@ impl ShortcutAction for TranscribeAction {
                                     file_name,
                                     String::new(),
                                     post_process,
+                                    effective_raw,
                                     None,
                                     None,
                                 ) {
@@ -703,11 +768,22 @@ pub static ACTION_MAP: Lazy<HashMap<String, Arc<dyn ShortcutAction>>> = Lazy::ne
         "transcribe".to_string(),
         Arc::new(TranscribeAction {
             post_process: false,
+            raw: false,
         }) as Arc<dyn ShortcutAction>,
     );
     map.insert(
         "transcribe_with_post_process".to_string(),
-        Arc::new(TranscribeAction { post_process: true }) as Arc<dyn ShortcutAction>,
+        Arc::new(TranscribeAction {
+            post_process: true,
+            raw: false,
+        }) as Arc<dyn ShortcutAction>,
+    );
+    map.insert(
+        "transcribe_raw".to_string(),
+        Arc::new(TranscribeAction {
+            post_process: false,
+            raw: true,
+        }) as Arc<dyn ShortcutAction>,
     );
     map.insert(
         "cancel".to_string(),
@@ -719,3 +795,43 @@ pub static ACTION_MAP: Lazy<HashMap<String, Arc<dyn ShortcutAction>>> = Lazy::ne
     );
     map
 });
+
+#[cfg(test)]
+mod tests {
+    use super::{effective_raw_output, force_english_i_casing};
+
+    #[test]
+    fn effective_raw_output_per_dictation_overrides_global() {
+        // An explicit per-dictation raw request always forces raw.
+        assert!(effective_raw_output(true, false, false));
+        // An explicit per-dictation post-process request suppresses the global raw toggle.
+        assert!(!effective_raw_output(false, true, true));
+        // With no per-dictation request, the global raw toggle still applies.
+        assert!(effective_raw_output(false, false, true));
+        // Nothing requested and the toggle off -> not raw.
+        assert!(!effective_raw_output(false, false, false));
+    }
+
+    #[test]
+    fn force_english_i_casing_forces_when_translating() {
+        // Translation emits English regardless of the selected dictation language.
+        assert!(force_english_i_casing(true, "de"));
+        assert!(force_english_i_casing(true, "auto"));
+    }
+
+    #[test]
+    fn force_english_i_casing_forces_for_explicit_english() {
+        // An explicitly selected English language forces English "I" casing, including region tags.
+        assert!(force_english_i_casing(false, "en"));
+        assert!(force_english_i_casing(false, "en-US"));
+    }
+
+    #[test]
+    fn force_english_i_casing_defers_for_auto_and_non_english() {
+        // Auto-detect can't tell us the language, and an explicit non-English language is not
+        // English, so neither forces English rules -- strip_to_raw_text preserves the engine casing.
+        assert!(!force_english_i_casing(false, "auto"));
+        assert!(!force_english_i_casing(false, "fr"));
+        assert!(!force_english_i_casing(false, "de"));
+    }
+}

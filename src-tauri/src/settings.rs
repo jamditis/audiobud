@@ -93,6 +93,31 @@ pub struct LLMPrompt {
     pub prompt: String,
 }
 
+fn default_true() -> bool {
+    true
+}
+
+/// A deterministic literal text replacement applied after fuzzy custom-word correction.
+///
+/// Unlike the fuzzy dictionary, this maps an exact heard phrase to an exact output, which is
+/// the only safe way to fix large mishears the fuzzy matcher cannot (and must not) guess at,
+/// e.g. "clawed" -> "Claude" (50% edit distance, phonetically distinct). Replacements run for
+/// every engine and are applied in order.
+#[derive(Serialize, Deserialize, Debug, Clone, Type)]
+pub struct WordReplacement {
+    /// The text to find, as heard/transcribed. May contain spaces for multi-word phrases.
+    pub from: String,
+    /// The replacement text. An empty string deletes the matched text.
+    pub to: String,
+    /// Match only on whole-word boundaries (default true). When false, matches substrings too.
+    #[serde(default = "default_true")]
+    pub whole_word: bool,
+    /// Match case-sensitively (default false). When false, matching ignores case and the
+    /// replacement adapts to the matched text's case pattern.
+    #[serde(default)]
+    pub case_sensitive: bool,
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, Type)]
 pub struct PostProcessProvider {
     pub id: String,
@@ -371,6 +396,10 @@ pub struct AppSettings {
     pub log_level: LogLevel,
     #[serde(default)]
     pub custom_words: Vec<String>,
+    /// Deterministic literal heard->meant replacements, applied after fuzzy custom-word
+    /// correction and before filler removal, for every engine. See [`WordReplacement`].
+    #[serde(default)]
+    pub word_replacements: Vec<WordReplacement>,
     #[serde(default)]
     pub model_unload_timeout: ModelUnloadTimeout,
     #[serde(default = "default_word_correction_threshold")]
@@ -405,6 +434,10 @@ pub struct AppSettings {
     pub mute_while_recording: bool,
     #[serde(default)]
     pub append_trailing_space: bool,
+    /// When true, transcriptions are emitted as raw lowercased, unpunctuated text (issue #19).
+    /// A per-dictation shortcut / CLI flag can override this at runtime without persisting.
+    #[serde(default)]
+    pub raw_output: bool,
     #[serde(default = "default_app_language")]
     pub app_language: String,
     #[serde(default)]
@@ -758,6 +791,27 @@ pub fn get_default_settings() -> AppSettings {
             current_binding: default_post_process_shortcut.to_string(),
         },
     );
+    #[cfg(target_os = "windows")]
+    let default_raw_shortcut = "ctrl+alt+r";
+    #[cfg(target_os = "macos")]
+    let default_raw_shortcut = "option+shift+r";
+    #[cfg(target_os = "linux")]
+    let default_raw_shortcut = "ctrl+alt+r";
+    #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+    let default_raw_shortcut = "alt+r";
+
+    bindings.insert(
+        "transcribe_raw".to_string(),
+        ShortcutBinding {
+            id: "transcribe_raw".to_string(),
+            name: "Transcribe (raw)".to_string(),
+            description: "Converts your speech into raw, lowercased, unpunctuated text."
+                .to_string(),
+            default_binding: default_raw_shortcut.to_string(),
+            current_binding: default_raw_shortcut.to_string(),
+        },
+    );
+
     bindings.insert(
         "cancel".to_string(),
         ShortcutBinding {
@@ -797,6 +851,7 @@ pub fn get_default_settings() -> AppSettings {
         debug_mode: false,
         log_level: default_log_level(),
         custom_words: Vec::new(),
+        word_replacements: Vec::new(),
         model_unload_timeout: ModelUnloadTimeout::default(),
         word_correction_threshold: default_word_correction_threshold(),
         history_limit: default_history_limit(),
@@ -814,6 +869,7 @@ pub fn get_default_settings() -> AppSettings {
         post_process_selected_prompt_id: None,
         mute_while_recording: false,
         append_trailing_space: false,
+        raw_output: false,
         app_language: default_app_language(),
         experimental_enabled: false,
         lazy_stream_close: false,
