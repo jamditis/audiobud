@@ -313,8 +313,9 @@ fn is_word_boundary_match(haystack: &str, start: usize, end: usize) -> bool {
 ///
 /// - `whole_word` (default true): matches only on word boundaries, so "cat" -> "dog" does
 ///   not corrupt "category".
-/// - `case_sensitive` (default false): matching ignores case and the output adapts to the
-///   matched text's case pattern (ALL CAPS / Capitalized / lower) via [`preserve_case_pattern`].
+/// - `case_sensitive` (default false): matching ignores case and the output mirrors the matched
+///   text when it is ALL CAPS or Capitalized; otherwise the replacement's own casing is kept (so a
+///   lowercase match of `clawed` still yields `Claude`, not `claude`). See [`preserve_case_pattern`].
 /// - An empty `to` deletes the match; spaces left dangling by a deletion (doubled, leading/trailing,
 ///   or stranded before punctuation) are cleaned up afterwards.
 pub fn apply_replacements(text: &str, replacements: &[WordReplacement]) -> String {
