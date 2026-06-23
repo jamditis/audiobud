@@ -3,7 +3,7 @@
 # transcription backend (no GPU). Native packaging/bundling and the signed
 # release + updater pipeline are deliberately milestone B: they need AudioBud's
 # own signing identity and provenance, not the inherited cjpais/Handy config.
-# See docs/superpowers/DEFERRED-issues.md ("Milestone B" section).
+# See superpowers/DEFERRED-issues.md ("Milestone B" section).
 name: CI
 
 on:
@@ -34,7 +34,7 @@ jobs:
       # and i18next falls back to English at runtime (fallbackLng: "en"), so this
       # is localization debt, not a functional gap. The check still runs and
       # annotates the missing keys; flip continue-on-error off once the locales
-      # are complete. See docs/superpowers/DEFERRED-issues.md.
+      # are complete. See superpowers/DEFERRED-issues.md.
       - name: Check translation consistency
         run: bun run check:translations
         continue-on-error: true

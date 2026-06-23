@@ -1,6 +1,6 @@
 // Milestone A: the Tauri updater endpoint in tauri.conf.json still points at
 // upstream Handy's release feed and verifies against upstream's key (see
-// docs/superpowers/DEFERRED-issues.md "Provenance"). Until that feed is
+// superpowers/DEFERRED-issues.md "Provenance"). Until that feed is
 // repointed to AudioBud and its builds are signed (milestone B), AudioBud must
 // never run an update check - a check would query, and could offer to install,
 // an upstream Handy release. Flip this to true in milestone B once the feed is
