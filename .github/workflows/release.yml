@@ -1,0 +1,154 @@
+# AudioBud release build (milestone B): produces the downloadable Windows
+# installers (NSIS .exe + MSI). Inert until manually dispatched or a v* tag is
+# pushed, so merging it never triggers a build on its own.
+#
+#   - workflow_dispatch (make_release: false) -> build + upload the installers
+#     as a CI artifact only. Use this to verify the build without cutting a
+#     release.
+#   - workflow_dispatch (make_release: true) or a pushed v* tag -> also create a
+#     draft GitHub Release and attach the installers to it.
+#
+# Windows-only for now (issues #3/#13 are Windows-NSIS packaging). No code
+# signing (milestone C) and no updater feed (gated off, see #32/#33), so the
+# build runs unsigned and createUpdaterArtifacts is false in tauri.conf.json.
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      make_release:
+        description: "Create a draft GitHub Release and attach the installers (otherwise upload as a CI artifact only)"
+        type: boolean
+        default: false
+  push:
+    tags:
+      - "v*"
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-windows:
+    name: Build Windows installers
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      # whisper-rs-sys cmake builds and the VS toolchain create paths well past
+      # the legacy 260-char MAX_PATH; enable long paths before anything checks out.
+      - name: Enable long paths
+        shell: pwsh
+        run: |
+          New-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem" `
+            -Name "LongPathsEnabled" -Value 1 -PropertyType DWORD -Force
+          git config --system core.longpaths true
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get version from tauri.conf.json
+        id: get-version
+        shell: bash
+        run: |
+          VERSION=$(grep -o '"version": "[^"]*"' src-tauri/tauri.conf.json | cut -d'"' -f4)
+          echo "Application version: $VERSION"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./src-tauri -> target"
+          key: windows-x86_64
+
+      # The Windows build links whisper-vulkan; the SDK provides glslc + the
+      # Vulkan headers/libs the native build needs.
+      - name: Install Vulkan SDK
+        uses: humbletim/install-vulkan-sdk@v1.2
+        with:
+          version: 1.4.309.0
+          cache: true
+
+      - name: Install frontend dependencies
+        run: bun install --frozen-lockfile
+
+      # silero_vad_v4.onnx is gitignored (binary blob), but bundle.resources
+      # ships resources/**/* and the app needs the VAD model at runtime, so a
+      # clean CI checkout has to fetch it before bundling.
+      - name: Download Silero VAD model
+        shell: bash
+        run: |
+          mkdir -p src-tauri/resources/models
+          curl -fL --retry 3 -o src-tauri/resources/models/silero_vad_v4.onnx \
+            https://blob.handy.computer/silero_vad_v4.onnx
+          ls -l src-tauri/resources/models/silero_vad_v4.onnx
+
+      # Keep the cargo target dir short (drive root) so whisper-rs-sys cmake
+      # paths stay under MAX_PATH.
+      - name: Shorten build path
+        shell: pwsh
+        run: |
+          $drive = Split-Path -Qualifier $env:GITHUB_WORKSPACE
+          $targetDir = "$drive\t"
+          New-Item -ItemType Directory -Force -Path $targetDir | Out-Null
+          echo "CARGO_TARGET_DIR=$targetDir" >> $env:GITHUB_ENV
+
+      - name: Create draft release
+        id: create-release
+        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.make_release) || startsWith(github.ref, 'refs/tags/v') }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data } = await github.rest.repos.createRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag_name: `v${{ steps.get-version.outputs.version }}`,
+              name: `AudioBud v${{ steps.get-version.outputs.version }}`,
+              draft: true,
+              prerelease: false,
+              generate_release_notes: true,
+            });
+            return data.id;
+
+      - name: Build with Tauri
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Disable -march=native and SIMD above SSE4.2 so the x86_64 build runs
+          # on CPUs without AVX/FMA (they would SIGILL otherwise). The Vulkan
+          # backend does the heavy compute, so the perf cost is negligible.
+          GGML_NATIVE: "OFF"
+          GGML_AVX: "OFF"
+          GGML_AVX2: "OFF"
+          GGML_FMA: "OFF"
+          GGML_F16C: "OFF"
+        with:
+          tagName: ${{ steps.create-release.outputs.result && format('v{0}', steps.get-version.outputs.version) || '' }}
+          releaseName: ${{ steps.create-release.outputs.result && format('AudioBud v{0}', steps.get-version.outputs.version) || '' }}
+          releaseId: ${{ steps.create-release.outputs.result }}
+          args: ""
+
+      - name: Resolve bundle path
+        id: bundle-path
+        shell: pwsh
+        run: |
+          $base = if ($env:CARGO_TARGET_DIR) { $env:CARGO_TARGET_DIR } else { "src-tauri/target" }
+          echo "base=$base" >> $env:GITHUB_OUTPUT
+
+      - name: Upload installers as CI artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: audiobud-windows-x86_64-v${{ steps.get-version.outputs.version }}
+          path: |
+            ${{ steps.bundle-path.outputs.base }}/release/bundle/nsis/*.exe
+            ${{ steps.bundle-path.outputs.base }}/release/bundle/msi/*.msi
+          retention-days: 30
+          if-no-files-found: error
