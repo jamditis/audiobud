@@ -20,6 +20,7 @@ jobs:
   frontend:
     name: Frontend (lint, format, types, unit tests)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -54,13 +55,17 @@ jobs:
   rust-tests:
     name: Rust tests (mock transcription, no GPU)
     runs-on: ubuntu-24.04
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
 
       - name: Install system dependencies
+        timeout-minutes: 8
+        env:
+          DEBIAN_FRONTEND: noninteractive
         run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev libasound2-dev libssl-dev libgtk-layer-shell-dev
+          sudo apt-get update -o Acquire::Retries=3
+          sudo apt-get install -y -o Acquire::Retries=3 libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev libasound2-dev libssl-dev libgtk-layer-shell-dev
 
       - uses: swatinem/rust-cache@v2
         with:
@@ -80,6 +85,7 @@ jobs:
   secret-scan:
     name: Secret scan (gitleaks)
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     # gitleaks-action lists the PR's commits to scope its scan, which needs
     # pull-requests: read; the default GITHUB_TOKEN does not grant it. Keep the
     # token read-only and turn off PR comments so it never needs write access.
