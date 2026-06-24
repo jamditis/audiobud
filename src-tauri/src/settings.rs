@@ -423,6 +423,11 @@ pub struct AppSettings {
     /// overrides the centered Top/Bottom placement; `None` = default placement.
     #[serde(default)]
     pub overlay_custom_position: Option<OverlayCustomPosition>,
+    /// Last visible overlay placement, remembered when the tray show/hide
+    /// toggle hides the overlay (sets `overlay_position` to None) so re-showing
+    /// restores the user's Top/Bottom choice instead of forcing the default.
+    #[serde(default)]
+    pub overlay_restore_position: Option<OverlayPosition>,
     #[serde(default = "default_debug_mode")]
     pub debug_mode: bool,
     #[serde(default = "default_log_level")]
@@ -882,6 +887,7 @@ pub fn get_default_settings() -> AppSettings {
         selected_language: "auto".to_string(),
         overlay_position: default_overlay_position(),
         overlay_custom_position: None,
+        overlay_restore_position: None,
         debug_mode: false,
         log_level: default_log_level(),
         custom_words: Vec::new(),

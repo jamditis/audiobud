@@ -9,7 +9,9 @@
     "cancel": "Cancel",
     "pushToTalk": "Push to talk",
     "muteWhileRecording": "Mute while recording",
-    "appendTrailingSpace": "Append trailing space"
+    "appendTrailingSpace": "Append trailing space",
+    "autoSubmit": "Auto-submit",
+    "showOverlay": "Show overlay"
   },
   "sidebar": {
     "navLabel": "Settings sections",

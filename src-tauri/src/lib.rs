@@ -300,6 +300,10 @@ fn initialize_core_logic(app_handle: &AppHandle) {
                         app.clone(),
                         !current.append_trailing_space,
                     ),
+                    "auto_submit" => {
+                        shortcut::change_auto_submit_setting(app.clone(), !current.auto_submit)
+                    }
+                    "overlay_visible" => shortcut::toggle_overlay_visibility(app.clone()),
                     other => {
                         log::warn!("Unknown tray toggle: {}", other);
                         return;
