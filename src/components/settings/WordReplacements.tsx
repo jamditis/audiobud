@@ -114,6 +114,7 @@ export const WordReplacements: React.FC<WordReplacementsProps> = React.memo(
                   "settings.advanced.wordReplacements.fromPlaceholder",
                 )}
                 variant="compact"
+                className="flex-1 min-w-0"
                 disabled={updating}
               />
               <span className="text-mid-gray select-none">→</span>
@@ -126,6 +127,7 @@ export const WordReplacements: React.FC<WordReplacementsProps> = React.memo(
                   "settings.advanced.wordReplacements.toPlaceholder",
                 )}
                 variant="compact"
+                className="flex-1 min-w-0"
                 disabled={updating}
               />
               <Button
@@ -133,6 +135,7 @@ export const WordReplacements: React.FC<WordReplacementsProps> = React.memo(
                 disabled={!from.trim() || updating}
                 variant="primary"
                 size="md"
+                className="shrink-0"
               >
                 {t("settings.advanced.wordReplacements.add")}
               </Button>
