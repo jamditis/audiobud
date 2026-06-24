@@ -450,12 +450,17 @@ impl ShortcutAction for TranscribeAction {
         });
 
         let binding_id = binding_id.to_string();
-        change_tray_icon(app, TrayIconState::Recording);
-        show_recording_overlay(app);
 
-        // Get the microphone mode to determine audio feedback timing
+        // Read settings once: it drives both the overlay's RAW badge and the microphone
+        // feedback timing below. Resolve the raw decision the same way the transcription path
+        // does so the badge always matches what will actually be emitted (issue #24).
         let settings = get_settings(app);
         let is_always_on = settings.always_on_microphone;
+        let effective_raw = effective_raw_output(self.raw, self.post_process, settings.raw_output);
+
+        change_tray_icon(app, TrayIconState::Recording);
+        show_recording_overlay(app, effective_raw);
+
         debug!("Microphone mode - always_on: {}", is_always_on);
 
         let mut recording_error: Option<String> = None;
@@ -546,8 +551,14 @@ impl ShortcutAction for TranscribeAction {
         let tm = Arc::clone(&app.state::<Arc<TranscriptionManager>>());
         let hm = Arc::clone(&app.state::<Arc<HistoryManager>>());
 
+        let post_process = self.post_process;
+        let raw = self.raw;
+        // Resolve the raw decision up front so the overlay's RAW badge matches what will be
+        // emitted; the async task below re-resolves it at completion for the persisted record.
+        let overlay_raw = effective_raw_output(raw, post_process, get_settings(app).raw_output);
+
         change_tray_icon(app, TrayIconState::Transcribing);
-        show_transcribing_overlay(app);
+        show_transcribing_overlay(app, overlay_raw);
 
         // Unmute before playing audio feedback so the stop sound is audible
         rm.remove_mute();
@@ -556,8 +567,6 @@ impl ShortcutAction for TranscribeAction {
         play_feedback_sound(app, SoundType::Stop);
 
         let binding_id = binding_id.to_string(); // Clone binding_id for the async task
-        let post_process = self.post_process;
-        let raw = self.raw;
 
         tauri::async_runtime::spawn(async move {
             let _guard = FinishGuard(ah.clone());
@@ -631,7 +640,7 @@ impl ShortcutAction for TranscribeAction {
                             );
 
                             if post_process {
-                                show_processing_overlay(&ah);
+                                show_processing_overlay(&ah, effective_raw);
                             }
                             let processed = process_transcription_output(
                                 &ah,
