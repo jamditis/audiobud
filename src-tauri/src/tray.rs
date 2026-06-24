@@ -2,6 +2,7 @@ use crate::managers::history::{HistoryEntry, HistoryManager};
 use crate::managers::model::ModelManager;
 use crate::managers::transcription::TranscriptionManager;
 use crate::settings;
+use crate::settings::OverlayPosition;
 use crate::tray_i18n::get_tray_translations;
 use log::{error, info, warn};
 use std::sync::Arc;
@@ -238,6 +239,26 @@ pub fn update_tray_menu(app: &AppHandle, state: &TrayIconState, locale: Option<&
         None::<&str>,
     )
     .expect("failed to create append-trailing-space toggle item");
+    let toggle_auto_submit_i = CheckMenuItem::with_id(
+        app,
+        "toggle:auto_submit",
+        &strings.auto_submit,
+        true,
+        settings.auto_submit,
+        None::<&str>,
+    )
+    .expect("failed to create auto-submit toggle item");
+    // The overlay isn't a plain bool: visible = any position other than None.
+    // Toggling hides it (None) or restores the last visible placement.
+    let toggle_overlay_i = CheckMenuItem::with_id(
+        app,
+        "toggle:overlay_visible",
+        &strings.show_overlay,
+        true,
+        settings.overlay_position != OverlayPosition::None,
+        None::<&str>,
+    )
+    .expect("failed to create show-overlay toggle item");
 
     let menu = match state {
         TrayIconState::Recording | TrayIconState::Transcribing => {
@@ -273,6 +294,8 @@ pub fn update_tray_menu(app: &AppHandle, state: &TrayIconState, locale: Option<&
                 &toggle_ptt_i,
                 &toggle_mute_i,
                 &toggle_space_i,
+                &toggle_auto_submit_i,
+                &toggle_overlay_i,
                 &separator(),
                 &settings_i,
                 &check_updates_i,

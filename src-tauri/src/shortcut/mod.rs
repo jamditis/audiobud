@@ -569,6 +569,45 @@ pub fn change_overlay_position_setting(app: AppHandle, position: String) -> Resu
     // Update overlay position without recreating window
     crate::utils::update_overlay_position(&app);
 
+    // Notify the settings window and the tray show-overlay quick-toggle (issue
+    // #12) so both surfaces reflect the new visibility/position.
+    let _ = app.emit(
+        "settings-changed",
+        serde_json::json!({
+            "setting": "overlay_position",
+            "value": position
+        }),
+    );
+
+    Ok(())
+}
+
+/// Toggle the recording overlay between hidden and visible for the tray
+/// quick-toggle (issue #12). Hiding remembers the current placement in
+/// `overlay_restore_position`; showing restores it (defaulting to Bottom) so the
+/// user's Top/Bottom choice survives a hide/show cycle instead of being reset.
+/// Not a Tauri command — only the tray menu handler calls it.
+pub fn toggle_overlay_visibility(app: AppHandle) -> Result<(), String> {
+    let mut settings = settings::get_settings(&app);
+    if settings.overlay_position == OverlayPosition::None {
+        settings.overlay_position = settings
+            .overlay_restore_position
+            .unwrap_or(OverlayPosition::Bottom);
+    } else {
+        settings.overlay_restore_position = Some(settings.overlay_position);
+        settings.overlay_position = OverlayPosition::None;
+    }
+    settings::write_settings(&app, settings);
+
+    // Update overlay position without recreating window
+    crate::utils::update_overlay_position(&app);
+
+    // Rebuild the tray checkmark and refresh the settings window.
+    let _ = app.emit(
+        "settings-changed",
+        serde_json::json!({ "setting": "overlay_position" }),
+    );
+
     Ok(())
 }
 
@@ -844,6 +883,17 @@ pub fn change_auto_submit_setting(app: AppHandle, enabled: bool) -> Result<(), S
     let mut settings = settings::get_settings(&app);
     settings.auto_submit = enabled;
     settings::write_settings(&app, settings);
+
+    // The settings window and the tray auto-submit quick-toggle (issue #12)
+    // share this command; emit so both refresh after a change from either.
+    let _ = app.emit(
+        "settings-changed",
+        serde_json::json!({
+            "setting": "auto_submit",
+            "value": enabled
+        }),
+    );
+
     Ok(())
 }
 
