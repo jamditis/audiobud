@@ -49,13 +49,28 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Get version from tauri.conf.json
-        id: get-version
+      - name: Resolve version and release tag
+        id: meta
         shell: bash
         run: |
           VERSION=$(grep -o '"version": "[^"]*"' src-tauri/tauri.conf.json | cut -d'"' -f4)
-          echo "Application version: $VERSION"
+          APP_TAG="v$VERSION"
+          if [[ "${{ github.ref_type }}" == "tag" ]]; then
+            # A tag-triggered run must publish to the tag that was actually
+            # pushed; fail loudly if it disagrees with the app version rather
+            # than drafting a release for the wrong tag.
+            PUSHED="${{ github.ref_name }}"
+            if [[ "$PUSHED" != "$APP_TAG" ]]; then
+              echo "::error::Pushed tag '$PUSHED' does not match app version '$APP_TAG' from src-tauri/tauri.conf.json. Bump the version or push the matching tag."
+              exit 1
+            fi
+            TAG="$PUSHED"
+          else
+            TAG="$APP_TAG"
+          fi
+          echo "Application version: $VERSION (release tag: $TAG)"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -101,22 +116,37 @@ jobs:
           New-Item -ItemType Directory -Force -Path $targetDir | Out-Null
           echo "CARGO_TARGET_DIR=$targetDir" >> $env:GITHUB_ENV
 
-      - name: Create draft release
+      - name: Find or create draft release
         id: create-release
-        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.make_release) || startsWith(github.ref, 'refs/tags/v') }}
+        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.make_release) || github.ref_type == 'tag' }}
         uses: actions/github-script@v7
+        env:
+          RELEASE_TAG: ${{ steps.meta.outputs.tag }}
         with:
           script: |
-            const { data } = await github.rest.repos.createRelease({
+            const tag = process.env.RELEASE_TAG;
+            // Reuse an existing release for this tag so a retried run (after a
+            // failed build/upload) attaches to the same draft instead of failing
+            // because the release/tag already exists.
+            const releases = await github.paginate(github.rest.repos.listReleases, {
               owner: context.repo.owner,
               repo: context.repo.repo,
-              tag_name: `v${{ steps.get-version.outputs.version }}`,
-              name: `AudioBud v${{ steps.get-version.outputs.version }}`,
-              draft: true,
-              prerelease: false,
-              generate_release_notes: true,
+              per_page: 100,
             });
-            return data.id;
+            let release = releases.find((r) => r.tag_name === tag);
+            if (!release) {
+              const { data } = await github.rest.repos.createRelease({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                tag_name: tag,
+                name: `AudioBud ${tag}`,
+                draft: true,
+                prerelease: false,
+                generate_release_notes: true,
+              });
+              release = data;
+            }
+            return release.id;
 
       - name: Build with Tauri
         uses: tauri-apps/tauri-action@v0
@@ -131,8 +161,8 @@ jobs:
           GGML_FMA: "OFF"
           GGML_F16C: "OFF"
         with:
-          tagName: ${{ steps.create-release.outputs.result && format('v{0}', steps.get-version.outputs.version) || '' }}
-          releaseName: ${{ steps.create-release.outputs.result && format('AudioBud v{0}', steps.get-version.outputs.version) || '' }}
+          tagName: ${{ steps.create-release.outputs.result && steps.meta.outputs.tag || '' }}
+          releaseName: ${{ steps.create-release.outputs.result && format('AudioBud {0}', steps.meta.outputs.tag) || '' }}
           releaseId: ${{ steps.create-release.outputs.result }}
           args: ""
 
@@ -146,7 +176,7 @@ jobs:
       - name: Upload installers as CI artifact
         uses: actions/upload-artifact@v4
         with:
-          name: audiobud-windows-x86_64-v${{ steps.get-version.outputs.version }}
+          name: audiobud-windows-x86_64-v${{ steps.meta.outputs.version }}
           path: |
             ${{ steps.bundle-path.outputs.base }}/release/bundle/nsis/*.exe
             ${{ steps.bundle-path.outputs.base }}/release/bundle/msi/*.msi
