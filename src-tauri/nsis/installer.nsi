@@ -631,6 +631,14 @@ Section EarlyChecks
 SectionEnd
 
 Section WebView2
+  ; --- PORTABLE MODE --- A portable install must not modify the host, so skip
+  ; the system WebView2 runtime install. Portable mode relies on the host
+  ; already having the WebView2 runtime (preinstalled on Windows 11 and current
+  ; Windows 10); the normal install still installs it when missing.
+  ${If} $PortableMode = 1
+    DetailPrint "Portable mode: skipping system WebView2 runtime install."
+    Return
+  ${EndIf}
   ; Check if Webview2 is already installed and skip this section
   ${If} ${RunningX64}
     ReadRegStr $4 HKLM "SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\${WEBVIEW2APPGUID}" "pv"
@@ -765,7 +773,10 @@ Section Install
     {{/each}}
   ${EndIf}
 
-  ; --- PORTABLE MODE --- Create portable marker and Data directory
+  ; --- PORTABLE MODE --- Create portable marker and Data directory.
+  ; The marker string is a cross-language contract with the Rust startup
+  ; detector (PORTABLE_MARKER in src-tauri/src/portable.rs); the two MUST match
+  ; byte-for-byte or the installed app won't recognize itself as portable.
   ${If} $PortableMode = 1
     FileOpen $0 "$INSTDIR\portable" w
     FileWrite $0 "AudioBud Portable Mode"
@@ -1062,6 +1073,12 @@ Function CreateOrUpdateStartMenuShortcut
 FunctionEnd
 
 Function CreateOrUpdateDesktopShortcut
+  ; --- PORTABLE MODE --- A portable install must leave no host shortcuts. The
+  ; finish page's "create desktop shortcut" checkbox invokes this function
+  ; directly, bypassing the install-section guard, so guard it here as well.
+  ${If} $PortableMode = 1
+    Return
+  ${EndIf}
   ; We used to use product name as MAINBINARYNAME
   ; migrate old shortcuts to target the new MAINBINARYNAME
   !insertmacro IsShortcutTarget "$DESKTOP\${PRODUCTNAME}.lnk" "$INSTDIR\$OldMainBinaryName"

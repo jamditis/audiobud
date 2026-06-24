@@ -2,11 +2,18 @@ use std::path::PathBuf;
 use std::sync::OnceLock;
 use tauri::Manager;
 
-/// Portable mode support for Handy.
+/// Portable mode support for AudioBud.
 ///
 /// When a file named `portable` exists next to the executable, all user data
 /// (settings, models, recordings, database, logs) is stored in a `Data/`
 /// directory alongside the executable instead of `%APPDATA%`.
+
+/// Magic string the `portable` marker file must contain. This is a
+/// cross-language contract: the NSIS installer writes it
+/// (`FileWrite $0 "AudioBud Portable Mode"` in `src-tauri/nsis/installer.nsi`)
+/// and this detector reads it. The two MUST stay byte-identical, or a portable
+/// install won't be recognized at startup.
+const PORTABLE_MARKER: &str = "AudioBud Portable Mode";
 
 static PORTABLE_DATA_DIR: OnceLock<Option<PathBuf>> = OnceLock::new();
 
@@ -27,7 +34,7 @@ pub fn init() {
             // empty/invalid marker alongside an existing Data/ dir, this is a
             // real portable install — upgrade the marker in place.
             eprintln!("[portable] upgrading legacy empty marker to magic string");
-            let _ = std::fs::write(&marker_path, "Handy Portable Mode");
+            let _ = std::fs::write(&marker_path, PORTABLE_MARKER);
             true
         } else {
             false
@@ -95,7 +102,7 @@ pub fn store_path(relative: &str) -> PathBuf {
 /// Extracted for testability.
 fn is_valid_portable_marker(path: &std::path::Path) -> bool {
     std::fs::read_to_string(path)
-        .map(|s| s.trim().starts_with("Handy Portable Mode"))
+        .map(|s| s.trim().starts_with(PORTABLE_MARKER))
         .unwrap_or(false)
 }
 
@@ -110,7 +117,7 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let marker = dir.join("portable");
         let mut f = std::fs::File::create(&marker).unwrap();
-        write!(f, "Handy Portable Mode").unwrap();
+        write!(f, "{}", PORTABLE_MARKER).unwrap();
         assert!(is_valid_portable_marker(&marker));
         std::fs::remove_dir_all(dir).unwrap();
     }
@@ -159,8 +166,22 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let marker = dir.join("portable");
         let mut f = std::fs::File::create(&marker).unwrap();
-        write!(f, "  Handy Portable Mode\n").unwrap();
+        write!(f, "  {}\n", PORTABLE_MARKER).unwrap();
         assert!(is_valid_portable_marker(&marker));
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn test_legacy_handy_marker_does_not_enable_portable() {
+        // AudioBud ships its own marker string; a marker left by Handy must not
+        // silently opt an AudioBud install into portable mode. This pins the
+        // cross-language contract with the NSIS installer to AudioBud's string.
+        let dir = std::env::temp_dir().join("audiobud_test_handy_marker");
+        std::fs::create_dir_all(&dir).unwrap();
+        let marker = dir.join("portable");
+        let mut f = std::fs::File::create(&marker).unwrap();
+        write!(f, "Handy Portable Mode").unwrap();
+        assert!(!is_valid_portable_marker(&marker));
         std::fs::remove_dir_all(dir).unwrap();
     }
 }
