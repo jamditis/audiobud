@@ -372,6 +372,27 @@
           "sec15": "After 15 seconds (debug)"
         }
       },
+      "dictionaryGuide": {
+        "title": "Getting words right",
+        "intro": "Two tools work together. Custom words nudge the model toward terms you use often, so it favors them when a sound is ambiguous. Word replacements force an exact fix afterward, for mishears the model keeps getting wrong.",
+        "rule": "Start with a custom word. If a name or term still comes out wrong the same way every time, add a word replacement from what you hear to what you mean.",
+        "examplesToggle": "Show examples",
+        "examples": {
+          "name": {
+            "title": "A hard name (jamditis)",
+            "body": "Add \"jamditis\" as a custom word. If it still transcribes as \"jam dightis\", add a word replacement: jam dightis → jamditis."
+          },
+          "domain": {
+            "title": "A domain or email (jamditis.com)",
+            "body": "You will say \"jamditis dot com\", so add a word replacement: jamditis dot com → jamditis.com. Replacements keep the exact characters, so it stays one token instead of being re-spaced or capitalized."
+          },
+          "handle": {
+            "title": "A handle (@jamditis)",
+            "body": "Add a word replacement: at jamditis → @jamditis."
+          }
+        },
+        "engineNote": "Custom words steer Whisper models as they decode; on other models they correct the text afterward, so results vary by model. Word replacements run the same way on every model."
+      },
       "customWords": {
         "title": "Custom words",
         "description": "Add words that are often misheard or misspelled during transcription. The system will automatically correct similar-sounding words to match your list.",
