@@ -1,6 +1,6 @@
 [package]
 name = "audiobud"
-version = "0.1.0"
+version = "0.2.0"
 description = "AudioBud - local voice dictation"
 authors = ["Joe Amditis"]
 edition = "2021"

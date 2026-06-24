@@ -107,6 +107,26 @@ jobs:
             https://blob.handy.computer/silero_vad_v4.onnx
           ls -l src-tauri/resources/models/silero_vad_v4.onnx
 
+      # vulkan-1.dll (the Vulkan loader) ships with GPU drivers, not the SDK, so
+      # the build host has none to bundle. Fetch the LunarG runtime components
+      # (pinned to the SDK version) and expose the x64 loader path; the
+      # beforeBundleCommand stages it next to the exe so the installer launches
+      # on a machine without a driver-supplied loader. See issue #36.
+      - name: Fetch Vulkan loader for bundling
+        shell: pwsh
+        run: |
+          $ver = "1.4.309.0"
+          $url = "https://sdk.lunarg.com/sdk/download/$ver/windows/VulkanRT-$ver-Components.zip"
+          $zip = Join-Path $env:RUNNER_TEMP "vulkanrt.zip"
+          $dir = Join-Path $env:RUNNER_TEMP "vulkanrt"
+          Invoke-WebRequest -Uri $url -OutFile $zip -MaximumRetryCount 3 -RetryIntervalSec 5
+          Expand-Archive -Path $zip -DestinationPath $dir -Force
+          $dll = Get-ChildItem -Recurse -Path $dir -Filter "vulkan-1.dll" |
+            Where-Object { $_.FullName -match "\\x64\\" } | Select-Object -First 1
+          if (-not $dll) { throw "vulkan-1.dll (x64) not found in $url" }
+          "VULKAN_RUNTIME_DLL=$($dll.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          Write-Output "Staged Vulkan loader: $($dll.FullName) ($($dll.Length) bytes)"
+
       # Keep the cargo target dir short (drive root) so whisper-rs-sys cmake
       # paths stay under MAX_PATH.
       - name: Shorten build path

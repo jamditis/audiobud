@@ -742,6 +742,21 @@ Section Install
   ; Copy main executable
   File "${MAINBINARYSRCPATH}"
 
+  ; Copy the app-local runtime DLLs that the beforeBundleCommand
+  ; (scripts/bundle-runtime-dlls.mjs) staged next to the executable: the VC++
+  ; CRT (msvcp140*, vcruntime140*) and the Vulkan loader (vulkan-1.dll). The
+  ; WiX/MSI bundler harvests the binary's sibling DLLs on its own, but NSIS does
+  ; not, so a clean machine without the VC++ Redistributable or a driver-supplied
+  ; Vulkan loader fails to launch. Derive the build directory at compile time by
+  ; stripping the exe name off MAINBINARYSRCPATH (leaves a trailing backslash,
+  ; e.g. C:\...\release\). See issue #36.
+  !searchreplace MAINBINARYDIR "${MAINBINARYSRCPATH}" "${MAINBINARYNAME}.exe" ""
+  File "${MAINBINARYDIR}msvcp140.dll"
+  File "${MAINBINARYDIR}msvcp140_1.dll"
+  File "${MAINBINARYDIR}vcruntime140.dll"
+  File "${MAINBINARYDIR}vcruntime140_1.dll"
+  File "${MAINBINARYDIR}vulkan-1.dll"
+
   ; Copy resources
   {{#each resources_dirs}}
     CreateDirectory "$INSTDIR\\{{this}}"
@@ -897,6 +912,15 @@ Section Uninstall
   ; Delete the app directory and its content from disk
   ; Copy main executable
   Delete "$INSTDIR\${MAINBINARYNAME}.exe"
+
+  ; Delete the app-local runtime DLLs added to the install payload above (see
+  ; issue #36); without these the files linger and RMDir "$INSTDIR" leaves the
+  ; install directory behind.
+  Delete "$INSTDIR\msvcp140.dll"
+  Delete "$INSTDIR\msvcp140_1.dll"
+  Delete "$INSTDIR\vcruntime140.dll"
+  Delete "$INSTDIR\vcruntime140_1.dll"
+  Delete "$INSTDIR\vulkan-1.dll"
 
   ; Delete resources
   {{#each resources}}

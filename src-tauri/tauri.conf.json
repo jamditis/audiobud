@@ -1,12 +1,13 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "AudioBud",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "identifier": "tech.amditis.audiobud",
   "build": {
     "beforeDevCommand": "bun run dev",
     "devUrl": "http://localhost:1420",
     "beforeBuildCommand": "bun run build",
+    "beforeBundleCommand": "bun scripts/bundle-runtime-dlls.mjs",
     "frontendDist": "../dist"
   },
   "app": {
