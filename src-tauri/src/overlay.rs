@@ -1,6 +1,6 @@
 use crate::input;
 use crate::settings;
-use crate::settings::OverlayPosition;
+use crate::settings::{OverlayAnchor, OverlayPosition};
 use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize};
 
 #[cfg(not(target_os = "macos"))]
@@ -44,6 +44,10 @@ const OVERLAY_BOTTOM_OFFSET: f64 = 15.0;
 
 #[cfg(any(target_os = "windows", target_os = "linux"))]
 const OVERLAY_BOTTOM_OFFSET: f64 = 40.0;
+
+/// Horizontal margin from the monitor edge for the left/right column anchors
+/// of the #9 reposition grid.
+const OVERLAY_SIDE_OFFSET: f64 = 16.0;
 
 #[cfg(target_os = "linux")]
 fn update_gtk_layer_shell_anchors(overlay_window: &tauri::webview::WebviewWindow) {
@@ -197,6 +201,70 @@ fn is_mouse_within_monitor(
 /// The per-platform OVERLAY_TOP_OFFSET / OVERLAY_BOTTOM_OFFSET constants
 /// already account for system chrome (menu bar, taskbar).
 ///
+/// Clamp the overlay's top-left so its full rect stays inside the monitor's
+/// logical bounds (so a drag nudge or a resolution change can never strand the
+/// bug off-screen).
+fn clamp_overlay_to_monitor(
+    x: f64,
+    y: f64,
+    monitor_x: f64,
+    monitor_y: f64,
+    monitor_w: f64,
+    monitor_h: f64,
+    overlay_w: f64,
+    overlay_h: f64,
+) -> (f64, f64) {
+    let max_x = monitor_x + (monitor_w - overlay_w).max(0.0);
+    let max_y = monitor_y + (monitor_h - overlay_h).max(0.0);
+    (x.clamp(monitor_x, max_x), y.clamp(monitor_y, max_y))
+}
+
+/// Resolve a 3x3 grid anchor plus a logical-pixel nudge (dx, dy) into the
+/// overlay's top-left position on the given monitor, clamped fully on-screen.
+/// Pure function so the placement math is unit-tested without a running app.
+fn resolve_overlay_anchor_position(
+    monitor_x: f64,
+    monitor_y: f64,
+    monitor_w: f64,
+    monitor_h: f64,
+    overlay_w: f64,
+    overlay_h: f64,
+    anchor: OverlayAnchor,
+    dx: f64,
+    dy: f64,
+) -> (f64, f64) {
+    let left = monitor_x + OVERLAY_SIDE_OFFSET;
+    let center_x = monitor_x + (monitor_w - overlay_w) / 2.0;
+    let right = monitor_x + monitor_w - overlay_w - OVERLAY_SIDE_OFFSET;
+
+    let top = monitor_y + OVERLAY_TOP_OFFSET;
+    let middle_y = monitor_y + (monitor_h - overlay_h) / 2.0;
+    let bottom = monitor_y + monitor_h - overlay_h - OVERLAY_BOTTOM_OFFSET;
+
+    let (base_x, base_y) = match anchor {
+        OverlayAnchor::TopLeft => (left, top),
+        OverlayAnchor::TopCenter => (center_x, top),
+        OverlayAnchor::TopRight => (right, top),
+        OverlayAnchor::MiddleLeft => (left, middle_y),
+        OverlayAnchor::MiddleCenter => (center_x, middle_y),
+        OverlayAnchor::MiddleRight => (right, middle_y),
+        OverlayAnchor::BottomLeft => (left, bottom),
+        OverlayAnchor::BottomCenter => (center_x, bottom),
+        OverlayAnchor::BottomRight => (right, bottom),
+    };
+
+    clamp_overlay_to_monitor(
+        base_x + dx,
+        base_y + dy,
+        monitor_x,
+        monitor_y,
+        monitor_w,
+        monitor_h,
+        overlay_w,
+        overlay_h,
+    )
+}
+
 /// We must use LogicalPosition (not PhysicalPosition) because Tauri/tao
 /// converts PhysicalPosition using the scale factor of the monitor the window
 /// is *currently* on, which is wrong when moving cross-monitor.
@@ -209,6 +277,23 @@ fn calculate_overlay_position(app_handle: &AppHandle) -> Option<(f64, f64)> {
     let monitor_height = monitor.size().height as f64 / scale;
 
     let settings = settings::get_settings(app_handle);
+
+    // A user-chosen placement (anchor + drag nudge from #9) overrides the
+    // centered Top/Bottom default, re-resolved on the cursor's monitor and
+    // clamped fully on-screen.
+    if let Some(custom) = settings.overlay_custom_position {
+        return Some(resolve_overlay_anchor_position(
+            monitor_x,
+            monitor_y,
+            monitor_width,
+            monitor_height,
+            OVERLAY_WIDTH,
+            OVERLAY_HEIGHT,
+            custom.anchor,
+            custom.dx,
+            custom.dy,
+        ));
+    }
 
     let x = monitor_x + (monitor_width - OVERLAY_WIDTH) / 2.0;
     let y = match settings.overlay_position {
@@ -401,5 +486,89 @@ pub fn emit_levels(app_handle: &AppHandle, levels: &Vec<f32>) {
     // also emit to the recording overlay if it's open
     if let Some(overlay_window) = app_handle.get_webview_window("recording_overlay") {
         let _ = overlay_window.emit("mic-level", levels);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // A 1920x1080 monitor at the origin with the standard overlay rect. The
+    // assertions reference the offset constants (not raw numbers) so they hold
+    // regardless of the platform CI runs on.
+    const MW: f64 = 1920.0;
+    const MH: f64 = 1080.0;
+
+    fn place(anchor: OverlayAnchor, dx: f64, dy: f64) -> (f64, f64) {
+        resolve_overlay_anchor_position(
+            0.0,
+            0.0,
+            MW,
+            MH,
+            OVERLAY_WIDTH,
+            OVERLAY_HEIGHT,
+            anchor,
+            dx,
+            dy,
+        )
+    }
+
+    #[test]
+    fn bottom_center_matches_the_legacy_centered_default() {
+        // The same spot the pre-#9 centered Bottom placement produced.
+        let (x, y) = place(OverlayAnchor::BottomCenter, 0.0, 0.0);
+        assert_eq!(x, (MW - OVERLAY_WIDTH) / 2.0);
+        assert_eq!(y, MH - OVERLAY_HEIGHT - OVERLAY_BOTTOM_OFFSET);
+    }
+
+    #[test]
+    fn top_left_uses_side_and_top_offsets() {
+        let (x, y) = place(OverlayAnchor::TopLeft, 0.0, 0.0);
+        assert_eq!(x, OVERLAY_SIDE_OFFSET);
+        assert_eq!(y, OVERLAY_TOP_OFFSET);
+    }
+
+    #[test]
+    fn top_right_is_flush_to_the_right_margin() {
+        let (x, _) = place(OverlayAnchor::TopRight, 0.0, 0.0);
+        assert_eq!(x, MW - OVERLAY_WIDTH - OVERLAY_SIDE_OFFSET);
+    }
+
+    #[test]
+    fn middle_center_is_centered_on_both_axes() {
+        let (x, y) = place(OverlayAnchor::MiddleCenter, 0.0, 0.0);
+        assert_eq!(x, (MW - OVERLAY_WIDTH) / 2.0);
+        assert_eq!(y, (MH - OVERLAY_HEIGHT) / 2.0);
+    }
+
+    #[test]
+    fn a_nudge_past_the_right_edge_is_clamped_on_screen() {
+        let (x, _) = place(OverlayAnchor::TopRight, 9999.0, 0.0);
+        assert_eq!(x, MW - OVERLAY_WIDTH); // flush right, fully visible
+    }
+
+    #[test]
+    fn a_negative_nudge_is_clamped_to_the_top_left_corner() {
+        let (x, y) = place(OverlayAnchor::TopLeft, -9999.0, -9999.0);
+        assert_eq!(x, 0.0);
+        assert_eq!(y, 0.0);
+    }
+
+    #[test]
+    fn the_anchor_resolves_relative_to_a_secondary_monitor() {
+        // A second monitor offset to the right at x=1920 (logical).
+        let (x, y) = resolve_overlay_anchor_position(
+            1920.0,
+            0.0,
+            1920.0,
+            1080.0,
+            OVERLAY_WIDTH,
+            OVERLAY_HEIGHT,
+            OverlayAnchor::BottomCenter,
+            0.0,
+            0.0,
+        );
+        assert_eq!(x, 1920.0 + (1920.0 - OVERLAY_WIDTH) / 2.0);
+        assert_eq!(y, 1080.0 - OVERLAY_HEIGHT - OVERLAY_BOTTOM_OFFSET);
     }
 }

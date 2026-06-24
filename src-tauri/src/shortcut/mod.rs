@@ -24,8 +24,8 @@ use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 use crate::settings::APPLE_INTELLIGENCE_DEFAULT_MODEL_ID;
 use crate::settings::{
     self, get_settings, AutoSubmitKey, ClipboardHandling, KeyboardImplementation, LLMPrompt,
-    OverlayPosition, PasteMethod, ShortcutBinding, SoundTheme, TypingTool,
-    APPLE_INTELLIGENCE_PROVIDER_ID,
+    OverlayAnchor, OverlayCustomPosition, OverlayPosition, PasteMethod, ShortcutBinding,
+    SoundTheme, TypingTool, APPLE_INTELLIGENCE_PROVIDER_ID,
 };
 use crate::tray;
 
@@ -563,10 +563,129 @@ pub fn change_overlay_position_setting(app: AppHandle, position: String) -> Resu
             OverlayPosition::Bottom
         }
     };
+    // Keep the restore slot (read by the tray show/hide toggle) in sync so it
+    // always holds the most recent visible placement. Choosing Top/Bottom here
+    // records it; hiding via the dropdown ("none") remembers the outgoing
+    // placement, so a dropdown-hide followed by a tray-show restores the
+    // position the user last picked instead of an older value or the default.
+    if parsed != OverlayPosition::None {
+        settings.overlay_restore_position = Some(parsed);
+    } else if settings.overlay_position != OverlayPosition::None {
+        settings.overlay_restore_position = Some(settings.overlay_position);
+    }
     settings.overlay_position = parsed;
+    // Picking a coarse position (or hiding the overlay) supersedes any fine
+    // grid/drag placement from #9, so clear it and fall back to the centered
+    // Top/Bottom default.
+    settings.overlay_custom_position = None;
     settings::write_settings(&app, settings);
 
     // Update overlay position without recreating window
+    crate::utils::update_overlay_position(&app);
+
+    // Notify the settings window and the tray show-overlay quick-toggle (issue
+    // #12) so both surfaces reflect the new visibility/position.
+    let _ = app.emit(
+        "settings-changed",
+        serde_json::json!({
+            "setting": "overlay_position",
+            "value": position
+        }),
+    );
+
+    Ok(())
+}
+
+/// Toggle the recording overlay between hidden and visible for the tray
+/// quick-toggle (issue #12). Hiding remembers the current placement in
+/// `overlay_restore_position`; showing restores it (defaulting to Bottom) so the
+/// user's Top/Bottom choice survives a hide/show cycle instead of being reset.
+/// Not a Tauri command — only the tray menu handler calls it.
+pub fn toggle_overlay_visibility(app: AppHandle) -> Result<(), String> {
+    let mut settings = settings::get_settings(&app);
+    if settings.overlay_position == OverlayPosition::None {
+        settings.overlay_position = settings
+            .overlay_restore_position
+            .unwrap_or(OverlayPosition::Bottom);
+    } else {
+        settings.overlay_restore_position = Some(settings.overlay_position);
+        settings.overlay_position = OverlayPosition::None;
+    }
+    settings::write_settings(&app, settings);
+
+    // Update overlay position without recreating window
+    crate::utils::update_overlay_position(&app);
+
+    // Rebuild the tray checkmark and refresh the settings window.
+    let _ = app.emit(
+        "settings-changed",
+        serde_json::json!({ "setting": "overlay_position" }),
+    );
+
+    Ok(())
+}
+
+/// Set a precise overlay placement from the #9 reposition grid: an anchor on the
+/// active monitor with a zero drag-nudge. Overrides the centered Top/Bottom
+/// default until reset.
+#[tauri::command]
+#[specta::specta]
+pub fn set_overlay_anchor(app: AppHandle, anchor: String) -> Result<(), String> {
+    let parsed = match anchor.as_str() {
+        "topleft" => OverlayAnchor::TopLeft,
+        "topcenter" => OverlayAnchor::TopCenter,
+        "topright" => OverlayAnchor::TopRight,
+        "middleleft" => OverlayAnchor::MiddleLeft,
+        "middlecenter" => OverlayAnchor::MiddleCenter,
+        "middleright" => OverlayAnchor::MiddleRight,
+        "bottomleft" => OverlayAnchor::BottomLeft,
+        "bottomcenter" => OverlayAnchor::BottomCenter,
+        "bottomright" => OverlayAnchor::BottomRight,
+        other => return Err(format!("Invalid overlay anchor: {other}")),
+    };
+
+    let mut settings = get_settings(&app);
+    settings.overlay_custom_position = Some(OverlayCustomPosition {
+        anchor: parsed,
+        dx: 0.0,
+        dy: 0.0,
+    });
+    // Keep the coarse Top/Bottom in sync with the grid row so the Linux
+    // layer-shell fallback (which can't free-position) and the settings dropdown
+    // both reflect the chosen anchor. Don't un-hide a disabled overlay.
+    if settings.overlay_position != OverlayPosition::None {
+        settings.overlay_position = match parsed {
+            OverlayAnchor::TopLeft | OverlayAnchor::TopCenter | OverlayAnchor::TopRight => {
+                OverlayPosition::Top
+            }
+            _ => OverlayPosition::Bottom,
+        };
+    }
+    settings::write_settings(&app, settings);
+
+    crate::utils::update_overlay_position(&app);
+
+    Ok(())
+}
+
+/// Clear any custom overlay placement, returning the bug to the centered
+/// Top/Bottom default (#9 reset-to-default).
+#[tauri::command]
+#[specta::specta]
+pub fn reset_overlay_position(app: AppHandle) -> Result<(), String> {
+    let mut settings = get_settings(&app);
+    settings.overlay_custom_position = None;
+    // Resetting the fine placement also returns the coarse Top/Bottom to the
+    // default bottom-centered placement. Choosing a top-row anchor pins
+    // overlay_position to Top (see set_overlay_anchor), so without this "Reset to
+    // default" would clear the nudge but leave the overlay stuck at the top
+    // instead of the app default. Guard on visibility so reset never un-hides a
+    // deliberately hidden overlay.
+    if settings.overlay_position != OverlayPosition::None {
+        settings.overlay_position = OverlayPosition::Bottom;
+    }
+    settings::write_settings(&app, settings);
+
     crate::utils::update_overlay_position(&app);
 
     Ok(())
@@ -844,6 +963,17 @@ pub fn change_auto_submit_setting(app: AppHandle, enabled: bool) -> Result<(), S
     let mut settings = settings::get_settings(&app);
     settings.auto_submit = enabled;
     settings::write_settings(&app, settings);
+
+    // The settings window and the tray auto-submit quick-toggle (issue #12)
+    // share this command; emit so both refresh after a change from either.
+    let _ = app.emit(
+        "settings-changed",
+        serde_json::json!({
+            "setting": "auto_submit",
+            "value": enabled
+        }),
+    );
+
     Ok(())
 }
 

@@ -300,6 +300,10 @@ fn initialize_core_logic(app_handle: &AppHandle) {
                         app.clone(),
                         !current.append_trailing_space,
                     ),
+                    "auto_submit" => {
+                        shortcut::change_auto_submit_setting(app.clone(), !current.auto_submit)
+                    }
+                    "overlay_visible" => shortcut::toggle_overlay_visibility(app.clone()),
                     other => {
                         log::warn!("Unknown tray toggle: {}", other);
                         return;
@@ -402,6 +406,8 @@ pub fn run(cli_args: CliArgs) {
             shortcut::change_translate_to_english_setting,
             shortcut::change_selected_language_setting,
             shortcut::change_overlay_position_setting,
+            shortcut::set_overlay_anchor,
+            shortcut::reset_overlay_position,
             shortcut::change_debug_mode_setting,
             shortcut::change_word_correction_threshold_setting,
             shortcut::change_extra_recording_buffer_setting,

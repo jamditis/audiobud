@@ -9,7 +9,9 @@
     "cancel": "Cancel",
     "pushToTalk": "Push to talk",
     "muteWhileRecording": "Mute while recording",
-    "appendTrailingSpace": "Append trailing space"
+    "appendTrailingSpace": "Append trailing space",
+    "autoSubmit": "Auto-submit",
+    "showOverlay": "Show overlay"
   },
   "sidebar": {
     "navLabel": "Settings sections",
@@ -312,6 +314,22 @@
           "none": "None",
           "bottom": "Bottom",
           "top": "Top"
+        },
+        "fine": {
+          "title": "Position on screen",
+          "description": "Pick where the recording bug sits on your active screen. The center column matches the default placement.",
+          "reset": "Reset to default"
+        },
+        "anchors": {
+          "topleft": "Top left",
+          "topcenter": "Top center",
+          "topright": "Top right",
+          "middleleft": "Middle left",
+          "middlecenter": "Center",
+          "middleright": "Middle right",
+          "bottomleft": "Bottom left",
+          "bottomcenter": "Bottom center",
+          "bottomright": "Bottom right"
         }
       },
       "pasteMethod": {

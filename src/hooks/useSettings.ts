@@ -18,6 +18,8 @@ interface UseSettingsReturn {
     value: Settings[K],
   ) => Promise<void>;
   resetSetting: (key: keyof Settings) => Promise<void>;
+  setOverlayAnchor: (anchor: string) => Promise<void>;
+  resetOverlayPosition: () => Promise<void>;
   refreshSettings: () => Promise<void>;
   refreshAudioDevices: () => Promise<void>;
   refreshOutputDevices: () => Promise<void>;
@@ -63,6 +65,8 @@ export const useSettings = (): UseSettingsReturn => {
     postProcessModelOptions: store.postProcessModelOptions,
     updateSetting: store.updateSetting,
     resetSetting: store.resetSetting,
+    setOverlayAnchor: store.setOverlayAnchor,
+    resetOverlayPosition: store.resetOverlayPosition,
     refreshSettings: store.refreshSettings,
     refreshAudioDevices: store.refreshAudioDevices,
     refreshOutputDevices: store.refreshOutputDevices,
