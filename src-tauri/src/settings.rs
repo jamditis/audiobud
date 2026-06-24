@@ -139,6 +139,35 @@ pub enum OverlayPosition {
     Bottom,
 }
 
+/// A 3x3 grid of placement anchors on a monitor's work area. Used by #9's
+/// reposition feature: the user picks an anchor (and can drag to nudge), and
+/// the overlay is placed relative to that anchor on whichever monitor has the
+/// cursor, then clamped fully on-screen.
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Type)]
+#[serde(rename_all = "lowercase")]
+pub enum OverlayAnchor {
+    TopLeft,
+    TopCenter,
+    TopRight,
+    MiddleLeft,
+    MiddleCenter,
+    MiddleRight,
+    BottomLeft,
+    BottomCenter,
+    BottomRight,
+}
+
+/// A user-chosen overlay placement that overrides the centered Top/Bottom
+/// default: an anchor on the active monitor plus a logical-pixel nudge (dx, dy)
+/// from that anchor, set by dragging the bug. When `overlay_custom_position` is
+/// `None`, the overlay uses the default centered Top/Bottom placement.
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Type)]
+pub struct OverlayCustomPosition {
+    pub anchor: OverlayAnchor,
+    pub dx: f64,
+    pub dy: f64,
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Type)]
 #[serde(rename_all = "snake_case")]
 pub enum ModelUnloadTimeout {
@@ -390,6 +419,10 @@ pub struct AppSettings {
     pub selected_language: String,
     #[serde(default = "default_overlay_position")]
     pub overlay_position: OverlayPosition,
+    /// User-chosen precise overlay placement (anchor + drag nudge). When set it
+    /// overrides the centered Top/Bottom placement; `None` = default placement.
+    #[serde(default)]
+    pub overlay_custom_position: Option<OverlayCustomPosition>,
     #[serde(default = "default_debug_mode")]
     pub debug_mode: bool,
     #[serde(default = "default_log_level")]
@@ -848,6 +881,7 @@ pub fn get_default_settings() -> AppSettings {
         translate_to_english: false,
         selected_language: "auto".to_string(),
         overlay_position: default_overlay_position(),
+        overlay_custom_position: None,
         debug_mode: false,
         log_level: default_log_level(),
         custom_words: Vec::new(),

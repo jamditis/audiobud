@@ -24,8 +24,8 @@ use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 use crate::settings::APPLE_INTELLIGENCE_DEFAULT_MODEL_ID;
 use crate::settings::{
     self, get_settings, AutoSubmitKey, ClipboardHandling, KeyboardImplementation, LLMPrompt,
-    OverlayPosition, PasteMethod, ShortcutBinding, SoundTheme, TypingTool,
-    APPLE_INTELLIGENCE_PROVIDER_ID,
+    OverlayAnchor, OverlayCustomPosition, OverlayPosition, PasteMethod, ShortcutBinding,
+    SoundTheme, TypingTool, APPLE_INTELLIGENCE_PROVIDER_ID,
 };
 use crate::tray;
 
@@ -564,9 +564,70 @@ pub fn change_overlay_position_setting(app: AppHandle, position: String) -> Resu
         }
     };
     settings.overlay_position = parsed;
+    // Picking a coarse position (or hiding the overlay) supersedes any fine
+    // grid/drag placement from #9, so clear it and fall back to the centered
+    // Top/Bottom default.
+    settings.overlay_custom_position = None;
     settings::write_settings(&app, settings);
 
     // Update overlay position without recreating window
+    crate::utils::update_overlay_position(&app);
+
+    Ok(())
+}
+
+/// Set a precise overlay placement from the #9 reposition grid: an anchor on the
+/// active monitor with a zero drag-nudge. Overrides the centered Top/Bottom
+/// default until reset.
+#[tauri::command]
+#[specta::specta]
+pub fn set_overlay_anchor(app: AppHandle, anchor: String) -> Result<(), String> {
+    let parsed = match anchor.as_str() {
+        "topleft" => OverlayAnchor::TopLeft,
+        "topcenter" => OverlayAnchor::TopCenter,
+        "topright" => OverlayAnchor::TopRight,
+        "middleleft" => OverlayAnchor::MiddleLeft,
+        "middlecenter" => OverlayAnchor::MiddleCenter,
+        "middleright" => OverlayAnchor::MiddleRight,
+        "bottomleft" => OverlayAnchor::BottomLeft,
+        "bottomcenter" => OverlayAnchor::BottomCenter,
+        "bottomright" => OverlayAnchor::BottomRight,
+        other => return Err(format!("Invalid overlay anchor: {other}")),
+    };
+
+    let mut settings = get_settings(&app);
+    settings.overlay_custom_position = Some(OverlayCustomPosition {
+        anchor: parsed,
+        dx: 0.0,
+        dy: 0.0,
+    });
+    // Keep the coarse Top/Bottom in sync with the grid row so the Linux
+    // layer-shell fallback (which can't free-position) and the settings dropdown
+    // both reflect the chosen anchor. Don't un-hide a disabled overlay.
+    if settings.overlay_position != OverlayPosition::None {
+        settings.overlay_position = match parsed {
+            OverlayAnchor::TopLeft | OverlayAnchor::TopCenter | OverlayAnchor::TopRight => {
+                OverlayPosition::Top
+            }
+            _ => OverlayPosition::Bottom,
+        };
+    }
+    settings::write_settings(&app, settings);
+
+    crate::utils::update_overlay_position(&app);
+
+    Ok(())
+}
+
+/// Clear any custom overlay placement, returning the bug to the centered
+/// Top/Bottom default (#9 reset-to-default).
+#[tauri::command]
+#[specta::specta]
+pub fn reset_overlay_position(app: AppHandle) -> Result<(), String> {
+    let mut settings = get_settings(&app);
+    settings.overlay_custom_position = None;
+    settings::write_settings(&app, settings);
+
     crate::utils::update_overlay_position(&app);
 
     Ok(())

@@ -49,6 +49,8 @@ interface SettingsStore {
     value: Settings[K],
   ) => Promise<void>;
   resetSetting: (key: keyof Settings) => Promise<void>;
+  setOverlayAnchor: (anchor: string) => Promise<void>;
+  resetOverlayPosition: () => Promise<void>;
   refreshSettings: () => Promise<void>;
   refreshAudioDevices: () => Promise<void>;
   refreshOutputDevices: () => Promise<void>;
@@ -342,6 +344,51 @@ export const useSettingsStore = create<SettingsStore>()(
         if (defaultValue !== undefined) {
           await get().updateSetting(key, defaultValue as any);
         }
+      }
+    },
+
+    // Set a precise overlay placement (anchor + zero nudge) from the #9 grid.
+    // overlay_custom_position is a struct, not a simple key in settingUpdaters,
+    // so this routes through its own command then re-reads from the backend
+    // (the source of truth), mirroring resetBinding/setPostProcessProvider. The
+    // "overlay_position" update key is reused so the grid and the show/hide
+    // dropdown share one in-flight lock.
+    setOverlayAnchor: async (anchor) => {
+      const { setUpdating, refreshSettings } = get();
+      const updateKey = "overlay_position";
+      setUpdating(updateKey, true);
+      try {
+        const result = await commands.setOverlayAnchor(anchor);
+        if (result.status === "error") {
+          throw new Error(result.error);
+        }
+        await refreshSettings();
+        notifySaved();
+      } catch (error) {
+        console.error("Failed to set overlay anchor:", error);
+        notifySaveError();
+      } finally {
+        setUpdating(updateKey, false);
+      }
+    },
+
+    // Clear any custom overlay placement, returning to the centered default.
+    resetOverlayPosition: async () => {
+      const { setUpdating, refreshSettings } = get();
+      const updateKey = "overlay_position";
+      setUpdating(updateKey, true);
+      try {
+        const result = await commands.resetOverlayPosition();
+        if (result.status === "error") {
+          throw new Error(result.error);
+        }
+        await refreshSettings();
+        notifySaved();
+      } catch (error) {
+        console.error("Failed to reset overlay position:", error);
+        notifySaveError();
+      } finally {
+        setUpdating(updateKey, false);
       }
     },
 
