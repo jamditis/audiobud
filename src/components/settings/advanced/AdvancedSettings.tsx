@@ -2,6 +2,7 @@ import React from "react";
 import { useTranslation } from "react-i18next";
 import { ShowOverlay } from "../ShowOverlay";
 import { ModelUnloadTimeoutSetting } from "../ModelUnloadTimeout";
+import { DictionaryGuide } from "../DictionaryGuide";
 import { CustomWords } from "../CustomWords";
 import { WordReplacements } from "../WordReplacements";
 import { RawOutput } from "../RawOutput";
@@ -48,6 +49,7 @@ export const AdvancedSettings: React.FC = () => {
       </SettingsGroup>
 
       <SettingsGroup title={t("settings.advanced.groups.transcription")}>
+        <DictionaryGuide grouped />
         <CustomWords descriptionMode="tooltip" grouped />
         <WordReplacements descriptionMode="tooltip" grouped />
         <RawOutput descriptionMode="tooltip" grouped={true} />
