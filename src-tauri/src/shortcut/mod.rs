@@ -563,6 +563,16 @@ pub fn change_overlay_position_setting(app: AppHandle, position: String) -> Resu
             OverlayPosition::Bottom
         }
     };
+    // Keep the restore slot (read by the tray show/hide toggle) in sync so it
+    // always holds the most recent visible placement. Choosing Top/Bottom here
+    // records it; hiding via the dropdown ("none") remembers the outgoing
+    // placement, so a dropdown-hide followed by a tray-show restores the
+    // position the user last picked instead of an older value or the default.
+    if parsed != OverlayPosition::None {
+        settings.overlay_restore_position = Some(parsed);
+    } else if settings.overlay_position != OverlayPosition::None {
+        settings.overlay_restore_position = Some(settings.overlay_position);
+    }
     settings.overlay_position = parsed;
     settings::write_settings(&app, settings);
 
