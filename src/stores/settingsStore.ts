@@ -49,6 +49,8 @@ interface SettingsStore {
     value: Settings[K],
   ) => Promise<void>;
   resetSetting: (key: keyof Settings) => Promise<void>;
+  setOverlayAnchor: (anchor: string) => Promise<void>;
+  resetOverlayPosition: () => Promise<void>;
   refreshSettings: () => Promise<void>;
   refreshAudioDevices: () => Promise<void>;
   refreshOutputDevices: () => Promise<void>;
@@ -303,11 +305,27 @@ export const useSettingsStore = create<SettingsStore>()(
       const updateKey = String(key);
       const originalValue = settings?.[key];
 
+      // Choosing a coarse Top/Bottom/none placement supersedes any fine grid
+      // anchor, and changeOverlayPositionSetting clears overlay_custom_position
+      // on the backend. Mirror that in the optimistic update so the grid and
+      // Reset button clear immediately instead of flashing the stale anchor
+      // until the settings-changed refresh lands.
+      const clearsCustomOverlay = key === "overlay_position";
+      const originalCustom = settings?.overlay_custom_position;
+
       setUpdating(updateKey, true);
 
       try {
         set((state) => ({
-          settings: state.settings ? { ...state.settings, [key]: value } : null,
+          settings: state.settings
+            ? {
+                ...state.settings,
+                [key]: value,
+                ...(clearsCustomOverlay
+                  ? { overlay_custom_position: null }
+                  : {}),
+              }
+            : null,
         }));
 
         const updater = settingUpdaters[key];
@@ -326,7 +344,15 @@ export const useSettingsStore = create<SettingsStore>()(
       } catch (error) {
         console.error(`Failed to update setting ${String(key)}:`, error);
         if (settings) {
-          set({ settings: { ...settings, [key]: originalValue } });
+          set({
+            settings: {
+              ...settings,
+              [key]: originalValue,
+              ...(clearsCustomOverlay
+                ? { overlay_custom_position: originalCustom }
+                : {}),
+            },
+          });
         }
         notifySaveError();
       } finally {
@@ -342,6 +368,51 @@ export const useSettingsStore = create<SettingsStore>()(
         if (defaultValue !== undefined) {
           await get().updateSetting(key, defaultValue as any);
         }
+      }
+    },
+
+    // Set a precise overlay placement (anchor + zero nudge) from the #9 grid.
+    // overlay_custom_position is a struct, not a simple key in settingUpdaters,
+    // so this routes through its own command then re-reads from the backend
+    // (the source of truth), mirroring resetBinding/setPostProcessProvider. The
+    // "overlay_position" update key is reused so the grid and the show/hide
+    // dropdown share one in-flight lock.
+    setOverlayAnchor: async (anchor) => {
+      const { setUpdating, refreshSettings } = get();
+      const updateKey = "overlay_position";
+      setUpdating(updateKey, true);
+      try {
+        const result = await commands.setOverlayAnchor(anchor);
+        if (result.status === "error") {
+          throw new Error(result.error);
+        }
+        await refreshSettings();
+        notifySaved();
+      } catch (error) {
+        console.error("Failed to set overlay anchor:", error);
+        notifySaveError();
+      } finally {
+        setUpdating(updateKey, false);
+      }
+    },
+
+    // Clear any custom overlay placement, returning to the centered default.
+    resetOverlayPosition: async () => {
+      const { setUpdating, refreshSettings } = get();
+      const updateKey = "overlay_position";
+      setUpdating(updateKey, true);
+      try {
+        const result = await commands.resetOverlayPosition();
+        if (result.status === "error") {
+          throw new Error(result.error);
+        }
+        await refreshSettings();
+        notifySaved();
+      } catch (error) {
+        console.error("Failed to reset overlay position:", error);
+        notifySaveError();
+      } finally {
+        setUpdating(updateKey, false);
       }
     },
 
