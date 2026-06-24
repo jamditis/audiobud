@@ -22,31 +22,57 @@ import { copyFileSync, existsSync, statSync } from "node:fs";
 import { join } from "node:path";
 import process from "node:process";
 
-if (process.platform !== "win32") {
-  console.log("[bundle-runtime-dlls] non-Windows host, nothing to stage");
+// Tauri sets TAURI_ENV_PLATFORM to the target's Rust target_os ("windows",
+// "darwin", "linux", ...). Gate the no-op on the TARGET platform, not the host, so
+// a Windows bundle cross-built from Linux/macOS still attempts to stage rather than
+// silently skipping and leaving the NSIS template to File missing DLLs. Fall back
+// to the host platform when the var is absent (e.g. invoked outside Tauri).
+const targetPlatform =
+  process.env.TAURI_ENV_PLATFORM ??
+  (process.platform === "win32" ? "windows" : process.platform);
+if (targetPlatform !== "windows") {
+  console.log(
+    `[bundle-runtime-dlls] target platform ${targetPlatform} is not Windows, nothing to stage`,
+  );
   process.exit(0);
+}
+
+// The VC++ CRT DLLs are sourced from the host's System32, so producing a Windows
+// bundle requires a Windows host. A Windows target on a non-Windows host cannot
+// supply them; fail with a clear message instead of letting the NSIS template fail
+// later on missing File entries.
+if (process.platform !== "win32") {
+  console.error(
+    `[bundle-runtime-dlls] building a Windows bundle needs a Windows host to ` +
+      `source the VC++ runtime DLLs from System32; cross-building from ` +
+      `${process.platform} is not supported.`,
+  );
+  process.exit(1);
 }
 
 const system32 = join(process.env.SystemRoot ?? "C:\\Windows", "System32");
 
-// tauri build emits to <target>/release; with an explicit --target it nests the
-// triple as <target>/<triple>/release. CI shortens <target> via CARGO_TARGET_DIR
-// to keep cmake paths under MAX_PATH. Probe both and use whichever holds the exe
-// so targeted builds (Tauri sets TAURI_ENV_TARGET_TRIPLE for the hook) work too.
+// tauri build emits to <target>/<profile>, where profile is "release" or, for
+// `tauri build --debug`, "debug" (Tauri sets TAURI_ENV_DEBUG for the hook). With
+// an explicit --target it nests the triple as <target>/<triple>/<profile>. CI
+// shortens <target> via CARGO_TARGET_DIR to keep cmake paths under MAX_PATH. Probe
+// both layouts and use whichever holds the exe so targeted builds (Tauri sets
+// TAURI_ENV_TARGET_TRIPLE for the hook) work too.
+const profile = process.env.TAURI_ENV_DEBUG === "true" ? "debug" : "release";
 const targetDir = process.env.CARGO_TARGET_DIR ?? join("src-tauri", "target");
 const triple = process.env.TAURI_ENV_TARGET_TRIPLE;
-const candidateReleaseDirs = [
-  triple ? join(targetDir, triple, "release") : null,
-  join(targetDir, "release"),
+const candidateOutDirs = [
+  triple ? join(targetDir, triple, profile) : null,
+  join(targetDir, profile),
 ].filter(Boolean);
 
-const releaseDir = candidateReleaseDirs.find((dir) =>
+const outDir = candidateOutDirs.find((dir) =>
   existsSync(join(dir, "audiobud.exe")),
 );
-if (!releaseDir) {
+if (!outDir) {
   console.error(
     `[bundle-runtime-dlls] built exe not found; looked for audiobud.exe in: ` +
-      `${candidateReleaseDirs.join(", ")}. The hook ran before the build ` +
+      `${candidateOutDirs.join(", ")}. The hook ran before the build ` +
       "produced it, or the output path differs.",
   );
   process.exit(1);
@@ -80,7 +106,7 @@ for (const dll of dlls) {
     failed = true;
     continue;
   }
-  const dest = join(releaseDir, dll.name);
+  const dest = join(outDir, dll.name);
   copyFileSync(source, dest);
   console.log(
     `[bundle-runtime-dlls] ${dll.name} <- ${source} (${statSync(dest).size} bytes)`,
