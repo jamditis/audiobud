@@ -6,7 +6,10 @@
     "unloadModel": "Вивантажити модель",
     "model": "Модель",
     "quit": "Вийти",
-    "cancel": "Скасувати"
+    "cancel": "Скасувати",
+    "pushToTalk": "Утримувати для запису (Push To Talk)",
+    "muteWhileRecording": "Вимкнути звук під час запису",
+    "appendTrailingSpace": "Додавати пробіл в кінці"
   },
   "sidebar": {
     "general": "Загальні",

@@ -6,7 +6,10 @@
     "unloadModel": "Выгрузить модель",
     "model": "Модель",
     "quit": "Выход",
-    "cancel": "Отмена"
+    "cancel": "Отмена",
+    "pushToTalk": "Нажми и говори",
+    "muteWhileRecording": "Отключить звук во время записи",
+    "appendTrailingSpace": "Добавить пробел"
   },
   "sidebar": {
     "general": "Общие",

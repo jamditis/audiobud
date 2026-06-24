@@ -6,7 +6,10 @@
     "unloadModel": "Modell entladen",
     "model": "Modell",
     "quit": "Beenden",
-    "cancel": "Abbrechen"
+    "cancel": "Abbrechen",
+    "pushToTalk": "Push-to-Talk",
+    "muteWhileRecording": "Während Aufnahme stummschalten",
+    "appendTrailingSpace": "Leerzeichen anhängen"
   },
   "sidebar": {
     "general": "Allgemein",

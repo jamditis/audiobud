@@ -6,7 +6,10 @@
     "unloadModel": "Modeli boşalt",
     "model": "Model",
     "quit": "Çıkış",
-    "cancel": "İptal"
+    "cancel": "İptal",
+    "pushToTalk": "Bas Konuş",
+    "muteWhileRecording": "Kayıt Sırasında Sessize Al",
+    "appendTrailingSpace": "Sonuna Boşluk Ekle"
   },
   "sidebar": {
     "general": "Genel",

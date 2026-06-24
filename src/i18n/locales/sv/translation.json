@@ -6,7 +6,10 @@
     "unloadModel": "Avlasta modell",
     "model": "Modell",
     "quit": "Avsluta",
-    "cancel": "Avbryt"
+    "cancel": "Avbryt",
+    "pushToTalk": "Tryck för att tala",
+    "muteWhileRecording": "Ljudlös under inspelning",
+    "appendTrailingSpace": "Lägg till avslutande mellanslag"
   },
   "sidebar": {
     "general": "Allmänt",

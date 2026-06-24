@@ -6,7 +6,10 @@
     "unloadModel": "تفريغ النموذج",
     "model": "النموذج",
     "quit": "إنهاء",
-    "cancel": "إلغاء"
+    "cancel": "إلغاء",
+    "pushToTalk": "اضغط للتحدث",
+    "muteWhileRecording": "كتم الصوت أثناء التسجيل",
+    "appendTrailingSpace": "إضافة مسافة تابعة"
   },
   "sidebar": {
     "general": "عام",

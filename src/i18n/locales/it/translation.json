@@ -6,7 +6,10 @@
     "unloadModel": "Rilascia modello",
     "model": "Modello",
     "quit": "Esci",
-    "cancel": "Annulla"
+    "cancel": "Annulla",
+    "pushToTalk": "Premi per Parlare",
+    "muteWhileRecording": "Silenzia durante la registrazione",
+    "appendTrailingSpace": "Aggiungi Spazio Finale"
   },
   "sidebar": {
     "general": "Generale",

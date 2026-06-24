@@ -6,7 +6,10 @@
     "unloadModel": "모델 언로드",
     "model": "모델",
     "quit": "종료",
-    "cancel": "취소"
+    "cancel": "취소",
+    "pushToTalk": "녹음 중 단축키 홀딩",
+    "muteWhileRecording": "녹음 중 음소거",
+    "appendTrailingSpace": "끝 공백 추가"
   },
   "sidebar": {
     "general": "일반",

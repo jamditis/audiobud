@@ -18,6 +18,31 @@ pub enum TrayIconState {
     Transcribing,
 }
 
+/// Tracks the tray's current logical state so menu rebuilds triggered by events
+/// (e.g. settings changes) can preserve the recording/transcribing menu instead of
+/// forcing Idle. Updated by `change_tray_icon`, the single point all
+/// recording/transcription transitions flow through.
+pub struct CurrentTrayState(pub std::sync::Mutex<TrayIconState>);
+
+impl CurrentTrayState {
+    pub fn new() -> Self {
+        Self(std::sync::Mutex::new(TrayIconState::Idle))
+    }
+}
+
+impl Default for CurrentTrayState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Reads the current tray state, defaulting to Idle if it has not been managed yet.
+pub fn current_tray_state(app: &AppHandle) -> TrayIconState {
+    app.try_state::<CurrentTrayState>()
+        .map(|s| s.0.lock().unwrap().clone())
+        .unwrap_or(TrayIconState::Idle)
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum AppTheme {
     Dark,
@@ -63,6 +88,12 @@ pub fn get_icon_path(theme: AppTheme, state: TrayIconState) -> &'static str {
 }
 
 pub fn change_tray_icon(app: &AppHandle, icon: TrayIconState) {
+    // Remember the current state so event-driven menu rebuilds (settings changes,
+    // model state) can preserve the recording/transcribing menu instead of Idle.
+    if let Some(current) = app.try_state::<CurrentTrayState>() {
+        *current.0.lock().unwrap() = icon.clone();
+    }
+
     let tray = app.state::<TrayIcon>();
     let theme = get_current_theme(app);
 
@@ -177,6 +208,37 @@ pub fn update_tray_menu(app: &AppHandle, state: &TrayIconState, locale: Option<&
     )
     .expect("failed to create unload model item");
 
+    // Quick toggles for high-traffic boolean settings (issue #12). They reuse the
+    // existing settings; their checked state is read fresh on every menu rebuild, and
+    // the `toggle:` handler in lib.rs flips the setting and rebuilds the menu.
+    let toggle_ptt_i = CheckMenuItem::with_id(
+        app,
+        "toggle:push_to_talk",
+        &strings.push_to_talk,
+        true,
+        settings.push_to_talk,
+        None::<&str>,
+    )
+    .expect("failed to create push-to-talk toggle item");
+    let toggle_mute_i = CheckMenuItem::with_id(
+        app,
+        "toggle:mute_while_recording",
+        &strings.mute_while_recording,
+        true,
+        settings.mute_while_recording,
+        None::<&str>,
+    )
+    .expect("failed to create mute-while-recording toggle item");
+    let toggle_space_i = CheckMenuItem::with_id(
+        app,
+        "toggle:append_trailing_space",
+        &strings.append_trailing_space,
+        true,
+        settings.append_trailing_space,
+        None::<&str>,
+    )
+    .expect("failed to create append-trailing-space toggle item");
+
     let menu = match state {
         TrayIconState::Recording | TrayIconState::Transcribing => {
             let cancel_i = MenuItem::with_id(app, "cancel", &strings.cancel, true, None::<&str>)
@@ -207,6 +269,10 @@ pub fn update_tray_menu(app: &AppHandle, state: &TrayIconState, locale: Option<&
                 &separator(),
                 &model_submenu,
                 &unload_model_i,
+                &separator(),
+                &toggle_ptt_i,
+                &toggle_mute_i,
+                &toggle_space_i,
                 &separator(),
                 &settings_i,
                 &check_updates_i,

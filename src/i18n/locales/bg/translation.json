@@ -6,7 +6,10 @@
     "unloadModel": "Разтоварване на модела",
     "model": "Модел",
     "quit": "Изход",
-    "cancel": "Отказ"
+    "cancel": "Отказ",
+    "pushToTalk": "Натискане за говорене",
+    "muteWhileRecording": "Заглушаване при запис",
+    "appendTrailingSpace": "Интервал в края"
   },
   "sidebar": {
     "general": "Общи",

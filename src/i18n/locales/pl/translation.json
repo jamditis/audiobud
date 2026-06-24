@@ -6,7 +6,10 @@
     "unloadModel": "Zwolnij model",
     "model": "Model",
     "quit": "Zamknij",
-    "cancel": "Anuluj"
+    "cancel": "Anuluj",
+    "pushToTalk": "Push To Talk",
+    "muteWhileRecording": "Wycisz podczas nagrywania",
+    "appendTrailingSpace": "Dodaj spację na końcu"
   },
   "sidebar": {
     "general": "Ogólne",
