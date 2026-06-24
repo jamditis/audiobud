@@ -61,11 +61,11 @@ jobs:
 
       - name: Install system dependencies
         timeout-minutes: 8
-        env:
-          DEBIAN_FRONTEND: noninteractive
         run: |
-          sudo apt-get update -o Acquire::Retries=3
-          sudo apt-get install -y -o Acquire::Retries=3 libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev libasound2-dev libssl-dev libgtk-layer-shell-dev
+          # DEBIAN_FRONTEND must ride inside sudo (env_reset strips a step-level
+          # env: before apt/dpkg ever see it), so set it as a sudo argument.
+          sudo DEBIAN_FRONTEND=noninteractive apt-get update -o Acquire::Retries=3
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -o Acquire::Retries=3 libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev libasound2-dev libssl-dev libgtk-layer-shell-dev
 
       - uses: swatinem/rust-cache@v2
         with:
