@@ -6,7 +6,10 @@
     "unloadModel": "Dỡ mô hình",
     "model": "Mô hình",
     "quit": "Thoát",
-    "cancel": "Hủy"
+    "cancel": "Hủy",
+    "pushToTalk": "Nhấn để nói",
+    "muteWhileRecording": "Tắt tiếng khi ghi âm",
+    "appendTrailingSpace": "Thêm dấu cách cuối"
   },
   "sidebar": {
     "general": "Chung",

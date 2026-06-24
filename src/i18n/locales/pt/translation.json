@@ -6,7 +6,10 @@
     "unloadModel": "Descarregar modelo",
     "model": "Modelo",
     "quit": "Sair",
-    "cancel": "Cancelar"
+    "cancel": "Cancelar",
+    "pushToTalk": "Pressionar para Falar",
+    "muteWhileRecording": "Silenciar Durante Gravação",
+    "appendTrailingSpace": "Adicionar Espaço Final"
   },
   "sidebar": {
     "general": "Geral",

@@ -489,6 +489,10 @@ pub fn change_ptt_setting(app: AppHandle, enabled: bool) -> Result<(), String> {
     let mut settings = settings::get_settings(&app);
     settings.push_to_talk = enabled;
     settings::write_settings(&app, settings);
+    let _ = app.emit(
+        "settings-changed",
+        serde_json::json!({ "setting": "push_to_talk", "value": enabled }),
+    );
     Ok(())
 }
 
@@ -1117,6 +1121,10 @@ pub fn change_mute_while_recording_setting(app: AppHandle, enabled: bool) -> Res
     let mut settings = settings::get_settings(&app);
     settings.mute_while_recording = enabled;
     settings::write_settings(&app, settings);
+    let _ = app.emit(
+        "settings-changed",
+        serde_json::json!({ "setting": "mute_while_recording", "value": enabled }),
+    );
     Ok(())
 }
 
@@ -1126,6 +1134,10 @@ pub fn change_append_trailing_space_setting(app: AppHandle, enabled: bool) -> Re
     let mut settings = settings::get_settings(&app);
     settings.append_trailing_space = enabled;
     settings::write_settings(&app, settings);
+    let _ = app.emit(
+        "settings-changed",
+        serde_json::json!({ "setting": "append_trailing_space", "value": enabled }),
+    );
     Ok(())
 }
 

@@ -628,6 +628,15 @@ export const useSettingsStore = create<SettingsStore>()(
       listen("model-state-changed", () => {
         get().refreshSettings();
       });
+
+      // The backend emits "settings-changed" whenever it mutates a setting outside
+      // the normal command round-trip — e.g. the tray quick-toggles (issue #12) and
+      // the keyboard-implementation/autostart commands. Re-fetch so the settings
+      // window stays in sync. The {setting, value} payload is ignored here; the
+      // backend store is the source of truth, so a full refresh is simplest.
+      listen("settings-changed", () => {
+        get().refreshSettings();
+      });
     },
   })),
 );

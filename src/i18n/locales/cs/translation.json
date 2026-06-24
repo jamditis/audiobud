@@ -6,7 +6,10 @@
     "unloadModel": "Uvolnit model",
     "model": "Model",
     "quit": "Ukončit",
-    "cancel": "Zrušit"
+    "cancel": "Zrušit",
+    "pushToTalk": "Stisk a mluv",
+    "muteWhileRecording": "Ztlumit při nahrávání",
+    "appendTrailingSpace": "Přidat koncovou mezeru"
   },
   "sidebar": {
     "general": "Obecné",

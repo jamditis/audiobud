@@ -281,11 +281,42 @@ fn initialize_core_logic(app_handle: &AppHandle) {
                     tray::update_tray_menu(&app_clone, &tray::TrayIconState::Idle, None);
                 });
             }
+            id if id.starts_with("toggle:") => {
+                let key = id.strip_prefix("toggle:").unwrap();
+                let current = settings::get_settings(app);
+                // Route tray toggles through the same setting commands the settings
+                // window uses, so there is a single mutation path. Each command emits
+                // "settings-changed", which rebuilds the tray (listener below) and
+                // refreshes the settings window.
+                let result = match key {
+                    "push_to_talk" => {
+                        shortcut::change_ptt_setting(app.clone(), !current.push_to_talk)
+                    }
+                    "mute_while_recording" => shortcut::change_mute_while_recording_setting(
+                        app.clone(),
+                        !current.mute_while_recording,
+                    ),
+                    "append_trailing_space" => shortcut::change_append_trailing_space_setting(
+                        app.clone(),
+                        !current.append_trailing_space,
+                    ),
+                    other => {
+                        log::warn!("Unknown tray toggle: {}", other);
+                        return;
+                    }
+                };
+                if let Err(e) = result {
+                    log::error!("Failed to apply tray toggle {}: {}", key, e);
+                }
+            }
             _ => {}
         })
         .build(app_handle)
         .unwrap();
     app_handle.manage(tray);
+    // Track the tray's logical state so event-driven menu rebuilds below can keep the
+    // recording/transcribing menu instead of forcing Idle.
+    app_handle.manage(tray::CurrentTrayState::new());
 
     // Initialize tray menu with idle state
     utils::update_tray_menu(app_handle, &utils::TrayIconState::Idle, None);
@@ -296,10 +327,22 @@ fn initialize_core_logic(app_handle: &AppHandle) {
         tray::set_tray_visibility(app_handle, false);
     }
 
-    // Refresh tray menu when model state changes
+    // Refresh tray menu when model state changes. Rebuild with the current tray
+    // state so a rebuild never clobbers the recording/transcribing menu.
     let app_handle_for_listener = app_handle.clone();
     app_handle.listen("model-state-changed", move |_| {
-        tray::update_tray_menu(&app_handle_for_listener, &tray::TrayIconState::Idle, None);
+        let state = tray::current_tray_state(&app_handle_for_listener);
+        tray::update_tray_menu(&app_handle_for_listener, &state, None);
+    });
+
+    // Rebuild the tray whenever a setting changes (tray quick-toggles, the settings
+    // window, keyboard-implementation switch, etc.) so the quick-toggle CheckMenuItems
+    // and the update-checks item never show a stale state. Use the current state so a
+    // settings change mid-recording keeps the Cancel item instead of forcing Idle.
+    let app_handle_for_settings = app_handle.clone();
+    app_handle.listen("settings-changed", move |_| {
+        let state = tray::current_tray_state(&app_handle_for_settings);
+        tray::update_tray_menu(&app_handle_for_settings, &state, None);
     });
 
     // Get the autostart manager and configure based on user setting

@@ -6,7 +6,10 @@
     "unloadModel": "פרוק מודל",
     "model": "מודל",
     "quit": "יציאה",
-    "cancel": "ביטול"
+    "cancel": "ביטול",
+    "pushToTalk": "לחץ כדי לדבר",
+    "muteWhileRecording": "השתק בזמן הקלטה",
+    "appendTrailingSpace": "הוסף רווח בסוף"
   },
   "sidebar": {
     "general": "כללי",

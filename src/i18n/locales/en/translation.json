@@ -6,7 +6,10 @@
     "unloadModel": "Unload model",
     "model": "Model",
     "quit": "Quit",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "pushToTalk": "Push to talk",
+    "muteWhileRecording": "Mute while recording",
+    "appendTrailingSpace": "Append trailing space"
   },
   "sidebar": {
     "navLabel": "Settings sections",

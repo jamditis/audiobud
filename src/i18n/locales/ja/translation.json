@@ -6,7 +6,10 @@
     "unloadModel": "モデルをアンロード",
     "model": "モデル",
     "quit": "終了",
-    "cancel": "キャンセル"
+    "cancel": "キャンセル",
+    "pushToTalk": "プッシュトゥトーク",
+    "muteWhileRecording": "録音中にミュート",
+    "appendTrailingSpace": "末尾にスペースを追加"
   },
   "sidebar": {
     "general": "一般",
