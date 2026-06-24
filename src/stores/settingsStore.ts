@@ -305,11 +305,27 @@ export const useSettingsStore = create<SettingsStore>()(
       const updateKey = String(key);
       const originalValue = settings?.[key];
 
+      // Choosing a coarse Top/Bottom/none placement supersedes any fine grid
+      // anchor, and changeOverlayPositionSetting clears overlay_custom_position
+      // on the backend. Mirror that in the optimistic update so the grid and
+      // Reset button clear immediately instead of flashing the stale anchor
+      // until the settings-changed refresh lands.
+      const clearsCustomOverlay = key === "overlay_position";
+      const originalCustom = settings?.overlay_custom_position;
+
       setUpdating(updateKey, true);
 
       try {
         set((state) => ({
-          settings: state.settings ? { ...state.settings, [key]: value } : null,
+          settings: state.settings
+            ? {
+                ...state.settings,
+                [key]: value,
+                ...(clearsCustomOverlay
+                  ? { overlay_custom_position: null }
+                  : {}),
+              }
+            : null,
         }));
 
         const updater = settingUpdaters[key];
@@ -328,7 +344,15 @@ export const useSettingsStore = create<SettingsStore>()(
       } catch (error) {
         console.error(`Failed to update setting ${String(key)}:`, error);
         if (settings) {
-          set({ settings: { ...settings, [key]: originalValue } });
+          set({
+            settings: {
+              ...settings,
+              [key]: originalValue,
+              ...(clearsCustomOverlay
+                ? { overlay_custom_position: originalCustom }
+                : {}),
+            },
+          });
         }
         notifySaveError();
       } finally {

@@ -675,6 +675,15 @@ pub fn set_overlay_anchor(app: AppHandle, anchor: String) -> Result<(), String> 
 pub fn reset_overlay_position(app: AppHandle) -> Result<(), String> {
     let mut settings = get_settings(&app);
     settings.overlay_custom_position = None;
+    // Resetting the fine placement also returns the coarse Top/Bottom to the
+    // default bottom-centered placement. Choosing a top-row anchor pins
+    // overlay_position to Top (see set_overlay_anchor), so without this "Reset to
+    // default" would clear the nudge but leave the overlay stuck at the top
+    // instead of the app default. Guard on visibility so reset never un-hides a
+    // deliberately hidden overlay.
+    if settings.overlay_position != OverlayPosition::None {
+        settings.overlay_position = OverlayPosition::Bottom;
+    }
     settings::write_settings(&app, settings);
 
     crate::utils::update_overlay_position(&app);
