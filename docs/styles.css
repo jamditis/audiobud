@@ -443,6 +443,19 @@ pre {
   gap: 18px;
 }
 
+.footer-links {
+  display: flex;
+  gap: 18px;
+}
+
+.footer-links a {
+  text-decoration: none;
+}
+
+.footer-links a:hover {
+  color: var(--text);
+}
+
 .roadmap-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -576,6 +589,10 @@ pre {
   .notice,
   .site-footer .wrap {
     display: block;
+  }
+
+  .footer-links {
+    margin-top: 14px;
   }
 
   .section-head p,
