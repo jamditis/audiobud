@@ -33,9 +33,16 @@ Automatic update checks are disabled for now because the inherited updater still
 - **Models:** Parakeet, Whisper, Moonshine, SenseVoice, GigaAM, Canary, Cohere, and custom Whisper GGML `.bin` files.
 - **Text output:** language selection where supported, translation where supported, trailing spaces, paste method, clipboard handling, and raw lowercased output.
 - **Vocabulary:** custom words plus deterministic word replacements for names, jargon, and common mishears.
+- **Personalization (opt-in):** on-device learning from your own dictation history -- word suggestions you accept or dismiss, remembered corrections, and view, export, and reset controls for everything it has learned.
 - **Post-processing:** optional cleanup through OpenAI, Anthropic, Z.AI, OpenRouter, Groq, Cerebras, AWS Bedrock via Mantle, or a custom OpenAI-compatible endpoint. API keys stay in local settings.
 - **History:** recent transcriptions, recording retention, retry, and saved entries.
 - **Advanced controls:** autostart, tray icon, overlay position, model unload timeout, Whisper acceleration, ONNX acceleration, GPU selection, logging, and debug paths.
+
+## Personalization
+
+Opt in to let AudioBud learn from your own dictation history, entirely on your machine. Turn on **Learn from my history** and it surfaces words you use often as suggestions to accept or dismiss, remembers the corrections you make, and applies both to later dictations. It stays off until you enable it, and you can view, export, or reset everything it has learned at any time -- even while the feature is off.
+
+![AudioBud advanced settings in dark mode showing custom words, word replacements, the learn-from-history toggle, suggested and learned words, and the export and reset personalization controls.](screenshots/app-personalization.png)
 
 ## Models
 
