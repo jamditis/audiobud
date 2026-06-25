@@ -927,13 +927,14 @@ async resetPersonalization() : Promise<Result<null, string>> {
 }
 },
 /**
- * Export the personalization data as pretty-printed JSON to a user-chosen `path` (the frontend
- * picks it via the native save dialog). The file write happens here in Rust so no JS filesystem
- * capability is needed. Nothing leaves the device.
+ * Export the personalization data as pretty-printed JSON. The native save dialog is opened here in
+ * Rust on the blocking pool (never the webview thread), so the destination is approved at the
+ * backend and the renderer cannot supply an arbitrary write path (#54). Returns `Ok(false)` when
+ * the user cancels. Nothing leaves the device.
  */
-async exportPersonalization(path: string) : Promise<Result<null, string>> {
+async exportPersonalization() : Promise<Result<boolean, string>> {
     try {
-    return { status: "ok", data: await TAURI_INVOKE("export_personalization", { path }) };
+    return { status: "ok", data: await TAURI_INVOKE("export_personalization") };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };

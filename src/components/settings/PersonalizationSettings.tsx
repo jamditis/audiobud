@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import { ask, save } from "@tauri-apps/plugin-dialog";
+import { ask } from "@tauri-apps/plugin-dialog";
 import { commands, type WordSuggestion } from "@/bindings";
 import { hasStoredPersonalizationData } from "@/lib/personalization";
 import { useSettings } from "../../hooks/useSettings";
@@ -164,14 +164,12 @@ export const PersonalizationSettings: React.FC<PersonalizationSettingsProps> =
 
     const handleExport = async () => {
       try {
-        const path = await save({
-          defaultPath: "audiobud-personalization.json",
-          filters: [{ name: "JSON", extensions: ["json"] }],
-        });
-        if (!path) return;
-        const res = await commands.exportPersonalization(path);
+        const res = await commands.exportPersonalization();
         if (res.status === "error") throw new Error(res.error);
-        toast.success(t("settings.advanced.personalization.data.exportDone"));
+        // Rust returns false when the user cancels the save dialog -- no toast then.
+        if (res.data) {
+          toast.success(t("settings.advanced.personalization.data.exportDone"));
+        }
       } catch (error) {
         console.error("Failed to export personalization:", error);
         toast.error(t("settings.advanced.personalization.data.exportError"));

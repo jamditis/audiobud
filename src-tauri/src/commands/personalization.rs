@@ -9,6 +9,7 @@ use crate::managers::personalization::{mine_word_suggestions, WordSuggestion};
 use std::collections::HashSet;
 use std::sync::Arc;
 use tauri::{AppHandle, State};
+use tauri_plugin_dialog::DialogExt;
 
 /// Maximum number of accepted learned words (mirrors the custom-words cap).
 const LEARNED_WORDS_CAP: usize = 500;
@@ -159,16 +160,35 @@ pub(crate) fn serialize_personalization(
     serde_json::to_string_pretty(data).map_err(|e| e.to_string())
 }
 
-/// Export the personalization data as pretty-printed JSON to a user-chosen `path` (the frontend
-/// picks it via the native save dialog). The file write happens here in Rust so no JS filesystem
-/// capability is needed. Nothing leaves the device.
+/// Export the personalization data as pretty-printed JSON. The native save dialog is opened here in
+/// Rust on the blocking pool (never the webview thread), so the destination is approved at the
+/// backend and the renderer cannot supply an arbitrary write path (#54). Returns `Ok(false)` when
+/// the user cancels. Nothing leaves the device.
 #[tauri::command]
 #[specta::specta]
-pub fn export_personalization(app: AppHandle, path: String) -> Result<(), String> {
+pub async fn export_personalization(app: AppHandle) -> Result<bool, String> {
     let settings = crate::settings::get_settings(&app);
     let json = serialize_personalization(&settings.personalization)?;
-    std::fs::write(&path, json).map_err(|e| format!("Failed to write {}: {}", path, e))?;
-    Ok(())
+
+    let dialog_app = app.clone();
+    let picked = tauri::async_runtime::spawn_blocking(move || {
+        dialog_app
+            .dialog()
+            .file()
+            .set_file_name("audiobud-personalization.json")
+            .add_filter("JSON", &["json"])
+            .blocking_save_file()
+    })
+    .await
+    .map_err(|_| "Save dialog failed to run".to_string())?;
+
+    let Some(file_path) = picked else {
+        return Ok(false); // user cancelled the save dialog
+    };
+
+    let path = file_path.into_path().map_err(|e| e.to_string())?;
+    std::fs::write(&path, json).map_err(|e| format!("Failed to write {}: {}", path.display(), e))?;
+    Ok(true)
 }
 
 #[cfg(test)]
