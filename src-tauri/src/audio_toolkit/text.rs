@@ -15,6 +15,13 @@ static COMMON_WORDS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
         .collect()
 });
 
+/// Whether `word` is an everyday English word in the bundled common-word list. Backs both the
+/// fuzzy matcher's common-word veto and history mining (issue #16), which uses it to avoid
+/// suggesting ordinary words. Comparison is case-insensitive.
+pub fn is_common_word(word: &str) -> bool {
+    COMMON_WORDS.contains(word.to_lowercase().as_str())
+}
+
 static METAPHONE: Lazy<Metaphone> = Lazy::new(Metaphone::default);
 static DOUBLE_METAPHONE: Lazy<DoubleMetaphone> = Lazy::new(DoubleMetaphone::default);
 

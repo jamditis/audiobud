@@ -453,6 +453,37 @@
         "caseBadge": "Aa",
         "remove": "Remove replacement for {{word}}"
       },
+      "personalization": {
+        "title": "Learn from my history",
+        "description": "Opt in to let AudioBud suggest custom words from the names and terms you dictate most. Everything stays on this device: it reads your local transcript history, nothing is uploaded, and you can export or clear what it learns at any time. Off by default.",
+        "error": "Something went wrong. Please try again.",
+        "suggestions": {
+          "title": "Suggested words",
+          "description": "Frequent proper nouns and terms mined from your transcript history. Accept the ones you want as custom words, or dismiss the rest so they stop showing up.",
+          "refresh": "Refresh suggestions",
+          "loading": "Scanning history...",
+          "empty": "No new suggestions yet. Dictate more, then refresh.",
+          "count": "seen {{count}} times",
+          "accept": "Add",
+          "dismiss": "Dismiss",
+          "dismissLabel": "Dismiss suggestion {{word}}"
+        },
+        "learned": {
+          "count": "{{count}} learned words",
+          "remove": "Remove learned word {{word}}"
+        },
+        "data": {
+          "title": "Your personalization data",
+          "description": "Export a copy of what AudioBud has learned, or clear it entirely. Resetting removes all learned words and dismissed suggestions; your manual custom words and replacements are not affected.",
+          "export": "Export",
+          "reset": "Reset personalization",
+          "resetTitle": "Reset personalization",
+          "resetConfirm": "This clears all learned words and dismissed suggestions. Your manual custom words and replacements stay. Continue?",
+          "resetDone": "Personalization data cleared",
+          "exportDone": "Personalization data exported",
+          "exportError": "Could not export personalization data"
+        }
+      },
       "rawOutput": {
         "label": "Raw transcript",
         "description": "Output lowercase text with capitalization and end punctuation removed. Acronyms (API, GPU) and the standalone English \"I\" are kept. Useful for feeding other tools or when the model over-formats. You can also bind a separate shortcut for one-off raw dictations."

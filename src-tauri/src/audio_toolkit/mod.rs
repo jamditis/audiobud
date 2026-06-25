@@ -9,7 +9,8 @@ pub use audio::{
     read_wav_samples, save_wav_file, verify_wav_file, AudioRecorder, CpalDeviceInfo,
 };
 pub use text::{
-    apply_custom_words, apply_replacements, filter_transcription_output, strip_to_raw_text,
+    apply_custom_words, apply_replacements, filter_transcription_output, is_common_word,
+    strip_to_raw_text,
 };
 pub use utils::get_cpal_host;
 pub use vad::{SileroVad, VoiceActivityDetector};

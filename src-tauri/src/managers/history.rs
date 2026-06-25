@@ -528,6 +528,29 @@ impl HistoryManager {
         Ok(PaginatedHistory { entries, has_more })
     }
 
+    /// Fetch every stored transcription's raw dictated text -- the `transcription_text` column only,
+    /// no audio or metadata -- newest first. Backs issue #16 history mining, which surfaces
+    /// frequently-used vocabulary from the user's own transcripts. Empty transcriptions are skipped.
+    ///
+    /// Deliberately mines `transcription_text`, not `post_processed_text`: post-processing is a
+    /// user-defined LLM prompt that can translate, summarize, or otherwise rewrite the transcript, so
+    /// its output may contain words the user never dictated. The raw transcription is the faithful
+    /// record of what was spoken, which is what custom-word suggestions should be drawn from. (The
+    /// tray/display layer separately prefers the post-processed text; that's a different concern.)
+    pub fn get_all_transcription_texts(&self) -> Result<Vec<String>> {
+        let conn = self.get_connection()?;
+        let mut stmt = conn.prepare(
+            "SELECT transcription_text
+             FROM transcription_history
+             WHERE transcription_text IS NOT NULL AND transcription_text != ''
+             ORDER BY id DESC",
+        )?;
+        let texts = stmt
+            .query_map([], |row| row.get::<_, String>(0))?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        Ok(texts)
+    }
+
     #[cfg(test)]
     fn get_latest_entry_with_conn(conn: &Connection) -> Result<Option<HistoryEntry>> {
         let mut stmt = conn.prepare(

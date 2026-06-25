@@ -118,6 +118,31 @@ pub struct WordReplacement {
     pub case_sensitive: bool,
 }
 
+/// Opt-in, on-device personalization data (issue #16, Tier 1).
+///
+/// Kept in a separate store from the user-authored `custom_words`/`word_replacements` so it can be
+/// inspected, exported, and reset on its own without ever touching hand-authored entries. All
+/// processing is local; nothing leaves the device. When `enabled` is false (the default) none of
+/// this data affects transcription and no history mining is surfaced.
+#[derive(Serialize, Deserialize, Debug, Clone, Default, Type)]
+pub struct PersonalizationData {
+    /// Opt-in master switch. Off by default.
+    #[serde(default)]
+    pub enabled: bool,
+    /// Words the user accepted from history-mined suggestions. Applied like `custom_words` (fuzzy)
+    /// when `enabled`.
+    #[serde(default)]
+    pub learned_words: Vec<String>,
+    /// Learned heard->meant corrections captured from in-app transcript edits (issue #16 PR2).
+    /// Defined now for a forward-compatible data model; empty until the capture surface ships.
+    /// Applied like `word_replacements` (deterministic) when `enabled`.
+    #[serde(default)]
+    pub learned_replacements: Vec<WordReplacement>,
+    /// Mined suggestions the user dismissed, so they are never surfaced again.
+    #[serde(default)]
+    pub dismissed_suggestions: Vec<String>,
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, Type)]
 pub struct PostProcessProvider {
     pub id: String,
@@ -501,6 +526,10 @@ pub struct AppSettings {
     pub whisper_gpu_device: i32,
     #[serde(default)]
     pub extra_recording_buffer_ms: u64,
+    /// Opt-in, on-device personalization (issue #16, Tier 1). Off by default. See
+    /// [`PersonalizationData`].
+    #[serde(default)]
+    pub personalization: PersonalizationData,
 }
 
 fn default_model() -> String {
@@ -923,6 +952,7 @@ pub fn get_default_settings() -> AppSettings {
         ort_accelerator: OrtAcceleratorSetting::default(),
         whisper_gpu_device: default_whisper_gpu_device(),
         extra_recording_buffer_ms: 0,
+        personalization: PersonalizationData::default(),
     }
 }
 
