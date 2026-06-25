@@ -8,9 +8,29 @@ AudioBud is a detached fork of [Handy](https://github.com/cjpais/Handy) by CJ Pa
 restate Handy's own history. AudioBud versions independently of Handy, starting at
 `0.1.0`. Releases are not yet code-signed; signing arrives in milestone B.
 
-## [Unreleased] - 0.3.0
+## 0.3.0 - 2026-06-25
 
-Work in progress. See the [roadmap](https://jamditis.github.io/audiobud/roadmap.html).
+Adds opt-in, on-device personalization: when you turn it on, AudioBud learns the
+words and corrections you actually use -- from your own transcription history, all
+on your machine -- and applies them to later dictations. It ships off by default.
+Windows (x64) only; the macOS and Linux code remains inherited and untested.
+
+### Added
+
+- An opt-in personalization dictionary that learns from your transcription
+  history. When enabled, AudioBud surfaces frequently used words as suggestions
+  you can accept or dismiss, remembers the corrections you make, and applies both
+  to future dictations. Everything runs and stays on your machine; the feature is
+  disabled until you switch it on, and it lives on the Advanced settings tab
+  (#16).
+- View, export, and reset controls for your learned data that stay available even
+  while personalization is turned off, so stored data is always reachable and
+  removable without re-enabling the feature. Export writes a JSON file through a
+  native save dialog; reset clears the learned words, learned replacements, and
+  dismissed suggestions (#53, #54).
+- A published [roadmap page](https://jamditis.github.io/audiobud/roadmap.html)
+  and a backfilled changelog, so planned work and shipped changes are visible from
+  the site (#60).
 
 ## 0.2.0 - 2026-06-24
 
