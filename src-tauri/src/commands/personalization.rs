@@ -187,7 +187,8 @@ pub async fn export_personalization(app: AppHandle) -> Result<bool, String> {
     };
 
     let path = file_path.into_path().map_err(|e| e.to_string())?;
-    std::fs::write(&path, json).map_err(|e| format!("Failed to write {}: {}", path.display(), e))?;
+    std::fs::write(&path, json)
+        .map_err(|e| format!("Failed to write {}: {}", path.display(), e))?;
     Ok(true)
 }
 
