@@ -151,6 +151,14 @@ pub fn reset_personalization(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+/// Serialize personalization data to pretty JSON. Pure (no I/O) so it is unit-testable
+/// and reused by the export command.
+pub(crate) fn serialize_personalization(
+    data: &crate::settings::PersonalizationData,
+) -> Result<String, String> {
+    serde_json::to_string_pretty(data).map_err(|e| e.to_string())
+}
+
 /// Export the personalization data as pretty-printed JSON to a user-chosen `path` (the frontend
 /// picks it via the native save dialog). The file write happens here in Rust so no JS filesystem
 /// capability is needed. Nothing leaves the device.
@@ -158,8 +166,30 @@ pub fn reset_personalization(app: AppHandle) -> Result<(), String> {
 #[specta::specta]
 pub fn export_personalization(app: AppHandle, path: String) -> Result<(), String> {
     let settings = crate::settings::get_settings(&app);
-    let json =
-        serde_json::to_string_pretty(&settings.personalization).map_err(|e| e.to_string())?;
+    let json = serialize_personalization(&settings.personalization)?;
     std::fs::write(&path, json).map_err(|e| format!("Failed to write {}: {}", path, e))?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::settings::PersonalizationData;
+
+    #[test]
+    fn serialize_personalization_includes_fields_and_round_trips() {
+        let data = PersonalizationData {
+            enabled: true,
+            learned_words: vec!["frobnicate".to_string()],
+            learned_replacements: vec![],
+            dismissed_suggestions: vec!["bar".to_string()],
+        };
+        let json = serialize_personalization(&data).expect("serialize");
+        assert!(json.contains("\"frobnicate\""));
+        assert!(json.contains("\"enabled\": true"));
+
+        let back: PersonalizationData = serde_json::from_str(&json).expect("round-trip parse");
+        assert_eq!(back.learned_words, data.learned_words);
+        assert_eq!(back.dismissed_suggestions, data.dismissed_suggestions);
+    }
 }
