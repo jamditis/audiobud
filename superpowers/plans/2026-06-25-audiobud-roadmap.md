@@ -4,7 +4,7 @@
 
 **Goal:** Stand up the AudioBud roadmap as concrete artifacts — seven GitHub milestones, reassigned and newly filed issues, a public `docs/roadmap.html` page, a current CHANGELOG, and a cleaned-up deferred-issues ledger — so contributors and users can see what ships when.
 
-**Architecture:** This is roadmap *setup*, not feature implementation. Work is mostly `gh` CLI calls against `jamditis/audiobud`, one static HTML page added to the existing zero-build Pages site under `docs/`, and Markdown edits. No app code, no Rust, no React. Each task ends with a verification command (a `gh` query, a file check, or a browser render) standing in for a unit test, since GitHub state and static HTML are not unit-testable.
+**Architecture:** This is roadmap _setup_, not feature implementation. Work is mostly `gh` CLI calls against `jamditis/audiobud`, one static HTML page added to the existing zero-build Pages site under `docs/`, and Markdown edits. No app code, no Rust, no React. Each task ends with a verification command (a `gh` query, a file check, or a browser render) standing in for a unit test, since GitHub state and static HTML are not unit-testable.
 
 **Tech Stack:** GitHub CLI (`gh`) + REST API, static HTML/CSS matching `docs/styles.css`, Keep a Changelog 1.1.0 format, Markdown.
 
@@ -14,7 +14,7 @@
 - The public roadmap page shows theme and status only — no dates, no individual inherited-bug numbers, no restated issue bodies. Issue detail lives on GitHub, linked.
 - AI cleanup is local-LLM only. Any issue/page copy about it must not imply a cloud provider.
 - No AI-attribution branding in commits, PRs, issues, code, or docs.
-- Conventional commit prefixes (`feat:`, `fix:`, `docs:`, `chore:`). Message says *why*, not *what*.
+- Conventional commit prefixes (`feat:`, `fix:`, `docs:`, `chore:`). Message says _why_, not _what_.
 - Before filing any issue, read `.github/ISSUE_TEMPLATE/bug_report.md` and fill every section; bugs get `bug`, feature/enhancement issues get `enhancement` (AudioBud has Discussions disabled). Before opening the PR, read `.github/PULL_REQUEST_TEMPLATE.md` and complete each section.
 - Do not push or open the PR (Task 11) or commit the wiki (Task 10) without Joe's explicit go.
 - Repo: `jamditis/audiobud`. Milestone themes are copied verbatim from the approved spec `superpowers/specs/2026-06-25-audiobud-roadmap-design.md`.
@@ -24,10 +24,12 @@
 ### Task 1: Create the working branch and commit the approved spec
 
 **Files:**
+
 - Modify: git branch state (currently on `main`)
 - Commit: `superpowers/specs/2026-06-25-audiobud-roadmap-design.md` (already written, uncommitted)
 
 **Interfaces:**
+
 - Produces: branch `joe/roadmap-setup` that all later commits land on.
 
 - [ ] **Step 1: Confirm clean tree and current branch**
@@ -59,6 +61,7 @@ Expected: the `docs(roadmap): add roadmap design spec and setup plan` commit at 
 **Files:** none (GitHub state via `gh api`).
 
 **Interfaces:**
+
 - Produces: milestones `v0.3.0`, `v0.3.1`, `v0.4.0`, `v0.5.0`, `v0.6.0`, `v0.7.0`, `v1.0.0`, each `open` with a one-line theme description. Later tasks assign issues to these by title.
 
 - [ ] **Step 1: Check existing milestones first (idempotency)**
@@ -101,6 +104,7 @@ No file changed yet; the milestone map is captured in the spec. Skip the commit 
 **Files:** none (GitHub state).
 
 **Interfaces:**
+
 - Consumes: the milestones from Task 2.
 - Produces: every existing open issue assigned to its milestone (or deliberately unassigned for #17).
 
@@ -152,6 +156,7 @@ Expected: #16/#43/#44/#45/#51/#53/#54 on v0.3.0; #39 on v0.4.0; #22/#23 on v0.6.
 **Files:** none yet (issue numbers recorded into the ledger in Task 8).
 
 **Interfaces:**
+
 - Consumes: the `v0.3.1` and `v0.6.0` milestones.
 - Produces: five new AudioBud issues; their numbers are needed by Task 8.
 
@@ -210,9 +215,11 @@ Expected: four bugs under v0.3.1, the AI-cleanup issue (plus #22/#23) under v0.6
 ### Task 5: Bring the CHANGELOG current (0.2.0 entry + unreleased 0.3.0 section)
 
 **Files:**
+
 - Modify: `CHANGELOG.md` (currently stops at 0.1.0)
 
 **Interfaces:**
+
 - Consumes: nothing.
 - Produces: a documented 0.2.0 entry and an `[Unreleased]` / 0.3.0 section that the phase-2 v0.3.0 work appends to.
 
@@ -233,9 +240,11 @@ In progress; see the [roadmap](https://jamditis.github.io/audiobud/roadmap.html)
 ## 0.2.0 - 2026-06-25
 
 ### Added
+
 - Opt-in, on-device personalization: a learnable dictionary mined from saved transcripts (#16).
 
 ### Fixed
+
 - Bundle the VC++ CRT and the Vulkan loader so a clean machine can install and run.
 - Stage runtime DLLs by target platform; support debug bundles.
 - Keep the word-replacements Add button inside its container on overflow (#47).
@@ -259,11 +268,13 @@ git -C "$REPO" commit -m "docs(changelog): backfill 0.2.0 and open an unreleased
 ### Task 6: Build the public roadmap page
 
 **Files:**
+
 - Create: `docs/roadmap.html`
 - Modify: `docs/styles.css` (append a scoped roadmap block)
 - Reference: `docs/index.html` (head/nav/footer markup to mirror), `docs/styles.css` (existing classes and color variables)
 
 **Interfaces:**
+
 - Consumes: the milestone themes/status from the spec.
 - Produces: a page reachable at `/roadmap.html`, linked in Task 7.
 
@@ -282,7 +293,10 @@ Mirror `index.html`'s `<head>` (title "AudioBud roadmap", canonical `…/roadmap
     <div class="wrap">
       <div class="section-head">
         <h2>Where AudioBud is headed</h2>
-        <p>Themes and status, not dates. Each milestone links to its issues on GitHub.</p>
+        <p>
+          Themes and status, not dates. Each milestone links to its issues on
+          GitHub.
+        </p>
       </div>
       <div class="roadmap-grid">
         <article class="roadmap-card">
@@ -290,8 +304,13 @@ Mirror `index.html`'s `<head>` (title "AudioBud roadmap", canonical `…/roadmap
             <h3>v0.3.0 — personalization and packaging</h3>
             <span class="status-pill status-progress">in progress</span>
           </div>
-          <p>Finalize the on-device learned dictionary and tighten the Windows installer.</p>
-          <a href="https://github.com/jamditis/audiobud/milestone/?title=v0.3.0">View issues</a>
+          <p>
+            Finalize the on-device learned dictionary and tighten the Windows
+            installer.
+          </p>
+          <a href="https://github.com/jamditis/audiobud/milestone/?title=v0.3.0"
+            >View issues</a
+          >
         </article>
         <!-- repeat one roadmap-card per milestone, in order: -->
         <!-- v0.3.1 (planned) critical stability patch — data-loss and crash fixes -->
@@ -309,17 +328,29 @@ Mirror `index.html`'s `<head>` (title "AudioBud roadmap", canonical `…/roadmap
       <div class="roadmap-grid">
         <article class="roadmap-card">
           <div class="roadmap-card-head">
-            <h3>v0.2.0</h3><span class="status-pill status-shipped">shipped</span>
+            <h3>v0.2.0</h3>
+            <span class="status-pill status-shipped">shipped</span>
           </div>
-          <p>On-device personalization, a self-contained installer, and overlay and word-replacement fixes.</p>
-          <a href="https://github.com/jamditis/audiobud/releases/tag/v0.2.0">Release notes</a>
+          <p>
+            On-device personalization, a self-contained installer, and overlay
+            and word-replacement fixes.
+          </p>
+          <a href="https://github.com/jamditis/audiobud/releases/tag/v0.2.0"
+            >Release notes</a
+          >
         </article>
         <article class="roadmap-card">
           <div class="roadmap-card-head">
-            <h3>v0.1.0</h3><span class="status-pill status-shipped">shipped</span>
+            <h3>v0.1.0</h3>
+            <span class="status-pill status-shipped">shipped</span>
           </div>
-          <p>First working local prototype, forked from Handy with the frog/swamp identity.</p>
-          <a href="https://github.com/jamditis/audiobud/releases/tag/v0.1.0">Release notes</a>
+          <p>
+            First working local prototype, forked from Handy with the frog/swamp
+            identity.
+          </p>
+          <a href="https://github.com/jamditis/audiobud/releases/tag/v0.1.0"
+            >Release notes</a
+          >
         </article>
       </div>
     </div>
@@ -327,21 +358,53 @@ Mirror `index.html`'s `<head>` (title "AudioBud roadmap", canonical `…/roadmap
 </main>
 ```
 
-Use the exact GitHub milestone URLs from `gh api repos/jamditis/audiobud/milestones --jq '.[] | "\(.title) \(.html_url)"'` rather than the placeholder `?title=` links above. Wake word and file transcription are *not* shown (exploring / post-1.0).
+Use the exact GitHub milestone URLs from `gh api repos/jamditis/audiobud/milestones --jq '.[] | "\(.title) \(.html_url)"'` rather than the placeholder `?title=` links above. Wake word and file transcription are _not_ shown (exploring / post-1.0).
 
 - [ ] **Step 3: Append the scoped styles to `docs/styles.css`**
 
 Reuse the existing color variables found in Step 1. Add:
 
 ```css
-.roadmap-grid { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
-.roadmap-card { border: 1px solid var(--border, #2a2f2a); border-radius: 12px; padding: 1.1rem 1.2rem; background: var(--surface, #161f17); }
-.roadmap-card-head { display: flex; align-items: baseline; justify-content: space-between; gap: .5rem; }
-.status-pill { font-size: .72rem; text-transform: lowercase; padding: .15rem .5rem; border-radius: 999px; white-space: nowrap; }
-.status-shipped { background: #1f3a24; color: #8fe3a3; }
-.status-progress { background: #3a341f; color: #e3cf8f; }
-.status-planned { background: #1f2a3a; color: #8fb6e3; }
-.status-exploring { background: #2a2333; color: #c2a3e3; }
+.roadmap-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+}
+.roadmap-card {
+  border: 1px solid var(--border, #2a2f2a);
+  border-radius: 12px;
+  padding: 1.1rem 1.2rem;
+  background: var(--surface, #161f17);
+}
+.roadmap-card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+.status-pill {
+  font-size: 0.72rem;
+  text-transform: lowercase;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.status-shipped {
+  background: #1f3a24;
+  color: #8fe3a3;
+}
+.status-progress {
+  background: #3a341f;
+  color: #e3cf8f;
+}
+.status-planned {
+  background: #1f2a3a;
+  color: #8fb6e3;
+}
+.status-exploring {
+  background: #2a2333;
+  color: #c2a3e3;
+}
 ```
 
 (Replace `var(--border,...)`/`var(--surface,...)` fallbacks with the real variable names from Step 1 if they exist.)
@@ -363,6 +426,7 @@ git -C "$REPO" commit -m "docs(site): add a public roadmap page with milestone s
 ### Task 7: Link the roadmap from the home page nav
 
 **Files:**
+
 - Modify: `docs/index.html:51-56` (the `.nav-links` block)
 
 - [ ] **Step 1: Add the nav link**
@@ -390,9 +454,11 @@ git -C "$REPO" commit -m "docs(site): link the roadmap page from the home nav"
 ### Task 8: Clean up the deferred-issues ledger
 
 **Files:**
+
 - Modify: `superpowers/DEFERRED-issues.md`
 
 **Interfaces:**
+
 - Consumes: the four new bug issue numbers from Task 4.
 
 - [ ] **Step 1: Fix the stale header**
@@ -438,9 +504,11 @@ Expected: 9 cards (7 planned/in-progress + 2 shipped). Wake word and file transc
 ### Task 10: Wiki update (GATED — cross-node, needs Joe's go)
 
 **Files:**
+
 - Modify: `../../sandbox/jawn-atlas/bundle/legion2025/projects/audiobud.md` (this file lives in **legion2025's** bundle, not a4000's)
 
 **Interfaces:**
+
 - Consumes: the shipped roadmap.
 
 - [ ] **Step 1: Coordinate before editing**
