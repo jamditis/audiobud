@@ -308,7 +308,7 @@ export const PersonalizationSettings: React.FC<PersonalizationSettingsProps> =
           </div>
         )}
 
-        {hasStoredData && (
+        {(enabled || hasStoredData) && (
           <SettingContainer
             title={t("settings.advanced.personalization.data.title")}
             description={t(
