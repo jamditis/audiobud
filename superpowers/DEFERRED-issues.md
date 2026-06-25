@@ -1,8 +1,9 @@
 # Deferred issues (AudioBud)
 
-Tracking file for work found but deliberately deferred. There is no `jamditis/audiobud`
-GitHub repo yet, so these live here until the repo exists, at which point each becomes a
-GitHub issue. Keep entries action-ready: file, symptom, fix.
+Tracking file for work found but deliberately deferred. The `jamditis/audiobud` repo now
+exists; entries here become GitHub issues as they are scheduled into a milestone, and this
+file stays the working ledger of findings not yet filed. Keep entries action-ready: file,
+symptom, fix.
 
 Status legend: `[ ]` open, `[x]` resolved (with the resolving commit/date noted inline).
 
@@ -159,6 +160,7 @@ the Windows-first target.
       this is a settings-write path. Surfaced by the milestone-A /simplify pass.
 
 - [ ] **#1262 — History Limit / Auto-Delete silently destroys recordings (data loss).**
+      _Filed as audiobud #55 (v0.3.1)._
       `src-tauri/src/commands/history.rs:121` and `:150` call `cleanup_old_entries()` synchronously
       the moment a user lowers the limit or changes retention → `history.rs:330` →
       `delete_entries_and_files` → `fs::remove_file` deletes unsaved recordings + WAVs with no warning.
@@ -167,6 +169,7 @@ the Windows-first target.
       run lazily via `save_entry()` on next recording); add a confirm/toast. **Write a failing test first.**
 
 - [ ] **#574 — Parakeet fails to load on non-ASCII Windows profile paths (crash on our DEFAULT engine).**
+      _Filed as audiobud #56 (v0.3.1)._
       `src-tauri/src/managers/audio.rs:121` (`vad_path: &str`) + `:282` (`vad_path.to_str().unwrap()`)
       lose non-UTF-8/Unicode path components; any user whose Windows profile has Cyrillic/CJK/accented
       characters hits model-load failure (also surfaces as `model.rs:1426` "model directory not found").
@@ -186,6 +189,7 @@ the Windows-first target.
       from the model store into the onboarding `ModelCard` and relax the disabled state. One component.
 
 - [ ] **#921 — clipboard paste destroys non-text clipboard contents (user data loss).**
+      _Filed as audiobud #57 (v0.3.1)._
       `src-tauri/src/...clipboard.rs:24` saves only `read_text().unwrap_or_default()`; restore at
       `:66-76` writes text only. If the user had an image/HTML/files on the clipboard, the round-trip
       overwrites it with an empty string. (`clipboard_handling` defaults to `DontModify`, so this is
@@ -223,7 +227,8 @@ the Windows-first target.
       Windows behavior unverified. **Verify on the Windows smoke gate.** If it leaks, switch the default
       main key away from `space`.
 
-- [ ] **#1228 / #1213 — no timeout/watchdog on a stuck transcription.** `tm.transcribe()` is called
+- [ ] **#1228 / #1213 — no timeout/watchdog on a stuck transcription.** _Filed as audiobud #58 (v0.3.1)._
+      `tm.transcribe()` is called
       with no timeout (`actions.rs:548`); a wedged engine leaves "Transcribing…" up forever (force-kill
       only). The empty-audio hang from #1213 is already defended (`actions.rs:531-534`). Fix: watchdog/timeout.
 
@@ -272,11 +277,12 @@ the Windows-first target.
 
 ### Milestone B (installer / packaging)
 
-- [ ] **#1527 / #99 / #290 — installer ships neither the VC++ runtime nor the Vulkan loader.**
-      `src-tauri/nsis/installer.nsi` only handles WebView2 (no VC++ redist check/bundle, no `vulkan-1.dll`).
-      This is the whole "crashes with no error, fixed by installing a DLL" class. Add (a) a VC++
-      Redistributable presence-check/bundle and (b) ship `vulkan-1.dll` (LunarG runtime) beside the exe.
-      Add a Windows troubleshooting section to the README. (Milestone B already lists VC++ redist installer logic.)
+- [x] **#1527 / #99 / #290 — installer ships neither the VC++ runtime nor the Vulkan loader.**
+      Resolved in v0.2.0. The installer now bundles the VC++ CRT (MSVCP140/VCRUNTIME140) and the Vulkan
+      loader (`vulkan-1.dll`) beside the exe for both the NSIS and MSI bundlers (`b9dfcb6` bundle CRT +
+      Vulkan loader; `deb000d` stage runtime DLLs by target platform). This closes the "crashes with no
+      error, fixed by installing a DLL" class for missing runtimes. Still worth adding: a Windows
+      troubleshooting section in the README.
 
 - [ ] **#1489 — 0.8.3 startup crash regression (Win10/11), no logging.** Reporters confirm 0.8.2
       works and 0.8.3 crashes on the same machine (MSVCP140.dll, 0xc0000005) with VC++ already installed.

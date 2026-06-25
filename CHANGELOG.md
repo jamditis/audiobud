@@ -8,6 +8,76 @@ AudioBud is a detached fork of [Handy](https://github.com/cjpais/Handy) by CJ Pa
 restate Handy's own history. AudioBud versions independently of Handy, starting at
 `0.1.0`. Releases are not yet code-signed; signing arrives in milestone B.
 
+## [Unreleased] - 0.3.0
+
+Work in progress. See the [roadmap](https://jamditis.github.io/audiobud/roadmap.html).
+
+## 0.2.0 - 2026-06-24
+
+The first AudioBud release with installers on the
+[releases page](https://github.com/jamditis/audiobud/releases/latest): a themed
+Windows setup wizard and a portable build, plus overlay placement, tray
+quick-toggles, and a dictionary that stops correcting words that were already
+right. Windows (x64) only; the macOS and Linux code remains inherited and
+untested.
+
+### Added
+
+- A 3x3 overlay placement grid: pin the recording bug to any corner, edge, or
+  center of the active monitor, with a reset to the centered default. Placement
+  is clamped on-screen so a saved position can never strand the overlay off a
+  smaller or disconnected display (#9).
+- Tray quick-toggles for the most-used settings -- push-to-talk, mute, trailing
+  space, auto-submit, and overlay show/hide -- so they can be flipped from the
+  tray without opening the settings window. The tray and the settings window
+  stay in sync when either one changes a setting (#12).
+- Raw transcript mode: a global toggle, a per-dictation `transcribe_raw`
+  shortcut, and a `--toggle-raw` CLI flag. Raw output drops sentence casing and
+  clause punctuation while preserving acronyms, versions, paths, emails, and the
+  standalone "I". The active mode is saved per history entry, so retrying an
+  entry reproduces its original output (#19).
+- A RAW badge on the recording overlay so the active output mode is visible at a
+  glance while recording (#24).
+- A guidance panel on the dictionary settings explaining which tool fixes which
+  problem -- the phonetic bias list versus deterministic word replacements --
+  with collapsible worked recipes for a hard name, a domain or email, and a
+  handle (#10).
+- A portable install mode, restored with AudioBud's own NSIS template: a
+  Normal-versus-Portable choice in the installer and a self-contained `Data/`
+  directory beside the executable (#3).
+- A frog and pond themed Windows setup wizard -- header banner, welcome and
+  finish sidebar art, and the frog installer icon -- matching the in-app
+  identity (#13).
+- A Windows release pipeline (NSIS and MSI installers) in continuous
+  integration, inert until a `v*` tag is pushed or it is dispatched by hand.
+
+### Fixed
+
+- The custom dictionary no longer corrupts words that were already correct. The
+  old matcher accepted any phonetic hit at up to ~60% character difference, so
+  "cloud" became "Claude" and "region" became "Legion"; a multi-signal gate
+  (length, first-character anchor, edit-distance floor, common-word veto, and
+  two-of-N agreement) now blocks wrong corrections, with a deterministic
+  word-replacement map for the corrections fuzzy matching cannot make safely
+  (#19).
+- The app no longer fails to launch on a clean Windows machine. The installer
+  now bundles the VC++ runtime (MSVCP140 / VCRUNTIME140) and the Vulkan loader
+  (`vulkan-1.dll`) -- neither is present on a fresh install -- for both the NSIS
+  and MSI bundlers (#36).
+- A startup panic when the updater configuration was absent: the updater plugin
+  is now registered only when a release feed is configured, matching the
+  frontend gate (#32).
+- The Word replacements "Add" button no longer overflows its container on the
+  Advanced tab (#47).
+- Initialization errors from the keyboard and shortcut setup are surfaced and
+  logged instead of being silently swallowed.
+
+### Changed
+
+- Inherited cjpais/Handy references in the contributor docs, the issue and PR
+  templates, and the updater configuration were repointed to AudioBud, and the
+  public site and screenshots were refreshed for the release (#5, #29).
+
 ## 0.1.0 (milestone A) - 2026-06-21
 
 AudioBud's first working local prototype, forked from Handy 0.8.3. Validated on
