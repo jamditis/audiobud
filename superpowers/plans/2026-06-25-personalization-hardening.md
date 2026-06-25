@@ -153,11 +153,9 @@ After the existing imports, add:
 import { hasStoredPersonalizationData } from "@/lib/personalization";
 ```
 
-Where `learnedWords` is derived (near line 32), add `dismissedSuggestions` and the predicate:
+Where `learnedWords` is derived (near line 32), add the predicate just below it. Do not add a `dismissedSuggestions` local — the predicate reads both lists from `personalization` itself, and an unused local would fail the repo's no-unused-vars lint:
 
 ```ts
-const learnedWords = personalization?.learned_words ?? [];
-const dismissedSuggestions = personalization?.dismissed_suggestions ?? [];
 const hasStoredData = hasStoredPersonalizationData(personalization);
 ```
 
