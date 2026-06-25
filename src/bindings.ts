@@ -93,6 +93,11 @@ async changeOverlayPositionSetting(position: string) : Promise<Result<null, stri
     else return { status: "error", error: e  as any };
 }
 },
+/**
+ * Set a precise overlay placement from the #9 reposition grid: an anchor on the
+ * active monitor with a zero drag-nudge. Overrides the centered Top/Bottom
+ * default until reset.
+ */
 async setOverlayAnchor(anchor: string) : Promise<Result<null, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("set_overlay_anchor", { anchor }) };
@@ -101,6 +106,10 @@ async setOverlayAnchor(anchor: string) : Promise<Result<null, string>> {
     else return { status: "error", error: e  as any };
 }
 },
+/**
+ * Clear any custom overlay placement, returning the bug to the centered
+ * Top/Bottom default (#9 reset-to-default).
+ */
 async resetOverlayPosition() : Promise<Result<null, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("reset_overlay_position") };
@@ -847,6 +856,90 @@ async updateRecordingRetentionPeriod(period: string) : Promise<Result<null, stri
 }
 },
 /**
+ * Toggle the opt-in personalization master switch.
+ */
+async updatePersonalizationEnabled(enabled: boolean) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("update_personalization_enabled", { enabled }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Mine custom-vocabulary suggestions from the user's transcript history.
+ * 
+ * Returns an empty list when personalization is disabled. Words already in the dictionary,
+ * already learned, or previously dismissed are excluded.
+ */
+async getWordSuggestions(limit: number) : Promise<Result<WordSuggestion[], string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_word_suggestions", { limit }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Accept a mined suggestion into the learned-words list (deduped, case-insensitive). Also clears
+ * the word from the dismissed list if it was there.
+ */
+async acceptWordSuggestion(word: string) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("accept_word_suggestion", { word }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Dismiss a mined suggestion so it is never surfaced again (deduped, case-insensitive).
+ */
+async dismissWordSuggestion(word: string) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("dismiss_word_suggestion", { word }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Replace the learned-words list (used to edit/remove entries from the UI).
+ */
+async updateLearnedWords(words: string[]) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("update_learned_words", { words }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Clear all personalization data (the "reset personalization" control). User-authored
+ * `custom_words`/`word_replacements` are untouched.
+ */
+async resetPersonalization() : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("reset_personalization") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Export the personalization data as pretty-printed JSON to a user-chosen `path` (the frontend
+ * picks it via the native save dialog). The file write happens here in Rust so no JS filesystem
+ * capability is needed. Nothing leaves the device.
+ */
+async exportPersonalization(path: string) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("export_personalization", { path }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
  * Stub implementation for non-macOS platforms
  * Always returns false since laptop detection is macOS-specific
  */
@@ -875,7 +968,33 @@ historyUpdatePayload: "history-update-payload"
 
 /** user-defined types **/
 
-export type AppSettings = { bindings: Partial<{ [key in string]: ShortcutBinding }>; push_to_talk: boolean; audio_feedback: boolean; audio_feedback_volume?: number; sound_theme?: SoundTheme; start_hidden?: boolean; autostart_enabled?: boolean; update_checks_enabled?: boolean; selected_model?: string; always_on_microphone?: boolean; selected_microphone?: string | null; clamshell_microphone?: string | null; selected_output_device?: string | null; translate_to_english?: boolean; selected_language?: string; overlay_position?: OverlayPosition; overlay_custom_position?: OverlayCustomPosition | null; overlay_restore_position?: OverlayPosition | null; debug_mode?: boolean; log_level?: LogLevel; custom_words?: string[]; word_replacements?: WordReplacement[]; model_unload_timeout?: ModelUnloadTimeout; word_correction_threshold?: number; history_limit?: number; recording_retention_period?: RecordingRetentionPeriod; paste_method?: PasteMethod; clipboard_handling?: ClipboardHandling; auto_submit?: boolean; auto_submit_key?: AutoSubmitKey; post_process_enabled?: boolean; post_process_provider_id?: string; post_process_providers?: PostProcessProvider[]; post_process_api_keys?: SecretMap; post_process_models?: Partial<{ [key in string]: string }>; post_process_prompts?: LLMPrompt[]; post_process_selected_prompt_id?: string | null; mute_while_recording?: boolean; append_trailing_space?: boolean; raw_output?: boolean; app_language?: string; experimental_enabled?: boolean; lazy_stream_close?: boolean; keyboard_implementation?: KeyboardImplementation; show_tray_icon?: boolean; paste_delay_ms?: number; typing_tool?: TypingTool; external_script_path: string | null; custom_filler_words?: string[] | null; whisper_accelerator?: WhisperAcceleratorSetting; ort_accelerator?: OrtAcceleratorSetting; whisper_gpu_device?: number; extra_recording_buffer_ms?: number }
+export type AppSettings = { bindings: Partial<{ [key in string]: ShortcutBinding }>; push_to_talk: boolean; audio_feedback: boolean; audio_feedback_volume?: number; sound_theme?: SoundTheme; start_hidden?: boolean; autostart_enabled?: boolean; update_checks_enabled?: boolean; selected_model?: string; always_on_microphone?: boolean; selected_microphone?: string | null; clamshell_microphone?: string | null; selected_output_device?: string | null; translate_to_english?: boolean; selected_language?: string; overlay_position?: OverlayPosition; 
+/**
+ * User-chosen precise overlay placement (anchor + drag nudge). When set it
+ * overrides the centered Top/Bottom placement; `None` = default placement.
+ */
+overlay_custom_position?: OverlayCustomPosition | null; 
+/**
+ * Last visible overlay placement, remembered when the tray show/hide
+ * toggle hides the overlay (sets `overlay_position` to None) so re-showing
+ * restores the user's Top/Bottom choice instead of forcing the default.
+ */
+overlay_restore_position?: OverlayPosition | null; debug_mode?: boolean; log_level?: LogLevel; custom_words?: string[]; 
+/**
+ * Deterministic literal heard->meant replacements, applied after fuzzy custom-word
+ * correction and before filler removal, for every engine. See [`WordReplacement`].
+ */
+word_replacements?: WordReplacement[]; model_unload_timeout?: ModelUnloadTimeout; word_correction_threshold?: number; history_limit?: number; recording_retention_period?: RecordingRetentionPeriod; paste_method?: PasteMethod; clipboard_handling?: ClipboardHandling; auto_submit?: boolean; auto_submit_key?: AutoSubmitKey; post_process_enabled?: boolean; post_process_provider_id?: string; post_process_providers?: PostProcessProvider[]; post_process_api_keys?: SecretMap; post_process_models?: Partial<{ [key in string]: string }>; post_process_prompts?: LLMPrompt[]; post_process_selected_prompt_id?: string | null; mute_while_recording?: boolean; append_trailing_space?: boolean; 
+/**
+ * When true, transcriptions are emitted as raw lowercased, unpunctuated text (issue #19).
+ * A per-dictation shortcut / CLI flag can override this at runtime without persisting.
+ */
+raw_output?: boolean; app_language?: string; experimental_enabled?: boolean; lazy_stream_close?: boolean; keyboard_implementation?: KeyboardImplementation; show_tray_icon?: boolean; paste_delay_ms?: number; typing_tool?: TypingTool; external_script_path: string | null; custom_filler_words?: string[] | null; whisper_accelerator?: WhisperAcceleratorSetting; ort_accelerator?: OrtAcceleratorSetting; whisper_gpu_device?: number; extra_recording_buffer_ms?: number; 
+/**
+ * Opt-in, on-device personalization (issue #16, Tier 1). Off by default. See
+ * [`PersonalizationData`].
+ */
+personalization?: PersonalizationData }
 export type AudioDevice = { index: string; name: string; is_default: boolean }
 export type AutoSubmitKey = "enter" | "ctrl_enter" | "cmd_enter"
 export type AvailableAccelerators = { whisper: string[]; ort: string[]; gpu_devices: GpuDeviceOption[] }
@@ -884,7 +1003,14 @@ export type ClipboardHandling = "dont_modify" | "copy_to_clipboard"
 export type CustomSounds = { start: boolean; stop: boolean }
 export type EngineType = "Whisper" | "Parakeet" | "Moonshine" | "MoonshineStreaming" | "SenseVoice" | "GigaAM" | "Canary" | "Cohere"
 export type GpuDeviceOption = { id: number; name: string; total_vram_mb: number }
-export type HistoryEntry = { id: number; file_name: string; timestamp: number; saved: boolean; title: string; transcription_text: string; post_processed_text: string | null; post_process_prompt: string | null; post_process_requested: boolean; raw_requested: boolean }
+export type HistoryEntry = { id: number; file_name: string; timestamp: number; saved: boolean; title: string; transcription_text: string; post_processed_text: string | null; post_process_prompt: string | null; post_process_requested: boolean; 
+/**
+ * Whether this dictation was emitted as raw text (the effective raw decision at creation
+ * time, after combining the per-dictation request with the persisted `raw_output` toggle).
+ * Persisted so a retry reproduces the original formatting instead of following whatever raw
+ * mode is active now.
+ */
+raw_requested: boolean }
 export type HistoryUpdatePayload = { action: "added"; entry: HistoryEntry } | { action: "updated"; entry: HistoryEntry } | { action: "deleted"; id: number } | { action: "toggled"; id: number }
 /**
  * Result of changing keyboard implementation
@@ -901,12 +1027,52 @@ export type ModelInfo = { id: string; name: string; description: string; filenam
 export type ModelLoadStatus = { is_loaded: boolean; current_model: string | null }
 export type ModelUnloadTimeout = "never" | "immediately" | "min_2" | "min_5" | "min_10" | "min_15" | "hour_1" | "sec_15"
 export type OrtAcceleratorSetting = "auto" | "cpu" | "cuda" | "directml" | "rocm"
+/**
+ * A 3x3 grid of placement anchors on a monitor's work area. Used by #9's
+ * reposition feature: the user picks an anchor (and can drag to nudge), and
+ * the overlay is placed relative to that anchor on whichever monitor has the
+ * cursor, then clamped fully on-screen.
+ */
 export type OverlayAnchor = "topleft" | "topcenter" | "topright" | "middleleft" | "middlecenter" | "middleright" | "bottomleft" | "bottomcenter" | "bottomright"
+/**
+ * A user-chosen overlay placement that overrides the centered Top/Bottom
+ * default: an anchor on the active monitor plus a logical-pixel nudge (dx, dy)
+ * from that anchor, set by dragging the bug. When `overlay_custom_position` is
+ * `None`, the overlay uses the default centered Top/Bottom placement.
+ */
 export type OverlayCustomPosition = { anchor: OverlayAnchor; dx: number; dy: number }
 export type OverlayPosition = "none" | "top" | "bottom"
 export type PaginatedHistory = { entries: HistoryEntry[]; has_more: boolean }
 export type PasteMethod = "ctrl_v" | "direct" | "none" | "shift_insert" | "ctrl_shift_v" | "external_script"
 export type PermissionAccess = "allowed" | "denied" | "unknown"
+/**
+ * Opt-in, on-device personalization data (issue #16, Tier 1).
+ * 
+ * Kept in a separate store from the user-authored `custom_words`/`word_replacements` so it can be
+ * inspected, exported, and reset on its own without ever touching hand-authored entries. All
+ * processing is local; nothing leaves the device. When `enabled` is false (the default) none of
+ * this data affects transcription and no history mining is surfaced.
+ */
+export type PersonalizationData = { 
+/**
+ * Opt-in master switch. Off by default.
+ */
+enabled?: boolean; 
+/**
+ * Words the user accepted from history-mined suggestions. Applied like `custom_words` (fuzzy)
+ * when `enabled`.
+ */
+learned_words?: string[]; 
+/**
+ * Learned heard->meant corrections captured from in-app transcript edits (issue #16 PR2).
+ * Defined now for a forward-compatible data model; empty until the capture surface ships.
+ * Applied like `word_replacements` (deterministic) when `enabled`.
+ */
+learned_replacements?: WordReplacement[]; 
+/**
+ * Mined suggestions the user dismissed, so they are never surfaced again.
+ */
+dismissed_suggestions?: string[] }
 export type PostProcessProvider = { id: string; label: string; base_url: string; allow_base_url_edit?: boolean; models_endpoint?: string | null; supports_structured_output?: boolean }
 export type RecordingRetentionPeriod = "never" | "preserve_limit" | "days_3" | "weeks_2" | "months_3"
 export type SecretMap = Partial<{ [key in string]: string }>
@@ -915,7 +1081,44 @@ export type SoundTheme = "marimba" | "pop" | "custom"
 export type TypingTool = "auto" | "wtype" | "kwtype" | "dotool" | "ydotool" | "xdotool"
 export type WhisperAcceleratorSetting = "auto" | "cpu" | "gpu"
 export type WindowsMicrophonePermissionStatus = { supported: boolean; overall_access: PermissionAccess; device_access: PermissionAccess; app_access: PermissionAccess; desktop_app_access: PermissionAccess }
-export type WordReplacement = { from: string; to: string; whole_word?: boolean; case_sensitive?: boolean }
+/**
+ * A deterministic literal text replacement applied after fuzzy custom-word correction.
+ * 
+ * Unlike the fuzzy dictionary, this maps an exact heard phrase to an exact output, which is
+ * the only safe way to fix large mishears the fuzzy matcher cannot (and must not) guess at,
+ * e.g. "clawed" -> "Claude" (50% edit distance, phonetically distinct). Replacements run for
+ * every engine and are applied in order.
+ */
+export type WordReplacement = { 
+/**
+ * The text to find, as heard/transcribed. May contain spaces for multi-word phrases.
+ */
+from: string; 
+/**
+ * The replacement text. An empty string deletes the matched text.
+ */
+to: string; 
+/**
+ * Match only on whole-word boundaries (default true). When false, matches substrings too.
+ */
+whole_word?: boolean; 
+/**
+ * Match case-sensitively (default false). When false, matching ignores case and the
+ * replacement adapts to the matched text's case pattern.
+ */
+case_sensitive?: boolean }
+/**
+ * A mined vocabulary suggestion: a word the user frequently dictates, with its occurrence count.
+ */
+export type WordSuggestion = { 
+/**
+ * The suggested surface form (the most frequent capitalized spelling seen in history).
+ */
+word: string; 
+/**
+ * How many times the word appears across the mined transcripts.
+ */
+count: number }
 
 /** tauri-specta globals **/
 

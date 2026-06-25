@@ -5,6 +5,7 @@ import { ModelUnloadTimeoutSetting } from "../ModelUnloadTimeout";
 import { DictionaryGuide } from "../DictionaryGuide";
 import { CustomWords } from "../CustomWords";
 import { WordReplacements } from "../WordReplacements";
+import { PersonalizationSettings } from "../PersonalizationSettings";
 import { RawOutput } from "../RawOutput";
 import { ShortcutInput } from "../ShortcutInput";
 import { SettingsGroup } from "../../ui/SettingsGroup";
@@ -52,6 +53,7 @@ export const AdvancedSettings: React.FC = () => {
         <DictionaryGuide grouped />
         <CustomWords descriptionMode="tooltip" grouped />
         <WordReplacements descriptionMode="tooltip" grouped />
+        <PersonalizationSettings descriptionMode="tooltip" grouped />
         <RawOutput descriptionMode="tooltip" grouped={true} />
         <ShortcutInput shortcutId="transcribe_raw" grouped={true} />
         <AppendTrailingSpace descriptionMode="tooltip" grouped={true} />

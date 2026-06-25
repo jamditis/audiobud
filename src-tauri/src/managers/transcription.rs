@@ -475,6 +475,33 @@ impl TranscriptionManager {
         // Get current settings for configuration
         let settings = get_settings(&self.app_handle);
 
+        // When opt-in personalization (issue #16) is enabled, fold the learned dictionary into the
+        // effective lists handed to the existing matcher: learned words bias/fuzzy-correct exactly
+        // like `custom_words`, and learned replacements run deterministically like
+        // `word_replacements`. When disabled these are the user-authored lists verbatim, so the
+        // pipeline behaves identically to before.
+        let effective_custom_words: Vec<String> = if settings.personalization.enabled {
+            settings
+                .custom_words
+                .iter()
+                .chain(settings.personalization.learned_words.iter())
+                .cloned()
+                .collect()
+        } else {
+            settings.custom_words.clone()
+        };
+        let effective_replacements: Vec<crate::settings::WordReplacement> =
+            if settings.personalization.enabled {
+                settings
+                    .word_replacements
+                    .iter()
+                    .chain(settings.personalization.learned_replacements.iter())
+                    .cloned()
+                    .collect()
+            } else {
+                settings.word_replacements.clone()
+            };
+
         // Validate selected language against the model's supported languages.
         // If the language isn't supported, fall back to "auto" to prevent errors.
         let validated_language = if settings.selected_language == "auto" {
@@ -543,10 +570,10 @@ impl TranscriptionManager {
                             let params = WhisperInferenceParams {
                                 language: whisper_language,
                                 translate: settings.translate_to_english,
-                                initial_prompt: if settings.custom_words.is_empty() {
+                                initial_prompt: if effective_custom_words.is_empty() {
                                     None
                                 } else {
-                                    Some(settings.custom_words.join(", "))
+                                    Some(effective_custom_words.join(", "))
                                 },
                                 ..Default::default()
                             };
@@ -690,10 +717,10 @@ impl TranscriptionManager {
             .map(|info| matches!(info.engine_type, EngineType::Whisper))
             .unwrap_or(false);
 
-        let corrected_result = if !settings.custom_words.is_empty() && !is_whisper {
+        let corrected_result = if !effective_custom_words.is_empty() && !is_whisper {
             apply_custom_words(
                 &result.text,
-                &settings.custom_words,
+                &effective_custom_words,
                 settings.word_correction_threshold,
             )
         } else {
@@ -703,10 +730,10 @@ impl TranscriptionManager {
         // Apply deterministic literal replacements. Unlike the fuzzy dictionary these are exact
         // and safe, so they run for every engine (Whisper still mishears) -- this is the path
         // that fixes large mishears like "clawed" -> "Claude".
-        let corrected_result = if settings.word_replacements.is_empty() {
+        let corrected_result = if effective_replacements.is_empty() {
             corrected_result
         } else {
-            apply_replacements(&corrected_result, &settings.word_replacements)
+            apply_replacements(&corrected_result, &effective_replacements)
         };
 
         // Filter out filler words and hallucinations
