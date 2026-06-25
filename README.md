@@ -12,7 +12,7 @@ AudioBud is a detached fork of [Handy](https://github.com/cjpais/Handy) by CJ Pa
 
 ## Current status
 
-The current release is `v0.2.0`, packaged for Windows x64. The build is not code-signed yet, so Windows SmartScreen warns on first launch. Choose **More info -> Run anyway** if you trust the build, or [build from source](#build-from-source).
+The current release is `v0.3.0`, packaged for Windows x64. The build is not code-signed yet, so Windows SmartScreen warns on first launch. Choose **More info -> Run anyway** if you trust the build, or [build from source](#build-from-source).
 
 Windows is the validated target for this milestone. macOS and Linux code is inherited from Handy and may work, but this fork has not validated those builds yet.
 
@@ -57,8 +57,8 @@ Parakeet V3 is the Windows default in this fork because it was the best small lo
 
 Download the Windows installer from the [latest release](https://github.com/jamditis/audiobud/releases/latest):
 
-- `AudioBud_0.2.0_x64-setup.exe`
-- `AudioBud_0.2.0_x64_en-US.msi`
+- `AudioBud_0.3.0_x64-setup.exe`
+- `AudioBud_0.3.0_x64_en-US.msi`
 
 On first run, choose a model if one is not already installed and grant microphone permission when Windows asks.
 
