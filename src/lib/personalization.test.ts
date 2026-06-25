@@ -26,3 +26,13 @@ test("true when only dismissed_suggestions present", () => {
     }),
   ).toBe(true);
 });
+
+test("true when only learned_replacements present", () => {
+  expect(
+    hasStoredPersonalizationData({
+      learned_words: [],
+      learned_replacements: [{ from: "lite coin", to: "Litecoin" }],
+      dismissed_suggestions: [],
+    }),
+  ).toBe(true);
+});
