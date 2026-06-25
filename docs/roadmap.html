@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AudioBud roadmap</title>
+    <meta
+      name="description"
+      content="Milestones and status for AudioBud, the local-first Windows dictation app: what has shipped and what is planned next."
+    />
+    <link rel="canonical" href="https://jamditis.github.io/audiobud/roadmap.html" />
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <meta property="og:title" content="AudioBud roadmap" />
+    <meta
+      property="og:description"
+      content="What has shipped and what is planned next for AudioBud, the local-first Windows dictation app."
+    />
+    <meta property="og:type" content="website" />
+    <meta
+      property="og:url"
+      content="https://jamditis.github.io/audiobud/roadmap.html"
+    />
+    <meta
+      property="og:image"
+      content="https://jamditis.github.io/audiobud/assets/og-image.png"
+    />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="AudioBud roadmap" />
+    <meta
+      name="twitter:description"
+      content="What has shipped and what is planned next for AudioBud, the local-first Windows dictation app."
+    />
+    <meta
+      name="twitter:image"
+      content="https://jamditis.github.io/audiobud/assets/og-image.png"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="swamp" aria-hidden="true"></div>
+    <header class="site-header">
+      <nav class="nav" aria-label="Primary">
+        <a class="brand" href="./index.html#top" aria-label="AudioBud home">
+          <img class="brand-mark" src="./favicon.svg" alt="" />
+          <span>AudioBud</span>
+        </a>
+        <div class="nav-links">
+          <a href="./index.html#how">How it works</a>
+          <a href="./index.html#features">Features</a>
+          <a href="./index.html#models">Models</a>
+          <a href="./index.html#install">Install</a>
+          <a href="./roadmap.html" aria-current="page">Roadmap</a>
+        </div>
+      </nav>
+    </header>
+
+    <main id="top">
+      <section class="section">
+        <div class="wrap">
+          <p class="eyebrow">Roadmap</p>
+          <div class="section-head">
+            <h2>Where AudioBud is headed.</h2>
+            <p>
+              Themes and status, not dates. Each milestone links to its issues
+              on GitHub. Near-term versions carry firm issue lists; the later
+              feature bets are directional, and v1.0.0 is a quality gate.
+            </p>
+          </div>
+          <div class="roadmap-grid">
+            <article class="roadmap-card">
+              <div class="roadmap-card-head">
+                <h3>v0.3.0 &mdash; personalization &amp; packaging</h3>
+                <span class="status-pill status-progress">in progress</span>
+              </div>
+              <p>
+                Finalize the on-device learned dictionary so AudioBud adapts to
+                your vocabulary, and tighten the Windows installer.
+              </p>
+              <a
+                class="roadmap-link"
+                href="https://github.com/jamditis/audiobud/milestone/3"
+                >View milestone &rarr;</a
+              >
+            </article>
+            <article class="roadmap-card">
+              <div class="roadmap-card-head">
+                <h3>v0.3.1 &mdash; critical stability patch</h3>
+                <span class="status-pill status-planned">planned</span>
+              </div>
+              <p>
+                Default-engine data-loss and crash fixes: history auto-delete,
+                non-ASCII profile paths, clipboard contents, and a watchdog for
+                a stuck transcription.
+              </p>
+              <a
+                class="roadmap-link"
+                href="https://github.com/jamditis/audiobud/milestone/4"
+                >View milestone &rarr;</a
+              >
+            </article>
+            <article class="roadmap-card">
+              <div class="roadmap-card-head">
+                <h3>v0.4.0 &mdash; signed &amp; distributable</h3>
+                <span class="status-pill status-planned">planned</span>
+              </div>
+              <p>
+                A signed installer with no SmartScreen warning, the updater
+                repointed to AudioBud so automatic updates work again, and a
+                self-contained install.
+              </p>
+              <a
+                class="roadmap-link"
+                href="https://github.com/jamditis/audiobud/milestone/5"
+                >View milestone &rarr;</a
+              >
+            </article>
+            <article class="roadmap-card">
+              <div class="roadmap-card-head">
+                <h3>v0.5.0 &mdash; stability &amp; reliability</h3>
+                <span class="status-pill status-planned">planned</span>
+              </div>
+              <p>
+                The remaining inherited reliability bugs and a full
+                accessibility pass across the settings, model picker, and
+                dialogs.
+              </p>
+              <a
+                class="roadmap-link"
+                href="https://github.com/jamditis/audiobud/milestone/6"
+                >View milestone &rarr;</a
+              >
+            </article>
+            <article class="roadmap-card">
+              <div class="roadmap-card-head">
+                <h3>v0.6.0 &mdash; on-device AI cleanup</h3>
+                <span class="status-pill status-planned">planned</span>
+              </div>
+              <p>
+                Optional transcript cleanup with a local LLM &mdash; never the
+                cloud &mdash; plus cheaper accuracy wins, the long-audio fix,
+                and a real-time preview.
+              </p>
+              <a
+                class="roadmap-link"
+                href="https://github.com/jamditis/audiobud/milestone/7"
+                >View milestone &rarr;</a
+              >
+            </article>
+            <article class="roadmap-card">
+              <div class="roadmap-card-head">
+                <h3>v0.7.0 &mdash; interaction &amp; personality</h3>
+                <span class="status-pill status-planned">planned</span>
+              </div>
+              <p>
+                Voice-driven editing commands, an in-app tutorial, and more of
+                the frog mascot's personality.
+              </p>
+              <a
+                class="roadmap-link"
+                href="https://github.com/jamditis/audiobud/milestone/8"
+                >View milestone &rarr;</a
+              >
+            </article>
+            <article class="roadmap-card">
+              <div class="roadmap-card-head">
+                <h3>v1.0.0 &mdash; cross-platform &amp; stable</h3>
+                <span class="status-pill status-planned">planned</span>
+              </div>
+              <p>
+                Validate the macOS and Linux builds, finish the remaining
+                hardening, and complete the documentation.
+              </p>
+              <a
+                class="roadmap-link"
+                href="https://github.com/jamditis/audiobud/milestone/9"
+                >View milestone &rarr;</a
+              >
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="section alt">
+        <div class="wrap">
+          <div class="section-head">
+            <h2>What has shipped.</h2>
+            <p>
+              Released builds, newest first. The full notes live in the
+              changelog.
+            </p>
+          </div>
+          <div class="roadmap-grid">
+            <article class="roadmap-card">
+              <div class="roadmap-card-head">
+                <h3>v0.2.0</h3>
+                <span class="status-pill status-shipped">shipped</span>
+              </div>
+              <p>
+                On-device personalization, a self-contained installer with a
+                portable build, the overlay placement grid, tray quick-toggles,
+                and a dictionary that stops correcting words that were already
+                right.
+              </p>
+              <a
+                class="roadmap-link"
+                href="https://github.com/jamditis/audiobud/releases/tag/v0.2.0"
+                >Release notes &rarr;</a
+              >
+            </article>
+            <article class="roadmap-card">
+              <div class="roadmap-card-head">
+                <h3>v0.1.0</h3>
+                <span class="status-pill status-shipped">shipped</span>
+              </div>
+              <p>
+                The first working local prototype, forked from Handy with the
+                frog and swamp identity and a Windows-first default engine.
+              </p>
+              <a
+                class="roadmap-link"
+                href="https://github.com/jamditis/audiobud/releases/tag/v0.1.0"
+                >Release notes &rarr;</a
+              >
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="wrap">
+          <div class="notice">
+            <p>
+              <strong>Exploring, not scheduled:</strong> wake-word activation
+              and local audio-file transcription are research bets with no
+              milestone yet. They join the roadmap only once they prove out.
+            </p>
+            <a class="button" href="https://github.com/jamditis/audiobud/issues"
+              >All issues</a
+            >
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="wrap">
+        <span>AudioBud is a detached fork of Handy by CJ Pais.</span>
+        <span>MIT licensed.</span>
+      </div>
+    </footer>
+  </body>
+</html>
