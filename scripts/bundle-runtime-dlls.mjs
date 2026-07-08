@@ -1,9 +1,9 @@
 // Stage the Windows runtime DLLs that audiobud.exe load-time-imports next to the
 // freshly built executable so both installers ship them and the app launches on a
 // clean machine that lacks the VC++ Redistributable or a driver-supplied Vulkan
-// loader. The MSI bundler harvests the binary's sibling DLLs automatically (the
-// same way DirectML.dll already gets picked up); the NSIS bundler does not, so the
-// custom template (src-tauri/nsis/installer.nsi) adds them explicitly with File.
+// loader. The MSI bundler harvests the binary's sibling DLLs automatically; the
+// NSIS bundler does not, so the custom template (src-tauri/nsis/installer.nsi)
+// adds them explicitly with File.
 //
 // Runs as Tauri's beforeBundleCommand: after the Rust build produces the exe and
 // before the installers are assembled. No-op on non-Windows so macOS and Linux
@@ -17,6 +17,12 @@
 //   - vulkan-1.dll: the Vulkan loader ships with GPU drivers, not the SDK, so CI
 //     fetches the LunarG runtime components and points VULKAN_RUNTIME_DLL at the
 //     extracted x64 loader. A driver-equipped dev box falls back to System32.
+//
+// This script also verifies (does not stage) DirectML.dll: it is produced next to
+// the exe by the ort-directml build, so the MSI harvests it as a sibling and the
+// NSIS template Files it for parity. Verifying it here fails the build with a clear
+// message if the build did not produce it, instead of a cryptic makensis "File:
+// could not find" later. See issue #44.
 
 import { copyFileSync, existsSync, statSync } from "node:fs";
 import { join } from "node:path";
@@ -113,11 +119,35 @@ for (const dll of dlls) {
   );
 }
 
+// DLLs the build already places next to the exe (so the MSI harvests them as
+// siblings), which this script does NOT stage but the NSIS template Files for
+// MSI/NSIS parity. Verify they are present so a missing build product fails here
+// with a clear message rather than later in makensis. Copying them would be a
+// self-copy (source and destination are the same path), so verify only.
+const requiredSiblings = ["DirectML.dll"];
+for (const name of requiredSiblings) {
+  const siblingPath = join(outDir, name);
+  if (!existsSync(siblingPath)) {
+    console.error(
+      `[bundle-runtime-dlls] ${name} not found next to the exe at ${siblingPath}; ` +
+        "the NSIS installer Files it for MSI parity but the build did not " +
+        "produce it. Check the ort-directml build step.",
+    );
+    failed = true;
+    continue;
+  }
+  console.log(
+    `[bundle-runtime-dlls] ${name} present next to the exe (${statSync(siblingPath).size} bytes)`,
+  );
+}
+
 if (failed) {
   console.error(
     "[bundle-runtime-dlls] missing runtime DLLs; failing the build so a " +
-      "non-launching installer is never produced.",
+      "non-launching or inconsistent installer is never produced.",
   );
   process.exit(1);
 }
-console.log("[bundle-runtime-dlls] all runtime DLLs staged next to the exe");
+console.log(
+  "[bundle-runtime-dlls] all runtime DLLs staged and required siblings verified",
+);

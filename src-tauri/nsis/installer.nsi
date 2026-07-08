@@ -750,12 +750,20 @@ Section Install
   ; Vulkan loader fails to launch. Derive the build directory at compile time by
   ; stripping the exe name off MAINBINARYSRCPATH (leaves a trailing backslash,
   ; e.g. C:\...\release\). See issue #36.
+  ;
+  ; DirectML.dll is the ONNX Runtime DirectML execution provider, produced next to
+  ; the exe by the ort-directml build. The MSI harvests it as a sibling; NSIS Files
+  ; it explicitly here for parity, so both installers run the DirectML version the
+  ; app was built against instead of the NSIS build silently using the OS in-box
+  ; copy. bundle-runtime-dlls.mjs verifies it is present so a missing build product
+  ; fails loudly rather than shipping an inconsistent installer. See issue #44.
   !searchreplace MAINBINARYDIR "${MAINBINARYSRCPATH}" "${MAINBINARYNAME}.exe" ""
   File "${MAINBINARYDIR}msvcp140.dll"
   File "${MAINBINARYDIR}msvcp140_1.dll"
   File "${MAINBINARYDIR}vcruntime140.dll"
   File "${MAINBINARYDIR}vcruntime140_1.dll"
   File "${MAINBINARYDIR}vulkan-1.dll"
+  File "${MAINBINARYDIR}DirectML.dll"
 
   ; Copy resources
   {{#each resources_dirs}}
@@ -914,13 +922,14 @@ Section Uninstall
   Delete "$INSTDIR\${MAINBINARYNAME}.exe"
 
   ; Delete the app-local runtime DLLs added to the install payload above (see
-  ; issue #36); without these the files linger and RMDir "$INSTDIR" leaves the
-  ; install directory behind.
+  ; issues #36 and #44); without these the files linger and RMDir "$INSTDIR"
+  ; leaves the install directory behind.
   Delete "$INSTDIR\msvcp140.dll"
   Delete "$INSTDIR\msvcp140_1.dll"
   Delete "$INSTDIR\vcruntime140.dll"
   Delete "$INSTDIR\vcruntime140_1.dll"
   Delete "$INSTDIR\vulkan-1.dll"
+  Delete "$INSTDIR\DirectML.dll"
 
   ; Delete resources
   {{#each resources}}
