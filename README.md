@@ -158,3 +158,5 @@ AudioBud builds on [Handy](https://github.com/cjpais/Handy) by CJ Pais and its c
 ## License
 
 MIT. See [LICENSE](LICENSE). AudioBud is a fork of Handy, and the original copyright notice is retained.
+
+The Windows installers also redistribute a few third-party runtime libraries app-locally (the Microsoft Visual C++ runtime, the Vulkan loader, and Microsoft DirectML). Their license notices are in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
