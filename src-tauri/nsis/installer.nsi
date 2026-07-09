@@ -765,6 +765,10 @@ Section Install
   File "${MAINBINARYDIR}vulkan-1.dll"
   File "${MAINBINARYDIR}DirectML.dll"
 
+  ; Ship the third-party license notices for the redistributed runtime DLLs
+  ; above (issue #45); bundle-runtime-dlls.mjs stages it next to the exe.
+  File "${MAINBINARYDIR}THIRD_PARTY_NOTICES.md"
+
   ; Copy resources
   {{#each resources_dirs}}
     CreateDirectory "$INSTDIR\\{{this}}"
@@ -930,6 +934,7 @@ Section Uninstall
   Delete "$INSTDIR\vcruntime140_1.dll"
   Delete "$INSTDIR\vulkan-1.dll"
   Delete "$INSTDIR\DirectML.dll"
+  Delete "$INSTDIR\THIRD_PARTY_NOTICES.md"
 
   ; Delete resources
   {{#each resources}}
