@@ -18,6 +18,7 @@ import {
 const goodWindows = (over: Partial<SystemFacts> = {}): SystemFacts => ({
   platform: "windows",
   arch: "x64",
+  windowsVersionSupported: true,
   totalRamMb: RECOMMENDED_RAM_MB,
   freeDiskMb: MIN_FREE_DISK_MB * 2,
   webview2Present: true,
@@ -52,6 +53,15 @@ describe("hard requirements block launch with an actionable message", () => {
     expect(report.launchable).toBe(false);
     const arch = report.blocking.find((r) => r.id === "arch");
     expect(arch?.message).toMatch(/arm64/);
+  });
+
+  it("blocks a Windows version below the documented floor", () => {
+    const report = evaluatePreflight(goodWindows({ windowsVersionSupported: false }));
+    expect(report.launchable).toBe(false);
+    const os = report.blocking.find((r) => r.id === "windows-version");
+    expect(os?.severity).toBe("hard");
+    expect(os?.message).toMatch(/Windows 10/);
+    expect(os?.fix).toMatch(/Windows 10/);
   });
 
   it("reports every missing hard requirement at once, not just the first", () => {
@@ -157,6 +167,16 @@ describe("a failed probe is fail-safe: warn, never block", () => {
     expect(report.warnings.map((r) => r.id)).toEqual(
       expect.arrayContaining(["ram", "disk"]),
     );
+  });
+
+  it("does not block when the OS-version probe is unwired or fails", () => {
+    // The adapter that reports the Windows build may not be present yet; an
+    // unknown OS version must warn, never lock out a machine that is actually fine.
+    const report = evaluatePreflight(goodWindows({ windowsVersionSupported: undefined }));
+    expect(report.launchable).toBe(true);
+    const os = report.results.find((r) => r.id === "windows-version");
+    expect(os?.status).toBe("unknown");
+    expect(report.warnings.map((r) => r.id)).toContain("windows-version");
   });
 });
 

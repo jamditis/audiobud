@@ -56,6 +56,8 @@ export interface SystemFacts {
   arch?: string;
   totalRamMb?: number;
   freeDiskMb?: number;
+  /** Whether the Windows build is version 10 or newer, the documented hard floor. Windows-only. */
+  windowsVersionSupported?: boolean;
   /** The WebView2 runtime the Windows UI needs (#39). */
   webview2Present?: boolean;
   /** VC++ CRT and the Vulkan loader the Windows engines need (#36, #44). */
@@ -144,6 +146,38 @@ function checkArch(facts: SystemFacts): RequirementResult {
     };
   }
   return ok(id, label, "hard", "Running on a supported 64-bit (x64) processor.");
+}
+
+/**
+ * Windows 10 is the documented hard floor; older builds lack the WebView2 and
+ * runtime support the app needs. The adapter decides whether the OS build clears
+ * the floor and passes the verdict as a boolean — version parsing stays out of
+ * this pure core. Undefined (probe not wired yet) fails safe to a warning.
+ */
+function checkWindowsVersion(facts: SystemFacts): RequirementResult {
+  const id = "windows-version";
+  const label = "Windows 10 or newer";
+  if (facts.windowsVersionSupported === undefined) {
+    return {
+      id,
+      label,
+      severity: "hard",
+      status: "unknown",
+      message: "Could not determine the Windows version.",
+      fix: "AudioBud needs 64-bit Windows 10 or newer; upgrade if you are on an older release.",
+    };
+  }
+  if (!facts.windowsVersionSupported) {
+    return {
+      id,
+      label,
+      severity: "hard",
+      status: "missing",
+      message: "This Windows version is older than the required Windows 10, so AudioBud cannot run.",
+      fix: "Upgrade to 64-bit Windows 10 or newer, then relaunch AudioBud.",
+    };
+  }
+  return ok(id, label, "hard", "Running on a supported Windows version (10 or newer).");
 }
 
 /** The WebView2 runtime the Windows UI renders in; without it the window never opens (#39). */
@@ -300,14 +334,22 @@ function gb(mb: number): string {
 
 /**
  * The checks that apply to each platform. Windows is the validated target and
- * carries the full hard gate (arch, WebView2, runtime DLLs); macOS and Linux are
- * inherited from upstream Handy and not yet validated here, so they run only the
- * soft, non-blocking checks — an unvalidated platform should warn, never claim a
- * hard pass it has not earned.
+ * carries the full hard gate (arch, OS version, WebView2, runtime DLLs); macOS
+ * and Linux are inherited from upstream Handy and not yet validated here, so they
+ * run only the soft, non-blocking checks — an unvalidated platform should warn,
+ * never claim a hard pass it has not earned.
  */
 function checksFor(platform: Platform): Array<(f: SystemFacts) => RequirementResult> {
   if (platform === "windows") {
-    return [checkArch, checkWebView2, checkRuntimeDlls, checkRam, checkDisk, checkAcceleration];
+    return [
+      checkArch,
+      checkWindowsVersion,
+      checkWebView2,
+      checkRuntimeDlls,
+      checkRam,
+      checkDisk,
+      checkAcceleration,
+    ];
   }
   return [checkRam, checkDisk, checkAcceleration];
 }

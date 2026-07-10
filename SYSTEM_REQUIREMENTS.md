@@ -15,7 +15,7 @@ rows are best-effort.
 | Requirement | Minimum | Recommended | Hard or soft |
 |-------------|---------|-------------|--------------|
 | Architecture | 64-bit (x64) | 64-bit (x64) | Hard — the build is x64 only |
-| OS | Windows 10 (64-bit) | Windows 11 | Hard |
+| OS | Windows 10 (64-bit) | Windows 11 | Hard — older builds lack the WebView2 and runtime support the app needs |
 | WebView2 runtime | Installed | Installed | Hard — the app window renders in it (#39) |
 | Visual C++ runtime, Vulkan loader | Installed | Installed | Hard — the engines link against them (#36, #44) |
 | Memory (RAM) | 4 GB | 8 GB | Soft — below 4 GB, larger models can run out of memory |
