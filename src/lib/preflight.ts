@@ -184,7 +184,7 @@ function checkRuntimeDlls(facts: SystemFacts): RequirementResult {
       severity: "hard",
       status: "unknown",
       message: "Could not check for the required Windows runtime libraries.",
-      fix: "If transcription fails to start, install the latest Microsoft Visual C++ redistributable.",
+      fix: "If transcription fails to start, install the latest Microsoft Visual C++ redistributable and update your Vulkan-capable GPU drivers (or install the Vulkan runtime).",
     };
   }
   if (!facts.runtimeDllsPresent) {
@@ -193,8 +193,11 @@ function checkRuntimeDlls(facts: SystemFacts): RequirementResult {
       label,
       severity: "hard",
       status: "missing",
+      // The message names both libraries, so the fix must cover both — the VC++
+      // runtime and the Vulkan loader come from different installers, and a
+      // machine missing only Vulkan stays blocked if it is told to install VC++.
       message: "Required Windows runtime libraries (Visual C++ runtime, Vulkan loader) are missing, so transcription cannot start.",
-      fix: "Install the latest Microsoft Visual C++ redistributable, then relaunch AudioBud.",
+      fix: "Install the latest Microsoft Visual C++ redistributable and update your Vulkan-capable GPU drivers (or install the Vulkan runtime), then relaunch AudioBud.",
     };
   }
   return ok(id, label, "hard", "The required Windows runtime libraries are present.");

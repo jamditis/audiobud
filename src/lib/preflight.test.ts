@@ -39,7 +39,12 @@ describe("hard requirements block launch with an actionable message", () => {
   it("blocks when the Windows runtime DLLs are missing", () => {
     const report = evaluatePreflight(goodWindows({ runtimeDllsPresent: false }));
     expect(report.launchable).toBe(false);
-    expect(report.blocking.map((r) => r.id)).toContain("runtime-dlls");
+    const dlls = report.blocking.find((r) => r.id === "runtime-dlls");
+    expect(dlls).toBeDefined();
+    // The message names both libraries, so the remediation must cover both —
+    // a machine missing only Vulkan stays blocked if told only to install VC++.
+    expect(dlls?.fix).toMatch(/Visual C\+\+/);
+    expect(dlls?.fix).toMatch(/Vulkan/);
   });
 
   it("blocks a non-x64 machine", () => {
