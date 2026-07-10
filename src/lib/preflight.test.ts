@@ -1,6 +1,7 @@
 import { describe, it, expect } from "bun:test";
 import {
   evaluatePreflight,
+  isX64Arch,
   MIN_RAM_MB,
   RECOMMENDED_RAM_MB,
   MIN_FREE_DISK_MB,
@@ -58,6 +59,33 @@ describe("hard requirements block launch with an actionable message", () => {
       "runtime-dlls",
       "webview2",
     ]);
+  });
+});
+
+describe("the arch gate accepts x64 under every probe's spelling", () => {
+  // The same x64 machine is named "x64" (Node), "x86_64" (Rust/Tauri), or
+  // "AMD64" (Windows env) depending on which probe the adapter used. All three
+  // must pass, or a valid target machine is blocked at launch.
+  it.each(["x64", "x86_64", "amd64", "AMD64", "  x86_64  "])(
+    "treats %p as a supported 64-bit processor",
+    (arch) => {
+      const report = evaluatePreflight(goodWindows({ arch }));
+      expect(report.launchable).toBe(true);
+      expect(report.results.find((r) => r.id === "arch")?.status).toBe("ok");
+    },
+  );
+
+  it("still blocks genuinely unsupported architectures", () => {
+    for (const arch of ["arm64", "aarch64", "x86", "i686"]) {
+      const report = evaluatePreflight(goodWindows({ arch }));
+      expect(report.launchable).toBe(false);
+      expect(report.blocking.map((r) => r.id)).toContain("arch");
+    }
+  });
+
+  it("isX64Arch matches the aliases and rejects everything else", () => {
+    expect(["x64", "x86_64", "amd64", "AMD64", "x86_64 "].every(isX64Arch)).toBe(true);
+    expect(["arm64", "aarch64", "x86", "i686", ""].some(isX64Arch)).toBe(false);
   });
 });
 

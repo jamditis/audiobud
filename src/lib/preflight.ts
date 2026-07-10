@@ -107,6 +107,18 @@ const ok = (
   message: string,
 ): RequirementResult => ({ id, label, severity, status: "ok", message });
 
+// The same x64 machine is named differently by different probes: Rust/Tauri
+// (`std::env::consts::ARCH`) reports "x86_64", the Windows environment reports
+// "AMD64", and Node's `process.arch` reports "x64". The hard gate must accept all
+// of them, or a valid x64 machine whose adapter used the Rust name would be
+// blocked at launch — the exact opaque-failure this check exists to prevent.
+const X64_ALIASES = new Set(["x64", "x86_64", "amd64"]);
+
+/** Whether a probed architecture string names a 64-bit x86 machine, in any of its spellings. */
+export function isX64Arch(arch: string): boolean {
+  return X64_ALIASES.has(arch.trim().toLowerCase());
+}
+
 /** x64 is the built target; any other architecture cannot run the bundled binaries. */
 function checkArch(facts: SystemFacts): RequirementResult {
   const id = "arch";
@@ -121,7 +133,7 @@ function checkArch(facts: SystemFacts): RequirementResult {
       fix: "AudioBud ships as a 64-bit (x64) build; a 32-bit or ARM machine cannot run it.",
     };
   }
-  if (facts.arch !== "x64") {
+  if (!isX64Arch(facts.arch)) {
     return {
       id,
       label,
