@@ -12,15 +12,15 @@ rows are best-effort.
 
 ## Windows (validated)
 
-| Requirement | Minimum | Recommended | Hard or soft |
-|-------------|---------|-------------|--------------|
-| Architecture | 64-bit (x64) | 64-bit (x64) | Hard — the build is x64 only |
-| OS | Windows 10 (64-bit) | Windows 11 | Hard — older builds lack the WebView2 and runtime support the app needs |
-| WebView2 runtime | Installed | Installed | Hard — the app window renders in it (#39) |
-| Visual C++ runtime, Vulkan loader | Installed | Installed | Hard — the engines link against them (#36, #44) |
-| Memory (RAM) | 4 GB | 8 GB | Soft — below 4 GB, larger models can run out of memory |
-| Free disk | 4 GB | 8 GB+ | Soft — covers the app plus at least one model download |
-| Acceleration | none (CPU) | Vulkan or DirectML GPU | Soft — CPU-only works but is slower |
+| Requirement                       | Minimum             | Recommended            | Hard or soft                                                            |
+| --------------------------------- | ------------------- | ---------------------- | ----------------------------------------------------------------------- |
+| Architecture                      | 64-bit (x64)        | 64-bit (x64)           | Hard — the build is x64 only                                            |
+| OS                                | Windows 10 (64-bit) | Windows 11             | Hard — older builds lack the WebView2 and runtime support the app needs |
+| WebView2 runtime                  | Installed           | Installed              | Hard — the app window renders in it (#39)                               |
+| Visual C++ runtime, Vulkan loader | Installed           | Installed              | Hard — the engines link against them (#36, #44)                         |
+| Memory (RAM)                      | 4 GB                | 8 GB                   | Soft — below 4 GB, larger models can run out of memory                  |
+| Free disk                         | 4 GB                | 8 GB+                  | Soft — covers the app plus at least one model download                  |
+| Acceleration                      | none (CPU)          | Vulkan or DirectML GPU | Soft — CPU-only works but is slower                                     |
 
 **Hard** requirements block launch when missing: the preflight check shows what
 is missing and how to fix it instead of the app failing silently. **Soft**
@@ -29,10 +29,10 @@ example, "pick a smaller model" on a low-memory machine) and lets you proceed.
 
 ## macOS and Linux (inherited, not yet validated)
 
-| Requirement | Minimum | Recommended |
-|-------------|---------|-------------|
-| Memory (RAM) | 4 GB | 8 GB |
-| Free disk | 4 GB | 8 GB+ |
+| Requirement  | Minimum    | Recommended                               |
+| ------------ | ---------- | ----------------------------------------- |
+| Memory (RAM) | 4 GB       | 8 GB                                      |
+| Free disk    | 4 GB       | 8 GB+                                     |
 | Acceleration | none (CPU) | Metal (macOS), Vulkan or OpenBLAS (Linux) |
 
 On these platforms the preflight check runs only the soft checks and warns

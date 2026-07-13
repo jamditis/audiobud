@@ -38,7 +38,9 @@ describe("hard requirements block launch with an actionable message", () => {
   });
 
   it("blocks when the Windows runtime DLLs are missing", () => {
-    const report = evaluatePreflight(goodWindows({ runtimeDllsPresent: false }));
+    const report = evaluatePreflight(
+      goodWindows({ runtimeDllsPresent: false }),
+    );
     expect(report.launchable).toBe(false);
     const dlls = report.blocking.find((r) => r.id === "runtime-dlls");
     expect(dlls).toBeDefined();
@@ -56,7 +58,9 @@ describe("hard requirements block launch with an actionable message", () => {
   });
 
   it("blocks a Windows version below the documented floor", () => {
-    const report = evaluatePreflight(goodWindows({ windowsVersionSupported: false }));
+    const report = evaluatePreflight(
+      goodWindows({ windowsVersionSupported: false }),
+    );
     expect(report.launchable).toBe(false);
     const os = report.blocking.find((r) => r.id === "windows-version");
     expect(os?.severity).toBe("hard");
@@ -66,7 +70,11 @@ describe("hard requirements block launch with an actionable message", () => {
 
   it("reports every missing hard requirement at once, not just the first", () => {
     const report = evaluatePreflight(
-      goodWindows({ webview2Present: false, runtimeDllsPresent: false, arch: "x86" }),
+      goodWindows({
+        webview2Present: false,
+        runtimeDllsPresent: false,
+        arch: "x86",
+      }),
     );
     expect(report.launchable).toBe(false);
     expect(report.blocking.map((r) => r.id).sort()).toEqual([
@@ -99,7 +107,9 @@ describe("the arch gate accepts x64 under every probe's spelling", () => {
   });
 
   it("isX64Arch matches the aliases and rejects everything else", () => {
-    expect(["x64", "x86_64", "amd64", "AMD64", "x86_64 "].every(isX64Arch)).toBe(true);
+    expect(
+      ["x64", "x86_64", "amd64", "AMD64", "x86_64 "].every(isX64Arch),
+    ).toBe(true);
     expect(["arm64", "aarch64", "x86", "i686", ""].some(isX64Arch)).toBe(false);
   });
 });
@@ -116,7 +126,9 @@ describe("soft shortfalls warn but never block", () => {
   });
 
   it("warns harder below the RAM minimum but still does not block", () => {
-    const report = evaluatePreflight(goodWindows({ totalRamMb: MIN_RAM_MB - 1024 }));
+    const report = evaluatePreflight(
+      goodWindows({ totalRamMb: MIN_RAM_MB - 1024 }),
+    );
     expect(report.launchable).toBe(true);
     const ram = report.results.find((r) => r.id === "ram");
     expect(ram?.status).toBe("degraded");
@@ -124,7 +136,9 @@ describe("soft shortfalls warn but never block", () => {
   });
 
   it("warns on a disk shortfall without blocking", () => {
-    const report = evaluatePreflight(goodWindows({ freeDiskMb: MIN_FREE_DISK_MB - 512 }));
+    const report = evaluatePreflight(
+      goodWindows({ freeDiskMb: MIN_FREE_DISK_MB - 512 }),
+    );
     expect(report.launchable).toBe(true);
     expect(report.warnings.map((r) => r.id)).toContain("disk");
   });
@@ -152,7 +166,9 @@ describe("a failed probe is fail-safe: warn, never block", () => {
   it("does not block when a hard probe returns unknown", () => {
     // A machine that is actually fine but whose WebView2 probe failed must not be
     // locked out — unknown surfaces as a warning, launch stays allowed.
-    const report = evaluatePreflight(goodWindows({ webview2Present: undefined }));
+    const report = evaluatePreflight(
+      goodWindows({ webview2Present: undefined }),
+    );
     expect(report.launchable).toBe(true);
     const webview2 = report.results.find((r) => r.id === "webview2");
     expect(webview2?.status).toBe("unknown");
@@ -172,7 +188,9 @@ describe("a failed probe is fail-safe: warn, never block", () => {
   it("does not block when the OS-version probe is unwired or fails", () => {
     // The adapter that reports the Windows build may not be present yet; an
     // unknown OS version must warn, never lock out a machine that is actually fine.
-    const report = evaluatePreflight(goodWindows({ windowsVersionSupported: undefined }));
+    const report = evaluatePreflight(
+      goodWindows({ windowsVersionSupported: undefined }),
+    );
     expect(report.launchable).toBe(true);
     const os = report.results.find((r) => r.id === "windows-version");
     expect(os?.status).toBe("unknown");
@@ -190,7 +208,11 @@ describe("unvalidated platforms run only the soft checks", () => {
     });
     expect(report.launchable).toBe(true);
     // No webview2/runtime-dlls/arch hard checks on a non-Windows platform.
-    expect(report.results.map((r) => r.id).sort()).toEqual(["acceleration", "disk", "ram"]);
+    expect(report.results.map((r) => r.id).sort()).toEqual([
+      "acceleration",
+      "disk",
+      "ram",
+    ]);
     expect(report.results.some((r) => r.severity === "hard")).toBe(false);
   });
 });

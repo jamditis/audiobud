@@ -145,7 +145,12 @@ function checkArch(facts: SystemFacts): RequirementResult {
       fix: "Run AudioBud on a 64-bit (x64) machine, or build from source for your architecture.",
     };
   }
-  return ok(id, label, "hard", "Running on a supported 64-bit (x64) processor.");
+  return ok(
+    id,
+    label,
+    "hard",
+    "Running on a supported 64-bit (x64) processor.",
+  );
 }
 
 /**
@@ -173,11 +178,17 @@ function checkWindowsVersion(facts: SystemFacts): RequirementResult {
       label,
       severity: "hard",
       status: "missing",
-      message: "This Windows version is older than the required Windows 10, so AudioBud cannot run.",
+      message:
+        "This Windows version is older than the required Windows 10, so AudioBud cannot run.",
       fix: "Upgrade to 64-bit Windows 10 or newer, then relaunch AudioBud.",
     };
   }
-  return ok(id, label, "hard", "Running on a supported Windows version (10 or newer).");
+  return ok(
+    id,
+    label,
+    "hard",
+    "Running on a supported Windows version (10 or newer).",
+  );
 }
 
 /** The WebView2 runtime the Windows UI renders in; without it the window never opens (#39). */
@@ -200,7 +211,8 @@ function checkWebView2(facts: SystemFacts): RequirementResult {
       label,
       severity: "hard",
       status: "missing",
-      message: "The Microsoft Edge WebView2 runtime is not installed, so the app window cannot open.",
+      message:
+        "The Microsoft Edge WebView2 runtime is not installed, so the app window cannot open.",
       fix: "Install the WebView2 runtime from Microsoft, then relaunch AudioBud.",
     };
   }
@@ -230,11 +242,17 @@ function checkRuntimeDlls(facts: SystemFacts): RequirementResult {
       // The message names both libraries, so the fix must cover both — the VC++
       // runtime and the Vulkan loader come from different installers, and a
       // machine missing only Vulkan stays blocked if it is told to install VC++.
-      message: "Required Windows runtime libraries (Visual C++ runtime, Vulkan loader) are missing, so transcription cannot start.",
+      message:
+        "Required Windows runtime libraries (Visual C++ runtime, Vulkan loader) are missing, so transcription cannot start.",
       fix: "Install the latest Microsoft Visual C++ redistributable and update your Vulkan-capable GPU drivers (or install the Vulkan runtime), then relaunch AudioBud.",
     };
   }
-  return ok(id, label, "hard", "The required Windows runtime libraries are present.");
+  return ok(
+    id,
+    label,
+    "hard",
+    "The required Windows runtime libraries are present.",
+  );
 }
 
 /** RAM is soft: too little never blocks, but it warns and steers toward a smaller model. */
@@ -252,7 +270,12 @@ function checkRam(facts: SystemFacts): RequirementResult {
     };
   }
   if (ram >= RECOMMENDED_RAM_MB) {
-    return ok(id, label, "soft", `${gb(ram)} of RAM — comfortable for the larger models.`);
+    return ok(
+      id,
+      label,
+      "soft",
+      `${gb(ram)} of RAM — comfortable for the larger models.`,
+    );
   }
   if (ram >= MIN_RAM_MB) {
     return {
@@ -289,7 +312,12 @@ function checkDisk(facts: SystemFacts): RequirementResult {
     };
   }
   if (free >= MIN_FREE_DISK_MB) {
-    return ok(id, label, "soft", `${gb(free)} free — enough for the app and a model.`);
+    return ok(
+      id,
+      label,
+      "soft",
+      `${gb(free)} free — enough for the app and a model.`,
+    );
   }
   return {
     id,
@@ -321,7 +349,8 @@ function checkAcceleration(facts: SystemFacts): RequirementResult {
       label,
       severity: "soft",
       status: "degraded",
-      message: "No GPU acceleration was found; transcription will run on the CPU and be slower.",
+      message:
+        "No GPU acceleration was found; transcription will run on the CPU and be slower.",
       fix: "A smaller model keeps CPU-only transcription responsive.",
     };
   }
@@ -339,7 +368,9 @@ function gb(mb: number): string {
  * run only the soft, non-blocking checks — an unvalidated platform should warn,
  * never claim a hard pass it has not earned.
  */
-function checksFor(platform: Platform): Array<(f: SystemFacts) => RequirementResult> {
+function checksFor(
+  platform: Platform,
+): Array<(f: SystemFacts) => RequirementResult> {
   if (platform === "windows") {
     return [
       checkArch,
@@ -362,7 +393,9 @@ function checksFor(platform: Platform): Array<(f: SystemFacts) => RequirementRes
  */
 export function evaluatePreflight(facts: SystemFacts): PreflightReport {
   const results = checksFor(facts.platform).map((check) => check(facts));
-  const blocking = results.filter((r) => r.severity === "hard" && r.status === "missing");
+  const blocking = results.filter(
+    (r) => r.severity === "hard" && r.status === "missing",
+  );
   const warnings = results.filter(
     (r) => r.status === "degraded" || r.status === "unknown",
   );
