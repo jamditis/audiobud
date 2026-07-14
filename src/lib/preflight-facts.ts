@@ -54,7 +54,9 @@ const BYTES_PER_MB = 1024 * 1024;
  * false shortfall. Floors so the reported figure never overstates the memory a
  * machine actually has.
  */
-export function mbFromBytes(bytes: number | null | undefined): number | undefined {
+export function mbFromBytes(
+  bytes: number | null | undefined,
+): number | undefined {
   if (bytes === null || bytes === undefined) return undefined;
   if (!Number.isFinite(bytes) || bytes < 0) return undefined;
   return Math.floor(bytes / BYTES_PER_MB);
@@ -133,7 +135,15 @@ export function buildSystemFacts(raw: RawProbe): SystemFacts {
   const facts: SystemFacts = { platform: raw.platform };
 
   if (raw.arch !== null && raw.arch !== undefined) {
-    facts.arch = raw.arch;
+    // A blank or whitespace-only arch means the probe failed to read it. On
+    // Windows the core hard-blocks any defined non-x64 arch, so writing a blank
+    // value would falsely fail a machine whose architecture simply could not be
+    // determined; omit it like blank OS versions and accelerators so it reads as
+    // `unknown`.
+    const arch = raw.arch.trim();
+    if (arch !== "") {
+      facts.arch = arch;
+    }
   }
 
   const totalRamMb = mbFromBytes(raw.totalRamBytes);

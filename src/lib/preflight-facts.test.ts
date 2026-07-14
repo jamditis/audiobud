@@ -6,7 +6,12 @@ import {
   parseWindowsVersionSupported,
   type RawProbe,
 } from "./preflight-facts";
-import { evaluatePreflight, MIN_RAM_MB, RECOMMENDED_RAM_MB, MIN_FREE_DISK_MB } from "./preflight";
+import {
+  evaluatePreflight,
+  MIN_RAM_MB,
+  RECOMMENDED_RAM_MB,
+  MIN_FREE_DISK_MB,
+} from "./preflight";
 
 // The adapter turns a raw platform probe into the typed SystemFacts the decision
 // core consumes. What matters is not line coverage but that it preserves the
@@ -108,6 +113,23 @@ describe("buildSystemFacts assembles typed facts from a raw probe", () => {
     expect(facts).toEqual({ platform: "windows" });
   });
 
+  it("omits a blank arch so an unreadable probe cannot hard-block a good machine", () => {
+    // An empty or whitespace-only arch means the probe failed to read it. On
+    // Windows the core hard-blocks any defined non-x64 arch, so a blank value
+    // written through would falsely fail a machine whose arch could not be
+    // determined; it must stay absent and read as `unknown` instead.
+    expect(
+      buildSystemFacts({ platform: "windows", arch: "" }).arch,
+    ).toBeUndefined();
+    expect(
+      buildSystemFacts({ platform: "windows", arch: "   " }).arch,
+    ).toBeUndefined();
+    // A real reading is still carried, trimmed of stray probe whitespace.
+    expect(buildSystemFacts({ platform: "linux", arch: " arm64 " }).arch).toBe(
+      "arm64",
+    );
+  });
+
   it("derives Windows-only fields only on Windows", () => {
     const raw: Omit<RawProbe, "platform"> = {
       osVersion: "6.1.7601",
@@ -162,6 +184,27 @@ describe("adapter feeds the decision core and preserves its fail-safe contract",
     expect(report.warnings.some((r) => r.id === "windows-version")).toBe(true);
   });
 
+  it("never blocks when the arch probe read blank, only warns", () => {
+    // The sibling of the version case, and the failure this fix exists to
+    // prevent: on Windows the arch check is a hard gate, so a probe that
+    // returned a blank arch must warn (unknown), never block a good machine.
+    const report = evaluatePreflight(
+      buildSystemFacts({
+        platform: "windows",
+        arch: "   ",
+        totalRamBytes: RECOMMENDED_RAM_MB * 1024 * 1024,
+        freeDiskBytes: MIN_FREE_DISK_MB * 2 * 1024 * 1024,
+        osVersion: "10.0.19045",
+        webview2Present: true,
+        runtimeDllsPresent: true,
+        acceleration: "directml",
+      }),
+    );
+    expect(report.launchable).toBe(true);
+    expect(report.blocking.some((r) => r.id === "arch")).toBe(false);
+    expect(report.warnings.some((r) => r.id === "arch")).toBe(true);
+  });
+
   it("passes a fully-good Windows machine with no blocks or warnings", () => {
     const report = evaluatePreflight(
       buildSystemFacts({
@@ -182,7 +225,11 @@ describe("adapter feeds the decision core and preserves its fail-safe contract",
 
   it("blocks an ARM machine through the passed-through arch", () => {
     const report = evaluatePreflight(
-      buildSystemFacts({ platform: "windows", arch: "arm64", osVersion: "10.0.22631" }),
+      buildSystemFacts({
+        platform: "windows",
+        arch: "arm64",
+        osVersion: "10.0.22631",
+      }),
     );
     expect(report.launchable).toBe(false);
     expect(report.blocking.some((r) => r.id === "arch")).toBe(true);
