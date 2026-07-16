@@ -28,7 +28,10 @@
     "active": true,
     "createUpdaterArtifacts": false,
     "targets": "all",
-    "resources": ["resources/**/*"],
+    "resources": {
+      "resources/": "resources/",
+      "../THIRD_PARTY_NOTICES.md": "THIRD_PARTY_NOTICES.md"
+    },
     "license": "MIT",
     "icon": [
       "icons/32x32.png",

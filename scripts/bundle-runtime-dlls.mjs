@@ -26,7 +26,6 @@
 
 import { copyFileSync, existsSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 import process from "node:process";
 
 // Tauri sets TAURI_ENV_PLATFORM to the target's Rust target_os ("windows",
@@ -117,30 +116,6 @@ for (const dll of dlls) {
   copyFileSync(source, dest);
   console.log(
     `[bundle-runtime-dlls] ${dll.name} <- ${source} (${statSync(dest).size} bytes)`,
-  );
-}
-
-// Stage the third-party license notices next to the exe so both installers ship
-// them alongside the redistributed runtime DLLs they cover (issue #45): the MSI
-// harvests it as a sibling of the exe and the NSIS template Files it explicitly.
-// Resolve from the repo root (one level up from this script) so it does not
-// depend on the process working directory.
-const noticesSource = fileURLToPath(
-  new URL("../THIRD_PARTY_NOTICES.md", import.meta.url),
-);
-if (!existsSync(noticesSource)) {
-  console.error(
-    `[bundle-runtime-dlls] THIRD_PARTY_NOTICES.md not found at ${noticesSource}; ` +
-      "the installers redistribute runtime DLLs and must ship their license " +
-      "notices. Restore the file at the repo root.",
-  );
-  failed = true;
-} else {
-  const noticesDest = join(outDir, "THIRD_PARTY_NOTICES.md");
-  copyFileSync(noticesSource, noticesDest);
-  console.log(
-    `[bundle-runtime-dlls] THIRD_PARTY_NOTICES.md <- ${noticesSource} ` +
-      `(${statSync(noticesDest).size} bytes)`,
   );
 }
 
