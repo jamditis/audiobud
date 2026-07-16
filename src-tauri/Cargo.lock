@@ -354,6 +354,7 @@ name = "audiobud"
 version = "0.3.0"
 dependencies = [
  "anyhow",
+ "arboard",
  "chrono",
  "clap",
  "cpal",

@@ -1,9 +1,10 @@
+use crate::clipboard_snapshot::{self, ArboardBackend, ClipboardContent};
 use crate::input::{self, EnigoState};
 #[cfg(target_os = "linux")]
 use crate::settings::TypingTool;
 use crate::settings::{get_settings, AutoSubmitKey, ClipboardHandling, PasteMethod};
 use enigo::{Direction, Enigo, Key, Keyboard};
-use log::info;
+use log::{info, warn};
 use std::process::Command;
 use std::time::Duration;
 use tauri::{AppHandle, Manager};
@@ -11,6 +12,14 @@ use tauri_plugin_clipboard_manager::ClipboardExt;
 
 #[cfg(target_os = "linux")]
 use crate::utils::{is_kde_wayland, is_wayland};
+
+/// What was on the clipboard before the transcript overwrote it.
+enum SavedClipboard {
+    /// Full snapshot (text, HTML, image, file list) via arboard (issue #57).
+    Full(ClipboardContent),
+    /// Text-only fallback when the arboard backend could not be opened.
+    TextOnly(String),
+}
 
 /// Pastes text using the clipboard: saves current content, writes text, sends paste keystroke, restores clipboard.
 fn paste_via_clipboard(
@@ -21,7 +30,21 @@ fn paste_via_clipboard(
     paste_delay_ms: u64,
 ) -> Result<(), String> {
     let clipboard = app_handle.clipboard();
-    let clipboard_content = clipboard.read_text().unwrap_or_default();
+
+    // Save the full clipboard before overwriting it with the transcript.
+    // Saving only the text would destroy images, HTML, and file lists the
+    // user had copied (issue #57).
+    let mut snapshot_backend = match ArboardBackend::new() {
+        Ok(backend) => Some(backend),
+        Err(e) => {
+            warn!("Falling back to text-only clipboard save/restore: {}", e);
+            None
+        }
+    };
+    let saved_clipboard = match snapshot_backend.as_mut() {
+        Some(backend) => SavedClipboard::Full(clipboard_snapshot::capture(backend)),
+        None => SavedClipboard::TextOnly(clipboard.read_text().unwrap_or_default()),
+    };
 
     // Write text to clipboard first
     // On Wayland, prefer wl-copy for better compatibility (especially with umlauts)
@@ -64,18 +87,44 @@ fn paste_via_clipboard(
     std::thread::sleep(std::time::Duration::from_millis(50));
 
     // Restore original clipboard content
-    // On Wayland, prefer wl-copy for better compatibility
-    #[cfg(target_os = "linux")]
-    if is_wayland() && is_wl_copy_available() {
-        let _ = write_clipboard_via_wl_copy(&clipboard_content);
-    } else {
-        let _ = clipboard.write_text(&clipboard_content);
-    }
-
-    #[cfg(not(target_os = "linux"))]
-    let _ = clipboard.write_text(&clipboard_content);
+    restore_saved_clipboard(&saved_clipboard, snapshot_backend.as_mut(), app_handle);
 
     Ok(())
+}
+
+/// Puts the saved clipboard contents back after the paste keystroke.
+/// Restore failures are logged, not propagated: the paste itself succeeded.
+fn restore_saved_clipboard(
+    saved: &SavedClipboard,
+    backend: Option<&mut ArboardBackend>,
+    app_handle: &AppHandle,
+) {
+    match saved {
+        SavedClipboard::Full(content) => {
+            // On Wayland, prefer wl-copy for text-only content, matching the
+            // transcript write path (better compatibility, e.g. umlauts).
+            #[cfg(target_os = "linux")]
+            if is_wayland() && is_wl_copy_available() && content.is_text_only() {
+                if let Some(text) = content.text.as_deref() {
+                    let _ = write_clipboard_via_wl_copy(text);
+                }
+                return;
+            }
+            if let Some(backend) = backend {
+                if let Err(e) = clipboard_snapshot::restore(backend, content) {
+                    warn!("Failed to restore clipboard contents: {}", e);
+                }
+            }
+        }
+        SavedClipboard::TextOnly(text) => {
+            #[cfg(target_os = "linux")]
+            if is_wayland() && is_wl_copy_available() {
+                let _ = write_clipboard_via_wl_copy(text);
+                return;
+            }
+            let _ = app_handle.clipboard().write_text(text);
+        }
+    }
 }
 
 /// Attempts to send a key combination using Linux-native tools.
