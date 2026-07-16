@@ -353,30 +353,88 @@ impl HistoryManager {
 
     pub fn cleanup_old_entries(&self) -> Result<()> {
         let retention_period = crate::settings::get_recording_retention_period(&self.app_handle);
+        let history_limit = crate::settings::get_history_limit(&self.app_handle);
+        let conn = self.get_connection()?;
+        Self::cleanup_old_entries_with_conn(
+            &conn,
+            &self.recordings_dir,
+            retention_period,
+            history_limit,
+        )
+    }
 
+    /// Core of `cleanup_old_entries`, extracted with an explicit connection +
+    /// recordings dir (same pattern as `delete_entry_with_conn`) so the cleanup
+    /// behavior can be unit-tested without an `AppHandle`.
+    fn cleanup_old_entries_with_conn(
+        conn: &Connection,
+        recordings_dir: &Path,
+        retention_period: crate::settings::RecordingRetentionPeriod,
+        history_limit: usize,
+    ) -> Result<()> {
         match retention_period {
             crate::settings::RecordingRetentionPeriod::Never => {
                 // Don't delete anything
-                return Ok(());
+                Ok(())
             }
             crate::settings::RecordingRetentionPeriod::PreserveLimit => {
                 // Use the old count-based logic with history_limit
-                let limit = crate::settings::get_history_limit(&self.app_handle);
-                return self.cleanup_by_count(limit);
+                Self::cleanup_by_count_with_conn(conn, recordings_dir, history_limit)
             }
             _ => {
                 // Use time-based logic
-                return self.cleanup_by_time(retention_period);
+                Self::cleanup_by_time_with_conn(conn, recordings_dir, retention_period)
             }
         }
     }
 
-    fn delete_entries_and_files(&self, entries: &[(i64, String)]) -> Result<usize> {
+    /// Hook run by the settings commands after a new history limit or
+    /// retention period has been persisted.
+    ///
+    /// Deliberately performs no cleanup. Running an immediate cleanup pass
+    /// here permanently deleted unsaved recordings and their WAV files the
+    /// moment a user lowered the history limit or changed retention, with no
+    /// warning and no undo (#55). Entries beyond the new limit are instead
+    /// trimmed lazily by `save_entry` when the next recording is added, so a
+    /// settings change alone never destroys data. Kept as an explicit hook
+    /// (with the `_with_conn` core below) so this invariant stays pinned by a
+    /// unit test and any future on-change behavior has a single home.
+    pub fn on_history_settings_changed(
+        &self,
+        new_retention_period: crate::settings::RecordingRetentionPeriod,
+        new_history_limit: usize,
+    ) -> Result<()> {
+        let conn = self.get_connection()?;
+        Self::on_history_settings_changed_with_conn(
+            &conn,
+            &self.recordings_dir,
+            new_retention_period,
+            new_history_limit,
+        )
+    }
+
+    /// Core of `on_history_settings_changed`, extracted with an explicit
+    /// connection + recordings dir so the settings-change behavior can be
+    /// unit-tested without an `AppHandle`. The new settings values arrive here
+    /// and are intentionally not acted on — see `on_history_settings_changed`.
+    pub(crate) fn on_history_settings_changed_with_conn(
+        _conn: &Connection,
+        _recordings_dir: &Path,
+        _new_retention_period: crate::settings::RecordingRetentionPeriod,
+        _new_history_limit: usize,
+    ) -> Result<()> {
+        Ok(())
+    }
+
+    fn delete_entries_and_files(
+        conn: &Connection,
+        recordings_dir: &Path,
+        entries: &[(i64, String)],
+    ) -> Result<usize> {
         if entries.is_empty() {
             return Ok(0);
         }
 
-        let conn = self.get_connection()?;
         let mut deleted_count = 0;
 
         for (id, file_name) in entries {
@@ -387,7 +445,7 @@ impl HistoryManager {
             )?;
 
             // Delete WAV file
-            let file_path = self.recordings_dir.join(file_name);
+            let file_path = recordings_dir.join(file_name);
             if file_path.exists() {
                 if let Err(e) = fs::remove_file(&file_path) {
                     error!("Failed to delete WAV file {}: {}", file_name, e);
@@ -401,9 +459,11 @@ impl HistoryManager {
         Ok(deleted_count)
     }
 
-    fn cleanup_by_count(&self, limit: usize) -> Result<()> {
-        let conn = self.get_connection()?;
-
+    fn cleanup_by_count_with_conn(
+        conn: &Connection,
+        recordings_dir: &Path,
+        limit: usize,
+    ) -> Result<()> {
         // Get all entries that are not saved, ordered by timestamp desc
         let mut stmt = conn.prepare(
             "SELECT id, file_name FROM transcription_history WHERE saved = 0 ORDER BY timestamp DESC"
@@ -420,7 +480,8 @@ impl HistoryManager {
 
         if entries.len() > limit {
             let entries_to_delete = &entries[limit..];
-            let deleted_count = self.delete_entries_and_files(entries_to_delete)?;
+            let deleted_count =
+                Self::delete_entries_and_files(conn, recordings_dir, entries_to_delete)?;
 
             if deleted_count > 0 {
                 debug!("Cleaned up {} old history entries by count", deleted_count);
@@ -430,12 +491,11 @@ impl HistoryManager {
         Ok(())
     }
 
-    fn cleanup_by_time(
-        &self,
+    fn cleanup_by_time_with_conn(
+        conn: &Connection,
+        recordings_dir: &Path,
         retention_period: crate::settings::RecordingRetentionPeriod,
     ) -> Result<()> {
-        let conn = self.get_connection()?;
-
         // Calculate cutoff timestamp (current time minus retention period)
         let now = Utc::now().timestamp();
         let cutoff_timestamp = match retention_period {
@@ -459,7 +519,8 @@ impl HistoryManager {
             entries_to_delete.push(row?);
         }
 
-        let deleted_count = self.delete_entries_and_files(&entries_to_delete)?;
+        let deleted_count =
+            Self::delete_entries_and_files(conn, recordings_dir, &entries_to_delete)?;
 
         if deleted_count > 0 {
             debug!(
@@ -908,6 +969,95 @@ mod tests {
         HistoryManager::delete_entry_with_conn(&conn, &dir, 1).expect("delete entry");
 
         assert_eq!(row_count(&conn, 1), 0);
+    }
+
+    fn all_row_count(conn: &Connection) -> i64 {
+        conn.query_row("SELECT COUNT(*) FROM transcription_history", [], |row| {
+            row.get(0)
+        })
+        .expect("count all rows")
+    }
+
+    /// Seed `count` unsaved entries (timestamps 100, 200, ...) with matching
+    /// WAV files on disk, mirroring the state of a real recordings dir.
+    fn seed_entries_with_files(conn: &Connection, dir: &Path, count: i64) -> Vec<PathBuf> {
+        (1..=count)
+            .map(|i| {
+                let timestamp = i * 100;
+                insert_entry(conn, timestamp, "text", None);
+                let path = dir.join(format!("handy-{}.wav", timestamp));
+                std::fs::write(&path, b"RIFF").expect("write wav file");
+                path
+            })
+            .collect()
+    }
+
+    #[test]
+    fn changing_history_settings_does_not_destroy_unsaved_entries() {
+        // Issue #55: lowering the history limit (or changing retention) used to
+        // run an immediate cleanup pass that permanently deleted unsaved
+        // recordings and their WAV files, with no warning and no undo. A
+        // settings change must leave stored data untouched; trimming belongs to
+        // the lazy cleanup in `save_entry` when the next recording is added.
+        let conn = setup_conn();
+        let dir = tempfile::tempdir().expect("create temp recordings dir");
+        let wav_paths = seed_entries_with_files(&conn, dir.path(), 3);
+
+        // The user lowers the history limit from 3 to 1.
+        HistoryManager::on_history_settings_changed_with_conn(
+            &conn,
+            dir.path(),
+            crate::settings::RecordingRetentionPeriod::PreserveLimit,
+            1,
+        )
+        .expect("apply settings change");
+
+        assert_eq!(
+            all_row_count(&conn),
+            3,
+            "a settings change must not delete history rows"
+        );
+        for path in &wav_paths {
+            assert!(
+                path.exists(),
+                "a settings change must not delete WAV files: {:?}",
+                path
+            );
+        }
+    }
+
+    #[test]
+    fn lazy_cleanup_still_trims_unsaved_entries_beyond_limit() {
+        // The `save_entry` cleanup path must keep enforcing the limit: with a
+        // limit of 1, the two oldest unsaved entries and their files go, the
+        // newest stays, and saved entries are never touched.
+        let conn = setup_conn();
+        let dir = tempfile::tempdir().expect("create temp recordings dir");
+        let wav_paths = seed_entries_with_files(&conn, dir.path(), 3);
+        // A saved entry older than everything else, which must survive.
+        insert_entry(&conn, 50, "saved text", None);
+        conn.execute(
+            "UPDATE transcription_history SET saved = 1 WHERE timestamp = 50",
+            [],
+        )
+        .expect("mark entry saved");
+        let saved_wav = dir.path().join("handy-50.wav");
+        std::fs::write(&saved_wav, b"RIFF").expect("write saved wav file");
+
+        HistoryManager::cleanup_old_entries_with_conn(
+            &conn,
+            dir.path(),
+            crate::settings::RecordingRetentionPeriod::PreserveLimit,
+            1,
+        )
+        .expect("run lazy cleanup");
+
+        // The saved entry plus the newest unsaved entry remain.
+        assert_eq!(all_row_count(&conn), 2);
+        assert!(!wav_paths[0].exists(), "oldest unsaved WAV should be gone");
+        assert!(!wav_paths[1].exists(), "older unsaved WAV should be gone");
+        assert!(wav_paths[2].exists(), "newest unsaved WAV should remain");
+        assert!(saved_wav.exists(), "saved WAV must never be deleted");
     }
 
     #[test]
