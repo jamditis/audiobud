@@ -5,6 +5,7 @@ mod audio_feedback;
 pub mod audio_toolkit;
 pub mod cli;
 mod clipboard;
+mod clipboard_snapshot;
 // Voice-command grammar (#7). Not yet wired into the dictation pipeline: the
 // mode boundary that decides when a phrase is a command versus dictation is a
 // separate, still-open design step, so the parser is intentionally unused until

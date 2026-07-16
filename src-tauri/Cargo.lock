@@ -354,8 +354,10 @@ name = "audiobud"
 version = "0.3.0"
 dependencies = [
  "anyhow",
+ "arboard",
  "chrono",
  "clap",
+ "clipboard-win",
  "cpal",
  "enigo",
  "env_filter",
