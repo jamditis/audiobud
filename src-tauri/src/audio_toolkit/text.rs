@@ -1055,7 +1055,10 @@ mod tests {
             whole_word: true,
             case_sensitive: true,
         };
-        assert_eq!(apply_replacements("C#12 ships", &[r.clone()]), "C#12 ships");
+        assert_eq!(
+            apply_replacements("C#12 ships", std::slice::from_ref(&r)),
+            "C#12 ships"
+        );
         assert_eq!(
             apply_replacements("I love C# code", &[r]),
             "I love CSharp code"
@@ -1073,7 +1076,7 @@ mod tests {
             case_sensitive: true,
         };
         assert_eq!(
-            apply_replacements("edit foo.env now", &[r.clone()]),
+            apply_replacements("edit foo.env now", std::slice::from_ref(&r)),
             "edit foo.env now"
         );
         assert_eq!(
@@ -1092,11 +1095,11 @@ mod tests {
             case_sensitive: false,
         };
         assert_eq!(
-            apply_replacements("this is basically, fine", &[r.clone()]),
+            apply_replacements("this is basically, fine", std::slice::from_ref(&r)),
             "this is, fine"
         );
         assert_eq!(
-            apply_replacements("stop basically. go", &[r.clone()]),
+            apply_replacements("stop basically. go", std::slice::from_ref(&r)),
             "stop. go"
         );
         // A deletion not adjacent to punctuation still collapses the doubled space cleanly.
