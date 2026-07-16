@@ -357,6 +357,7 @@ dependencies = [
  "arboard",
  "chrono",
  "clap",
+ "clipboard-win",
  "cpal",
  "enigo",
  "env_filter",
