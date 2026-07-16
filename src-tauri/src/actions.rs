@@ -1,12 +1,15 @@
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
 use crate::apple_intelligence;
 use crate::audio_feedback::{play_feedback_sound, play_feedback_sound_blocking, SoundType};
+use crate::audio_toolkit::constants::WHISPER_SAMPLE_RATE;
 use crate::audio_toolkit::{
     is_microphone_access_denied, is_no_input_device_error, strip_to_raw_text,
 };
 use crate::managers::audio::AudioRecordingManager;
 use crate::managers::history::HistoryManager;
-use crate::managers::transcription::TranscriptionManager;
+use crate::managers::transcription::{
+    run_with_watchdog, transcription_watchdog_timeout, TranscriptionManager,
+};
 use crate::settings::{get_settings, AppSettings, APPLE_INTELLIGENCE_PROVIDER_ID};
 use crate::shortcut;
 use crate::tray::{change_tray_icon, TrayIconState};
@@ -27,6 +30,11 @@ use tauri::{AppHandle, Emitter};
 struct RecordingErrorEvent {
     error_type: String,
     detail: Option<String>,
+}
+
+#[derive(Clone, serde::Serialize)]
+struct TranscriptionTimeoutEvent {
+    timeout_secs: u64,
 }
 
 /// Drop guard that notifies the [`TranscriptionCoordinator`] when the
@@ -598,9 +606,32 @@ impl ShortcutAction for TranscribeAction {
                         crate::audio_toolkit::save_wav_file(&wav_path, &samples_for_wav)
                     });
 
-                    // Transcribe concurrently with WAV save
+                    // Transcribe concurrently with WAV save, under a watchdog
+                    // so a wedged engine can't pin the "transcribing" UI state
+                    // forever (issue #58). On timeout the result is treated as
+                    // a normal transcription error, which reuses the existing
+                    // recovery path below (overlay hidden, tray back to idle,
+                    // empty history entry saved for retry).
                     let transcription_time = Instant::now();
-                    let transcription_result = tm.transcribe(samples);
+                    let watchdog_timeout =
+                        transcription_watchdog_timeout(sample_count, WHISPER_SAMPLE_RATE);
+                    let transcription_result =
+                        match run_with_watchdog("transcription", watchdog_timeout, move || {
+                            tm.transcribe(samples)
+                        }) {
+                            Some(result) => result,
+                            None => {
+                                let timeout_secs = watchdog_timeout.as_secs();
+                                let _ = ah.emit(
+                                    "transcription-timeout",
+                                    TranscriptionTimeoutEvent { timeout_secs },
+                                );
+                                Err(anyhow::anyhow!(
+                                    "Transcription timed out after {}s",
+                                    timeout_secs
+                                ))
+                            }
+                        };
 
                     // Await WAV save and verify
                     let wav_saved = match wav_handle.await {

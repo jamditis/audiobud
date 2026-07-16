@@ -1,7 +1,8 @@
 use crate::actions::process_transcription_output;
+use crate::audio_toolkit::constants::WHISPER_SAMPLE_RATE;
 use crate::managers::{
     history::{HistoryManager, PaginatedHistory},
-    transcription::TranscriptionManager,
+    transcription::{run_with_watchdog, transcription_watchdog_timeout, TranscriptionManager},
 };
 use std::sync::Arc;
 use tauri::{AppHandle, State};
@@ -87,11 +88,25 @@ pub async fn retry_history_entry_transcription(
 
     transcription_manager.initiate_model_load();
 
+    // Watchdog (issue #58): a wedged engine must fail this command instead of
+    // leaving the frontend awaiting it forever. The error string surfaces
+    // through the command's normal Result path.
     let tm = Arc::clone(&transcription_manager);
-    let transcription = tauri::async_runtime::spawn_blocking(move || tm.transcribe(samples))
-        .await
-        .map_err(|e| format!("Transcription task panicked: {}", e))?
-        .map_err(|e| e.to_string())?;
+    let watchdog_timeout = transcription_watchdog_timeout(samples.len(), WHISPER_SAMPLE_RATE);
+    let transcription = tauri::async_runtime::spawn_blocking(move || {
+        run_with_watchdog("history retry transcription", watchdog_timeout, move || {
+            tm.transcribe(samples)
+        })
+    })
+    .await
+    .map_err(|e| format!("Transcription task panicked: {}", e))?
+    .ok_or_else(|| {
+        format!(
+            "Transcription timed out after {}s",
+            watchdog_timeout.as_secs()
+        )
+    })?
+    .map_err(|e| e.to_string())?;
 
     if transcription.is_empty() {
         return Err("Recording contains no speech".to_string());

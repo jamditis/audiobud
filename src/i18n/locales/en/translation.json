@@ -741,7 +741,9 @@
     "modelLoadFailed": "Failed to load model: {{model}}",
     "modelLoadFailedUnknown": "unknown model",
     "pasteFailedTitle": "Failed to paste text",
-    "pasteFailed": "Text could not be pasted into the active application."
+    "pasteFailed": "Text could not be pasted into the active application.",
+    "transcriptionTimeoutTitle": "Transcription timed out",
+    "transcriptionTimeout": "The transcription engine did not respond after {{seconds}} seconds. Try again, or select a different model in settings."
   },
   "appLanguage": {
     "title": "Application language",

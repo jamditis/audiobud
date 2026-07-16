@@ -7,7 +7,11 @@ import {
   checkAccessibilityPermission,
   checkMicrophonePermission,
 } from "tauri-plugin-macos-permissions-api";
-import { ModelStateEvent, RecordingErrorEvent } from "./lib/types/events";
+import {
+  ModelStateEvent,
+  RecordingErrorEvent,
+  TranscriptionTimeoutEvent,
+} from "./lib/types/events";
 import "./App.css";
 import AccessibilityPermissions from "./components/AccessibilityPermissions";
 import Footer from "./components/footer";
@@ -158,6 +162,24 @@ function App() {
         description: t("errors.pasteFailed"),
       });
     });
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, [t]);
+
+  // Listen for transcription watchdog timeouts (wedged engine, issue #58)
+  // and show a toast. The Rust side has already recovered the overlay/tray.
+  useEffect(() => {
+    const unlisten = listen<TranscriptionTimeoutEvent>(
+      "transcription-timeout",
+      (event) => {
+        toast.error(t("errors.transcriptionTimeoutTitle"), {
+          description: t("errors.transcriptionTimeout", {
+            seconds: event.payload.timeout_secs,
+          }),
+        });
+      },
+    );
     return () => {
       unlisten.then((fn) => fn());
     };

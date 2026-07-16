@@ -445,6 +445,16 @@ impl TranscriptionManager {
             ));
         }
 
+        // Manual repro hook for the issue #58 watchdog: simulate a wedged
+        // engine so the timeout/recovery path can be exercised in a dev build.
+        #[cfg(debug_assertions)]
+        if std::env::var("HANDY_FORCE_TRANSCRIPTION_HANG").is_ok() {
+            warn!("Simulating wedged engine (HANDY_FORCE_TRANSCRIPTION_HANG); blocking forever");
+            loop {
+                thread::sleep(Duration::from_secs(60));
+            }
+        }
+
         // Update last activity timestamp
         self.touch_activity();
 
@@ -769,6 +779,80 @@ impl TranscriptionManager {
     }
 }
 
+/// Shortest watchdog deadline: even a tiny clip gets this long before the
+/// pipeline gives up on the engine (issue #58).
+pub(crate) const TRANSCRIPTION_TIMEOUT_FLOOR: Duration = Duration::from_secs(120);
+
+/// Longest watchdog deadline. A legitimate transcription that needs more than
+/// this has an unusable UX anyway; bounding it keeps a wedged engine from
+/// pinning the "transcribing" state for the rest of the session.
+pub(crate) const TRANSCRIPTION_TIMEOUT_CEILING: Duration = Duration::from_secs(600);
+
+/// Budget per second of recorded audio. 10x realtime covers a large Whisper
+/// model on a slow CPU with headroom; anything slower is indistinguishable
+/// from a hang for the user.
+const TRANSCRIPTION_TIMEOUT_REALTIME_FACTOR: u64 = 10;
+
+/// Watchdog deadline for a transcription of `sample_count` mono samples at
+/// `sample_rate` Hz: 10x the audio duration, clamped to a generous
+/// floor/ceiling so short clips aren't cut off early and long ones can't
+/// wedge the UI forever.
+pub(crate) fn transcription_watchdog_timeout(sample_count: usize, sample_rate: u32) -> Duration {
+    let audio_secs = (sample_count as u64).div_ceil(u64::from(sample_rate.max(1)));
+    Duration::from_secs(audio_secs.saturating_mul(TRANSCRIPTION_TIMEOUT_REALTIME_FACTOR))
+        .clamp(TRANSCRIPTION_TIMEOUT_FLOOR, TRANSCRIPTION_TIMEOUT_CEILING)
+}
+
+/// Run `f` and give up if it does not finish within `timeout` (issue #58).
+///
+/// Returns `Some(result)` on completion, `None` if the deadline passed (or the
+/// worker panicked before producing a result). The caller must treat `None` as
+/// an error and recover the UI/state itself.
+///
+/// Limitation: a wedged worker thread cannot be killed. On timeout it is left
+/// running detached; if it ever finishes, the late result is logged and
+/// discarded. For `TranscriptionManager::transcribe` this is safe — the wedged
+/// call still owns the engine it took out of the mutex, so the manager sees no
+/// loaded engine and the next attempt loads a fresh one.
+pub(crate) fn run_with_watchdog<T: Send + 'static>(
+    operation: &'static str,
+    timeout: Duration,
+    f: impl FnOnce() -> T + Send + 'static,
+) -> Option<T> {
+    let (tx, rx) = std::sync::mpsc::channel();
+    thread::spawn(move || {
+        let result = f();
+        if tx.send(result).is_err() {
+            warn!(
+                "{} finished after its watchdog already fired; late result discarded",
+                operation
+            );
+        }
+    });
+
+    match rx.recv_timeout(timeout) {
+        Ok(result) => Some(result),
+        Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+            error!(
+                "{} watchdog fired after {:?}; the engine appears wedged. \
+                 The worker thread cannot be killed and is left running detached.",
+                operation, timeout
+            );
+            None
+        }
+        Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+            // The worker panicked before sending. transcribe() catches engine
+            // panics itself, so this is unexpected — but it still must not
+            // wedge the pipeline.
+            error!(
+                "{} worker thread panicked before producing a result",
+                operation
+            );
+            None
+        }
+    }
+}
+
 /// Apply the user's accelerator preferences to the transcribe-rs global atomics.
 /// Called on startup and whenever the user changes the setting.
 pub fn apply_accelerator_settings(app: &tauri::AppHandle) {
@@ -860,6 +944,68 @@ pub fn get_available_accelerators() -> AvailableAccelerators {
         whisper: whisper_options,
         ort: ort_options,
         gpu_devices: cached_gpu_devices().to_vec(),
+    }
+}
+
+#[cfg(test)]
+mod watchdog_tests {
+    use super::{
+        run_with_watchdog, transcription_watchdog_timeout, TRANSCRIPTION_TIMEOUT_CEILING,
+        TRANSCRIPTION_TIMEOUT_FLOOR,
+    };
+    use std::time::{Duration, Instant};
+
+    #[test]
+    fn watchdog_passes_through_a_result_that_arrives_in_time() {
+        let result = run_with_watchdog("test", Duration::from_secs(5), || "hello".to_string());
+        assert_eq!(result, Some("hello".to_string()));
+    }
+
+    /// Reproduces issue #58: with no watchdog, a wedged engine call blocks the
+    /// pipeline forever and the "transcribing" UI state is never cleared. The
+    /// watchdog must return `None` at its deadline instead of waiting for the
+    /// wedged call. The stand-in for a wedged engine sleeps well past the
+    /// deadline (rather than literally forever) so a failing run still
+    /// terminates.
+    #[test]
+    fn watchdog_times_out_on_a_wedged_transcribe_call() {
+        let start = Instant::now();
+        let result = run_with_watchdog("test", Duration::from_millis(100), || {
+            std::thread::sleep(Duration::from_secs(3));
+        });
+        assert!(
+            result.is_none(),
+            "a wedged transcribe call must time out, not produce a result"
+        );
+        assert!(
+            start.elapsed() < Duration::from_secs(2),
+            "the watchdog must fire at its deadline instead of waiting out the wedged call"
+        );
+    }
+
+    #[test]
+    fn watchdog_timeout_scales_with_audio_duration_within_bounds() {
+        const RATE: u32 = 16_000;
+        // Short clip: clamped up to the floor.
+        assert_eq!(
+            transcription_watchdog_timeout(10 * RATE as usize, RATE),
+            TRANSCRIPTION_TIMEOUT_FLOOR
+        );
+        // 30s of audio: 10x realtime = 300s, between floor and ceiling.
+        assert_eq!(
+            transcription_watchdog_timeout(30 * RATE as usize, RATE),
+            Duration::from_secs(300)
+        );
+        // Very long recording: clamped down to the ceiling.
+        assert_eq!(
+            transcription_watchdog_timeout(600 * RATE as usize, RATE),
+            TRANSCRIPTION_TIMEOUT_CEILING
+        );
+        // Empty audio still gets the floor (the caller guards this case anyway).
+        assert_eq!(
+            transcription_watchdog_timeout(0, RATE),
+            TRANSCRIPTION_TIMEOUT_FLOOR
+        );
     }
 }
 
