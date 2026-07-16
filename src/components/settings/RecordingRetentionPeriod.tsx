@@ -43,20 +43,25 @@ export const RecordingRetentionPeriodSelector: React.FC<RecordingRetentionPeriod
     ];
 
     return (
-      <SettingContainer
-        title={t("settings.debug.recordingRetention.title")}
-        description={t("settings.debug.recordingRetention.description")}
-        descriptionMode={descriptionMode}
-        grouped={grouped}
-      >
-        <Dropdown
-          options={retentionOptions}
-          selectedValue={selectedRetentionPeriod}
-          onSelect={handleRetentionPeriodSelect}
-          placeholder={t("settings.debug.recordingRetention.placeholder")}
-          disabled={isUpdating("recording_retention_period")}
-        />
-      </SettingContainer>
+      <div>
+        <SettingContainer
+          title={t("settings.debug.recordingRetention.title")}
+          description={t("settings.debug.recordingRetention.description")}
+          descriptionMode={descriptionMode}
+          grouped={grouped}
+        >
+          <Dropdown
+            options={retentionOptions}
+            selectedValue={selectedRetentionPeriod}
+            onSelect={handleRetentionPeriodSelect}
+            placeholder={t("settings.debug.recordingRetention.placeholder")}
+            disabled={isUpdating("recording_retention_period")}
+          />
+        </SettingContainer>
+        <p className="px-4 pb-2 text-xs text-mid-gray">
+          {t("settings.debug.recordingRetention.trimNote")}
+        </p>
+      </div>
     );
   });
 

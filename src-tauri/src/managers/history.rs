@@ -396,17 +396,21 @@ impl HistoryManager {
     /// moment a user lowered the history limit or changed retention, with no
     /// warning and no undo (#55). Entries beyond the new limit are instead
     /// trimmed lazily by `save_entry` when the next recording is added, so a
-    /// settings change alone never destroys data. Kept as an explicit hook
-    /// (with the `_with_conn` core below) so this invariant stays pinned by a
-    /// unit test and any future on-change behavior has a single home.
+    /// settings change alone never destroys data.
+    ///
+    /// Also deliberately infallible and without database access: the setting
+    /// is already persisted by the time this runs, so a failure here (for
+    /// example a transient `history.db` open error) would make the command
+    /// report failure and the frontend roll back its optimistic value while
+    /// the backend keeps the new one. Kept as an explicit hook (with the
+    /// testable core below) so this invariant stays pinned by a unit test and
+    /// any future on-change behavior has a single home.
     pub fn on_history_settings_changed(
         &self,
         new_retention_period: crate::settings::RecordingRetentionPeriod,
         new_history_limit: usize,
-    ) -> Result<()> {
-        let conn = self.get_connection()?;
-        Self::on_history_settings_changed_with_conn(
-            &conn,
+    ) {
+        Self::on_history_settings_changed_core(
             &self.recordings_dir,
             new_retention_period,
             new_history_limit,
@@ -414,16 +418,16 @@ impl HistoryManager {
     }
 
     /// Core of `on_history_settings_changed`, extracted with an explicit
-    /// connection + recordings dir so the settings-change behavior can be
-    /// unit-tested without an `AppHandle`. The new settings values arrive here
-    /// and are intentionally not acted on — see `on_history_settings_changed`.
-    pub(crate) fn on_history_settings_changed_with_conn(
-        _conn: &Connection,
+    /// recordings dir so the settings-change behavior can be unit-tested
+    /// without an `AppHandle`. The new settings values arrive here and are
+    /// intentionally not acted on — see `on_history_settings_changed`. Takes
+    /// no database connection on purpose: opening one is fallible, and the
+    /// settings-update path must not gain a failure path from a no-op.
+    pub(crate) fn on_history_settings_changed_core(
         _recordings_dir: &Path,
         _new_retention_period: crate::settings::RecordingRetentionPeriod,
         _new_history_limit: usize,
-    ) -> Result<()> {
-        Ok(())
+    ) {
     }
 
     fn delete_entries_and_files(
@@ -1004,13 +1008,11 @@ mod tests {
         let wav_paths = seed_entries_with_files(&conn, dir.path(), 3);
 
         // The user lowers the history limit from 3 to 1.
-        HistoryManager::on_history_settings_changed_with_conn(
-            &conn,
+        HistoryManager::on_history_settings_changed_core(
             dir.path(),
             crate::settings::RecordingRetentionPeriod::PreserveLimit,
             1,
-        )
-        .expect("apply settings change");
+        );
 
         assert_eq!(
             all_row_count(&conn),

@@ -26,27 +26,32 @@ export const HistoryLimit: React.FC<HistoryLimitProps> = ({
   };
 
   return (
-    <SettingContainer
-      title={t("settings.debug.historyLimit.title")}
-      description={t("settings.debug.historyLimit.description")}
-      descriptionMode={descriptionMode}
-      grouped={grouped}
-      layout="horizontal"
-    >
-      <div className="flex items-center space-x-2">
-        <Input
-          type="number"
-          min="0"
-          max="1000"
-          value={historyLimit}
-          onChange={handleChange}
-          disabled={isUpdating("history_limit")}
-          className="w-20"
-        />
-        <span className="text-sm text-text">
-          {t("settings.debug.historyLimit.entries")}
-        </span>
-      </div>
-    </SettingContainer>
+    <div>
+      <SettingContainer
+        title={t("settings.debug.historyLimit.title")}
+        description={t("settings.debug.historyLimit.description")}
+        descriptionMode={descriptionMode}
+        grouped={grouped}
+        layout="horizontal"
+      >
+        <div className="flex items-center space-x-2">
+          <Input
+            type="number"
+            min="0"
+            max="1000"
+            value={historyLimit}
+            onChange={handleChange}
+            disabled={isUpdating("history_limit")}
+            className="w-20"
+          />
+          <span className="text-sm text-text">
+            {t("settings.debug.historyLimit.entries")}
+          </span>
+        </div>
+      </SettingContainer>
+      <p className="px-4 pb-2 text-xs text-mid-gray">
+        {t("settings.debug.historyLimit.trimNote")}
+      </p>
+    </div>
   );
 };

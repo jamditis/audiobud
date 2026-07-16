@@ -589,7 +589,8 @@
       "historyLimit": {
         "title": "History limit",
         "description": "Maximum number of history entries to keep",
-        "entries": "entries"
+        "entries": "entries",
+        "trimNote": "Lowering the limit does not delete recordings right away. Unsaved recordings beyond the limit are removed when your next recording is added."
       },
       "recordingRetention": {
         "title": "Auto-delete recordings",
@@ -599,7 +600,8 @@
         "days3": "After 3 days",
         "weeks2": "After 2 weeks",
         "months3": "After 3 months",
-        "placeholder": "Select retention period..."
+        "placeholder": "Select retention period...",
+        "trimNote": "Changing this does not delete recordings right away. Old unsaved recordings are only removed when your next recording is added."
       },
       "alwaysOnMicrophone": {
         "label": "Always-on microphone",
