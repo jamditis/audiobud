@@ -2,7 +2,7 @@ use crate::actions::process_transcription_output;
 use crate::audio_toolkit::constants::WHISPER_SAMPLE_RATE;
 use crate::managers::{
     history::{HistoryManager, PaginatedHistory},
-    transcription::{run_with_watchdog, transcription_watchdog_timeout, TranscriptionManager},
+    transcription::{transcription_watchdog_timeout, TranscriptionManager, WatchdogOutcome},
 };
 use std::sync::Arc;
 use tauri::{AppHandle, State};
@@ -93,20 +93,23 @@ pub async fn retry_history_entry_transcription(
     // through the command's normal Result path.
     let tm = Arc::clone(&transcription_manager);
     let watchdog_timeout = transcription_watchdog_timeout(samples.len(), WHISPER_SAMPLE_RATE);
-    let transcription = tauri::async_runtime::spawn_blocking(move || {
-        run_with_watchdog("history retry transcription", watchdog_timeout, move || {
-            tm.transcribe(samples)
-        })
+    let transcription = match tauri::async_runtime::spawn_blocking(move || {
+        tm.transcribe_with_watchdog(samples, watchdog_timeout)
     })
     .await
     .map_err(|e| format!("Transcription task panicked: {}", e))?
-    .ok_or_else(|| {
-        format!(
-            "Transcription timed out after {}s",
-            watchdog_timeout.as_secs()
-        )
-    })?
-    .map_err(|e| e.to_string())?;
+    {
+        WatchdogOutcome::Completed(result) => result.map_err(|e| e.to_string())?,
+        WatchdogOutcome::TimedOut => {
+            return Err(format!(
+                "Transcription timed out after {}s",
+                watchdog_timeout.as_secs()
+            ));
+        }
+        WatchdogOutcome::Panicked => {
+            return Err("Transcription worker panicked before producing a result".to_string());
+        }
+    };
 
     if transcription.is_empty() {
         return Err("Recording contains no speech".to_string());

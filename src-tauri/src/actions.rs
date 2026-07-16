@@ -8,7 +8,7 @@ use crate::audio_toolkit::{
 use crate::managers::audio::AudioRecordingManager;
 use crate::managers::history::HistoryManager;
 use crate::managers::transcription::{
-    run_with_watchdog, transcription_watchdog_timeout, TranscriptionManager,
+    transcription_watchdog_timeout, TranscriptionManager, WatchdogOutcome,
 };
 use crate::settings::{get_settings, AppSettings, APPLE_INTELLIGENCE_PROVIDER_ID};
 use crate::shortcut;
@@ -616,11 +616,9 @@ impl ShortcutAction for TranscribeAction {
                     let watchdog_timeout =
                         transcription_watchdog_timeout(sample_count, WHISPER_SAMPLE_RATE);
                     let transcription_result =
-                        match run_with_watchdog("transcription", watchdog_timeout, move || {
-                            tm.transcribe(samples)
-                        }) {
-                            Some(result) => result,
-                            None => {
+                        match tm.transcribe_with_watchdog(samples, watchdog_timeout) {
+                            WatchdogOutcome::Completed(result) => result,
+                            WatchdogOutcome::TimedOut => {
                                 let timeout_secs = watchdog_timeout.as_secs();
                                 let _ = ah.emit(
                                     "transcription-timeout",
@@ -631,6 +629,9 @@ impl ShortcutAction for TranscribeAction {
                                     timeout_secs
                                 ))
                             }
+                            WatchdogOutcome::Panicked => Err(anyhow::anyhow!(
+                                "Transcription worker panicked before producing a result"
+                            )),
                         };
 
                     // Await WAV save and verify

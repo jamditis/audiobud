@@ -9,7 +9,7 @@ use log::{debug, error, info, warn};
 use serde::Serialize;
 use specta::Type;
 use std::panic::{catch_unwind, AssertUnwindSafe};
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard, OnceLock};
 use std::thread;
 use std::time::{Duration, SystemTime};
@@ -47,6 +47,85 @@ enum LoadedEngine {
     Cohere(CohereModel),
 }
 
+/// Inner state of a [`GenerationGate`]: the stored value plus a counter that
+/// bumps on every install/clear.
+struct GateInner<T> {
+    value: Option<T>,
+    generation: u64,
+}
+
+/// Slot for the loaded engine, guarded by a generation counter (issue #58).
+///
+/// A transcription takes the engine out of the slot and puts it back when it
+/// finishes. If the call wedges and its watchdog fires, the engine can come
+/// back much later — after the model was unloaded or a different one loaded.
+/// Every install/clear bumps the generation, and a take records the
+/// generation observed, so a late restore whose generation no longer matches
+/// is rejected and the stale engine is dropped instead of clobbering the slot.
+pub(crate) struct GenerationGate<T> {
+    inner: Mutex<GateInner<T>>,
+}
+
+impl<T> GenerationGate<T> {
+    pub(crate) fn new() -> Self {
+        Self {
+            inner: Mutex::new(GateInner {
+                value: None,
+                generation: 0,
+            }),
+        }
+    }
+
+    /// Lock the slot, recovering from poison if a holder panicked.
+    fn lock(&self) -> MutexGuard<'_, GateInner<T>> {
+        self.inner.lock().unwrap_or_else(|poisoned| {
+            warn!("Engine slot mutex was poisoned by a previous panic, recovering");
+            poisoned.into_inner()
+        })
+    }
+
+    pub(crate) fn is_occupied(&self) -> bool {
+        self.lock().value.is_some()
+    }
+
+    /// Put a new value in the slot, replacing any previous one.
+    pub(crate) fn install(&self, value: T) {
+        let mut inner = self.lock();
+        inner.generation += 1;
+        inner.value = Some(value);
+    }
+
+    /// Empty the slot. Bumps the generation even when already empty, so a
+    /// value currently taken out (a running transcription) cannot be restored
+    /// after the unload.
+    pub(crate) fn clear(&self) {
+        let mut inner = self.lock();
+        inner.generation += 1;
+        inner.value = None;
+    }
+
+    /// Take the value out together with the generation observed at take time.
+    pub(crate) fn take(&self) -> Option<(T, u64)> {
+        let mut inner = self.lock();
+        let generation = inner.generation;
+        inner.value.take().map(|value| (value, generation))
+    }
+
+    /// Put a taken value back only if the slot generation is unchanged since
+    /// the take. Returns `false` (dropping the stale value) if the slot was
+    /// cleared or refilled in the meantime.
+    #[must_use]
+    pub(crate) fn try_restore(&self, value: T, taken_generation: u64) -> bool {
+        let mut inner = self.lock();
+        if inner.generation == taken_generation {
+            inner.value = Some(value);
+            true
+        } else {
+            false
+        }
+    }
+}
+
 /// RAII guard that clears the `is_loading` flag and notifies waiters on drop.
 /// Ensures the loading flag is always reset, even on early returns or panics.
 pub struct LoadingGuard {
@@ -62,9 +141,14 @@ impl Drop for LoadingGuard {
     }
 }
 
+/// Error used when a transcription or model load is refused because an
+/// earlier transcription timed out and its worker still holds an engine.
+const WEDGED_ENGINE_ERROR: &str = "A previous transcription timed out and its engine is still \
+     busy. Restart AudioBud to recover.";
+
 #[derive(Clone)]
 pub struct TranscriptionManager {
-    engine: Arc<Mutex<Option<LoadedEngine>>>,
+    engine: Arc<GenerationGate<LoadedEngine>>,
     model_manager: Arc<ModelManager>,
     app_handle: AppHandle,
     current_model_id: Arc<Mutex<Option<String>>>,
@@ -73,12 +157,17 @@ pub struct TranscriptionManager {
     watcher_handle: Arc<Mutex<Option<thread::JoinHandle<()>>>>,
     is_loading: Arc<Mutex<bool>>,
     loading_condvar: Arc<Condvar>,
+    /// Number of transcribe calls whose watchdog fired and whose worker has
+    /// not resolved yet (issue #58). While nonzero, new transcriptions and
+    /// model loads are refused so retries cannot stack additional engines on
+    /// top of the one the wedged worker still holds.
+    wedged_workers: Arc<AtomicUsize>,
 }
 
 impl TranscriptionManager {
     pub fn new(app_handle: &AppHandle, model_manager: Arc<ModelManager>) -> Result<Self> {
         let manager = Self {
-            engine: Arc::new(Mutex::new(None)),
+            engine: Arc::new(GenerationGate::new()),
             model_manager,
             app_handle: app_handle.clone(),
             current_model_id: Arc::new(Mutex::new(None)),
@@ -87,6 +176,7 @@ impl TranscriptionManager {
             watcher_handle: Arc::new(Mutex::new(None)),
             is_loading: Arc::new(Mutex::new(false)),
             loading_condvar: Arc::new(Condvar::new()),
+            wedged_workers: Arc::new(AtomicUsize::new(0)),
         };
 
         // Start the idle watcher
@@ -163,17 +253,14 @@ impl TranscriptionManager {
         Ok(manager)
     }
 
-    /// Lock the engine mutex, recovering from poison if a previous transcription panicked.
-    fn lock_engine(&self) -> MutexGuard<'_, Option<LoadedEngine>> {
-        self.engine.lock().unwrap_or_else(|poisoned| {
-            warn!("Engine mutex was poisoned by a previous panic, recovering");
-            poisoned.into_inner()
-        })
+    pub fn is_model_loaded(&self) -> bool {
+        self.engine.is_occupied()
     }
 
-    pub fn is_model_loaded(&self) -> bool {
-        let engine = self.lock_engine();
-        engine.is_some()
+    /// Whether an earlier transcription timed out and its worker is still
+    /// running (holding an engine). See `wedged_workers`.
+    pub fn is_wedged(&self) -> bool {
+        self.wedged_workers.load(Ordering::SeqCst) > 0
     }
 
     /// Atomically check whether a model load is in progress and, if not, mark
@@ -196,11 +283,10 @@ impl TranscriptionManager {
         let unload_start = std::time::Instant::now();
         debug!("Starting to unload model");
 
-        {
-            let mut engine = self.lock_engine();
-            // Dropping the engine frees all resources
-            *engine = None;
-        }
+        // Dropping the engine frees all resources. clear() also bumps the
+        // slot generation, so a transcription currently holding the engine
+        // cannot restore it after this unload.
+        self.engine.clear();
         {
             let mut current_model = self.current_model_id.lock().unwrap();
             *current_model = None;
@@ -253,6 +339,23 @@ impl TranscriptionManager {
     pub fn load_model(&self, model_id: &str) -> Result<()> {
         let load_start = std::time::Instant::now();
         debug!("Starting to load model: {}", model_id);
+
+        // Refuse to stack another engine while a wedged transcription still
+        // holds one (issue #58) — repeated retries would otherwise pile up
+        // engines and exhaust VRAM/RAM. The loading_failed event surfaces the
+        // refusal as the usual model-load toast.
+        if self.is_wedged() {
+            let _ = self.app_handle.emit(
+                "model-state-changed",
+                ModelStateEvent {
+                    event_type: "loading_failed".to_string(),
+                    model_id: Some(model_id.to_string()),
+                    model_name: None,
+                    error: Some(WEDGED_ENGINE_ERROR.to_string()),
+                },
+            );
+            return Err(anyhow::anyhow!(WEDGED_ENGINE_ERROR));
+        }
 
         // Emit loading started event
         let _ = self.app_handle.emit(
@@ -380,10 +483,7 @@ impl TranscriptionManager {
         };
 
         // Update the current engine and model ID
-        {
-            let mut engine = self.lock_engine();
-            *engine = Some(loaded_engine);
-        }
+        self.engine.install(loaded_engine);
         {
             let mut current_model = self.current_model_id.lock().unwrap();
             *current_model = Some(model_id.to_string());
@@ -476,8 +576,7 @@ impl TranscriptionManager {
                 is_loading = self.loading_condvar.wait(is_loading).unwrap();
             }
 
-            let engine_guard = self.lock_engine();
-            if engine_guard.is_none() {
+            if !self.engine.is_occupied() {
                 return Err(anyhow::anyhow!("Model is not loaded for transcription."));
             }
         }
@@ -543,13 +642,12 @@ impl TranscriptionManager {
         // We use catch_unwind to prevent engine panics from poisoning the mutex,
         // which would make the app hang indefinitely on subsequent operations.
         let result = {
-            let mut engine_guard = self.lock_engine();
-
-            // Take the engine out so we own it during transcription.
+            // Take the engine out so we own it during transcription, together
+            // with the slot generation observed at take time.
             // If the engine panics, we simply don't put it back (effectively unloading it)
             // instead of poisoning the mutex.
-            let mut engine = match engine_guard.take() {
-                Some(e) => e,
+            let (mut engine, taken_generation) = match self.engine.take() {
+                Some(taken) => taken,
                 None => {
                     return Err(anyhow::anyhow!(
                         "Model failed to load after auto-load attempt. Please check your model settings."
@@ -557,8 +655,7 @@ impl TranscriptionManager {
                 }
             };
 
-            // Release the lock before transcribing — no mutex held during the engine call
-            drop(engine_guard);
+            // take() released the slot lock — no mutex held during the engine call
 
             let transcribe_result = catch_unwind(AssertUnwindSafe(
                 || -> Result<transcribe_rs::TranscriptionResult> {
@@ -672,9 +769,18 @@ impl TranscriptionManager {
 
             match transcribe_result {
                 Ok(inner_result) => {
-                    // Success or normal error — put the engine back
-                    let mut engine_guard = self.lock_engine();
-                    *engine_guard = Some(engine);
+                    // Success or normal error — put the engine back, unless
+                    // the slot changed while we were out (model unloaded or a
+                    // different one loaded, e.g. after this call wedged and
+                    // its watchdog fired). Restoring then would clobber the
+                    // current engine or resurrect an unloaded one, so the
+                    // stale engine is dropped instead (issue #58).
+                    if !self.engine.try_restore(engine, taken_generation) {
+                        warn!(
+                            "Engine slot changed while a transcription was running; \
+                             dropping the stale engine instead of restoring it"
+                        );
+                    }
                     inner_result?
                 }
                 Err(panic_payload) => {
@@ -777,6 +883,32 @@ impl TranscriptionManager {
 
         Ok(final_result)
     }
+
+    /// Watchdog-guarded transcription (issue #58).
+    ///
+    /// While an earlier timed-out call is still running (wedged) this refuses
+    /// immediately instead of starting another engine call: the wedged worker
+    /// still holds the engine it took out of the slot, and stacking more
+    /// engines on retries would exhaust VRAM/RAM. Model loads are refused for
+    /// the same reason (see [`Self::load_model`]). If the wedged worker ever
+    /// resolves, the count clears and — when the slot generation is unchanged
+    /// — its engine is restored, so the manager recovers without a restart.
+    pub fn transcribe_with_watchdog(
+        &self,
+        audio: Vec<f32>,
+        timeout: Duration,
+    ) -> WatchdogOutcome<Result<String>> {
+        if self.is_wedged() {
+            return WatchdogOutcome::Completed(Err(anyhow::anyhow!(WEDGED_ENGINE_ERROR)));
+        }
+        let manager = self.clone();
+        run_with_watchdog(
+            "transcription",
+            timeout,
+            Arc::clone(&self.wedged_workers),
+            move || manager.transcribe(audio),
+        )
+    }
 }
 
 /// Shortest watchdog deadline: even a tiny clip gets this long before the
@@ -803,52 +935,115 @@ pub(crate) fn transcription_watchdog_timeout(sample_count: usize, sample_rate: u
         .clamp(TRANSCRIPTION_TIMEOUT_FLOOR, TRANSCRIPTION_TIMEOUT_CEILING)
 }
 
+/// How a watchdog-guarded call ended (issue #58).
+#[derive(Debug)]
+pub enum WatchdogOutcome<T> {
+    /// The call finished within the deadline; its result is inside.
+    Completed(T),
+    /// The deadline passed with the worker still running. It is counted in
+    /// the wedged-worker counter until it resolves.
+    TimedOut,
+    /// The worker panicked before producing a result. Distinct from
+    /// [`WatchdogOutcome::TimedOut`] so callers don't report a false timeout.
+    Panicked,
+}
+
+/// Handshake between the watchdog and its worker so the wedged-worker count
+/// stays exact even when the worker finishes right at the deadline.
+struct WatchdogState {
+    finished: bool,
+    timed_out: bool,
+}
+
 /// Run `f` and give up if it does not finish within `timeout` (issue #58).
-///
-/// Returns `Some(result)` on completion, `None` if the deadline passed (or the
-/// worker panicked before producing a result). The caller must treat `None` as
-/// an error and recover the UI/state itself.
+/// The caller must treat anything but `Completed` as an error and recover the
+/// UI/state itself.
 ///
 /// Limitation: a wedged worker thread cannot be killed. On timeout it is left
-/// running detached; if it ever finishes, the late result is logged and
-/// discarded. For `TranscriptionManager::transcribe` this is safe — the wedged
-/// call still owns the engine it took out of the mutex, so the manager sees no
-/// loaded engine and the next attempt loads a fresh one.
+/// running detached and `wedged_workers` is incremented until it resolves
+/// (its late result is then logged and discarded, and the count decremented).
+/// The counter lets the owner refuse new work while a wedged worker still
+/// holds resources.
 pub(crate) fn run_with_watchdog<T: Send + 'static>(
     operation: &'static str,
     timeout: Duration,
+    wedged_workers: Arc<AtomicUsize>,
     f: impl FnOnce() -> T + Send + 'static,
-) -> Option<T> {
+) -> WatchdogOutcome<T> {
     let (tx, rx) = std::sync::mpsc::channel();
+    let state = Arc::new(Mutex::new(WatchdogState {
+        finished: false,
+        timed_out: false,
+    }));
+
+    let worker_state = Arc::clone(&state);
+    let worker_wedged = Arc::clone(&wedged_workers);
     thread::spawn(move || {
-        let result = f();
-        if tx.send(result).is_err() {
+        let result = catch_unwind(AssertUnwindSafe(f));
+        let panicked = result.is_err();
+        if let Ok(value) = result {
+            // Send before marking finished: once the watchdog observes
+            // `finished`, a successful result is guaranteed to be in the
+            // channel (so an empty channel + finished means a panic).
+            let _ = tx.send(value);
+        }
+        let timed_out = {
+            let mut st = worker_state.lock().unwrap_or_else(|p| p.into_inner());
+            st.finished = true;
+            if st.timed_out {
+                // Increment and decrement both happen under this lock, so the
+                // count can never underflow.
+                worker_wedged.fetch_sub(1, Ordering::SeqCst);
+            }
+            st.timed_out
+        };
+        if timed_out {
             warn!(
-                "{} finished after its watchdog already fired; late result discarded",
-                operation
+                "{} resolved after its watchdog already fired; late {} discarded",
+                operation,
+                if panicked { "panic" } else { "result" }
             );
         }
+        if panicked {
+            error!("{} worker thread panicked", operation);
+        }
+        // tx drops here; a watchdog still waiting sees Disconnected on panic.
     });
 
     match rx.recv_timeout(timeout) {
-        Ok(result) => Some(result),
-        Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
-            error!(
-                "{} watchdog fired after {:?}; the engine appears wedged. \
-                 The worker thread cannot be killed and is left running detached.",
-                operation, timeout
-            );
-            None
-        }
+        Ok(result) => WatchdogOutcome::Completed(result),
         Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
-            // The worker panicked before sending. transcribe() catches engine
-            // panics itself, so this is unexpected — but it still must not
-            // wedge the pipeline.
+            // The worker panicked. transcribe() catches engine panics itself,
+            // so this is unexpected — but it still must not wedge the pipeline.
             error!(
                 "{} worker thread panicked before producing a result",
                 operation
             );
-            None
+            WatchdogOutcome::Panicked
+        }
+        Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+            let mut st = state.lock().unwrap_or_else(|p| p.into_inner());
+            if st.finished {
+                // The worker finished right at the deadline. On success its
+                // result is already in the channel; nothing there means it
+                // panicked.
+                drop(st);
+                match rx.try_recv() {
+                    Ok(result) => WatchdogOutcome::Completed(result),
+                    Err(_) => WatchdogOutcome::Panicked,
+                }
+            } else {
+                st.timed_out = true;
+                wedged_workers.fetch_add(1, Ordering::SeqCst);
+                drop(st);
+                error!(
+                    "{} watchdog fired after {:?}; the engine appears wedged. The worker \
+                     thread cannot be killed and is left running detached; further \
+                     transcriptions and model loads are refused until it resolves.",
+                    operation, timeout
+                );
+                WatchdogOutcome::TimedOut
+            }
         }
     }
 }
@@ -947,40 +1142,123 @@ pub fn get_available_accelerators() -> AvailableAccelerators {
     }
 }
 
+impl Drop for TranscriptionManager {
+    fn drop(&mut self) {
+        // Skip shutdown unless this is the very last clone. TranscriptionManager
+        // is cloned by initiate_model_load() and the watcher thread — those
+        // clones dropping must not kill the watcher. The watcher thread holds
+        // its own clone, so engine's strong_count is always >= 2 while the
+        // watcher is alive. When it reaches 1, only this instance remains
+        // and we can safely shut down.
+        if Arc::strong_count(&self.engine) > 1 {
+            return;
+        }
+
+        // Signal the watcher thread to shutdown
+        self.shutdown_signal.store(true, Ordering::Relaxed);
+
+        // Wait for the thread to finish gracefully
+        if let Some(handle) = self.watcher_handle.lock().unwrap().take() {
+            if let Err(e) = handle.join() {
+                warn!("Failed to join idle watcher thread: {:?}", e);
+            } else {
+                debug!("Idle watcher thread joined successfully");
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod watchdog_tests {
     use super::{
-        run_with_watchdog, transcription_watchdog_timeout, TRANSCRIPTION_TIMEOUT_CEILING,
-        TRANSCRIPTION_TIMEOUT_FLOOR,
+        run_with_watchdog, transcription_watchdog_timeout, GenerationGate, WatchdogOutcome,
+        TRANSCRIPTION_TIMEOUT_CEILING, TRANSCRIPTION_TIMEOUT_FLOOR,
     };
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
     use std::time::{Duration, Instant};
+
+    fn counter() -> Arc<AtomicUsize> {
+        Arc::new(AtomicUsize::new(0))
+    }
 
     #[test]
     fn watchdog_passes_through_a_result_that_arrives_in_time() {
-        let result = run_with_watchdog("test", Duration::from_secs(5), || "hello".to_string());
-        assert_eq!(result, Some("hello".to_string()));
+        let wedged = counter();
+        let outcome =
+            run_with_watchdog("test", Duration::from_secs(5), Arc::clone(&wedged), || {
+                "hello".to_string()
+            });
+        assert!(matches!(outcome, WatchdogOutcome::Completed(ref s) if s == "hello"));
+        assert_eq!(wedged.load(Ordering::SeqCst), 0);
     }
 
     /// Reproduces issue #58: with no watchdog, a wedged engine call blocks the
     /// pipeline forever and the "transcribing" UI state is never cleared. The
-    /// watchdog must return `None` at its deadline instead of waiting for the
-    /// wedged call. The stand-in for a wedged engine sleeps well past the
+    /// watchdog must report `TimedOut` at its deadline instead of waiting for
+    /// the wedged call. The stand-in for a wedged engine sleeps well past the
     /// deadline (rather than literally forever) so a failing run still
     /// terminates.
     #[test]
     fn watchdog_times_out_on_a_wedged_transcribe_call() {
         let start = Instant::now();
-        let result = run_with_watchdog("test", Duration::from_millis(100), || {
+        let outcome = run_with_watchdog("test", Duration::from_millis(100), counter(), || {
             std::thread::sleep(Duration::from_secs(3));
         });
         assert!(
-            result.is_none(),
+            matches!(outcome, WatchdogOutcome::TimedOut),
             "a wedged transcribe call must time out, not produce a result"
         );
         assert!(
             start.elapsed() < Duration::from_secs(2),
             "the watchdog must fire at its deadline instead of waiting out the wedged call"
         );
+    }
+
+    /// A wedged worker is counted while it is still running so the owner can
+    /// refuse new engine loads/transcriptions (no engine stacking), and the
+    /// count clears when the worker finally resolves.
+    #[test]
+    fn watchdog_counts_a_wedged_worker_and_clears_it_when_it_resolves() {
+        let wedged = counter();
+        let outcome = run_with_watchdog(
+            "test",
+            Duration::from_millis(50),
+            Arc::clone(&wedged),
+            || std::thread::sleep(Duration::from_millis(400)),
+        );
+        assert!(matches!(outcome, WatchdogOutcome::TimedOut));
+        assert_eq!(
+            wedged.load(Ordering::SeqCst),
+            1,
+            "a timed-out worker must be counted as wedged while it is still running"
+        );
+
+        // The worker resolves ~350ms later; poll until the count clears.
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while wedged.load(Ordering::SeqCst) != 0 {
+            assert!(
+                Instant::now() < deadline,
+                "the wedged count must clear once the late worker resolves"
+            );
+            std::thread::sleep(Duration::from_millis(10));
+        }
+    }
+
+    /// A worker panic must be reported as `Panicked`, not as a false
+    /// "timed out after N seconds", and must not leave a wedged count behind.
+    #[test]
+    fn watchdog_reports_a_worker_panic_as_panicked_not_timed_out() {
+        let wedged = counter();
+        let outcome: WatchdogOutcome<()> =
+            run_with_watchdog("test", Duration::from_secs(5), Arc::clone(&wedged), || {
+                panic!("simulated engine panic")
+            });
+        assert!(
+            matches!(outcome, WatchdogOutcome::Panicked),
+            "a worker panic must surface as Panicked, not TimedOut or Completed"
+        );
+        assert_eq!(wedged.load(Ordering::SeqCst), 0);
     }
 
     #[test]
@@ -1007,30 +1285,51 @@ mod watchdog_tests {
             TRANSCRIPTION_TIMEOUT_FLOOR
         );
     }
-}
 
-impl Drop for TranscriptionManager {
-    fn drop(&mut self) {
-        // Skip shutdown unless this is the very last clone. TranscriptionManager
-        // is cloned by initiate_model_load() and the watcher thread — those
-        // clones dropping must not kill the watcher. The watcher thread holds
-        // its own clone, so engine's strong_count is always >= 2 while the
-        // watcher is alive. When it reaches 1, only this instance remains
-        // and we can safely shut down.
-        if Arc::strong_count(&self.engine) > 1 {
-            return;
-        }
+    #[test]
+    fn generation_gate_restores_when_the_slot_is_untouched() {
+        let gate: GenerationGate<u32> = GenerationGate::new();
+        gate.install(7);
+        let (value, generation) = gate.take().expect("installed value must be takeable");
+        assert!(!gate.is_occupied());
+        assert!(
+            gate.try_restore(value, generation),
+            "a take/restore with no intervening slot change must succeed"
+        );
+        assert!(gate.is_occupied());
+    }
 
-        // Signal the watcher thread to shutdown
-        self.shutdown_signal.store(true, Ordering::Relaxed);
+    /// A late-returning transcription must not resurrect its engine after the
+    /// model was unloaded while it was out.
+    #[test]
+    fn generation_gate_rejects_a_restore_after_clear() {
+        let gate: GenerationGate<u32> = GenerationGate::new();
+        gate.install(7);
+        let (value, generation) = gate.take().expect("installed value must be takeable");
+        gate.clear();
+        assert!(
+            !gate.try_restore(value, generation),
+            "restoring after an unload must be rejected"
+        );
+        assert!(!gate.is_occupied());
+    }
 
-        // Wait for the thread to finish gracefully
-        if let Some(handle) = self.watcher_handle.lock().unwrap().take() {
-            if let Err(e) = handle.join() {
-                warn!("Failed to join idle watcher thread: {:?}", e);
-            } else {
-                debug!("Idle watcher thread joined successfully");
-            }
-        }
+    /// A late-returning transcription must not clobber an engine that was
+    /// loaded while it was out (e.g. a fresh model loaded after its watchdog
+    /// fired).
+    #[test]
+    fn generation_gate_rejects_a_restore_after_a_new_install() {
+        let gate: GenerationGate<u32> = GenerationGate::new();
+        gate.install(7);
+        let (stale, generation) = gate.take().expect("installed value must be takeable");
+        gate.install(8);
+        assert!(
+            !gate.try_restore(stale, generation),
+            "restoring over a newly installed value must be rejected"
+        );
+        let (current, _) = gate
+            .take()
+            .expect("the new value must still be in the slot");
+        assert_eq!(current, 8, "the newly installed value must win");
     }
 }
