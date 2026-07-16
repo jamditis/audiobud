@@ -76,6 +76,52 @@ function hasKeyPath(obj: TranslationData, keyPath: string[]): boolean {
   return true;
 }
 
+// i18next resolves a plural by appending a CLDR category suffix to a base key, and the
+// categories a language has are language-specific: en has one/other, ru adds few/many,
+// ar has all six. So a locale legitimately carries keys the reference language cannot --
+// `added_few` is valid Russian even though en can never define it. Treat those as part of
+// the same plural group rather than as extra keys, otherwise this check blocks the only
+// correct fix for locales whose plurals currently fall back to English (see #96).
+const PLURAL_CATEGORIES = ["zero", "one", "two", "few", "many", "other"];
+const PLURAL_KEY = new RegExp(`^(.*)_(${PLURAL_CATEGORIES.join("|")})$`);
+
+function isPluralVariantOfReference(
+  referenceData: TranslationData,
+  keyPath: string[],
+): boolean {
+  const match = PLURAL_KEY.exec(keyPath[keyPath.length - 1]);
+  if (!match) return false;
+
+  const [, base] = match;
+  const parent = keyPath.slice(0, -1);
+
+  // Scope the exemption to plural groups the reference actually defines, so an
+  // invented `removed_few` is still reported when en has no `removed_*` at all.
+  return PLURAL_CATEGORIES.some((category) =>
+    hasKeyPath(referenceData, parent.concat([`${base}_${category}`])),
+  );
+}
+
+export function findMissingKeys(
+  referenceData: TranslationData,
+  langData: TranslationData,
+): string[][] {
+  return getAllKeyPaths(referenceData).filter(
+    (keyPath) => !hasKeyPath(langData, keyPath),
+  );
+}
+
+export function findExtraKeys(
+  referenceData: TranslationData,
+  langData: TranslationData,
+): string[][] {
+  return getAllKeyPaths(langData).filter(
+    (keyPath) =>
+      !hasKeyPath(referenceData, keyPath) &&
+      !isPluralVariantOfReference(referenceData, keyPath),
+  );
+}
+
 function loadTranslationFile(lang: string): TranslationData | null {
   const filePath = path.join(LOCALES_DIR, lang, "translation.json");
 
@@ -121,16 +167,8 @@ function validateTranslations(): void {
       continue;
     }
 
-    // Find missing keys
-    const missing = referenceKeyPaths.filter(
-      (keyPath) => !hasKeyPath(langData, keyPath),
-    );
-
-    // Find extra keys (keys in language but not in reference)
-    const langKeyPaths = getAllKeyPaths(langData);
-    const extra = langKeyPaths.filter(
-      (keyPath) => !hasKeyPath(referenceData, keyPath),
-    );
+    const missing = findMissingKeys(referenceData, langData);
+    const extra = findExtraKeys(referenceData, langData);
 
     results[lang] = {
       valid: missing.length === 0 && extra.length === 0,
@@ -220,5 +258,8 @@ function validateTranslations(): void {
   }
 }
 
-// Run validation
-validateTranslations();
+// Only run when invoked directly, so the helpers above can be imported by tests
+// without the module exiting the process on import.
+if (import.meta.main) {
+  validateTranslations();
+}

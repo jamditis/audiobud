@@ -9,9 +9,12 @@
     "cancel": "Zrušit",
     "pushToTalk": "Stisk a mluv",
     "muteWhileRecording": "Ztlumit při nahrávání",
-    "appendTrailingSpace": "Přidat koncovou mezeru"
+    "appendTrailingSpace": "Přidat koncovou mezeru",
+    "autoSubmit": "Automatické odeslání",
+    "showOverlay": "Zobrazit překryv"
   },
   "sidebar": {
+    "navLabel": "Sekce nastavení",
     "general": "Obecné",
     "models": "Modely",
     "advanced": "Pokročilé",
@@ -125,6 +128,7 @@
   "modelSelector": {
     "custom": "Vlastní",
     "active": "Aktivní",
+    "switching": "Přepínání...",
     "noModelsAvailable": "Nejsou dostupné žádné modely",
     "verifying": "Ověřování {{modelName}}...",
     "verifyingGeneric": "Ověřování...",
@@ -140,41 +144,26 @@
     "modelUnloaded": "Model uvolněn",
     "noModelDownloadRequired": "Žádný model - je nutné stáhnout",
     "deleteModel": "Smazat {{modelName}}",
-    "switching": "Přepínání...",
     "downloadSpeed": "{{speed}} MB/s",
+    "cancel": "Zrušit",
+    "cancelDownload": "Zrušit stahování",
     "capabilities": {
       "languageSelection": "Podporuje více vstupních jazyků",
-      "multiLanguage": "Vícejazyčný",
-      "translation": "Umí překládat do angličtiny",
-      "translate": "Přeložit do angličtiny",
       "singleLanguage": "Podporuje pouze tento jazyk",
-      "languageOnly": "Pouze {{language}}"
-    },
-    "cancel": "Zrušit",
-    "cancelDownload": "Zrušit stahování"
+      "multiLanguage": "Vícejazyčný",
+      "languageOnly": "Pouze {{language}}",
+      "translation": "Umí překládat do angličtiny",
+      "translate": "Přeložit do angličtiny"
+    }
   },
   "settings": {
+    "autosave": {
+      "saved": "Uloženo do rybníčku",
+      "failed": "Změnu se nepodařilo uložit"
+    },
     "modelSettings": {
       "title": "Nastavení {{model}}",
       "noSettingsNeeded": "Tento model funguje automaticky bez nutnosti konfigurace."
-    },
-    "models": {
-      "title": "Modely přepisu",
-      "description": "Vyberte model přepisu nebo stáhněte další modely. Různé modely nabízejí různé úrovně přesnosti a rychlosti.",
-      "downloaded": "Staženo",
-      "available": "K dispozici ke stažení",
-      "deleteConfirm": "Opravdu chcete smazat {{modelName}}? Pro opětovné použití jej budete muset znovu stáhnout.",
-      "deleteActiveConfirm": "{{modelName}} je váš aktivní model. Jeho smazáním se zastaví přepisy, dokud nevyberete nový model. Opravdu chcete pokračovat?",
-      "deleteTitle": "Smazat model",
-      "filters": {
-        "all": "Vše",
-        "multiLanguage": "Vícejazyčný",
-        "translation": "Překlad",
-        "allLanguages": "Všechny jazyky"
-      },
-      "noModelsMatch": "Tomuto filtru neodpovídají žádné modely.",
-      "yourModels": "Stažené modely",
-      "availableModels": "Dostupné ke stažení"
     },
     "general": {
       "title": "Obecné",
@@ -197,6 +186,10 @@
           "transcribe_with_post_process": {
             "name": "Klávesa pro následné zpracování",
             "description": "Volitelné: Vyhrazená klávesová zkratka, která vždy použije AI následné zpracování na váš přepis."
+          },
+          "transcribe_raw": {
+            "name": "Klávesa pro surový přepis",
+            "description": "Vyhrazená klávesová zkratka, která pouze pro tento jeden diktát přepíše text jako surový – malými písmeny a bez interpunkce."
           }
         },
         "errors": {
@@ -218,13 +211,36 @@
         "description": "Podržte pro nahrávání, uvolněte pro zastavení"
       }
     },
+    "models": {
+      "title": "Modely přepisu",
+      "description": "Vyberte model přepisu nebo stáhněte další modely. Různé modely nabízejí různé úrovně přesnosti a rychlosti.",
+      "yourModels": "Stažené modely",
+      "availableModels": "Dostupné ke stažení",
+      "downloaded": "Staženo",
+      "available": "K dispozici ke stažení",
+      "deleteConfirm": "Opravdu chcete smazat {{modelName}}? Pro opětovné použití jej budete muset znovu stáhnout.",
+      "deleteActiveConfirm": "{{modelName}} je váš aktivní model. Jeho smazáním se zastaví přepisy, dokud nevyberete nový model. Opravdu chcete pokračovat?",
+      "deleteTitle": "Smazat model",
+      "filters": {
+        "all": "Vše",
+        "multiLanguage": "Vícejazyčný",
+        "translation": "Překlad",
+        "allLanguages": "Všechny jazyky"
+      },
+      "noModelsMatch": "Tomuto filtru neodpovídají žádné modely."
+    },
     "sound": {
       "title": "Zvuk",
+      "previewSounds": "Přehrát ukázku zvuků (nejprve start, pak stop)",
       "microphone": {
         "title": "Mikrofon",
         "description": "Vyberte preferované zařízení mikrofonu",
         "placeholder": "Vyberte mikrofon...",
         "loading": "Načítání..."
+      },
+      "inputLevel": {
+        "title": "Úroveň vstupu",
+        "description": "Živá úroveň z vybraného mikrofonu. Když promluvíte, sloupce se rozhýbou – tím se potvrdí, že zvuk přichází."
       },
       "audioFeedback": {
         "label": "Zvuková odezva",
@@ -239,6 +255,12 @@
       "volume": {
         "title": "Hlasitost",
         "description": "Upravte hlasitost zvukové odezvy"
+      },
+      "outputTest": {
+        "title": "Test výstupu",
+        "description": "Přehrajte zkušební zvuk přes vybrané výstupní zařízení a ověřte, že zvuk vychází.",
+        "button": "Otestovat výstup",
+        "playing": "Přehrávání..."
       }
     },
     "advanced": {
@@ -292,6 +314,22 @@
           "none": "Žádné",
           "bottom": "Dole",
           "top": "Nahoře"
+        },
+        "fine": {
+          "title": "Pozice na obrazovce",
+          "description": "Vyberte, kde má na aktivní obrazovce sedět indikátor nahrávání. Prostřední sloupec odpovídá výchozímu umístění.",
+          "reset": "Obnovit výchozí"
+        },
+        "anchors": {
+          "topleft": "Vlevo nahoře",
+          "topcenter": "Nahoře uprostřed",
+          "topright": "Vpravo nahoře",
+          "middleleft": "Vlevo uprostřed",
+          "middlecenter": "Uprostřed",
+          "middleright": "Vpravo uprostřed",
+          "bottomleft": "Vlevo dole",
+          "bottomcenter": "Dole uprostřed",
+          "bottomright": "Vpravo dole"
         }
       },
       "pasteMethod": {
@@ -352,13 +390,104 @@
           "sec15": "Po 15 sekundách (Debug)"
         }
       },
+      "dictionaryGuide": {
+        "title": "Aby slova seděla",
+        "intro": "Spolupracují dva nástroje. Vlastní slova nasměrují model k výrazům, které používáte často, takže jim dá přednost, když je zvuk nejednoznačný. Náhrady slov vynutí přesnou opravu až potom – u přeslechů, které model dělá pořád dokola.",
+        "rule": "Začněte vlastním slovem. Pokud jméno nebo výraz pořád vychází špatně vždy stejným způsobem, přidejte náhradu slova z toho, co slyšíte, na to, co myslíte.",
+        "examplesToggle": "Zobrazit příklady",
+        "examples": {
+          "name": {
+            "title": "Těžké jméno (jamditis)",
+            "body": "Přidejte \"jamditis\" jako vlastní slovo. Pokud se pořád přepisuje jako \"jam dightis\", přidejte náhradu slova: jam dightis → jamditis."
+          },
+          "domain": {
+            "title": "Doména nebo e-mail (jamditis.com)",
+            "body": "Řeknete \"jamditis tečka com\", takže přidejte náhradu slova: jamditis tečka com → jamditis.com. Náhrady zachovají přesné znaky, takže výraz zůstane jedním celkem a nerozdělí se mezerami ani nezíská velké písmeno."
+          },
+          "handle": {
+            "title": "Uživatelské jméno (@jamditis)",
+            "body": "Přidejte náhradu slova: zavináč jamditis → @jamditis."
+          }
+        },
+        "engineNote": "Vlastní slova řídí modely Whisper už při dekódování; u ostatních modelů opravují text až potom, takže výsledky se model od modelu liší. Náhrady slov fungují stejně u všech modelů."
+      },
       "customWords": {
         "title": "Vlastní slova",
         "description": "Přidejte slova, která jsou při přepisu často špatně rozpoznána nebo napsána. Systém automaticky opraví podobně znějící slova podle vašeho seznamu.",
         "placeholder": "Přidat slovo",
         "add": "Přidat",
         "remove": "Odebrat {{word}}",
-        "duplicate": "\"{{word}}\" již existuje"
+        "duplicate": "\"{{word}}\" již existuje",
+        "capReached": "Váš slovník je plný ({{cap}} slov). Chcete-li přidat další, nějaká odeberte.",
+        "count": "{{count}} / {{cap}} slov",
+        "import": {
+          "title": "Import seznamu",
+          "description": "Nahrajte soubor .txt nebo vložte seznam. Položky oddělte novými řádky nebo čárkami. Fráze až o třech slovech se zachovají; delší položky se rozdělí na jednotlivá slova.",
+          "upload": "Nahrát soubor .txt",
+          "formatHint": "Prostý .txt nebo .csv. Jedno slovo nebo fráze na řádek, případně položky oddělte čárkami. Fráze až o třech slovech zůstanou pohromadě; delší položky se rozdělí na jednotlivá slova. Celkem až 500 položek.",
+          "pastePlaceholder": "Vložte sem slova, jedno na řádek nebo oddělená čárkami",
+          "add": "Přidat seznam",
+          "none": "Žádná nová slova k přidání",
+          "added_one": "Přidáno {{count}} slovo",
+          "added_few": "Přidána {{count}} slova",
+          "added_other": "Přidáno {{count}} slov",
+          "skippedDuplicates": "{{count}} již ve vašem seznamu",
+          "skippedCap": "{{count}} nad limit {{cap}} slov",
+          "skippedInvalid": "{{count}} příliš dlouhých",
+          "readError": "Soubor se nepodařilo přečíst"
+        }
+      },
+      "wordReplacements": {
+        "title": "Náhrady slov",
+        "description": "Vždy nahradí přesná slova nebo fráze bez ohledu na to, jak znějí. Spouští se u každého přepisu, u všech modelů, až po vyhledávání vlastních slov. Ponechte náhradu prázdnou, chcete-li slovo smazat. Použijte je pro opravy, které přibližné vyhledávání nezvládne bezpečně (například \"clawed\" na \"Claude\").",
+        "fromPlaceholder": "Slyšeno",
+        "toPlaceholder": "Nahradit za",
+        "add": "Přidat",
+        "wholeWord": "Pouze celé slovo",
+        "caseSensitive": "Rozlišovat velikost písmen",
+        "duplicate": "\"{{word}}\" již má náhradu",
+        "capReached": "Váš seznam náhrad je plný ({{cap}} položek). Chcete-li přidat další, nějaké odeberte.",
+        "tooLong": "Každé pole musí mít méně než {{max}} znaků",
+        "count": "{{count}} / {{cap}} náhrad",
+        "deletes": "(smaže slovo)",
+        "partialBadge": "částečné",
+        "caseBadge": "Aa",
+        "remove": "Odebrat náhradu pro {{word}}"
+      },
+      "personalization": {
+        "title": "Učit se z mé historie",
+        "description": "Zapněte, aby AudioBud navrhoval vlastní slova ze jmen a výrazů, které diktujete nejčastěji. Vše zůstává na tomto zařízení: čte se místní historie přepisů, nic se nikam neodesílá a naučená data můžete kdykoli exportovat nebo smazat. Ve výchozím stavu vypnuto.",
+        "error": "Něco se pokazilo. Zkuste to prosím znovu.",
+        "suggestions": {
+          "title": "Navrhovaná slova",
+          "description": "Častá vlastní jména a výrazy vytěžené z vaší historie přepisů. Ta, která chcete, přidejte jako vlastní slova, ostatní odmítněte, aby se přestala zobrazovat.",
+          "refresh": "Obnovit návrhy",
+          "loading": "Prohledávám historii...",
+          "empty": "Zatím žádné nové návrhy. Nadiktujte více textu a obnovte.",
+          "count": "viděno {{count}}×",
+          "accept": "Přidat",
+          "dismiss": "Odmítnout",
+          "dismissLabel": "Odmítnout návrh {{word}}"
+        },
+        "learned": {
+          "count": "Naučená slova: {{count}}",
+          "remove": "Odebrat naučené slovo {{word}}"
+        },
+        "data": {
+          "title": "Vaše data personalizace",
+          "description": "Exportujte kopii toho, co se AudioBud naučil, nebo vše smažte. Resetováním se odeberou všechna naučená slova a odmítnuté návrhy; vašich ručně přidaných vlastních slov a náhrad se to nedotkne.",
+          "export": "Exportovat",
+          "reset": "Resetovat personalizaci",
+          "resetTitle": "Resetovat personalizaci",
+          "resetConfirm": "Tímto se smažou všechna naučená slova a odmítnuté návrhy. Vaše ručně přidaná vlastní slova a náhrady zůstanou. Pokračovat?",
+          "resetDone": "Data personalizace byla smazána",
+          "exportDone": "Data personalizace byla exportována",
+          "exportError": "Data personalizace se nepodařilo exportovat"
+        }
+      },
+      "rawOutput": {
+        "label": "Surový přepis",
+        "description": "Vypisuje text malými písmeny, bez velkých písmen a bez koncové interpunkce. Zkratky (API, GPU) a samostatné anglické \"I\" zůstávají zachovány. Hodí se pro předávání dalším nástrojům nebo když model formátuje příliš. Pro jednorázové surové diktáty si můžete nastavit i samostatnou zkratku."
       }
     },
     "postProcessing": {
@@ -461,7 +590,8 @@
       "historyLimit": {
         "title": "Limit historie",
         "description": "Maximální počet záznamů historie k uchování",
-        "entries": "záznamů"
+        "entries": "záznamů",
+        "trimNote": "Snížení limitu nesmaže nahrávky okamžitě. Neuložené nahrávky nad limit se odeberou, až přidáte další nahrávku."
       },
       "recordingRetention": {
         "title": "Automatické mazání nahrávek",
@@ -471,7 +601,8 @@
         "days3": "Po 3 dnech",
         "weeks2": "Po 2 týdnech",
         "months3": "Po 3 měsících",
-        "placeholder": "Vyberte dobu uchování..."
+        "placeholder": "Vyberte dobu uchování...",
+        "trimNote": "Změna tohoto nastavení nesmaže nahrávky okamžitě. Staré neuložené nahrávky se odeberou, až přidáte další nahrávku."
       },
       "alwaysOnMicrophone": {
         "label": "Vždy zapnutý mikrofon",
@@ -528,16 +659,26 @@
         "button": "Zobrazit na GitHubu"
       },
       "supportDevelopment": {
-        "title": "Podpořte vývoj",
-        "description": "Pomozte nám pokračovat ve vývoji Handy",
-        "button": "Přispět"
+        "title": "Nakrmte žábu",
+        "description": "AudioBud je zdarma a běží celý na vašem počítači. Pokud vám ušetří psaní, hoďte žábě mouchu.",
+        "button": "Kupte mi mouchu"
       },
       "acknowledgments": {
         "title": "Poděkování",
+        "handy": {
+          "title": "Handy",
+          "description": "Open-source diktovací aplikace, na které AudioBud staví",
+          "details": "AudioBud je fork projektu Handy (licence MIT) od cjpais. Velké díky cjpais a přispěvatelům projektu Handy za základ, na kterém tato aplikace stojí. Více na handy.computer."
+        },
+        "parakeet": {
+          "title": "Parakeet",
+          "description": "NVIDIA NeMo Parakeet, výchozí engine AudioBud na Windows",
+          "details": "Přepis ve výchozím nastavení používá model Parakeet od NVIDIA přes ONNX runtime transcribe-rs. Díky NVIDIA NeMo a správcům projektu transcribe-rs."
+        },
         "whisper": {
           "title": "Whisper.cpp",
-          "description": "Vysoce výkonné inferenční zpracování modelu automatického rozpoznávání řeči Whisper od OpenAI",
-          "details": "Handy používá Whisper.cpp pro rychlé lokální zpracování řeči na text. Díky skvělé práci Georgiho Gerganova a přispěvatelů."
+          "description": "Vysoce výkonná lokální inference modelu Whisper od OpenAI",
+          "details": "AudioBud umí přepisovat i pomocí Whisper.cpp s akcelerací na GPU. Díky Georgimu Gerganovovi a přispěvatelům."
         }
       }
     }
@@ -572,6 +713,7 @@
     "update": "Aktualizovat",
     "close": "Zavřít",
     "open": "Otevřít",
+    "moreInfo": "Více informací",
     "default": "Výchozí",
     "enabled": "Zapnuto",
     "disabled": "Vypnuto",
@@ -602,7 +744,9 @@
     "modelLoadFailed": "Nepodařilo se načíst model: {{model}}",
     "modelLoadFailedUnknown": "neznámý model",
     "pasteFailedTitle": "Vložení textu se nezdařilo",
-    "pasteFailed": "Text nebylo možné vložit do aktivní aplikace."
+    "pasteFailed": "Text nebylo možné vložit do aktivní aplikace.",
+    "transcriptionTimeoutTitle": "Vypršel časový limit přepisu",
+    "transcriptionTimeout": "Engine neodpověděl ani po {{seconds}} sekundách a možná se zasekl. Pokud se to bude opakovat, restartujte AudioBud."
   },
   "appLanguage": {
     "title": "Jazyk aplikace",
@@ -610,6 +754,10 @@
   },
   "overlay": {
     "transcribing": "Přepisuji...",
-    "processing": "Zpracovávám..."
+    "processing": "Zpracovávám...",
+    "recording": "Nahrávání",
+    "cancel": "Zrušit nahrávání",
+    "raw": "RAW",
+    "rawHint": "Režim surového přepisu"
   }
 }
