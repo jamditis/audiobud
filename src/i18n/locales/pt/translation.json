@@ -469,7 +469,8 @@
           "dismissLabel": "Dispensar sugestão {{word}}"
         },
         "learned": {
-          "count": "{{count}} palavras aprendidas",
+          "count_one": "{{count}} palavra aprendida",
+          "count_other": "{{count}} palavras aprendidas",
           "remove": "Remover palavra aprendida {{word}}"
         },
         "data": {

@@ -469,7 +469,8 @@
           "dismissLabel": "Отхвърляне на предложението {{word}}"
         },
         "learned": {
-          "count": "{{count}} научени думи",
+          "count_one": "{{count}} научена дума",
+          "count_other": "{{count}} научени думи",
           "remove": "Премахване на научената дума {{word}}"
         },
         "data": {

@@ -471,7 +471,10 @@
           "dismissLabel": "Відхилити пропозицію {{word}}"
         },
         "learned": {
-          "count": "{{count}} вивчених слів",
+          "count_one": "{{count}} вивчене слово",
+          "count_few": "{{count}} вивчені слова",
+          "count_many": "{{count}} вивчених слів",
+          "count_other": "{{count}} вивчених слів",
           "remove": "Видалити вивчене слово {{word}}"
         },
         "data": {

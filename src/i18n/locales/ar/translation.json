@@ -473,7 +473,12 @@
           "dismissLabel": "تجاهل اقتراح {{word}}"
         },
         "learned": {
-          "count": "{{count}} كلمة متعلَّمة",
+          "count_zero": "لا كلمات متعلَّمة",
+          "count_one": "{{count}} كلمة متعلَّمة",
+          "count_two": "كلمتان متعلَّمتان",
+          "count_few": "{{count}} كلمات متعلَّمة",
+          "count_many": "{{count}} كلمة متعلَّمة",
+          "count_other": "{{count}} كلمة متعلَّمة",
           "remove": "إزالة الكلمة المتعلَّمة {{word}}"
         },
         "data": {

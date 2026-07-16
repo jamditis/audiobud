@@ -469,7 +469,8 @@
           "dismissLabel": "忽略推荐 {{word}}"
         },
         "learned": {
-          "count": "已学习 {{count}} 个词",
+          "count_one": "已学习 {{count}} 个词",
+          "count_other": "已学习 {{count}} 个词",
           "remove": "删除已学习的词 {{word}}"
         },
         "data": {

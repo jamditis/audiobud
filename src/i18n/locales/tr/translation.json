@@ -469,7 +469,8 @@
           "dismissLabel": "{{word}} önerisini yoksay"
         },
         "learned": {
-          "count": "{{count}} öğrenilen kelime",
+          "count_one": "{{count}} öğrenilen kelime",
+          "count_other": "{{count}} öğrenilen kelime",
           "remove": "Öğrenilen {{word}} kelimesini kaldır"
         },
         "data": {

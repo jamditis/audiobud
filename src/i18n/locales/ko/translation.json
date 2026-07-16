@@ -469,7 +469,8 @@
           "dismissLabel": "추천 {{word}} 무시"
         },
         "learned": {
-          "count": "학습한 단어 {{count}}개",
+          "count_one": "학습한 단어 {{count}}개",
+          "count_other": "학습한 단어 {{count}}개",
           "remove": "학습한 단어 {{word}} 제거"
         },
         "data": {

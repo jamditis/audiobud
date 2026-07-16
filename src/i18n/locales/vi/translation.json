@@ -469,7 +469,8 @@
           "dismissLabel": "Bỏ qua gợi ý {{word}}"
         },
         "learned": {
-          "count": "{{count}} từ đã học",
+          "count_one": "{{count}} từ đã học",
+          "count_other": "{{count}} từ đã học",
           "remove": "Xóa từ đã học {{word}}"
         },
         "data": {
