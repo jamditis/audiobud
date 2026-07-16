@@ -9,9 +9,12 @@
     "cancel": "İptal",
     "pushToTalk": "Bas Konuş",
     "muteWhileRecording": "Kayıt Sırasında Sessize Al",
-    "appendTrailingSpace": "Sonuna Boşluk Ekle"
+    "appendTrailingSpace": "Sonuna Boşluk Ekle",
+    "autoSubmit": "Otomatik gönder",
+    "showOverlay": "Kaplamayı göster"
   },
   "sidebar": {
+    "navLabel": "Ayar bölümleri",
     "general": "Genel",
     "models": "Modeller",
     "advanced": "Gelişmiş",
@@ -125,6 +128,7 @@
   "modelSelector": {
     "custom": "Özel",
     "active": "Aktif",
+    "switching": "Değiştiriliyor...",
     "noModelsAvailable": "Kullanılabilir model yok",
     "verifying": "{{modelName}} doğrulanıyor...",
     "verifyingGeneric": "Doğrulanıyor...",
@@ -140,41 +144,26 @@
     "modelUnloaded": "Model Boşaltıldı",
     "noModelDownloadRequired": "Model Yok – İndirme Gerekli",
     "deleteModel": "{{modelName}} Sil",
-    "switching": "Değiştiriliyor...",
     "downloadSpeed": "{{speed}} MB/s",
+    "cancel": "İptal",
+    "cancelDownload": "İndirmeyi iptal et",
     "capabilities": {
       "languageSelection": "Birden fazla giriş dilini destekler",
-      "multiLanguage": "Çok dilli",
-      "translation": "İngilizce'ye çevirebilir",
-      "translate": "İngilizce'ye çevir",
       "singleLanguage": "Yalnızca bu dili destekler",
-      "languageOnly": "Yalnızca {{language}}"
-    },
-    "cancel": "İptal",
-    "cancelDownload": "İndirmeyi iptal et"
+      "multiLanguage": "Çok dilli",
+      "languageOnly": "Yalnızca {{language}}",
+      "translation": "İngilizce'ye çevirebilir",
+      "translate": "İngilizce'ye çevir"
+    }
   },
   "settings": {
+    "autosave": {
+      "saved": "Gölete kaydedildi",
+      "failed": "Bu değişiklik kaydedilemedi"
+    },
     "modelSettings": {
       "title": "{{model}} Ayarları",
       "noSettingsNeeded": "Bu model yapılandırma gerektirmeden otomatik olarak çalışır."
-    },
-    "models": {
-      "title": "Transkripsiyon Modelleri",
-      "description": "Bir transkripsiyon modeli seçin veya ek modeller indirin. Farklı modeller değişen doğruluk ve hız seviyeleri sunar.",
-      "downloaded": "İndirildi",
-      "available": "İndirilebilir",
-      "deleteConfirm": "{{modelName}} modelini silmek istediğinizden emin misiniz? Kullanmak için tekrar indirmeniz gerekecek.",
-      "deleteActiveConfirm": "{{modelName}} aktif modelinizdir. Silmek, yeni bir model seçene kadar transkripsiyonları durduracaktır. Emin misiniz?",
-      "deleteTitle": "Modeli Sil",
-      "filters": {
-        "all": "Tümü",
-        "multiLanguage": "Çok dilli",
-        "translation": "Çeviri",
-        "allLanguages": "Tüm Diller"
-      },
-      "noModelsMatch": "Bu filtreyle eşleşen model yok.",
-      "yourModels": "İndirilen modeller",
-      "availableModels": "İndirilebilir"
     },
     "general": {
       "title": "Genel",
@@ -197,6 +186,10 @@
           "transcribe_with_post_process": {
             "name": "Son İşlem Kısayolu",
             "description": "İsteğe bağlı: Transkripsiyonunuza her zaman AI son işleme uygulayan özel bir kısayol tuşu."
+          },
+          "transcribe_raw": {
+            "name": "Ham transkript kısayolu",
+            "description": "Yalnızca o dikte için ham, küçük harfli ve noktalama işaretsiz metne dönüştüren özel bir kısayol tuşu."
           }
         },
         "errors": {
@@ -218,13 +211,36 @@
         "description": "Kaydetmek için basılı tutun, durdurmak için bırakın"
       }
     },
+    "models": {
+      "title": "Transkripsiyon Modelleri",
+      "description": "Bir transkripsiyon modeli seçin veya ek modeller indirin. Farklı modeller değişen doğruluk ve hız seviyeleri sunar.",
+      "yourModels": "İndirilen modeller",
+      "availableModels": "İndirilebilir",
+      "downloaded": "İndirildi",
+      "available": "İndirilebilir",
+      "deleteConfirm": "{{modelName}} modelini silmek istediğinizden emin misiniz? Kullanmak için tekrar indirmeniz gerekecek.",
+      "deleteActiveConfirm": "{{modelName}} aktif modelinizdir. Silmek, yeni bir model seçene kadar transkripsiyonları durduracaktır. Emin misiniz?",
+      "deleteTitle": "Modeli Sil",
+      "filters": {
+        "all": "Tümü",
+        "multiLanguage": "Çok dilli",
+        "translation": "Çeviri",
+        "allLanguages": "Tüm Diller"
+      },
+      "noModelsMatch": "Bu filtreyle eşleşen model yok."
+    },
     "sound": {
       "title": "Ses",
+      "previewSounds": "Sesleri önizle (önce başlangıç, sonra bitiş çalar)",
       "microphone": {
         "title": "Mikrofon",
         "description": "Tercih ettiğiniz mikrofon cihazını seçin",
         "placeholder": "Mikrofon seçin...",
         "loading": "Yükleniyor..."
+      },
+      "inputLevel": {
+        "title": "Giriş seviyesi",
+        "description": "Seçili mikrofondan gelen anlık seviye. Konuşun; çubuklar hareket ederse ses geliyor demektir."
       },
       "audioFeedback": {
         "label": "Sesli Geri Bildirim",
@@ -239,6 +255,12 @@
       "volume": {
         "title": "Ses Seviyesi",
         "description": "Sesli geri bildirimlerin ses seviyesini ayarlayın"
+      },
+      "outputTest": {
+        "title": "Çıkış testi",
+        "description": "Sesin çıktığını doğrulamak için seçili çıkış cihazından bir test sesi çalın.",
+        "button": "Çıkışı test et",
+        "playing": "Çalıyor..."
       }
     },
     "advanced": {
@@ -292,6 +314,22 @@
           "none": "Yok",
           "bottom": "Alt",
           "top": "Üst"
+        },
+        "fine": {
+          "title": "Ekrandaki konum",
+          "description": "Kayıt göstergesinin etkin ekranınızda nerede duracağını seçin. Orta sütun varsayılan yerleşimle aynıdır.",
+          "reset": "Varsayılana sıfırla"
+        },
+        "anchors": {
+          "topleft": "Sol üst",
+          "topcenter": "Üst orta",
+          "topright": "Sağ üst",
+          "middleleft": "Orta sol",
+          "middlecenter": "Orta",
+          "middleright": "Orta sağ",
+          "bottomleft": "Sol alt",
+          "bottomcenter": "Alt orta",
+          "bottomright": "Sağ alt"
         }
       },
       "pasteMethod": {
@@ -352,13 +390,103 @@
           "sec15": "15 saniye sonra (Debug)"
         }
       },
+      "dictionaryGuide": {
+        "title": "Kelimeleri doğru yakalamak",
+        "intro": "İki araç birlikte çalışır. Özel kelimeler, modeli sık kullandığınız terimlere yönlendirir; böylece bir ses belirsiz olduğunda bunları tercih eder. Kelime değiştirmeleri ise sonradan kesin bir düzeltme uygular; modelin sürekli yanlış duyduğu durumlar için.",
+        "rule": "Önce bir özel kelime ekleyin. Bir ad veya terim hâlâ her seferinde aynı şekilde yanlış çıkıyorsa, duyduğunuz metinden kastettiğiniz metne bir kelime değiştirme ekleyin.",
+        "examplesToggle": "Örnekleri göster",
+        "examples": {
+          "name": {
+            "title": "Zor bir ad (jamditis)",
+            "body": "\"jamditis\" kelimesini özel kelime olarak ekleyin. Hâlâ \"jam dightis\" olarak yazıya dökülüyorsa bir kelime değiştirme ekleyin: jam dightis → jamditis."
+          },
+          "domain": {
+            "title": "Bir alan adı veya e-posta (jamditis.com)",
+            "body": "\"jamditis dot com\" diyeceksiniz, bu yüzden bir kelime değiştirme ekleyin: jamditis dot com → jamditis.com. Değiştirmeler karakterleri birebir korur; böylece araya boşluk girmeden veya büyük harfe çevrilmeden tek parça kalır."
+          },
+          "handle": {
+            "title": "Bir kullanıcı adı (@jamditis)",
+            "body": "Bir kelime değiştirme ekleyin: at jamditis → @jamditis."
+          }
+        },
+        "engineNote": "Özel kelimeler, Whisper modellerini çözümleme sırasında yönlendirir; diğer modellerde metni sonradan düzeltir, bu yüzden sonuçlar modele göre değişir. Kelime değiştirmeleri her modelde aynı şekilde çalışır."
+      },
       "customWords": {
         "title": "Özel Kelimeler",
         "description": "Transkripsiyon sırasında sıkça yanlış duyulan veya yanlış yazılan kelimeleri ekleyin. Sistem, benzer sesli kelimeleri listenize göre otomatik olarak düzeltir.",
         "placeholder": "Kelime ekle",
         "add": "Ekle",
         "remove": "{{word}} Kaldır",
-        "duplicate": "\"{{word}}\" zaten mevcut"
+        "duplicate": "\"{{word}}\" zaten mevcut",
+        "capReached": "Sözlüğünüz dolu ({{cap}} kelime). Yenilerini eklemek için bazılarını kaldırın.",
+        "count": "{{count}} / {{cap}} kelime",
+        "import": {
+          "title": "Liste içe aktar",
+          "description": "Bir .txt dosyası yükleyin veya bir liste yapıştırın. Girdileri satır sonu ya da virgülle ayırın. Üç kelimeye kadar olan ifadeler korunur; daha uzun girdiler tek tek kelimelere bölünür.",
+          "upload": ".txt dosyası yükle",
+          "formatHint": "Düz .txt veya .csv. Her satıra bir kelime ya da ifade yazın veya girdileri virgülle ayırın. Üç kelimeye kadar olan ifadeler bir arada kalır; daha uzun girdiler tek tek kelimelere bölünür. Toplamda en fazla 500 girdi.",
+          "pastePlaceholder": "Kelimeleri buraya yapıştırın; her satıra bir tane veya virgülle ayırarak",
+          "add": "Listeyi ekle",
+          "none": "Eklenecek yeni kelime yok",
+          "added_one": "{{count}} kelime eklendi",
+          "added_other": "{{count}} kelime eklendi",
+          "skippedDuplicates": "{{count}} tanesi listenizde zaten var",
+          "skippedCap": "{{count}} tanesi {{cap}} kelimelik sınırın üzerinde",
+          "skippedInvalid": "{{count}} tanesi çok uzun",
+          "readError": "Bu dosya okunamadı"
+        }
+      },
+      "wordReplacements": {
+        "title": "Kelime değiştirmeleri",
+        "description": "Nasıl seslendiğinden bağımsız olarak belirli kelimeleri veya ifadeleri her zaman değiştirir. Her transkripsiyonda, tüm modellerde, özel kelime eşleştiricisinden sonra çalışır. Bir kelimeyi silmek için değiştirme alanını boş bırakın. Bulanık eşleştiricinin güvenle yapamayacağı düzeltmeler için bunları kullanın (örneğin \"clawed\" yerine \"Claude\").",
+        "fromPlaceholder": "Duyulan",
+        "toPlaceholder": "Şununla değiştir",
+        "add": "Ekle",
+        "wholeWord": "Yalnızca tam kelime",
+        "caseSensitive": "Büyük/küçük harfe duyarlı",
+        "duplicate": "\"{{word}}\" için zaten bir değiştirme var",
+        "capReached": "Değiştirme listeniz dolu ({{cap}} girdi). Yenilerini eklemek için bazılarını kaldırın.",
+        "tooLong": "Her alanı {{max}} karakterin altında tutun",
+        "count": "{{count}} / {{cap}} değiştirme",
+        "deletes": "(kelimeyi siler)",
+        "partialBadge": "kısmi",
+        "caseBadge": "Aa",
+        "remove": "{{word}} için değiştirmeyi kaldır"
+      },
+      "personalization": {
+        "title": "Geçmişimden öğren",
+        "description": "AudioBud'un en çok dikte ettiğiniz ad ve terimlerden özel kelime önermesine izin verin. Her şey bu cihazda kalır: yerel transkript geçmişinizi okur, hiçbir şey yüklenmez ve öğrendiklerini istediğiniz zaman dışa aktarabilir veya temizleyebilirsiniz. Varsayılan olarak kapalıdır.",
+        "error": "Bir şeyler ters gitti. Lütfen tekrar deneyin.",
+        "suggestions": {
+          "title": "Önerilen kelimeler",
+          "description": "Transkript geçmişinizden çıkarılan sık kullanılan özel adlar ve terimler. İstediklerinizi özel kelime olarak ekleyin, geri kalanları görünmemeleri için yoksayın.",
+          "refresh": "Önerileri yenile",
+          "loading": "Geçmiş taranıyor...",
+          "empty": "Henüz yeni öneri yok. Biraz daha dikte edin, sonra yenileyin.",
+          "count": "{{count}} kez görüldü",
+          "accept": "Ekle",
+          "dismiss": "Yoksay",
+          "dismissLabel": "{{word}} önerisini yoksay"
+        },
+        "learned": {
+          "count": "{{count}} öğrenilen kelime",
+          "remove": "Öğrenilen {{word}} kelimesini kaldır"
+        },
+        "data": {
+          "title": "Kişiselleştirme verileriniz",
+          "description": "AudioBud'un öğrendiklerinin bir kopyasını dışa aktarın veya tamamen temizleyin. Sıfırlamak, öğrenilen tüm kelimeleri ve yoksayılan önerileri kaldırır; elle eklediğiniz özel kelimeler ve değiştirmeler etkilenmez.",
+          "export": "Dışa aktar",
+          "reset": "Kişiselleştirmeyi sıfırla",
+          "resetTitle": "Kişiselleştirmeyi sıfırla",
+          "resetConfirm": "Bu işlem, öğrenilen tüm kelimeleri ve yoksayılan önerileri temizler. Elle eklediğiniz özel kelimeler ve değiştirmeler kalır. Devam edilsin mi?",
+          "resetDone": "Kişiselleştirme verileri temizlendi",
+          "exportDone": "Kişiselleştirme verileri dışa aktarıldı",
+          "exportError": "Kişiselleştirme verileri dışa aktarılamadı"
+        }
+      },
+      "rawOutput": {
+        "label": "Ham transkript",
+        "description": "Büyük harfler ve cümle sonu noktalaması kaldırılmış, küçük harfli metin üretir. Kısaltmalar (API, GPU) ve İngilizcede tek başına kullanılan \"I\" korunur. Metni başka araçlara aktarırken veya model fazla biçimlendirme yaptığında kullanışlıdır. Tek seferlik ham dikteler için ayrı bir kısayol da atayabilirsiniz."
       }
     },
     "postProcessing": {
@@ -461,7 +589,8 @@
       "historyLimit": {
         "title": "Geçmiş Limiti",
         "description": "Saklanacak maksimum geçmiş kaydı sayısı",
-        "entries": "kayıt"
+        "entries": "kayıt",
+        "trimNote": "Sınırı düşürmek kayıtları hemen silmez. Sınırın dışında kalan kaydedilmemiş kayıtlar, bir sonraki kaydınız eklendiğinde kaldırılır."
       },
       "recordingRetention": {
         "title": "Kayıtları Otomatik Sil",
@@ -471,7 +600,8 @@
         "days3": "3 gün sonra",
         "weeks2": "2 hafta sonra",
         "months3": "3 ay sonra",
-        "placeholder": "Saklama süresi seçin..."
+        "placeholder": "Saklama süresi seçin...",
+        "trimNote": "Bunu değiştirmek kayıtları hemen silmez. Eski kaydedilmemiş kayıtlar yalnızca bir sonraki kaydınız eklendiğinde kaldırılır."
       },
       "alwaysOnMicrophone": {
         "label": "Mikrofon Her Zaman Açık",
@@ -528,16 +658,26 @@
         "button": "GitHub'da Görüntüle"
       },
       "supportDevelopment": {
-        "title": "Geliştirmeyi Destekle",
-        "description": "Handy'yi geliştirmeye devam etmemize yardımcı olun",
-        "button": "Bağış Yap"
+        "title": "Kurbağayı besle",
+        "description": "AudioBud ücretsizdir ve tamamen sizin makinenizde çalışır. Klavyede biraz yükünüzü azaltıyorsa, kavanoza bir sinek atın.",
+        "button": "Bana bir sinek ısmarla"
       },
       "acknowledgments": {
         "title": "Teşekkürler",
+        "handy": {
+          "title": "Handy",
+          "description": "AudioBud'un üzerine kurulduğu açık kaynaklı dikte uygulaması",
+          "details": "AudioBud, cjpais tarafından geliştirilen Handy'nin (MIT lisanslı) bir çatallamasıdır. Bu uygulamanın dayandığı temel için cjpais'e ve Handy'ye katkıda bulunanlara çok teşekkürler. Daha fazla bilgi: handy.computer."
+        },
+        "parakeet": {
+          "title": "Parakeet",
+          "description": "NVIDIA NeMo Parakeet, AudioBud'un Windows'taki varsayılan motoru",
+          "details": "Transkripsiyon, varsayılan olarak NVIDIA'nın Parakeet modelini transcribe-rs ONNX çalışma zamanı üzerinden çalıştırır. NVIDIA NeMo'ya ve transcribe-rs geliştiricilerine teşekkürler."
+        },
         "whisper": {
           "title": "Whisper.cpp",
-          "description": "OpenAI'nin Whisper otomatik konuşma tanıma modelinin yüksek performanslı çıkarımı",
-          "details": "Handy, hızlı ve yerel konuşmadan metne dönüştürme için Whisper.cpp kullanır. Georgi Gerganov ve katkıda bulunanların harika çalışmaları için teşekkür ederiz."
+          "description": "OpenAI'nin Whisper modelinin yüksek performanslı yerel çıkarımı",
+          "details": "AudioBud, GPU üzerinde hızlandırılan Whisper.cpp ile de transkripsiyon yapabilir. Georgi Gerganov'a ve katkıda bulunanlara teşekkürler."
         }
       }
     }
@@ -572,6 +712,7 @@
     "update": "Güncelle",
     "close": "Kapat",
     "open": "Aç",
+    "moreInfo": "Daha fazla bilgi",
     "default": "Varsayılan",
     "enabled": "Etkin",
     "disabled": "Devre Dışı",
@@ -602,7 +743,9 @@
     "modelLoadFailed": "Model yüklenemedi: {{model}}",
     "modelLoadFailedUnknown": "bilinmeyen model",
     "pasteFailedTitle": "Metin yapıştırılamadı",
-    "pasteFailed": "Metin etkin uygulamaya yapıştırılamadı."
+    "pasteFailed": "Metin etkin uygulamaya yapıştırılamadı.",
+    "transcriptionTimeoutTitle": "Transkripsiyon zaman aşımına uğradı",
+    "transcriptionTimeout": "Motor {{seconds}} saniye sonra yanıt vermedi ve takılmış olabilir. Bu durum devam ederse AudioBud'u yeniden başlatın."
   },
   "appLanguage": {
     "title": "Uygulama Dili",
@@ -610,6 +753,10 @@
   },
   "overlay": {
     "transcribing": "Transkribe ediliyor...",
-    "processing": "İşleniyor..."
+    "processing": "İşleniyor...",
+    "recording": "Kaydediliyor",
+    "cancel": "Kaydı iptal et",
+    "raw": "HAM",
+    "rawHint": "Ham transkript modu"
   }
 }

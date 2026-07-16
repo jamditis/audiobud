@@ -9,9 +9,12 @@
     "cancel": "Cancelar",
     "pushToTalk": "Pressionar para Falar",
     "muteWhileRecording": "Silenciar Durante Gravação",
-    "appendTrailingSpace": "Adicionar Espaço Final"
+    "appendTrailingSpace": "Adicionar Espaço Final",
+    "autoSubmit": "Envio automático",
+    "showOverlay": "Mostrar sobreposição"
   },
   "sidebar": {
+    "navLabel": "Seções de configurações",
     "general": "Geral",
     "models": "Modelos",
     "advanced": "Avançado",
@@ -125,6 +128,7 @@
   "modelSelector": {
     "custom": "Personalizado",
     "active": "Ativo",
+    "switching": "Alternando...",
     "noModelsAvailable": "Nenhum modelo disponível",
     "verifying": "Verificando {{modelName}}...",
     "verifyingGeneric": "Verificando...",
@@ -140,20 +144,23 @@
     "modelUnloaded": "Modelo Descarregado",
     "noModelDownloadRequired": "Sem Modelo - Download Necessário",
     "deleteModel": "Excluir {{modelName}}",
-    "switching": "Alternando...",
     "downloadSpeed": "{{speed}} MB/s",
+    "cancel": "Cancelar",
+    "cancelDownload": "Cancelar download",
     "capabilities": {
       "languageSelection": "Suporta vários idiomas de entrada",
-      "multiLanguage": "Multi-idioma",
-      "translation": "Pode traduzir para inglês",
-      "translate": "Traduzir para inglês",
       "singleLanguage": "Suporta apenas este idioma",
-      "languageOnly": "Apenas {{language}}"
-    },
-    "cancel": "Cancelar",
-    "cancelDownload": "Cancelar download"
+      "multiLanguage": "Multi-idioma",
+      "languageOnly": "Apenas {{language}}",
+      "translation": "Pode traduzir para inglês",
+      "translate": "Traduzir para inglês"
+    }
   },
   "settings": {
+    "autosave": {
+      "saved": "Salvo na lagoa",
+      "failed": "Não foi possível salvar essa alteração"
+    },
     "modelSettings": {
       "title": "Configurações de {{model}}",
       "noSettingsNeeded": "Este modelo funciona automaticamente sem necessidade de configuração."
@@ -179,6 +186,10 @@
           "transcribe_with_post_process": {
             "name": "Tecla de Pós-Processamento",
             "description": "Opcional: Uma tecla de atalho dedicada que sempre aplica pós-processamento com IA à sua transcrição."
+          },
+          "transcribe_raw": {
+            "name": "Tecla de transcrição bruta",
+            "description": "Uma tecla de atalho dedicada que transcreve em texto bruto, em minúsculas e sem pontuação, apenas para este ditado."
           }
         },
         "errors": {
@@ -203,6 +214,8 @@
     "models": {
       "title": "Modelos de Transcrição",
       "description": "Selecione um modelo de transcrição ou baixe modelos adicionais. Diferentes modelos oferecem diferentes níveis de precisão e velocidade.",
+      "yourModels": "Modelos baixados",
+      "availableModels": "Disponíveis para download",
       "downloaded": "Baixados",
       "available": "Disponíveis para Download",
       "deleteConfirm": "Tem certeza de que deseja excluir {{modelName}}? Você precisará baixá-lo novamente para usá-lo.",
@@ -214,17 +227,20 @@
         "translation": "Tradução",
         "allLanguages": "Todos os Idiomas"
       },
-      "noModelsMatch": "Nenhum modelo corresponde a este filtro.",
-      "yourModels": "Modelos baixados",
-      "availableModels": "Disponíveis para download"
+      "noModelsMatch": "Nenhum modelo corresponde a este filtro."
     },
     "sound": {
       "title": "Som",
+      "previewSounds": "Ouvir os sons (toca o de início e depois o de parada)",
       "microphone": {
         "title": "Microfone",
         "description": "Selecione seu dispositivo de microfone preferido",
         "placeholder": "Selecionar microfone...",
         "loading": "Carregando..."
+      },
+      "inputLevel": {
+        "title": "Nível de entrada",
+        "description": "Nível ao vivo do microfone selecionado. Fale e as barras devem se mover, confirmando que o áudio está chegando."
       },
       "audioFeedback": {
         "label": "Feedback de Áudio",
@@ -239,6 +255,12 @@
       "volume": {
         "title": "Volume",
         "description": "Ajustar o volume dos sons de feedback de áudio"
+      },
+      "outputTest": {
+        "title": "Teste de saída",
+        "description": "Reproduza um som de teste no dispositivo de saída selecionado para confirmar que o áudio está saindo.",
+        "button": "Testar saída",
+        "playing": "Reproduzindo..."
       }
     },
     "advanced": {
@@ -292,6 +314,22 @@
           "none": "Nenhum",
           "bottom": "Inferior",
           "top": "Superior"
+        },
+        "fine": {
+          "title": "Posição na tela",
+          "description": "Escolha onde o indicador de gravação fica na sua tela ativa. A coluna central corresponde à posição padrão.",
+          "reset": "Restaurar padrão"
+        },
+        "anchors": {
+          "topleft": "Superior esquerda",
+          "topcenter": "Superior centro",
+          "topright": "Superior direita",
+          "middleleft": "Meio esquerda",
+          "middlecenter": "Centro",
+          "middleright": "Meio direita",
+          "bottomleft": "Inferior esquerda",
+          "bottomcenter": "Inferior centro",
+          "bottomright": "Inferior direita"
         }
       },
       "pasteMethod": {
@@ -352,13 +390,103 @@
           "sec15": "Após 15 segundos (Depuração)"
         }
       },
+      "dictionaryGuide": {
+        "title": "Acertando as palavras",
+        "intro": "Duas ferramentas trabalham juntas. As palavras personalizadas orientam o modelo para os termos que você usa com frequência, para que ele os prefira quando um som for ambíguo. As substituições de palavras forçam uma correção exata depois, para os erros de audição que o modelo continua cometendo.",
+        "rule": "Comece com uma palavra personalizada. Se um nome ou termo continuar saindo errado sempre da mesma forma, adicione uma substituição de palavra do que você ouve para o que você quer dizer.",
+        "examplesToggle": "Mostrar exemplos",
+        "examples": {
+          "name": {
+            "title": "Um nome difícil (jamditis)",
+            "body": "Adicione \"jamditis\" como palavra personalizada. Se ainda for transcrito como \"jam dightis\", adicione uma substituição de palavra: jam dightis → jamditis."
+          },
+          "domain": {
+            "title": "Um domínio ou e-mail (jamditis.com)",
+            "body": "Você vai dizer \"jamditis ponto com\", então adicione uma substituição de palavra: jamditis ponto com → jamditis.com. As substituições mantêm os caracteres exatos, então o resultado continua sendo um único token em vez de ganhar espaços ou maiúsculas."
+          },
+          "handle": {
+            "title": "Um nome de usuário (@jamditis)",
+            "body": "Adicione uma substituição de palavra: arroba jamditis → @jamditis."
+          }
+        },
+        "engineNote": "As palavras personalizadas guiam os modelos Whisper durante a decodificação; em outros modelos, elas corrigem o texto depois, então os resultados variam conforme o modelo. As substituições de palavras funcionam da mesma forma em todos os modelos."
+      },
       "customWords": {
         "title": "Palavras Personalizadas",
         "description": "Adicione palavras que são frequentemente mal ouvidas ou mal escritas durante a transcrição. O sistema irá automaticamente corrigir palavras semelhantes para corresponder à sua lista.",
         "placeholder": "Adicionar uma palavra",
         "add": "Adicionar",
         "remove": "Remover {{word}}",
-        "duplicate": "\"{{word}}\" já existe"
+        "duplicate": "\"{{word}}\" já existe",
+        "capReached": "Seu dicionário está cheio ({{cap}} palavras). Remova algumas para adicionar mais.",
+        "count": "{{count}} / {{cap}} palavras",
+        "import": {
+          "title": "Importar uma lista",
+          "description": "Envie um arquivo .txt ou cole uma lista. Separe as entradas com quebras de linha ou vírgulas. Frases de até três palavras são mantidas; entradas maiores são divididas em palavras individuais.",
+          "upload": "Enviar arquivo .txt",
+          "formatHint": "Arquivo .txt ou .csv simples. Uma palavra ou frase por linha, ou separe as entradas com vírgulas. Frases de até três palavras permanecem juntas; entradas maiores são divididas em palavras individuais. Até 500 entradas no total.",
+          "pastePlaceholder": "Cole as palavras aqui, uma por linha ou separadas por vírgulas",
+          "add": "Adicionar lista",
+          "none": "Nenhuma palavra nova para adicionar",
+          "added_one": "{{count}} palavra adicionada",
+          "added_other": "{{count}} palavras adicionadas",
+          "skippedDuplicates": "{{count}} já na sua lista",
+          "skippedCap": "{{count}} acima do limite de {{cap}} palavras",
+          "skippedInvalid": "{{count}} longas demais",
+          "readError": "Não foi possível ler esse arquivo"
+        }
+      },
+      "wordReplacements": {
+        "title": "Substituições de palavras",
+        "description": "Sempre substitui palavras ou frases exatas, não importa como elas soem. Roda em toda transcrição, em todos os modelos, depois do comparador de palavras personalizadas. Deixe a substituição em branco para excluir uma palavra. Use isto para correções que o comparador aproximado não consegue fazer com segurança (por exemplo, \"clawed\" para \"Claude\").",
+        "fromPlaceholder": "Ouvido",
+        "toPlaceholder": "Substituir por",
+        "add": "Adicionar",
+        "wholeWord": "Somente palavra inteira",
+        "caseSensitive": "Diferenciar maiúsculas",
+        "duplicate": "\"{{word}}\" já tem uma substituição",
+        "capReached": "Sua lista de substituições está cheia ({{cap}} entradas). Remova algumas para adicionar mais.",
+        "tooLong": "Mantenha cada campo com menos de {{max}} caracteres",
+        "count": "{{count}} / {{cap}} substituições",
+        "deletes": "(exclui a palavra)",
+        "partialBadge": "parcial",
+        "caseBadge": "Aa",
+        "remove": "Remover substituição de {{word}}"
+      },
+      "personalization": {
+        "title": "Aprender com meu histórico",
+        "description": "Ative para deixar o AudioBud sugerir palavras personalizadas a partir dos nomes e termos que você mais dita. Tudo fica neste dispositivo: ele lê seu histórico local de transcrições, nada é enviado para fora e você pode exportar ou apagar o que ele aprende a qualquer momento. Desativado por padrão.",
+        "error": "Algo deu errado. Por favor, tente novamente.",
+        "suggestions": {
+          "title": "Palavras sugeridas",
+          "description": "Nomes próprios e termos frequentes extraídos do seu histórico de transcrições. Aceite os que você quiser como palavras personalizadas ou dispense o resto para que parem de aparecer.",
+          "refresh": "Atualizar sugestões",
+          "loading": "Analisando histórico...",
+          "empty": "Nenhuma sugestão nova ainda. Dite mais e depois atualize.",
+          "count": "vista {{count}} vezes",
+          "accept": "Adicionar",
+          "dismiss": "Dispensar",
+          "dismissLabel": "Dispensar sugestão {{word}}"
+        },
+        "learned": {
+          "count": "{{count}} palavras aprendidas",
+          "remove": "Remover palavra aprendida {{word}}"
+        },
+        "data": {
+          "title": "Seus dados de personalização",
+          "description": "Exporte uma cópia do que o AudioBud aprendeu ou apague tudo. Redefinir remove todas as palavras aprendidas e sugestões dispensadas; suas palavras personalizadas e substituições manuais não são afetadas.",
+          "export": "Exportar",
+          "reset": "Redefinir personalização",
+          "resetTitle": "Redefinir personalização",
+          "resetConfirm": "Isso apaga todas as palavras aprendidas e sugestões dispensadas. Suas palavras personalizadas e substituições manuais permanecem. Continuar?",
+          "resetDone": "Dados de personalização apagados",
+          "exportDone": "Dados de personalização exportados",
+          "exportError": "Não foi possível exportar os dados de personalização"
+        }
+      },
+      "rawOutput": {
+        "label": "Transcrição bruta",
+        "description": "Gera texto em minúsculas, sem maiúsculas iniciais nem pontuação final. Siglas (API, GPU) e o \"I\" isolado do inglês são mantidos. Útil para alimentar outras ferramentas ou quando o modelo formata demais. Você também pode definir um atalho separado para ditados brutos pontuais."
       }
     },
     "postProcessing": {
@@ -461,7 +589,8 @@
       "historyLimit": {
         "title": "Limite de Histórico",
         "description": "Número máximo de entradas de histórico a manter",
-        "entries": "entradas"
+        "entries": "entradas",
+        "trimNote": "Reduzir o limite não exclui as gravações na hora. As gravações não salvas que passarem do limite são removidas quando sua próxima gravação for adicionada."
       },
       "recordingRetention": {
         "title": "Excluir Gravações Automaticamente",
@@ -471,7 +600,8 @@
         "days3": "Após 3 dias",
         "weeks2": "Após 2 semanas",
         "months3": "Após 3 meses",
-        "placeholder": "Selecionar período de retenção..."
+        "placeholder": "Selecionar período de retenção...",
+        "trimNote": "Alterar isso não exclui as gravações na hora. Gravações antigas não salvas só são removidas quando sua próxima gravação for adicionada."
       },
       "alwaysOnMicrophone": {
         "label": "Microfone Sempre Ativo",
@@ -528,16 +658,26 @@
         "button": "Ver no GitHub"
       },
       "supportDevelopment": {
-        "title": "Apoiar o Desenvolvimento",
-        "description": "Ajude-nos a continuar construindo o Handy",
-        "button": "Doar"
+        "title": "Alimente o sapo",
+        "description": "O AudioBud é gratuito e roda inteiramente na sua máquina. Se ele te poupa alguma digitação, jogue uma mosca no pote.",
+        "button": "Me paga uma mosca"
       },
       "acknowledgments": {
         "title": "Agradecimentos",
+        "handy": {
+          "title": "Handy",
+          "description": "O aplicativo de ditado de código aberto sobre o qual o AudioBud é construído",
+          "details": "O AudioBud é um fork do Handy (licença MIT), de cjpais. Muito obrigado a cjpais e aos colaboradores do Handy pela base sobre a qual este aplicativo se apoia. Saiba mais em handy.computer."
+        },
+        "parakeet": {
+          "title": "Parakeet",
+          "description": "NVIDIA NeMo Parakeet, o motor padrão do AudioBud no Windows",
+          "details": "Por padrão, a transcrição executa o modelo Parakeet da NVIDIA através do runtime ONNX transcribe-rs. Obrigado ao NVIDIA NeMo e aos mantenedores do transcribe-rs."
+        },
         "whisper": {
           "title": "Whisper.cpp",
-          "description": "Inferência de alto desempenho do modelo de reconhecimento automático de fala Whisper da OpenAI",
-          "details": "O Handy usa Whisper.cpp para processamento rápido e local de fala para texto. Agradecemos ao incrível trabalho de Georgi Gerganov e colaboradores."
+          "description": "Inferência local de alto desempenho do modelo Whisper da OpenAI",
+          "details": "O AudioBud também pode transcrever com Whisper.cpp, acelerado na GPU. Obrigado a Georgi Gerganov e aos colaboradores."
         }
       }
     }
@@ -572,6 +712,7 @@
     "update": "Atualizar",
     "close": "Fechar",
     "open": "Abrir",
+    "moreInfo": "Mais informações",
     "default": "Padrão",
     "enabled": "Habilitado",
     "disabled": "Desabilitado",
@@ -602,7 +743,9 @@
     "modelLoadFailed": "Falha ao carregar o modelo: {{model}}",
     "modelLoadFailedUnknown": "modelo desconhecido",
     "pasteFailedTitle": "Falha ao colar o texto",
-    "pasteFailed": "Não foi possível colar o texto no aplicativo ativo."
+    "pasteFailed": "Não foi possível colar o texto no aplicativo ativo.",
+    "transcriptionTimeoutTitle": "Tempo esgotado na transcrição",
+    "transcriptionTimeout": "O motor não respondeu após {{seconds}} segundos e pode estar travado. Reinicie o AudioBud se isso continuar acontecendo."
   },
   "appLanguage": {
     "title": "Idioma da Aplicação",
@@ -610,6 +753,10 @@
   },
   "overlay": {
     "transcribing": "Transcrevendo...",
-    "processing": "Processando..."
+    "processing": "Processando...",
+    "recording": "Gravando",
+    "cancel": "Cancelar gravação",
+    "raw": "BRUTO",
+    "rawHint": "Modo de transcrição bruta"
   }
 }

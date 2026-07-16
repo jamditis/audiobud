@@ -9,9 +9,12 @@
     "cancel": "취소",
     "pushToTalk": "녹음 중 단축키 홀딩",
     "muteWhileRecording": "녹음 중 음소거",
-    "appendTrailingSpace": "끝 공백 추가"
+    "appendTrailingSpace": "끝 공백 추가",
+    "autoSubmit": "자동 제출",
+    "showOverlay": "오버레이 표시"
   },
   "sidebar": {
+    "navLabel": "설정 섹션",
     "general": "일반",
     "models": "모델",
     "advanced": "고급",
@@ -154,6 +157,10 @@
     }
   },
   "settings": {
+    "autosave": {
+      "saved": "연못에 저장했습니다",
+      "failed": "변경 사항을 저장하지 못했습니다"
+    },
     "modelSettings": {
       "title": "{{model}} 설정",
       "noSettingsNeeded": "이 모델은 별도의 설정 없이 자동으로 작동합니다."
@@ -179,6 +186,10 @@
           "transcribe_with_post_process": {
             "name": "후처리 단축키",
             "description": "선택 사항: 항상 AI 후처리를 적용하는 전용 단축키입니다."
+          },
+          "transcribe_raw": {
+            "name": "원본 전사 단축키",
+            "description": "이번 받아쓰기에만 소문자로, 문장 부호 없는 원본 텍스트로 전사하는 전용 단축키입니다."
           }
         },
         "errors": {
@@ -200,29 +211,6 @@
         "description": "누르고 있으면 녹음, 놓으면 정지"
       }
     },
-    "sound": {
-      "title": "사운드",
-      "microphone": {
-        "title": "마이크",
-        "description": "선호하는 마이크 장치를 선택하세요",
-        "placeholder": "마이크 선택...",
-        "loading": "로딩 중..."
-      },
-      "audioFeedback": {
-        "label": "오디오 피드백",
-        "description": "녹음 시작 및 정지 시 소리 재생"
-      },
-      "outputDevice": {
-        "title": "출력 장치",
-        "description": "피드백 사운드를 위한 오디오 출력 장치를 선택하세요",
-        "placeholder": "출력 장치 선택...",
-        "loading": "로딩 중..."
-      },
-      "volume": {
-        "title": "볼륨",
-        "description": "오디오 피드백 사운드의 볼륨 조절"
-      }
-    },
     "models": {
       "title": "음성 인식 모델",
       "description": "음성 인식 모델을 선택하거나 추가 모델을 다운로드하세요. 모델마다 정확도와 속도가 다릅니다.",
@@ -240,6 +228,40 @@
         "allLanguages": "모든 언어"
       },
       "noModelsMatch": "이 필터에 맞는 모델이 없습니다."
+    },
+    "sound": {
+      "title": "사운드",
+      "previewSounds": "사운드 미리 듣기 (시작음 후 정지음 재생)",
+      "microphone": {
+        "title": "마이크",
+        "description": "선호하는 마이크 장치를 선택하세요",
+        "placeholder": "마이크 선택...",
+        "loading": "로딩 중..."
+      },
+      "inputLevel": {
+        "title": "입력 레벨",
+        "description": "선택한 마이크의 실시간 입력 레벨입니다. 말할 때 막대가 움직이면 오디오가 들어오고 있는 것입니다."
+      },
+      "audioFeedback": {
+        "label": "오디오 피드백",
+        "description": "녹음 시작 및 정지 시 소리 재생"
+      },
+      "outputDevice": {
+        "title": "출력 장치",
+        "description": "피드백 사운드를 위한 오디오 출력 장치를 선택하세요",
+        "placeholder": "출력 장치 선택...",
+        "loading": "로딩 중..."
+      },
+      "volume": {
+        "title": "볼륨",
+        "description": "오디오 피드백 사운드의 볼륨 조절"
+      },
+      "outputTest": {
+        "title": "출력 테스트",
+        "description": "선택한 출력 장치로 테스트 사운드를 재생하여 오디오가 나오는지 확인합니다.",
+        "button": "출력 테스트",
+        "playing": "재생 중..."
+      }
     },
     "advanced": {
       "title": "고급",
@@ -292,6 +314,22 @@
           "none": "없음",
           "bottom": "하단",
           "top": "상단"
+        },
+        "fine": {
+          "title": "화면 내 위치",
+          "description": "녹음 표시기를 현재 화면의 어디에 둘지 선택하세요. 가운데 열이 기본 위치와 같습니다.",
+          "reset": "기본값으로 재설정"
+        },
+        "anchors": {
+          "topleft": "왼쪽 위",
+          "topcenter": "가운데 위",
+          "topright": "오른쪽 위",
+          "middleleft": "왼쪽 가운데",
+          "middlecenter": "가운데",
+          "middleright": "오른쪽 가운데",
+          "bottomleft": "왼쪽 아래",
+          "bottomcenter": "가운데 아래",
+          "bottomright": "오른쪽 아래"
         }
       },
       "pasteMethod": {
@@ -352,13 +390,103 @@
           "sec15": "15초 후 (디버그)"
         }
       },
+      "dictionaryGuide": {
+        "title": "단어를 정확하게 인식시키기",
+        "intro": "두 가지 도구가 함께 작동합니다. 사용자 정의 단어는 자주 쓰는 용어 쪽으로 모델을 유도해, 발음이 모호할 때 그 단어를 우선하도록 합니다. 단어 교체는 전사가 끝난 뒤 정확하게 고쳐 주며, 모델이 계속 잘못 듣는 경우에 사용합니다.",
+        "rule": "먼저 사용자 정의 단어를 추가해 보세요. 이름이나 용어가 매번 똑같이 잘못 나온다면, 들리는 텍스트를 원하는 텍스트로 바꾸는 단어 교체를 추가하세요.",
+        "examplesToggle": "예시 보기",
+        "examples": {
+          "name": {
+            "title": "어려운 이름 (jamditis)",
+            "body": "\"jamditis\"를 사용자 정의 단어로 추가하세요. 그래도 \"jam dightis\"로 전사된다면 단어 교체를 추가하세요: jam dightis → jamditis."
+          },
+          "domain": {
+            "title": "도메인 또는 이메일 (jamditis.com)",
+            "body": "\"jamditis dot com\"이라고 말하게 되므로 단어 교체를 추가하세요: jamditis dot com → jamditis.com. 교체는 문자를 그대로 유지하므로, 띄어쓰기가 바뀌거나 대문자로 변환되지 않고 하나의 토큰으로 남습니다."
+          },
+          "handle": {
+            "title": "핸들 (@jamditis)",
+            "body": "단어 교체를 추가하세요: at jamditis → @jamditis."
+          }
+        },
+        "engineNote": "사용자 정의 단어는 Whisper 모델에서는 디코딩 중에 결과를 유도하고, 다른 모델에서는 전사 후에 텍스트를 수정하므로 모델에 따라 결과가 다릅니다. 단어 교체는 모든 모델에서 동일하게 작동합니다."
+      },
       "customWords": {
         "title": "사용자 정의 단어",
         "description": "녹음 중 자주 잘못 들리거나 철자가 틀리는 단어를 추가하세요. 시스템이 유사한 소리의 단어를 목록과 일치하도록 자동으로 수정합니다.",
         "placeholder": "단어 추가",
         "add": "추가",
         "remove": "{{word}} 제거",
-        "duplicate": "\"{{word}}\"이(가) 이미 존재합니다"
+        "duplicate": "\"{{word}}\"이(가) 이미 존재합니다",
+        "capReached": "사전이 가득 찼습니다 ({{cap}}단어). 더 추가하려면 일부를 제거하세요.",
+        "count": "{{count}} / {{cap}} 단어",
+        "import": {
+          "title": "목록 가져오기",
+          "description": ".txt 파일을 업로드하거나 목록을 붙여넣으세요. 항목은 줄바꿈이나 쉼표로 구분합니다. 세 단어까지의 구문은 그대로 유지되고, 그보다 긴 항목은 단어별로 나뉩니다.",
+          "upload": ".txt 파일 업로드",
+          "formatHint": "일반 .txt 또는 .csv 파일. 한 줄에 단어나 구문 하나씩, 또는 쉼표로 항목을 구분하세요. 세 단어까지의 구문은 그대로 유지되고, 그보다 긴 항목은 단어별로 나뉩니다. 총 500개 항목까지 가능합니다.",
+          "pastePlaceholder": "여기에 단어를 붙여넣으세요. 한 줄에 하나씩 또는 쉼표로 구분",
+          "add": "목록 추가",
+          "none": "추가할 새 단어가 없습니다",
+          "added_one": "{{count}}개 단어를 추가했습니다",
+          "added_other": "{{count}}개 단어를 추가했습니다",
+          "skippedDuplicates": "{{count}}개는 이미 목록에 있습니다",
+          "skippedCap": "{{count}}개는 {{cap}}단어 제한을 초과했습니다",
+          "skippedInvalid": "{{count}}개는 너무 깁니다",
+          "readError": "파일을 읽을 수 없습니다"
+        }
+      },
+      "wordReplacements": {
+        "title": "단어 교체",
+        "description": "발음과 상관없이 지정한 단어나 구문을 항상 교체합니다. 모든 모델의 모든 전사에서, 사용자 정의 단어 매칭 이후에 실행됩니다. 교체할 텍스트를 비워 두면 해당 단어가 삭제됩니다. 유사 발음 매칭으로는 안전하게 처리할 수 없는 수정에 사용하세요 (예: \"clawed\"를 \"Claude\"로).",
+        "fromPlaceholder": "들린 텍스트",
+        "toPlaceholder": "바꿀 텍스트",
+        "add": "추가",
+        "wholeWord": "전체 단어만",
+        "caseSensitive": "대소문자 구분",
+        "duplicate": "\"{{word}}\"에 대한 교체가 이미 있습니다",
+        "capReached": "교체 목록이 가득 찼습니다 ({{cap}}개 항목). 더 추가하려면 일부를 제거하세요.",
+        "tooLong": "각 항목은 {{max}}자 미만으로 입력하세요",
+        "count": "{{count}} / {{cap}} 교체",
+        "deletes": "(단어 삭제)",
+        "partialBadge": "부분",
+        "caseBadge": "Aa",
+        "remove": "{{word}} 교체 제거"
+      },
+      "personalization": {
+        "title": "내 히스토리에서 학습",
+        "description": "AudioBud가 자주 말하는 이름과 용어에서 사용자 정의 단어를 제안하도록 허용합니다. 모든 처리는 이 기기에서만 이루어집니다. 로컬 전사 히스토리만 읽고 아무것도 업로드하지 않으며, 학습한 내용은 언제든지 내보내거나 지울 수 있습니다. 기본값은 꺼짐입니다.",
+        "error": "문제가 발생했습니다. 다시 시도해주세요.",
+        "suggestions": {
+          "title": "추천 단어",
+          "description": "전사 히스토리에서 찾아낸 자주 쓰는 고유명사와 용어입니다. 원하는 단어는 사용자 정의 단어로 추가하고, 나머지는 무시하면 다시 표시되지 않습니다.",
+          "refresh": "추천 새로고침",
+          "loading": "히스토리 검색 중...",
+          "empty": "아직 새 추천이 없습니다. 더 받아쓴 후 새로고침하세요.",
+          "count": "{{count}}회 나타남",
+          "accept": "추가",
+          "dismiss": "무시",
+          "dismissLabel": "추천 {{word}} 무시"
+        },
+        "learned": {
+          "count": "학습한 단어 {{count}}개",
+          "remove": "학습한 단어 {{word}} 제거"
+        },
+        "data": {
+          "title": "개인화 데이터",
+          "description": "AudioBud가 학습한 내용을 내보내거나 전부 지울 수 있습니다. 재설정하면 학습한 단어와 무시한 추천이 모두 삭제되며, 직접 추가한 사용자 정의 단어와 교체는 영향을 받지 않습니다.",
+          "export": "내보내기",
+          "reset": "개인화 재설정",
+          "resetTitle": "개인화 재설정",
+          "resetConfirm": "학습한 단어와 무시한 추천이 모두 삭제됩니다. 직접 추가한 사용자 정의 단어와 교체는 그대로 유지됩니다. 계속하시겠습니까?",
+          "resetDone": "개인화 데이터가 삭제되었습니다",
+          "exportDone": "개인화 데이터를 내보냈습니다",
+          "exportError": "개인화 데이터를 내보내지 못했습니다"
+        }
+      },
+      "rawOutput": {
+        "label": "원본 전사",
+        "description": "대문자와 문장 끝 부호를 제거한 소문자 텍스트로 출력합니다. 약어(API, GPU)와 단독으로 쓰인 영어 \"I\"는 유지됩니다. 다른 도구에 입력할 때나 모델이 서식을 과도하게 넣을 때 유용합니다. 일회성 원본 받아쓰기용 별도 단축키를 지정할 수도 있습니다."
       }
     },
     "postProcessing": {
@@ -461,7 +589,8 @@
       "historyLimit": {
         "title": "히스토리 제한",
         "description": "보관할 최대 히스토리 항목 수",
-        "entries": "항목"
+        "entries": "항목",
+        "trimNote": "제한을 낮춰도 녹음이 즉시 삭제되지는 않습니다. 제한을 초과한, 저장되지 않은 녹음은 다음 녹음이 추가될 때 삭제됩니다."
       },
       "recordingRetention": {
         "title": "녹음 자동 삭제",
@@ -471,7 +600,8 @@
         "days3": "3일 후",
         "weeks2": "2주 후",
         "months3": "3개월 후",
-        "placeholder": "보관 기간 선택..."
+        "placeholder": "보관 기간 선택...",
+        "trimNote": "이 설정을 변경해도 녹음이 즉시 삭제되지는 않습니다. 저장되지 않은 오래된 녹음은 다음 녹음이 추가될 때만 삭제됩니다."
       },
       "alwaysOnMicrophone": {
         "label": "항상 켜진 마이크",
@@ -498,6 +628,11 @@
         "description": "키보드 단축키 백엔드를 선택하세요.",
         "bindingsReset": "키보드 단축키가 호환되지 않아 기본값으로 재설정되었습니다"
       },
+      "paths": {
+        "appData": "앱 데이터:",
+        "models": "모델:",
+        "settings": "설정:"
+      },
       "pasteDelay": {
         "title": "붙여넣기 지연",
         "description": "붙여넣기 키 입력을 보내기 전 지연 시간(밀리초). 잘못된 텍스트가 붙여넣어지면 늘리세요."
@@ -505,11 +640,6 @@
       "recordingBuffer": {
         "title": "추가 녹음 버퍼",
         "description": "키를 놓은 후 추가로 녹음을 계속하는 시간(밀리초). 후행 오디오를 캡처하기 위함. 0 = 추가 버퍼 없음."
-      },
-      "paths": {
-        "appData": "앱 데이터:",
-        "models": "모델:",
-        "settings": "설정:"
       }
     },
     "about": {
@@ -528,16 +658,26 @@
         "button": "GitHub에서 보기"
       },
       "supportDevelopment": {
-        "title": "개발 지원",
-        "description": "Handy 개발을 계속할 수 있도록 도와주세요",
-        "button": "후원하기"
+        "title": "개구리 밥 주기",
+        "description": "AudioBud는 무료이며 전적으로 내 컴퓨터에서 실행됩니다. 타이핑을 조금이라도 덜어 줬다면 파리 한 마리 넣어 주세요.",
+        "button": "파리 한 마리 사주기"
       },
       "acknowledgments": {
         "title": "감사의 말",
+        "handy": {
+          "title": "Handy",
+          "description": "AudioBud의 기반이 된 오픈소스 받아쓰기 앱",
+          "details": "AudioBud는 cjpais가 만든 Handy(MIT 라이선스)의 포크입니다. 이 앱의 토대를 마련해 준 cjpais와 Handy 기여자들에게 깊이 감사드립니다. 자세한 내용은 handy.computer에서 확인하세요."
+        },
+        "parakeet": {
+          "title": "Parakeet",
+          "description": "NVIDIA NeMo Parakeet, Windows에서 AudioBud의 기본 엔진",
+          "details": "전사는 기본적으로 transcribe-rs ONNX 런타임을 통해 NVIDIA의 Parakeet 모델로 실행됩니다. NVIDIA NeMo와 transcribe-rs 관리자들에게 감사드립니다."
+        },
         "whisper": {
           "title": "Whisper.cpp",
-          "description": "OpenAI의 Whisper 자동 음성 인식 모델의 고성능 추론",
-          "details": "Handy는 빠르고 로컬 음성-텍스트 처리를 위해 Whisper.cpp를 사용합니다. Georgi Gerganov와 기여자들의 놀라운 작업에 감사드립니다."
+          "description": "OpenAI Whisper 모델의 고성능 로컬 추론",
+          "details": "AudioBud는 GPU로 가속되는 Whisper.cpp로도 전사할 수 있습니다. Georgi Gerganov와 기여자들에게 감사드립니다."
         }
       }
     }
@@ -572,6 +712,7 @@
     "update": "업데이트",
     "close": "닫기",
     "open": "열기",
+    "moreInfo": "자세한 정보",
     "default": "기본값",
     "enabled": "활성화됨",
     "disabled": "비활성화됨",
@@ -602,7 +743,9 @@
     "modelLoadFailed": "모델을 불러오지 못했습니다: {{model}}",
     "modelLoadFailedUnknown": "알 수 없는 모델",
     "pasteFailedTitle": "텍스트 붙여넣기 실패",
-    "pasteFailed": "활성 애플리케이션에 텍스트를 붙여넣을 수 없습니다."
+    "pasteFailed": "활성 애플리케이션에 텍스트를 붙여넣을 수 없습니다.",
+    "transcriptionTimeoutTitle": "전사 시간 초과",
+    "transcriptionTimeout": "엔진이 {{seconds}}초 동안 응답하지 않아 멈춰 있을 수 있습니다. 이 문제가 계속되면 AudioBud를 다시 시작하세요."
   },
   "appLanguage": {
     "title": "애플리케이션 언어",
@@ -610,6 +753,10 @@
   },
   "overlay": {
     "transcribing": "텍스트로 변환 중...",
-    "processing": "처리 중..."
+    "processing": "처리 중...",
+    "recording": "녹음 중",
+    "cancel": "녹음 취소",
+    "raw": "RAW",
+    "rawHint": "원본 전사 모드"
   }
 }

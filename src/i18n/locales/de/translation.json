@@ -9,9 +9,12 @@
     "cancel": "Abbrechen",
     "pushToTalk": "Push-to-Talk",
     "muteWhileRecording": "Während Aufnahme stummschalten",
-    "appendTrailingSpace": "Leerzeichen anhängen"
+    "appendTrailingSpace": "Leerzeichen anhängen",
+    "autoSubmit": "Automatisch absenden",
+    "showOverlay": "Overlay anzeigen"
   },
   "sidebar": {
+    "navLabel": "Einstellungsbereiche",
     "general": "Allgemein",
     "models": "Modelle",
     "advanced": "Erweitert",
@@ -142,39 +145,25 @@
     "noModelDownloadRequired": "Kein Modell - Download erforderlich",
     "deleteModel": "{{modelName}} löschen",
     "downloadSpeed": "{{speed}} MB/s",
+    "cancel": "Abbrechen",
+    "cancelDownload": "Download abbrechen",
     "capabilities": {
       "languageSelection": "Unterstützt mehrere Eingabesprachen",
-      "multiLanguage": "Mehrsprachig",
-      "translation": "Kann ins Englische übersetzen",
-      "translate": "Ins Englische übersetzen",
       "singleLanguage": "Unterstützt nur diese Sprache",
-      "languageOnly": "Nur {{language}}"
-    },
-    "cancel": "Abbrechen",
-    "cancelDownload": "Download abbrechen"
+      "multiLanguage": "Mehrsprachig",
+      "languageOnly": "Nur {{language}}",
+      "translation": "Kann ins Englische übersetzen",
+      "translate": "Ins Englische übersetzen"
+    }
   },
   "settings": {
+    "autosave": {
+      "saved": "Im Teich gespeichert",
+      "failed": "Änderung konnte nicht gespeichert werden"
+    },
     "modelSettings": {
       "title": "{{model}}-Einstellungen",
       "noSettingsNeeded": "Dieses Modell funktioniert automatisch ohne Konfiguration."
-    },
-    "models": {
-      "title": "Transkriptionsmodelle",
-      "description": "Wähle ein Transkriptionsmodell aus oder lade zusätzliche Modelle herunter. Verschiedene Modelle bieten unterschiedliche Genauigkeits- und Geschwindigkeitsstufen.",
-      "downloaded": "Heruntergeladen",
-      "available": "Zum Download verfügbar",
-      "deleteConfirm": "Bist du sicher, dass du {{modelName}} löschen möchtest? Du musst es erneut herunterladen, um es zu verwenden.",
-      "deleteActiveConfirm": "{{modelName}} ist dein aktives Modell. Das Löschen stoppt Transkriptionen, bis du ein neues Modell auswählst. Bist du sicher?",
-      "deleteTitle": "Modell löschen",
-      "filters": {
-        "all": "Alle",
-        "multiLanguage": "Mehrsprachig",
-        "translation": "Übersetzung",
-        "allLanguages": "Alle Sprachen"
-      },
-      "noModelsMatch": "Keine Modelle entsprechen diesem Filter.",
-      "yourModels": "Heruntergeladene Modelle",
-      "availableModels": "Zum Download verfügbar"
     },
     "general": {
       "title": "Allgemein",
@@ -197,6 +186,10 @@
           "transcribe_with_post_process": {
             "name": "Nachbearbeitungs-Tastenkürzel",
             "description": "Optional: Ein dediziertes Tastenkürzel, das immer die KI-Nachbearbeitung auf deine Transkription anwendet."
+          },
+          "transcribe_raw": {
+            "name": "Rohtranskript-Tastenkürzel",
+            "description": "Ein dediziertes Tastenkürzel, das nur für dieses Diktat rohen Text in Kleinbuchstaben und ohne Satzzeichen erzeugt."
           }
         },
         "errors": {
@@ -218,13 +211,36 @@
         "description": "Gedrückt halten zum Aufnehmen, loslassen zum Stoppen"
       }
     },
+    "models": {
+      "title": "Transkriptionsmodelle",
+      "description": "Wähle ein Transkriptionsmodell aus oder lade zusätzliche Modelle herunter. Verschiedene Modelle bieten unterschiedliche Genauigkeits- und Geschwindigkeitsstufen.",
+      "yourModels": "Heruntergeladene Modelle",
+      "availableModels": "Zum Download verfügbar",
+      "downloaded": "Heruntergeladen",
+      "available": "Zum Download verfügbar",
+      "deleteConfirm": "Bist du sicher, dass du {{modelName}} löschen möchtest? Du musst es erneut herunterladen, um es zu verwenden.",
+      "deleteActiveConfirm": "{{modelName}} ist dein aktives Modell. Das Löschen stoppt Transkriptionen, bis du ein neues Modell auswählst. Bist du sicher?",
+      "deleteTitle": "Modell löschen",
+      "filters": {
+        "all": "Alle",
+        "multiLanguage": "Mehrsprachig",
+        "translation": "Übersetzung",
+        "allLanguages": "Alle Sprachen"
+      },
+      "noModelsMatch": "Keine Modelle entsprechen diesem Filter."
+    },
     "sound": {
       "title": "Ton",
+      "previewSounds": "Töne vorhören (spielt Start, dann Stopp)",
       "microphone": {
         "title": "Mikrofon",
         "description": "Bevorzugtes Mikrofon auswählen",
         "placeholder": "Mikrofon auswählen...",
         "loading": "Wird geladen..."
+      },
+      "inputLevel": {
+        "title": "Eingangspegel",
+        "description": "Live-Pegel des ausgewählten Mikrofons. Sprich – die Balken sollten sich bewegen und bestätigen, dass Audio ankommt."
       },
       "audioFeedback": {
         "label": "Audio-Feedback",
@@ -239,6 +255,12 @@
       "volume": {
         "title": "Lautstärke",
         "description": "Lautstärke der Audio-Feedback-Töne anpassen"
+      },
+      "outputTest": {
+        "title": "Ausgabetest",
+        "description": "Spiele einen Testton über das ausgewählte Ausgabegerät ab, um zu bestätigen, dass Audio ausgegeben wird.",
+        "button": "Ausgabe testen",
+        "playing": "Wird abgespielt..."
       }
     },
     "advanced": {
@@ -292,6 +314,22 @@
           "none": "Keine",
           "bottom": "Unten",
           "top": "Oben"
+        },
+        "fine": {
+          "title": "Position auf dem Bildschirm",
+          "description": "Lege fest, wo die Aufnahmeanzeige auf deinem aktiven Bildschirm sitzt. Die mittlere Spalte entspricht der Standardposition.",
+          "reset": "Auf Standard zurücksetzen"
+        },
+        "anchors": {
+          "topleft": "Oben links",
+          "topcenter": "Oben mittig",
+          "topright": "Oben rechts",
+          "middleleft": "Mittig links",
+          "middlecenter": "Mitte",
+          "middleright": "Mittig rechts",
+          "bottomleft": "Unten links",
+          "bottomcenter": "Unten mittig",
+          "bottomright": "Unten rechts"
         }
       },
       "pasteMethod": {
@@ -352,13 +390,103 @@
           "sec15": "Nach 15 Sekunden (Debug)"
         }
       },
+      "dictionaryGuide": {
+        "title": "Wörter richtig treffen",
+        "intro": "Zwei Werkzeuge greifen ineinander. Benutzerdefinierte Wörter lenken das Modell zu Begriffen, die du oft verwendest, damit es sie bei undeutlichen Lauten bevorzugt. Wortersetzungen erzwingen danach eine exakte Korrektur – für Verhörer, die das Modell immer wieder macht.",
+        "rule": "Beginne mit einem benutzerdefinierten Wort. Wenn ein Name oder Begriff trotzdem jedes Mal gleich falsch herauskommt, füge eine Wortersetzung hinzu – von dem, was du hörst, zu dem, was du meinst.",
+        "examplesToggle": "Beispiele anzeigen",
+        "examples": {
+          "name": {
+            "title": "Ein schwieriger Name (jamditis)",
+            "body": "Füge \"jamditis\" als benutzerdefiniertes Wort hinzu. Wird es weiterhin als \"jam dightis\" transkribiert, ergänze eine Wortersetzung: jam dightis → jamditis."
+          },
+          "domain": {
+            "title": "Eine Domain oder E-Mail (jamditis.com)",
+            "body": "Du sagst \"jamditis punkt com\", also ergänze eine Wortersetzung: jamditis punkt com → jamditis.com. Ersetzungen behalten die exakten Zeichen bei, sodass es ein einziges Token bleibt und nicht neu getrennt oder großgeschrieben wird."
+          },
+          "handle": {
+            "title": "Ein Handle (@jamditis)",
+            "body": "Ergänze eine Wortersetzung: at jamditis → @jamditis."
+          }
+        },
+        "engineNote": "Benutzerdefinierte Wörter steuern Whisper-Modelle bereits beim Dekodieren; bei anderen Modellen korrigieren sie den Text im Nachhinein, die Ergebnisse unterscheiden sich also je nach Modell. Wortersetzungen funktionieren bei jedem Modell gleich."
+      },
       "customWords": {
         "title": "Benutzerdefinierte Wörter",
         "description": "Wörter hinzufügen, die oft falsch gehört oder geschrieben werden. Das System korrigiert automatisch ähnlich klingende Wörter entsprechend deiner Liste.",
         "placeholder": "Wort hinzufügen",
         "add": "Hinzufügen",
         "remove": "{{word}} entfernen",
-        "duplicate": "\"{{word}}\" existiert bereits"
+        "duplicate": "\"{{word}}\" existiert bereits",
+        "capReached": "Dein Wörterbuch ist voll ({{cap}} Wörter). Entferne einige, um weitere hinzuzufügen.",
+        "count": "{{count}} / {{cap}} Wörter",
+        "import": {
+          "title": "Liste importieren",
+          "description": "Lade eine .txt-Datei hoch oder füge eine Liste ein. Trenne Einträge durch Zeilenumbrüche oder Kommas. Wortgruppen mit bis zu drei Wörtern bleiben erhalten; längere Einträge werden in einzelne Wörter aufgeteilt.",
+          "upload": ".txt-Datei hochladen",
+          "formatHint": "Einfaches .txt oder .csv. Ein Wort oder eine Wortgruppe pro Zeile, oder Einträge durch Kommas getrennt. Wortgruppen mit bis zu drei Wörtern bleiben zusammen; längere Einträge werden in einzelne Wörter aufgeteilt. Maximal 500 Einträge.",
+          "pastePlaceholder": "Wörter hier einfügen, eines pro Zeile oder durch Kommas getrennt",
+          "add": "Liste hinzufügen",
+          "none": "Keine neuen Wörter zum Hinzufügen",
+          "added_one": "{{count}} Wort hinzugefügt",
+          "added_other": "{{count}} Wörter hinzugefügt",
+          "skippedDuplicates": "{{count}} bereits in deiner Liste",
+          "skippedCap": "{{count}} über dem Limit von {{cap}} Wörtern",
+          "skippedInvalid": "{{count}} zu lang",
+          "readError": "Datei konnte nicht gelesen werden"
+        }
+      },
+      "wordReplacements": {
+        "title": "Wortersetzungen",
+        "description": "Ersetzt exakte Wörter oder Wortgruppen immer, unabhängig davon, wie sie klingen. Läuft bei jeder Transkription und bei allen Modellen, nach dem Abgleich der benutzerdefinierten Wörter. Lasse die Ersetzung leer, um ein Wort zu löschen. Nutze das für Korrekturen, die der unscharfe Abgleich nicht sicher vornehmen kann (zum Beispiel \"clawed\" zu \"Claude\").",
+        "fromPlaceholder": "Gehört",
+        "toPlaceholder": "Ersetzen durch",
+        "add": "Hinzufügen",
+        "wholeWord": "Nur ganzes Wort",
+        "caseSensitive": "Groß-/Kleinschreibung beachten",
+        "duplicate": "Für \"{{word}}\" gibt es bereits eine Ersetzung",
+        "capReached": "Deine Ersetzungsliste ist voll ({{cap}} Einträge). Entferne einige, um weitere hinzuzufügen.",
+        "tooLong": "Halte jedes Feld unter {{max}} Zeichen",
+        "count": "{{count}} / {{cap}} Ersetzungen",
+        "deletes": "(löscht das Wort)",
+        "partialBadge": "teilweise",
+        "caseBadge": "Aa",
+        "remove": "Ersetzung für {{word}} entfernen"
+      },
+      "personalization": {
+        "title": "Aus meinem Verlauf lernen",
+        "description": "Aktiviere dies, damit AudioBud benutzerdefinierte Wörter aus den Namen und Begriffen vorschlägt, die du am häufigsten diktierst. Alles bleibt auf diesem Gerät: Es liest deinen lokalen Transkriptionsverlauf, nichts wird hochgeladen, und du kannst das Gelernte jederzeit exportieren oder löschen. Standardmäßig aus.",
+        "error": "Etwas ist schiefgelaufen. Bitte versuche es erneut.",
+        "suggestions": {
+          "title": "Vorgeschlagene Wörter",
+          "description": "Häufige Eigennamen und Begriffe aus deinem Transkriptionsverlauf. Übernimm die gewünschten als benutzerdefinierte Wörter oder verwirf den Rest, damit er nicht mehr auftaucht.",
+          "refresh": "Vorschläge aktualisieren",
+          "loading": "Verlauf wird durchsucht...",
+          "empty": "Noch keine neuen Vorschläge. Diktiere mehr und aktualisiere dann.",
+          "count": "{{count}}-mal gesehen",
+          "accept": "Hinzufügen",
+          "dismiss": "Verwerfen",
+          "dismissLabel": "Vorschlag {{word}} verwerfen"
+        },
+        "learned": {
+          "count": "{{count}} gelernte Wörter",
+          "remove": "Gelerntes Wort {{word}} entfernen"
+        },
+        "data": {
+          "title": "Deine Personalisierungsdaten",
+          "description": "Exportiere eine Kopie dessen, was AudioBud gelernt hat, oder lösche alles. Beim Zurücksetzen werden alle gelernten Wörter und verworfenen Vorschläge entfernt; deine manuell angelegten benutzerdefinierten Wörter und Ersetzungen bleiben unberührt.",
+          "export": "Exportieren",
+          "reset": "Personalisierung zurücksetzen",
+          "resetTitle": "Personalisierung zurücksetzen",
+          "resetConfirm": "Dies löscht alle gelernten Wörter und verworfenen Vorschläge. Deine manuell angelegten benutzerdefinierten Wörter und Ersetzungen bleiben erhalten. Fortfahren?",
+          "resetDone": "Personalisierungsdaten gelöscht",
+          "exportDone": "Personalisierungsdaten exportiert",
+          "exportError": "Personalisierungsdaten konnten nicht exportiert werden"
+        }
+      },
+      "rawOutput": {
+        "label": "Rohtranskript",
+        "description": "Gibt Text in Kleinbuchstaben aus, ohne Großschreibung und ohne abschließende Satzzeichen. Abkürzungen (API, GPU) und das alleinstehende englische \"I\" bleiben erhalten. Nützlich, um andere Tools zu füttern, oder wenn das Modell zu stark formatiert. Du kannst auch ein eigenes Tastenkürzel für einmalige Roh-Diktate festlegen."
       }
     },
     "postProcessing": {
@@ -461,7 +589,8 @@
       "historyLimit": {
         "title": "Verlaufslimit",
         "description": "Maximale Anzahl der Verlaufseinträge",
-        "entries": "Einträge"
+        "entries": "Einträge",
+        "trimNote": "Ein niedrigeres Limit löscht Aufnahmen nicht sofort. Nicht gespeicherte Aufnahmen oberhalb des Limits werden entfernt, sobald deine nächste Aufnahme hinzukommt."
       },
       "recordingRetention": {
         "title": "Aufnahmen automatisch löschen",
@@ -471,7 +600,8 @@
         "days3": "Nach 3 Tagen",
         "weeks2": "Nach 2 Wochen",
         "months3": "Nach 3 Monaten",
-        "placeholder": "Aufbewahrungszeitraum auswählen..."
+        "placeholder": "Aufbewahrungszeitraum auswählen...",
+        "trimNote": "Eine Änderung löscht Aufnahmen nicht sofort. Alte, nicht gespeicherte Aufnahmen werden erst entfernt, sobald deine nächste Aufnahme hinzukommt."
       },
       "alwaysOnMicrophone": {
         "label": "Mikrofon immer aktiv",
@@ -528,16 +658,26 @@
         "button": "Auf GitHub ansehen"
       },
       "supportDevelopment": {
-        "title": "Entwicklung unterstützen",
-        "description": "Hilf uns, Handy weiterzuentwickeln",
-        "button": "Spenden"
+        "title": "Füttere den Frosch",
+        "description": "AudioBud ist kostenlos und läuft komplett auf deinem Rechner. Wenn es dir Tipparbeit spart, wirf eine Fliege ins Glas.",
+        "button": "Spendier mir eine Fliege"
       },
       "acknowledgments": {
         "title": "Danksagungen",
+        "handy": {
+          "title": "Handy",
+          "description": "Die Open-Source-Diktier-App, auf der AudioBud aufbaut",
+          "details": "AudioBud ist ein Fork von Handy (MIT-Lizenz) von cjpais. Großen Dank an cjpais und die Handy-Mitwirkenden für das Fundament, auf dem diese App steht. Mehr dazu auf handy.computer."
+        },
+        "parakeet": {
+          "title": "Parakeet",
+          "description": "NVIDIA NeMo Parakeet, die Standard-Engine von AudioBud unter Windows",
+          "details": "Die Transkription nutzt standardmäßig NVIDIAs Parakeet-Modell über die transcribe-rs-ONNX-Runtime. Dank an NVIDIA NeMo und die transcribe-rs-Maintainer."
+        },
         "whisper": {
           "title": "Whisper.cpp",
-          "description": "Hochleistungs-Inferenz des Whisper-Spracherkennungsmodells von OpenAI",
-          "details": "Handy verwendet Whisper.cpp für schnelle, lokale Sprach-zu-Text-Verarbeitung. Dank an Georgi Gerganov und die Mitwirkenden für ihre großartige Arbeit."
+          "description": "Leistungsstarke lokale Inferenz des Whisper-Modells von OpenAI",
+          "details": "AudioBud kann auch mit Whisper.cpp transkribieren, beschleunigt auf der GPU. Dank an Georgi Gerganov und die Mitwirkenden."
         }
       }
     }
@@ -572,6 +712,7 @@
     "update": "Aktualisieren",
     "close": "Schließen",
     "open": "Öffnen",
+    "moreInfo": "Weitere Informationen",
     "default": "Standard",
     "enabled": "Aktiviert",
     "disabled": "Deaktiviert",
@@ -602,7 +743,9 @@
     "modelLoadFailed": "Modell konnte nicht geladen werden: {{model}}",
     "modelLoadFailedUnknown": "unbekanntes Modell",
     "pasteFailedTitle": "Text konnte nicht eingefügt werden",
-    "pasteFailed": "Der Text konnte nicht in die aktive Anwendung eingefügt werden."
+    "pasteFailed": "Der Text konnte nicht in die aktive Anwendung eingefügt werden.",
+    "transcriptionTimeoutTitle": "Zeitüberschreitung bei der Transkription",
+    "transcriptionTimeout": "Die Engine hat nach {{seconds}} Sekunden nicht reagiert und hängt möglicherweise. Starte AudioBud neu, wenn das häufiger vorkommt."
   },
   "appLanguage": {
     "title": "Anwendungssprache",
@@ -610,6 +753,10 @@
   },
   "overlay": {
     "transcribing": "Transkribiere...",
-    "processing": "Verarbeite..."
+    "processing": "Verarbeite...",
+    "recording": "Aufnahme",
+    "cancel": "Aufnahme abbrechen",
+    "raw": "RAW",
+    "rawHint": "Rohtranskript-Modus"
   }
 }
