@@ -109,12 +109,27 @@ pub fn capture(backend: &mut dyn ClipboardBackend) -> ClipboardContent {
 ///   restored cut degrades to a copy and a later paste duplicates the files
 ///   instead of moving them. macOS has no cut marker on the pasteboard (move
 ///   is chosen at paste time), so nothing is lost there.
+/// - On Linux, arboard canonicalizes each path when writing the file list, so
+///   a copied symlink restores as its target — and a broken symlink cannot be
+///   restored at all. A failed file-list write falls back to the captured
+///   text/HTML (or clearing), so the transcript never stays on the clipboard.
 pub fn restore(
     backend: &mut dyn ClipboardBackend,
     content: &ClipboardContent,
 ) -> Result<(), String> {
     if let Some(files) = &content.files {
-        return backend.write_files(files);
+        match backend.write_files(files) {
+            Ok(()) => return Ok(()),
+            Err(e) => {
+                // Fall through to the text/HTML formats (or clear): leaving
+                // the transcript on the clipboard is worse than degrading
+                // the restored fidelity.
+                log::warn!(
+                    "Failed to restore the clipboard file list, falling back: {}",
+                    e
+                );
+            }
+        }
     }
     if content.text.is_none() {
         if let Some(image) = &content.image {
@@ -344,6 +359,9 @@ mod tests {
         /// full bitmap, so capture must skip them when nothing could be
         /// restored anyway.
         image_reads: usize,
+        /// Makes `write_files` fail, modeling e.g. arboard's Linux
+        /// canonicalization failing on a broken symlink.
+        fail_file_writes: bool,
     }
 
     impl FakeClipboard {
@@ -395,6 +413,9 @@ mod tests {
         }
 
         fn write_files(&mut self, files: &ClipboardFiles) -> Result<(), String> {
+            if self.fail_file_writes {
+                return Err("file list write failed".to_string());
+            }
             // Models the trait contract: the file list replaces the whole
             // clipboard state (Windows does empty + CF_HDROP + drop effect
             // in one transaction; macOS/Linux setters replace implicitly).
@@ -514,6 +535,46 @@ mod tests {
         assert_eq!(clipboard.text, None);
         assert_eq!(clipboard.html, None);
         assert_eq!(clipboard.image, None);
+    }
+
+    #[test]
+    fn failed_file_list_restore_falls_back_and_drops_the_transcript() {
+        // A file-list write can fail after the transcript already overwrote
+        // the clipboard (e.g. arboard canonicalizing a broken symlink on
+        // Linux). The restore must degrade to the captured text rather than
+        // leave the transcript pasteable.
+        let mut clipboard = FakeClipboard {
+            files: Some(ClipboardFiles {
+                paths: vec![PathBuf::from("/tmp/broken-link")],
+                preferred_drop_effect: None,
+            }),
+            text: Some("/tmp/broken-link".to_string()),
+            fail_file_writes: true,
+            ..Default::default()
+        };
+
+        round_trip(&mut clipboard);
+
+        assert_eq!(clipboard.text, Some("/tmp/broken-link".to_string()));
+        assert_eq!(clipboard.files, None);
+    }
+
+    #[test]
+    fn failed_file_list_restore_with_nothing_else_clears_the_transcript() {
+        let mut clipboard = FakeClipboard {
+            files: Some(ClipboardFiles {
+                paths: vec![PathBuf::from("/tmp/broken-link")],
+                preferred_drop_effect: None,
+            }),
+            fail_file_writes: true,
+            ..Default::default()
+        };
+
+        round_trip(&mut clipboard);
+
+        // Worse than a lost file list is the transcript staying pasteable.
+        assert_eq!(clipboard.text, None);
+        assert_eq!(clipboard.files, None);
     }
 
     #[test]

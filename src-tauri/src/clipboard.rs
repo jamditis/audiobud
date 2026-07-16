@@ -101,14 +101,22 @@ fn restore_saved_clipboard(
 ) {
     match saved {
         SavedClipboard::Full(content) => {
-            // On Wayland, prefer wl-copy for text-only content, matching the
-            // transcript write path (better compatibility, e.g. umlauts).
+            // On Wayland the transcript was written through wl-copy (same
+            // condition as the write path), so the restore must displace
+            // that write: text-only content goes back through wl-copy, and
+            // everything else clears the wl-copy selection first — the
+            // arboard restore below talks to the X11/XWayland selection and
+            // cannot displace what wl-copy wrote, which would leave the
+            // transcript pasteable.
             #[cfg(target_os = "linux")]
-            if is_wayland() && is_wl_copy_available() && content.is_text_only() {
-                if let Some(text) = content.text.as_deref() {
-                    let _ = write_clipboard_via_wl_copy(text);
+            if is_wayland() && is_wl_copy_available() {
+                if content.is_text_only() {
+                    if let Some(text) = content.text.as_deref() {
+                        let _ = write_clipboard_via_wl_copy(text);
+                    }
+                    return;
                 }
-                return;
+                let _ = clear_clipboard_via_wl_copy();
             }
             if let Some(backend) = backend {
                 if let Err(e) = clipboard_snapshot::restore(backend, content) {
@@ -426,6 +434,23 @@ fn type_text_via_kwtype(text: &str) -> Result<(), String> {
         return Err(format!("kwtype failed: {}", stderr));
     }
 
+    Ok(())
+}
+
+/// Clears the Wayland clipboard selection wl-copy wrote the transcript to.
+#[cfg(target_os = "linux")]
+fn clear_clipboard_via_wl_copy() -> Result<(), String> {
+    use std::process::Stdio;
+    let status = Command::new("wl-copy")
+        .arg("--clear")
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map_err(|e| format!("Failed to execute wl-copy --clear: {}", e))?;
+
+    if !status.success() {
+        return Err("wl-copy --clear failed".into());
+    }
     Ok(())
 }
 
