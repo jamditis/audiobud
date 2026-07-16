@@ -630,6 +630,37 @@ mod tests {
         fs::remove_dir_all(&dir).ok();
     }
 
+    // End-to-end check for issue #56's reported case: a VALID Unicode
+    // (Cyrillic + CJK + accented Latin) directory, exercised through the real
+    // ONNX load stack (vad-rs -> ort -> onnxruntime CreateSession) — the same
+    // file-open call the Parakeet engine sessions use. Skips when the VAD
+    // model resource has not been downloaded (see AGENTS.md model setup).
+    #[test]
+    fn silero_vad_loads_from_unicode_directory() {
+        use crate::audio_toolkit::SileroVad;
+
+        let source =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources/models/silero_vad_v4.onnx");
+        if !source.is_file() {
+            eprintln!(
+                "skipping silero_vad_loads_from_unicode_directory: \
+                 silero_vad_v4.onnx not downloaded (see AGENTS.md model setup)"
+            );
+            return;
+        }
+
+        let dir = std::env::temp_dir().join(
+            "audiobud-vad-\u{0410}\u{043b}\u{0435}\u{043a}\u{0441}\u{0430}\u{043d}\u{0434}\u{0440}-\u{7528}\u{6237}-Fran\u{e7}aise",
+        );
+        fs::create_dir_all(&dir).expect("test setup: failed to create unicode temp dir");
+        let model = dir.join("silero_vad_v4.onnx");
+        fs::copy(&source, &model).expect("test setup: failed to copy VAD model");
+
+        let result = SileroVad::new(&model, 0.3);
+        fs::remove_dir_all(&dir).ok();
+        result.expect("silero VAD must load from a unicode (Cyrillic/CJK) directory");
+    }
+
     #[test]
     fn vad_engine_path_reports_missing_model() {
         let missing = std::env::temp_dir().join("audiobud-vad-missing/silero_vad_v4.onnx");
