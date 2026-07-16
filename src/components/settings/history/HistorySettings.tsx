@@ -140,9 +140,16 @@ export const HistorySettings: React.FC = () => {
         setEntries((prev) =>
           prev.map((e) => (e.id === payload.entry.id ? payload.entry : e)),
         );
+      } else if (payload.action === "deleted") {
+        // Lazy cleanup inside save_entry trims rows this page may still be
+        // showing (recording from the History page emits "added" without a
+        // re-fetch), so deletions must be applied here too. Filtering by id
+        // is idempotent, which keeps it safe for user-initiated deletes that
+        // the UI already removed optimistically.
+        setEntries((prev) => prev.filter((e) => e.id !== payload.id));
       }
-      // "deleted" and "toggled" are handled by optimistic updates only,
-      // so we intentionally ignore them here to avoid double-mutation.
+      // "toggled" is handled by optimistic updates only, so we intentionally
+      // ignore it here to avoid double-mutation.
     });
 
     return () => {
