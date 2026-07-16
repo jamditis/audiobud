@@ -8,6 +8,45 @@ AudioBud is a detached fork of [Handy](https://github.com/cjpais/Handy) by CJ Pa
 restate Handy's own history. AudioBud versions independently of Handy, starting at
 `0.1.0`. Releases are not yet code-signed; signing arrives in milestone B.
 
+## 0.3.2 - 2026-07-16
+
+A translation release. AudioBud ships 19 languages besides English, and about a
+fifth of the interface showed English in every one of them -- the settings pages,
+the dictionary, and the overlay all fell back. Those languages are now complete,
+and the app calls itself AudioBud in them rather than Handy. If you use AudioBud
+in English, the visible change is a counter that no longer reads "1 learned
+words". Windows (x64) only; the macOS and Linux code remains inherited and
+untested.
+
+### Fixed
+
+- The 19 non-English languages now cover the whole interface. Roughly a fifth of
+  the app fell back to English in all of them, because those strings were added
+  after the translations were inherited and never caught up. All 2,033 missing
+  strings are filled, and the check that compares each language against English
+  now fails the build instead of only warning -- so a new English string can no
+  longer ship without its translations (#88).
+- AudioBud called itself Handy in all 19 non-English languages, in text it
+  showed you about your own dictation. The name is now correct in each of them,
+  including where the language attaches word endings to it, as Turkish does
+  (#95).
+- The learned-words counter read "1 learned words" in English, and would have
+  shown English mid-sentence in Russian, Polish, Ukrainian, Czech, Arabic, and
+  Hebrew once corrected. It now agrees with the number in every language (#96).
+- The MSI package now installs the third-party license notices alongside the
+  app, matching what the setup wizard already installed (#70).
+
+### Known issues
+
+- The non-English path fix from 0.3.1 covers Parakeet, the default engine.
+  Whisper models can still fail to load from a folder whose path is not valid
+  UTF-8; the fault is in a library AudioBud depends on and needs a fix further
+  down (#80).
+- A few counts still read awkwardly in some non-English languages -- "seen 3
+  times" and the import warnings do not bend the word to the number in Russian,
+  Ukrainian, or Arabic. Nothing falls back to English; the wording disagrees
+  with the number (#100).
+
 ## 0.3.1 - 2026-07-16
 
 A stability patch for the default setup. Four bugs in this release could lose
