@@ -469,7 +469,8 @@
           "dismissLabel": "Avfärda förslaget {{word}}"
         },
         "learned": {
-          "count": "{{count}} inlärda ord",
+          "count_one": "{{count}} inlärt ord",
+          "count_other": "{{count}} inlärda ord",
           "remove": "Ta bort inlärt ord {{word}}"
         },
         "data": {

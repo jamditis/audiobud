@@ -470,7 +470,9 @@
           "dismissLabel": "Odmítnout návrh {{word}}"
         },
         "learned": {
-          "count": "Naučená slova: {{count}}",
+          "count_one": "{{count}} naučené slovo",
+          "count_few": "{{count}} naučená slova",
+          "count_other": "{{count}} naučených slov",
           "remove": "Odebrat naučené slovo {{word}}"
         },
         "data": {

@@ -469,7 +469,8 @@
           "dismissLabel": "Vorschlag {{word}} verwerfen"
         },
         "learned": {
-          "count": "{{count}} gelernte Wörter",
+          "count_one": "{{count}} gelerntes Wort",
+          "count_other": "{{count}} gelernte Wörter",
           "remove": "Gelerntes Wort {{word}} entfernen"
         },
         "data": {

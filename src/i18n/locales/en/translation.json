@@ -469,7 +469,8 @@
           "dismissLabel": "Dismiss suggestion {{word}}"
         },
         "learned": {
-          "count": "{{count}} learned words",
+          "count_one": "{{count}} learned word",
+          "count_other": "{{count}} learned words",
           "remove": "Remove learned word {{word}}"
         },
         "data": {

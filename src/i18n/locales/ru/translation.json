@@ -471,7 +471,10 @@
           "dismissLabel": "Скрыть предложение {{word}}"
         },
         "learned": {
-          "count": "Выученных слов: {{count}}",
+          "count_one": "{{count}} выученное слово",
+          "count_few": "{{count}} выученных слова",
+          "count_many": "{{count}} выученных слов",
+          "count_other": "{{count}} выученных слов",
           "remove": "Удалить выученное слово {{word}}"
         },
         "data": {

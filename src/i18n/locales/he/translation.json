@@ -470,7 +470,9 @@
           "dismissLabel": "דחה את ההצעה {{word}}"
         },
         "learned": {
-          "count": "{{count}} מילים שנלמדו",
+          "count_one": "{{count}} מילה שנלמדה",
+          "count_two": "{{count}} מילים שנלמדו",
+          "count_other": "{{count}} מילים שנלמדו",
           "remove": "הסר את המילה שנלמדה {{word}}"
         },
         "data": {

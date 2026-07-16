@@ -469,7 +469,8 @@
           "dismissLabel": "提案「{{word}}」を非表示にする"
         },
         "learned": {
-          "count": "学習済み{{count}}語",
+          "count_one": "学習済み{{count}}語",
+          "count_other": "学習済み{{count}}語",
           "remove": "学習済みの単語「{{word}}」を削除"
         },
         "data": {

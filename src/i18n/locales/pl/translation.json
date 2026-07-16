@@ -471,7 +471,10 @@
           "dismissLabel": "Odrzuć propozycję {{word}}"
         },
         "learned": {
-          "count": "{{count}} wyuczonych słów",
+          "count_one": "{{count}} wyuczone słowo",
+          "count_few": "{{count}} wyuczone słowa",
+          "count_many": "{{count}} wyuczonych słów",
+          "count_other": "{{count}} wyuczonych słów",
           "remove": "Usuń wyuczone słowo {{word}}"
         },
         "data": {

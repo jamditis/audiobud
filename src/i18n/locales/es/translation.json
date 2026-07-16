@@ -469,7 +469,8 @@
           "dismissLabel": "Descartar la sugerencia {{word}}"
         },
         "learned": {
-          "count": "{{count}} palabras aprendidas",
+          "count_one": "{{count}} palabra aprendida",
+          "count_other": "{{count}} palabras aprendidas",
           "remove": "Eliminar la palabra aprendida {{word}}"
         },
         "data": {
