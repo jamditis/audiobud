@@ -60,9 +60,18 @@
     </header>
 
     <main id="top">
+      <!--
+        Deliberately no version number anywhere on this page. The download links
+        resolve releases/latest at click time, so a hardcoded version can only
+        ever be right for as long as nobody forgets to update it: state it here
+        and the page advertises a release the button will not serve until the
+        draft is published. Let the releases page be the one place that names a
+        version. The roadmap's shipped cards are the exception -- those are a
+        historical record and are pinned on purpose.
+      -->
       <section class="hero" aria-labelledby="hero-title">
         <div class="hero-inner">
-          <p class="eyebrow">v0.3.1 for Windows</p>
+          <p class="eyebrow">For Windows x64</p>
           <h1 id="hero-title">Local dictation that stays on your machine.</h1>
           <p class="lede">
             AudioBud turns a hotkey into private speech-to-text. Press, speak,
@@ -81,8 +90,11 @@
           </div>
           <div class="status-row" aria-label="Project status">
             <span
-              ><strong>Current release</strong>v0.3.1, as a Windows x64
-              installer or portable build.</span
+              ><strong>Current release</strong>A Windows x64 installer or a
+              portable build, on the
+              <a href="https://github.com/jamditis/audiobud/releases/latest"
+                >releases page</a
+              >.</span
             >
             <span
               ><strong>Audio privacy</strong>Transcription runs locally; audio
