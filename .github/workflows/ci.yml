@@ -78,6 +78,48 @@ jobs:
           cp src/managers/transcription_mock.rs src/managers/transcription.rs
           sed -i '/^transcribe-rs/d' Cargo.toml
 
+      - name: Download the VAD model (unicode-path ONNX regression test)
+        working-directory: src-tauri
+        run: |
+          # silero_vad_loads_from_unicode_directory fails in CI when the model
+          # is absent instead of skipping silently, so keep this step ahead of
+          # cargo test.
+          mkdir -p resources/models
+          curl --fail --retry 3 -o resources/models/silero_vad_v4.onnx https://blob.handy.computer/silero_vad_v4.onnx
+
+      - name: Run Rust tests
+        working-directory: src-tauri
+        run: cargo test
+
+  rust-tests-windows:
+    name: Rust tests (Windows, mock transcription, no GPU)
+    # The unicode/surrogate path regression tests (issue #56) are
+    # cfg(windows)-gated: unpaired-surrogate names and the reported profile
+    # paths only exist there. Without this job they never run in CI.
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./src-tauri -> target"
+
+      - name: Use mock TranscriptionManager (CI only)
+        working-directory: src-tauri
+        shell: bash
+        run: |
+          # Swap to the mock adapter so cargo test does not compile whisper/Vulkan/ONNX.
+          cp src/managers/transcription_mock.rs src/managers/transcription.rs
+          sed -i '/^transcribe-rs/d' Cargo.toml
+
+      - name: Download the VAD model (unicode-path ONNX regression test)
+        working-directory: src-tauri
+        shell: bash
+        run: |
+          mkdir -p resources/models
+          curl --fail --retry 3 -o resources/models/silero_vad_v4.onnx https://blob.handy.computer/silero_vad_v4.onnx
+
       - name: Run Rust tests
         working-directory: src-tauri
         run: cargo test
