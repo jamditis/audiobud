@@ -58,21 +58,35 @@ pub trait ClipboardBackend {
     /// Writes HTML plus an optional plain-text alternate in one clipboard state.
     fn write_html(&mut self, html: &str, alt_text: Option<&str>) -> Result<(), String>;
     fn write_image(&mut self, image: &ClipboardImage) -> Result<(), String>;
-    /// May add the file list without clearing formats already on the
-    /// clipboard (Windows CF_HDROP is set additively). Callers that need a
-    /// clean state must call `clear` first.
+    /// Replaces the whole clipboard state with the file list (and its
+    /// cut/copy marker where the platform has one), like the other write
+    /// methods. Nothing written before it (e.g. the transcript) may survive.
     fn write_files(&mut self, files: &ClipboardFiles) -> Result<(), String>;
     fn clear(&mut self) -> Result<(), String>;
 }
 
 /// Reads a snapshot of the current clipboard contents. A format that cannot
 /// be read (absent, or unsupported on this platform) is captured as `None`.
+///
+/// Capture order: text, HTML, and the file list are read first, and the
+/// image only when both text and files are absent. [`restore`] can only ever
+/// write the image back in that case, and decoding a clipboard image is the
+/// one expensive read (a large spreadsheet selection renders to hundreds of
+/// MB of RGBA), so it is skipped whenever it could not be restored.
 pub fn capture(backend: &mut dyn ClipboardBackend) -> ClipboardContent {
+    let text = backend.read_text();
+    let html = backend.read_html();
+    let files = backend.read_files();
+    let image = if text.is_none() && files.is_none() {
+        backend.read_image()
+    } else {
+        None
+    };
     ClipboardContent {
-        text: backend.read_text(),
-        html: backend.read_html(),
-        image: backend.read_image(),
-        files: backend.read_files(),
+        text,
+        html,
+        image,
+        files,
     }
 }
 
@@ -85,8 +99,9 @@ pub fn capture(backend: &mut dyn ClipboardBackend) -> ClipboardContent {
 /// empty string.
 ///
 /// Known limitations:
-/// - A snapshot holding both an image and text (e.g. a spreadsheet range
-///   copy) restores the text/HTML side and drops the image render.
+/// - A clipboard holding both an image and text (e.g. a spreadsheet range
+///   copy) restores the text/HTML side; the image render is dropped (it is
+///   not even captured, see [`capture`]).
 /// - Cut versus copy: on Windows the "Preferred DropEffect" marker is
 ///   captured and restored, so a cut (move) file list stays a cut. On Linux
 ///   the KDE/GNOME cut markers (`application/x-kde-cutselection`,
@@ -99,10 +114,6 @@ pub fn restore(
     content: &ClipboardContent,
 ) -> Result<(), String> {
     if let Some(files) = &content.files {
-        // The file-list write can be additive (Windows CF_HDROP is set
-        // without emptying the clipboard), which would leave the transcript
-        // text alongside the restored files. Clear first.
-        backend.clear()?;
         return backend.write_files(files);
     }
     if content.text.is_none() {
@@ -158,7 +169,7 @@ impl ClipboardBackend for ArboardBackend {
         Some(ClipboardFiles {
             paths,
             #[cfg(windows)]
-            preferred_drop_effect: windows_drop_effect::read(),
+            preferred_drop_effect: windows_files::read_drop_effect(),
             #[cfg(not(windows))]
             preferred_drop_effect: None,
         })
@@ -190,17 +201,26 @@ impl ClipboardBackend for ArboardBackend {
     }
 
     fn write_files(&mut self, files: &ClipboardFiles) -> Result<(), String> {
-        self.0
-            .set()
-            .file_list(&files.paths)
-            .map_err(|e| format!("Failed to restore clipboard file list: {}", e))?;
-
+        // On Windows, CF_HDROP and the Preferred DropEffect marker must land
+        // in one clipboard transaction: a clipboard listener (clipboard
+        // history, third-party managers) can react to the CF_HDROP update in
+        // the gap between two opens and the marker would be lost, turning a
+        // cut back into a copy. arboard closes the clipboard after
+        // `file_list`, so the Windows path goes through clipboard-win
+        // directly under a single open. arboard's macOS and Linux setters
+        // already replace the clipboard state in one operation.
         #[cfg(windows)]
-        if let Some(effect) = files.preferred_drop_effect {
-            windows_drop_effect::write(effect)?;
+        {
+            windows_files::write(files)
         }
 
-        Ok(())
+        #[cfg(not(windows))]
+        {
+            self.0
+                .set()
+                .file_list(&files.paths)
+                .map_err(|e| format!("Failed to restore clipboard file list: {}", e))
+        }
     }
 
     fn clear(&mut self) -> Result<(), String> {
@@ -210,18 +230,23 @@ impl ClipboardBackend for ArboardBackend {
     }
 }
 
-/// Reads and writes the Windows "Preferred DropEffect" clipboard format,
-/// which Explorer uses to distinguish cut (move) from copied file lists.
-/// arboard does not expose it, so this goes through clipboard-win directly
-/// (the same crate arboard uses underneath).
+/// Windows file-list clipboard access through clipboard-win (the same crate
+/// arboard uses underneath). Two things arboard cannot do:
+/// - the "Preferred DropEffect" marker Explorer uses to distinguish cut
+///   (move) from copied file lists is not exposed by arboard at all;
+/// - restoring must write CF_HDROP and the marker under one clipboard open,
+///   which arboard prevents by closing the clipboard after `file_list`.
 #[cfg(windows)]
-mod windows_drop_effect {
-    const FORMAT_NAME: &str = "Preferred DropEffect";
+mod windows_files {
+    use super::ClipboardFiles;
 
-    /// Reads the marker off the current clipboard, if present.
-    pub fn read() -> Option<u32> {
+    const FORMAT_NAME: &str = "Preferred DropEffect";
+    const OPEN_ATTEMPTS: usize = 10;
+
+    /// Reads the drop-effect marker off the current clipboard, if present.
+    pub fn read_drop_effect() -> Option<u32> {
         let format = clipboard_win::register_format(FORMAT_NAME)?;
-        let _open = clipboard_win::Clipboard::new_attempts(10).ok()?;
+        let _open = clipboard_win::Clipboard::new_attempts(OPEN_ATTEMPTS).ok()?;
         if !clipboard_win::is_format_avail(format.get()) {
             return None;
         }
@@ -231,15 +256,35 @@ mod windows_drop_effect {
         Some(u32::from_le_bytes(bytes))
     }
 
-    /// Adds the marker to the clipboard without clearing the formats already
-    /// on it (the file list written just before).
-    pub fn write(effect: u32) -> Result<(), String> {
-        let format = clipboard_win::register_format(FORMAT_NAME)
-            .ok_or_else(|| "Failed to register the Preferred DropEffect format".to_string())?;
-        let _open = clipboard_win::Clipboard::new_attempts(10)
-            .map_err(|e| format!("Failed to open clipboard for the drop effect: {}", e))?;
-        clipboard_win::raw::set_without_clear(format.get(), &effect.to_le_bytes())
-            .map_err(|e| format!("Failed to restore the Preferred DropEffect: {}", e))
+    /// Replaces the clipboard with the file list and its drop-effect marker
+    /// in a single open/empty/set transaction.
+    pub fn write(files: &ClipboardFiles) -> Result<(), String> {
+        let paths = files
+            .paths
+            .iter()
+            .map(|p| {
+                p.to_str().ok_or_else(|| {
+                    format!("Clipboard file path is not valid UTF-8: {}", p.display())
+                })
+            })
+            .collect::<Result<Vec<&str>, String>>()?;
+
+        let _open = clipboard_win::Clipboard::new_attempts(OPEN_ATTEMPTS)
+            .map_err(|e| format!("Failed to open clipboard for the file list: {}", e))?;
+
+        // DoClear empties the clipboard before CF_HDROP is set, replacing
+        // the transcript in the same transaction.
+        clipboard_win::raw::set_file_list_with(&paths, clipboard_win::options::DoClear)
+            .map_err(|e| format!("Failed to restore clipboard file list: {}", e))?;
+
+        if let Some(effect) = files.preferred_drop_effect {
+            let format = clipboard_win::register_format(FORMAT_NAME)
+                .ok_or_else(|| "Failed to register the Preferred DropEffect format".to_string())?;
+            clipboard_win::raw::set_without_clear(format.get(), &effect.to_le_bytes())
+                .map_err(|e| format!("Failed to restore the Preferred DropEffect: {}", e))?;
+        }
+
+        Ok(())
     }
 }
 
@@ -255,6 +300,21 @@ mod tests {
         html: Option<String>,
         image: Option<ClipboardImage>,
         files: Option<ClipboardFiles>,
+        /// How many times `read_image` was called. Image reads decode the
+        /// full bitmap, so capture must skip them when nothing could be
+        /// restored anyway.
+        image_reads: usize,
+    }
+
+    impl FakeClipboard {
+        /// Clears the clipboard content, keeping test instrumentation
+        /// (`image_reads`) intact.
+        fn reset_content(&mut self) {
+            self.text = None;
+            self.html = None;
+            self.image = None;
+            self.files = None;
+        }
     }
 
     impl ClipboardBackend for FakeClipboard {
@@ -267,6 +327,7 @@ mod tests {
         }
 
         fn read_image(&mut self) -> Option<ClipboardImage> {
+            self.image_reads += 1;
             self.image.clone()
         }
 
@@ -275,34 +336,35 @@ mod tests {
         }
 
         fn write_text(&mut self, text: &str) -> Result<(), String> {
-            *self = Self::default();
+            self.reset_content();
             self.text = Some(text.to_string());
             Ok(())
         }
 
         fn write_html(&mut self, html: &str, alt_text: Option<&str>) -> Result<(), String> {
-            *self = Self::default();
+            self.reset_content();
             self.html = Some(html.to_string());
             self.text = alt_text.map(str::to_string);
             Ok(())
         }
 
         fn write_image(&mut self, image: &ClipboardImage) -> Result<(), String> {
-            *self = Self::default();
+            self.reset_content();
             self.image = Some(image.clone());
             Ok(())
         }
 
         fn write_files(&mut self, files: &ClipboardFiles) -> Result<(), String> {
-            // Models the Windows behavior: CF_HDROP is added via
-            // SetClipboardData without emptying the clipboard first, so
-            // whatever text/HTML/image was there survives alongside it.
+            // Models the trait contract: the file list replaces the whole
+            // clipboard state (Windows does empty + CF_HDROP + drop effect
+            // in one transaction; macOS/Linux setters replace implicitly).
+            self.reset_content();
             self.files = Some(files.clone());
             Ok(())
         }
 
         fn clear(&mut self) -> Result<(), String> {
-            *self = Self::default();
+            self.reset_content();
             Ok(())
         }
     }
@@ -394,9 +456,9 @@ mod tests {
 
     #[test]
     fn file_list_restore_does_not_leave_transcript_text_behind() {
-        // The file-list write is additive (Windows CF_HDROP does not empty
-        // the clipboard), so the restore path must clear the transcript
-        // first or text-aware apps keep pasting it.
+        // Restoring a file list must not leave the transcript pasteable:
+        // text-aware apps would keep pasting it (on Windows, CF_HDROP alone
+        // would not displace CF_UNICODETEXT without the explicit empty).
         let files = ClipboardFiles {
             paths: vec![PathBuf::from("/tmp/a.txt")],
             preferred_drop_effect: None,
@@ -461,6 +523,23 @@ mod tests {
         round_trip(&mut clipboard);
 
         assert_eq!(clipboard.text, Some("A1\tB1".to_string()));
+    }
+
+    #[test]
+    fn capture_skips_the_image_read_when_text_is_present() {
+        // restore() can never write the image back when text was captured
+        // (single-set limitation), and decoding a clipboard image can cost
+        // hundreds of MB for large spreadsheet selections. Don't read it.
+        let mut clipboard = FakeClipboard {
+            text: Some("A1\tB1".to_string()),
+            image: Some(test_image()),
+            ..Default::default()
+        };
+
+        let snapshot = capture(&mut clipboard);
+
+        assert_eq!(clipboard.image_reads, 0);
+        assert_eq!(snapshot.image, None);
     }
 
     #[test]
