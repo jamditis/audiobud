@@ -17,6 +17,7 @@ export const HistoryLimit: React.FC<HistoryLimitProps> = ({
   const { getSetting, updateSetting, isUpdating } = useSettings();
 
   const historyLimit = getSetting("history_limit") ?? 5;
+  const retentionPeriod = getSetting("recording_retention_period") || "never";
 
   const handleChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const value = parseInt(event.target.value, 10);
@@ -49,9 +50,13 @@ export const HistoryLimit: React.FC<HistoryLimitProps> = ({
           </span>
         </div>
       </SettingContainer>
-      <p className="px-4 pb-2 text-xs text-mid-gray">
-        {t("settings.debug.historyLimit.trimNote")}
-      </p>
+      {/* The limit only drives cleanup in "keep latest N" retention mode, so
+          only promise count-based trimming there. */}
+      {retentionPeriod === "preserve_limit" && (
+        <p className="px-4 pb-2 text-xs text-mid-gray">
+          {t("settings.debug.historyLimit.trimNote")}
+        </p>
+      )}
     </div>
   );
 };

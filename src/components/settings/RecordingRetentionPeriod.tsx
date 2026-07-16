@@ -58,9 +58,13 @@ export const RecordingRetentionPeriodSelector: React.FC<RecordingRetentionPeriod
             disabled={isUpdating("recording_retention_period")}
           />
         </SettingContainer>
-        <p className="px-4 pb-2 text-xs text-mid-gray">
-          {t("settings.debug.recordingRetention.trimNote")}
-        </p>
+        {/* With "Never" nothing is ever removed, so the trim note would
+            mislead — only show it when a deleting mode is selected. */}
+        {selectedRetentionPeriod !== "never" && (
+          <p className="px-4 pb-2 text-xs text-mid-gray">
+            {t("settings.debug.recordingRetention.trimNote")}
+          </p>
+        )}
       </div>
     );
   });

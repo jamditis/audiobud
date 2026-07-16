@@ -391,39 +391,51 @@ impl HistoryManager {
     /// Hook run by the settings commands after a new history limit or
     /// retention period has been persisted.
     ///
-    /// Deliberately performs no cleanup. Running an immediate cleanup pass
-    /// here permanently deleted unsaved recordings and their WAV files the
-    /// moment a user lowered the history limit or changed retention, with no
-    /// warning and no undo (#55). Entries beyond the new limit are instead
-    /// trimmed lazily by `save_entry` when the next recording is added, so a
-    /// settings change alone never destroys data.
-    ///
-    /// Also deliberately infallible and without database access: the setting
-    /// is already persisted by the time this runs, so a failure here (for
-    /// example a transient `history.db` open error) would make the command
-    /// report failure and the frontend roll back its optimistic value while
-    /// the backend keeps the new one. Kept as an explicit hook (with the
-    /// testable core below) so this invariant stays pinned by a unit test and
-    /// any future on-change behavior has a single home.
+    /// Deliberately infallible: the setting is already persisted by the time
+    /// this runs, so a failure here (for example a transient `history.db`
+    /// open error) would make the command report failure and the frontend
+    /// roll back its optimistic value while the backend keeps the new one.
+    /// The connection open is therefore best-effort — an error is logged and
+    /// the hook is skipped, which is safe because the hook never destroys
+    /// data (see `apply_history_settings_change`).
     pub fn on_history_settings_changed(
         &self,
         new_retention_period: crate::settings::RecordingRetentionPeriod,
         new_history_limit: usize,
     ) {
-        Self::on_history_settings_changed_core(
-            &self.recordings_dir,
-            new_retention_period,
-            new_history_limit,
-        )
+        match self.get_connection() {
+            Ok(conn) => Self::apply_history_settings_change(
+                &conn,
+                &self.recordings_dir,
+                new_retention_period,
+                new_history_limit,
+            ),
+            Err(e) => {
+                warn!(
+                    "Skipping history settings-change hook (could not open history db): {}",
+                    e
+                );
+            }
+        }
     }
 
-    /// Core of `on_history_settings_changed`, extracted with an explicit
-    /// recordings dir so the settings-change behavior can be unit-tested
-    /// without an `AppHandle`. The new settings values arrive here and are
-    /// intentionally not acted on — see `on_history_settings_changed`. Takes
-    /// no database connection on purpose: opening one is fallible, and the
-    /// settings-update path must not gain a failure path from a no-op.
-    pub(crate) fn on_history_settings_changed_core(
+    /// Everything the settings commands do to stored history data after a new
+    /// history limit or retention period is persisted. Extracted with an
+    /// explicit connection + recordings dir (same pattern as
+    /// `delete_entry_with_conn`) so the behavior is unit-testable without an
+    /// `AppHandle`, and given full access to the data on purpose: the
+    /// regression test hands it a real database and real WAV files and
+    /// asserts they survive.
+    ///
+    /// Deliberately performs no cleanup. Running an immediate cleanup pass
+    /// here permanently deleted unsaved recordings and their WAV files the
+    /// moment a user lowered the history limit or changed retention, with no
+    /// warning and no undo (#55). Entries beyond the new limit are instead
+    /// trimmed lazily by `save_entry` when the next recording is added, so a
+    /// settings change alone never destroys data. Any future on-change
+    /// behavior belongs here, where the test can see it.
+    pub(crate) fn apply_history_settings_change(
+        _conn: &Connection,
         _recordings_dir: &Path,
         _new_retention_period: crate::settings::RecordingRetentionPeriod,
         _new_history_limit: usize,
@@ -442,11 +454,20 @@ impl HistoryManager {
         let mut deleted_count = 0;
 
         for (id, file_name) in entries {
-            // Delete database entry
-            conn.execute(
-                "DELETE FROM transcription_history WHERE id = ?1",
+            // Re-check `saved` at delete time: the entry list was SELECTed
+            // earlier, and toggle_saved_status runs on its own connection from
+            // another command thread, so the user may have starred an entry in
+            // that window. A just-saved recording must never be destroyed by a
+            // stale cleanup list, and the WAV file is only unlinked when the
+            // row was actually deleted.
+            let rows_deleted = conn.execute(
+                "DELETE FROM transcription_history WHERE id = ?1 AND saved = 0",
                 params![id],
             )?;
+            if rows_deleted == 0 {
+                debug!("Skipping cleanup of entry {}: saved since selection", id);
+                continue;
+            }
 
             // Delete WAV file
             let file_path = recordings_dir.join(file_name);
@@ -1007,8 +1028,11 @@ mod tests {
         let dir = tempfile::tempdir().expect("create temp recordings dir");
         let wav_paths = seed_entries_with_files(&conn, dir.path(), 3);
 
-        // The user lowers the history limit from 3 to 1.
-        HistoryManager::on_history_settings_changed_core(
+        // The user lowers the history limit from 3 to 1. This is the same
+        // function the settings commands execute after persisting the new
+        // value, handed the real database and recordings dir.
+        HistoryManager::apply_history_settings_change(
+            &conn,
             dir.path(),
             crate::settings::RecordingRetentionPeriod::PreserveLimit,
             1,
@@ -1026,6 +1050,46 @@ mod tests {
                 path
             );
         }
+    }
+
+    #[test]
+    fn cleanup_delete_skips_entries_saved_after_selection() {
+        // A cleanup pass SELECTs its unsaved victims first and deletes them
+        // afterwards, while toggle_saved_status runs on its own connection
+        // from another command thread. If the user stars an entry in that
+        // window, the stale list still contains it; the delete must re-check
+        // `saved` so a just-saved recording is never destroyed.
+        let conn = setup_conn();
+        let dir = tempfile::tempdir().expect("create temp recordings dir");
+        let wav_paths = seed_entries_with_files(&conn, dir.path(), 2);
+
+        // Entry 1 (timestamp 100) was captured by the cleanup SELECT while
+        // unsaved, then the user saved it before the delete ran.
+        conn.execute(
+            "UPDATE transcription_history SET saved = 1 WHERE timestamp = 100",
+            [],
+        )
+        .expect("mark entry saved");
+
+        let stale_list = vec![
+            (1i64, "handy-100.wav".to_string()),
+            (2i64, "handy-200.wav".to_string()),
+        ];
+        HistoryManager::delete_entries_and_files(&conn, dir.path(), &stale_list)
+            .expect("delete entries");
+
+        // The just-saved entry and its WAV survive; the unsaved one is gone.
+        assert_eq!(
+            row_count(&conn, 1),
+            1,
+            "a row saved after the cleanup SELECT must survive"
+        );
+        assert!(
+            wav_paths[0].exists(),
+            "the WAV of a row saved after the cleanup SELECT must survive"
+        );
+        assert_eq!(row_count(&conn, 2), 0);
+        assert!(!wav_paths[1].exists());
     }
 
     #[test]
