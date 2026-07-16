@@ -166,6 +166,8 @@ impl ClipboardBackend for ArboardBackend {
 
     fn read_files(&mut self) -> Option<ClipboardFiles> {
         let paths = self.0.get().file_list().ok().filter(|f| !f.is_empty())?;
+        #[cfg(target_os = "linux")]
+        let paths = paths.into_iter().map(strip_uri_list_cr).collect();
         Some(ClipboardFiles {
             paths,
             #[cfg(windows)]
@@ -230,6 +232,22 @@ impl ClipboardBackend for ArboardBackend {
     }
 }
 
+/// arboard 3.6.1 splits `text/uri-list` on `\n` only, so a CRLF-delimited
+/// list (the RFC 2483 form GTK and KDE write) leaves a trailing `\r` on every
+/// path. Writing such a path back fails and would strand the transcript on
+/// the clipboard, so the artifact is stripped at capture time. A real file
+/// name ending in `\r` is indistinguishable from the artifact here; upstream
+/// arboard accepts the same trade-off in its (unreleased) fix.
+#[cfg(target_os = "linux")]
+fn strip_uri_list_cr(path: PathBuf) -> PathBuf {
+    use std::ffi::OsString;
+    use std::os::unix::ffi::{OsStrExt, OsStringExt};
+    match path.as_os_str().as_bytes().strip_suffix(b"\r") {
+        Some(stripped) => PathBuf::from(OsString::from_vec(stripped.to_vec())),
+        None => path,
+    }
+}
+
 /// Windows file-list clipboard access through clipboard-win (the same crate
 /// arboard uses underneath). Two things arboard cannot do:
 /// - the "Preferred DropEffect" marker Explorer uses to distinguish cut
@@ -256,25 +274,47 @@ mod windows_files {
         Some(u32::from_le_bytes(bytes))
     }
 
+    /// Builds the CF_HDROP payload: a 20-byte DROPFILES header (offset to
+    /// the path block, drop point, non-client flag, fWide=1) followed by
+    /// each path as a null-terminated UTF-16 string and a final extra null.
+    ///
+    /// Built from the path's raw UTF-16 code units rather than through
+    /// `to_str()`: CF_HDROP names captured off the clipboard can contain
+    /// unpaired surrogates (valid in NTFS names), which `to_str()` rejects —
+    /// and a restore failure here strands the transcript on the clipboard.
+    pub(super) fn hdrop_buffer(paths: &[std::path::PathBuf]) -> Vec<u8> {
+        use std::os::windows::ffi::OsStrExt;
+        const DROPFILES_HEADER_LEN: u32 = 20;
+        let mut buf = Vec::new();
+        buf.extend_from_slice(&DROPFILES_HEADER_LEN.to_le_bytes()); // pFiles
+        buf.extend_from_slice(&0i32.to_le_bytes()); // pt.x
+        buf.extend_from_slice(&0i32.to_le_bytes()); // pt.y
+        buf.extend_from_slice(&0i32.to_le_bytes()); // fNC
+        buf.extend_from_slice(&1i32.to_le_bytes()); // fWide
+        for path in paths {
+            for unit in path.as_os_str().encode_wide() {
+                buf.extend_from_slice(&unit.to_le_bytes());
+            }
+            buf.extend_from_slice(&0u16.to_le_bytes());
+        }
+        buf.extend_from_slice(&0u16.to_le_bytes());
+        buf
+    }
+
     /// Replaces the clipboard with the file list and its drop-effect marker
     /// in a single open/empty/set transaction.
     pub fn write(files: &ClipboardFiles) -> Result<(), String> {
-        let paths = files
-            .paths
-            .iter()
-            .map(|p| {
-                p.to_str().ok_or_else(|| {
-                    format!("Clipboard file path is not valid UTF-8: {}", p.display())
-                })
-            })
-            .collect::<Result<Vec<&str>, String>>()?;
+        let hdrop = hdrop_buffer(&files.paths);
 
         let _open = clipboard_win::Clipboard::new_attempts(OPEN_ATTEMPTS)
             .map_err(|e| format!("Failed to open clipboard for the file list: {}", e))?;
 
-        // DoClear empties the clipboard before CF_HDROP is set, replacing
-        // the transcript in the same transaction.
-        clipboard_win::raw::set_file_list_with(&paths, clipboard_win::options::DoClear)
+        // The explicit empty replaces the transcript in the same
+        // transaction; without it CF_HDROP would sit alongside the
+        // transcript's CF_UNICODETEXT instead of displacing it.
+        clipboard_win::raw::empty()
+            .map_err(|e| format!("Failed to clear the clipboard for the file list: {}", e))?;
+        clipboard_win::raw::set_without_clear(clipboard_win::formats::CF_HDROP, &hdrop)
             .map_err(|e| format!("Failed to restore clipboard file list: {}", e))?;
 
         if let Some(effect) = files.preferred_drop_effect {
@@ -540,6 +580,67 @@ mod tests {
 
         assert_eq!(clipboard.image_reads, 0);
         assert_eq!(snapshot.image, None);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn capture_strips_the_uri_list_cr_artifact() {
+        // arboard 3.6.1 leaves the CRLF `\r` on paths parsed from a
+        // CRLF-delimited text/uri-list; restoring `/tmp/a.txt\r` fails and
+        // strands the transcript on the clipboard.
+        assert_eq!(
+            strip_uri_list_cr(PathBuf::from("/tmp/a.txt\r")),
+            PathBuf::from("/tmp/a.txt")
+        );
+        assert_eq!(
+            strip_uri_list_cr(PathBuf::from("/tmp/clean.txt")),
+            PathBuf::from("/tmp/clean.txt")
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn hdrop_buffer_encodes_paths_as_utf16_with_terminators() {
+        let paths = vec![PathBuf::from("C:\\a.txt")];
+        let buf = super::windows_files::hdrop_buffer(&paths);
+
+        // DROPFILES header: pFiles=20, pt=(0,0), fNC=0, fWide=1.
+        assert_eq!(&buf[0..4], &20u32.to_le_bytes());
+        assert_eq!(&buf[16..20], &1i32.to_le_bytes());
+
+        let units: Vec<u16> = buf[20..]
+            .chunks_exact(2)
+            .map(|c| u16::from_le_bytes([c[0], c[1]]))
+            .collect();
+        let mut expected: Vec<u16> = "C:\\a.txt".encode_utf16().collect();
+        expected.push(0); // path terminator
+        expected.push(0); // list terminator
+        assert_eq!(units, expected);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn hdrop_buffer_preserves_unpaired_surrogates() {
+        use std::ffi::OsString;
+        use std::os::windows::ffi::OsStringExt;
+
+        // A lone high surrogate is a valid NTFS name element but not valid
+        // Unicode. `to_str()` rejects it — the conversion the old writer
+        // used — so restoration would fail after the transcript already
+        // overwrote the clipboard.
+        let wide: Vec<u16> = "C:\\x".encode_utf16().chain([0xD800]).collect();
+        let path = PathBuf::from(OsString::from_wide(&wide));
+        assert!(path.to_str().is_none());
+
+        let buf = super::windows_files::hdrop_buffer(std::slice::from_ref(&path));
+        let units: Vec<u16> = buf[20..]
+            .chunks_exact(2)
+            .map(|c| u16::from_le_bytes([c[0], c[1]]))
+            .collect();
+        let mut expected = wide.clone();
+        expected.push(0);
+        expected.push(0);
+        assert_eq!(units, expected);
     }
 
     #[test]
