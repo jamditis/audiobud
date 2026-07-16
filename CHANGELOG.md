@@ -8,6 +8,55 @@ AudioBud is a detached fork of [Handy](https://github.com/cjpais/Handy) by CJ Pa
 restate Handy's own history. AudioBud versions independently of Handy, starting at
 `0.1.0`. Releases are not yet code-signed; signing arrives in milestone B.
 
+## 0.3.1 - 2026-07-16
+
+A stability patch for the default setup. Four bugs in this release could lose
+your work or stop dictation outright: AudioBud failed to start transcribing at
+all if your Windows username contained a non-English character, changing a
+history setting could delete recordings you had not saved, pasting a transcript
+wiped whatever you had copied earlier, and a stuck engine could hang the window
+with no way out. Windows (x64) only; the macOS and Linux code remains inherited
+and untested.
+
+### Fixed
+
+- AudioBud now starts and transcribes normally when your Windows user folder
+  contains non-English characters. The default engine (Parakeet) previously
+  failed to load its voice-detection model on those accounts, which broke
+  dictation on a fresh install with no obvious cause (#56).
+- Changing a history setting no longer deletes recordings you have not saved.
+  Cleanup now runs when a new entry is saved rather than the moment you adjust
+  the limit or the retention window, and a history list that is open on screen
+  stays in sync when older entries are trimmed (#55).
+- Pasting a transcript no longer destroys what was already on your clipboard.
+  AudioBud restores the previous contents after it pastes -- including copied
+  files, images, and formatted text, not just plain text -- and always leaves
+  the transcript itself reachable if a restore cannot complete (#57).
+- A transcription engine that stops responding no longer hangs the app. The
+  transcription now runs under a watchdog that gives up after a timeout, tells
+  you it timed out, and returns you to a working window instead of a frozen one
+  (#58).
+
+### Added
+
+- The setup installer now bundles DirectML.dll, matching what the MSI package
+  already shipped. Installing with the .exe and the .msi now produces the same
+  working set of runtime files (#44).
+- Third-party license notices for the Windows runtime libraries AudioBud
+  bundles, installed alongside the app by the setup installer (#69). The MSI
+  package does not carry them yet (#70).
+
+### Known issues
+
+- The non-English path fix above covers Parakeet, the default engine. Whisper
+  models can still fail to load from a folder whose path is not valid UTF-8;
+  the fault is in a library AudioBud depends on and needs a fix further down
+  (#80).
+- About a fifth of the interface still shows English in the other 19 languages
+  AudioBud ships. The translations cover the app as it was at the fork point;
+  the settings, dictionary, and overlay text added since then falls back to
+  English until the locales are brought up to date (#88).
+
 ## 0.3.0 - 2026-06-25
 
 Adds opt-in, on-device personalization: when you turn it on, AudioBud learns the
