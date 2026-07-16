@@ -1,12 +1,22 @@
 // CI-only mock TranscriptionManager - avoids whisper/Vulkan dependencies.
 // This file is copied over transcription.rs during CI tests.
 // Existing tests don't exercise transcription, so this is safe.
+//
+// The watchdog machinery itself (issue #58) lives in managers/watchdog.rs,
+// which CI does NOT replace — its tests run against the real implementation.
+// This mock only mirrors the watchdog-facing API surface of the real manager
+// (is_wedged / transcribe_with_watchdog) so actions.rs and commands/history.rs
+// compile and behave sensibly: the mock transcribe is wrapped in the same
+// run_with_watchdog as the real one.
 
 use crate::managers::model::ModelManager;
+use crate::managers::watchdog::{run_with_watchdog, WatchdogOutcome};
 use anyhow::Result;
 use serde::Serialize;
 use specta::Type;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::time::Duration;
 use tauri::AppHandle;
 
 #[derive(Clone, Debug, Serialize)]
@@ -24,13 +34,44 @@ pub struct LoadingGuard;
 pub struct TranscriptionManager {
     #[allow(dead_code)]
     app_handle: AppHandle,
+    /// Mirrors the real manager's wedged-worker count (issue #58).
+    wedged_workers: Arc<AtomicUsize>,
 }
 
 impl TranscriptionManager {
     pub fn new(app_handle: &AppHandle, _model_manager: Arc<ModelManager>) -> Result<Self> {
         Ok(Self {
             app_handle: app_handle.clone(),
+            wedged_workers: Arc::new(AtomicUsize::new(0)),
         })
+    }
+
+    /// Mirrors the real manager: whether an earlier transcription timed out
+    /// and its worker is still running.
+    pub fn is_wedged(&self) -> bool {
+        self.wedged_workers.load(Ordering::SeqCst) > 0
+    }
+
+    /// Mirrors the real manager's watchdog-guarded transcription (issue #58):
+    /// the mock transcribe runs under the same shared watchdog.
+    pub fn transcribe_with_watchdog(
+        &self,
+        audio: Vec<f32>,
+        timeout: Duration,
+    ) -> WatchdogOutcome<Result<String>> {
+        if self.is_wedged() {
+            return WatchdogOutcome::Completed(Err(anyhow::anyhow!(
+                "The transcription engine is stuck from an earlier timeout. \
+                 Restart AudioBud to recover."
+            )));
+        }
+        let manager = self.clone();
+        run_with_watchdog(
+            "transcription",
+            timeout,
+            Arc::clone(&self.wedged_workers),
+            move || manager.transcribe(audio),
+        )
     }
 
     pub fn is_model_loaded(&self) -> bool {

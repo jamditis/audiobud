@@ -7,9 +7,8 @@ use crate::audio_toolkit::{
 };
 use crate::managers::audio::AudioRecordingManager;
 use crate::managers::history::HistoryManager;
-use crate::managers::transcription::{
-    transcription_watchdog_timeout, TranscriptionManager, WatchdogOutcome,
-};
+use crate::managers::transcription::TranscriptionManager;
+use crate::managers::watchdog::{transcription_watchdog_timeout, WatchdogOutcome};
 use crate::settings::{get_settings, AppSettings, APPLE_INTELLIGENCE_PROVIDER_ID};
 use crate::shortcut;
 use crate::tray::{change_tray_icon, TrayIconState};
@@ -32,9 +31,11 @@ struct RecordingErrorEvent {
     detail: Option<String>,
 }
 
+/// Payload of the `transcription-timeout` event, shared with the history
+/// retry command so both paths surface the same timeout toast.
 #[derive(Clone, serde::Serialize)]
-struct TranscriptionTimeoutEvent {
-    timeout_secs: u64,
+pub(crate) struct TranscriptionTimeoutEvent {
+    pub(crate) timeout_secs: u64,
 }
 
 /// Drop guard that notifies the [`TranscriptionCoordinator`] when the
