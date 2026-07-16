@@ -78,6 +78,15 @@ jobs:
           cp src/managers/transcription_mock.rs src/managers/transcription.rs
           sed -i '/^transcribe-rs/d' Cargo.toml
 
+      - name: Download the VAD model (unicode-path ONNX regression test)
+        working-directory: src-tauri
+        run: |
+          # silero_vad_loads_from_unicode_directory fails in CI when the model
+          # is absent instead of skipping silently, so keep this step ahead of
+          # cargo test.
+          mkdir -p resources/models
+          curl --fail --retry 3 -o resources/models/silero_vad_v4.onnx https://blob.handy.computer/silero_vad_v4.onnx
+
       - name: Run Rust tests
         working-directory: src-tauri
         run: cargo test

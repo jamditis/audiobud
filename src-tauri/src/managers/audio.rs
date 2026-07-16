@@ -633,8 +633,10 @@ mod tests {
     // End-to-end check for issue #56's reported case: a VALID Unicode
     // (Cyrillic + CJK + accented Latin) directory, exercised through the real
     // ONNX load stack (vad-rs -> ort -> onnxruntime CreateSession) — the same
-    // file-open call the Parakeet engine sessions use. Skips when the VAD
-    // model resource has not been downloaded (see AGENTS.md model setup).
+    // file-open call the Parakeet engine sessions use. CI downloads the model
+    // (see .github/workflows/ci.yml) and the test fails there if it is absent —
+    // a silent skip would let the regression test pass without running. Local
+    // checkouts without the model skip with a notice (AGENTS.md model setup).
     #[test]
     fn silero_vad_loads_from_unicode_directory() {
         use crate::audio_toolkit::SileroVad;
@@ -642,6 +644,10 @@ mod tests {
         let source =
             PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources/models/silero_vad_v4.onnx");
         if !source.is_file() {
+            assert!(
+                std::env::var_os("CI").is_none(),
+                "silero_vad_v4.onnx is missing in CI; the workflow must download it before cargo test"
+            );
             eprintln!(
                 "skipping silero_vad_loads_from_unicode_directory: \
                  silero_vad_v4.onnx not downloaded (see AGENTS.md model setup)"
