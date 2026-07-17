@@ -117,11 +117,15 @@ pub fn tray_tooltip() -> String {
     version_label()
 }
 
+/// The name the app presents to the user. Kept in step with tauri.conf.json's
+/// productName by `tray_tooltip_names_the_product_not_the_upstream_fork`.
+const APP_NAME: &str = "AudioBud";
+
 fn version_label() -> String {
     if cfg!(debug_assertions) {
-        format!("Handy v{} (Dev)", env!("CARGO_PKG_VERSION"))
+        format!("{APP_NAME} v{} (Dev)", env!("CARGO_PKG_VERSION"))
     } else {
-        format!("Handy v{}", env!("CARGO_PKG_VERSION"))
+        format!("{APP_NAME} v{}", env!("CARGO_PKG_VERSION"))
     }
 }
 
@@ -363,6 +367,29 @@ pub fn copy_last_transcript(app: &AppHandle) {
 mod tests {
     use super::last_transcript_text;
     use crate::managers::history::HistoryEntry;
+
+    #[test]
+    fn tray_tooltip_names_the_product_not_the_upstream_fork() {
+        // The tooltip is the most visible place the app names itself, and it kept
+        // saying "Handy" for three releases after the fork. Pin it to the one source
+        // of truth (tauri.conf.json's productName) rather than to a literal, so a
+        // future rename cannot strand it again.
+        let conf: serde_json::Value = serde_json::from_str(include_str!("../tauri.conf.json"))
+            .expect("tauri.conf.json parses");
+        let product = conf["productName"]
+            .as_str()
+            .expect("productName is a string");
+
+        let tooltip = super::tray_tooltip();
+        assert!(
+            tooltip.starts_with(product),
+            "tooltip {tooltip:?} does not start with productName {product:?}"
+        );
+        assert!(
+            !tooltip.contains("Handy"),
+            "tooltip still names the upstream fork: {tooltip:?}"
+        );
+    }
 
     fn build_entry(transcription: &str, post_processed: Option<&str>) -> HistoryEntry {
         HistoryEntry {
