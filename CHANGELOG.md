@@ -8,6 +8,33 @@ AudioBud is a detached fork of [Handy](https://github.com/cjpais/Handy) by CJ Pa
 restate Handy's own history. AudioBud versions independently of Handy, starting at
 `0.1.0`. Releases are not yet code-signed; signing arrives in milestone B.
 
+## 0.3.3 - 2026-07-17
+
+A naming release. Three releases after the fork, the app still introduced itself
+as Handy: the tray tooltip you hover said so, `--help` said so, and every request
+to a post-processing provider said so in its headers. All three now say AudioBud.
+Windows (x64) only; the macOS and Linux code remains inherited and untested.
+
+### Fixed
+
+- The system tray tooltip read "Handy v0.3.2". It now names the product, and a
+  test pins it to the product name in `tauri.conf.json` rather than to a literal,
+  so the tooltip cannot drift from the app's own name again (#106).
+- `audiobud --help` announced itself as "handy" and described "Handy - Speech to
+  Text" (#106).
+- Requests to post-processing providers identified the app as Handy 1.0 in their
+  `Referer`, `User-Agent`, and `X-Title` headers, and pointed at the upstream
+  repository. Providers surface those headers in their dashboards, so AudioBud's
+  traffic was credited to a project it forked from. The headers now name AudioBud,
+  link to this repository, and report the real build version instead of a frozen
+  1.0 (#106).
+
+### Internal
+
+- The frontend build pinned an exact Bun version. The previous floating version
+  made an authenticated call to the GitHub API to resolve itself, so a rate-limited
+  or degraded API could fail a build that had nothing wrong with it (#103).
+
 ## 0.3.2 - 2026-07-16
 
 A translation release. AudioBud ships 19 languages besides English, and about a
