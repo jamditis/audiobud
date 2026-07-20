@@ -8,6 +8,36 @@ AudioBud is a detached fork of [Handy](https://github.com/cjpais/Handy) by CJ Pa
 restate Handy's own history. AudioBud versions independently of Handy, starting at
 `0.1.0`. Releases are not yet code-signed; signing arrives in milestone B.
 
+## 0.3.4 - 2026-07-20
+
+A dictation-quality release. Spoken numbers now come through as digits and
+symbols instead of spelled out, you can switch the output mode from the tray
+without opening settings, and raw transcript mode gained the groundwork to
+interpret spoken punctuation. Windows (x64) only; the macOS and Linux code
+remains inherited and untested.
+
+### Added
+
+- Spoken numbers are formatted as digits on the normal dictation path: "twenty
+  five dollars" becomes "$25", "ten percent" becomes "10%", and "three point
+  five" becomes "3.5". The formatter is offline and deterministic -- it runs for
+  every engine with no API key, and it leaves raw output and LLM post-processing
+  untouched. It errs toward leaving text alone: an ambiguous run like "twenty
+  twenty" is not merged, a bare "one" stays a word, an ordinal ("July twenty
+  first") is not half-converted, and a spoken-zero decimal ("one point oh")
+  becomes "1.0". On by default, with a toggle in Advanced settings (#111).
+- An "Output mode" submenu in the system tray switches between Formatted and Raw
+  transcript without opening the settings window; the tray and the settings
+  window stay in sync when either one changes it (#111).
+- Raw transcript mode can now interpret spoken punctuation -- "question mark"
+  becomes "?", "new line" and "new paragraph" break the text, and paired
+  commands like "open paren" attach to the correct side with the right spacing --
+  and it runs the number formatter as well, so raw mode becomes usable for
+  dictation with no model in the loop (#66). It is off by default, because raw
+  mode's promise is that it prints what you said, so an upgrade should not change
+  existing output. The settings toggle to turn it on ships next (#116; UI in
+  #115).
+
 ## 0.3.3 - 2026-07-17
 
 A naming release. Three releases after the fork, the app still introduced itself

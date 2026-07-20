@@ -31,7 +31,7 @@ Automatic update checks are disabled for now because the inherited updater still
 - **Recording mode:** push-to-talk or toggle recording.
 - **Audio:** microphone, output device, input meter, audio feedback, volume, and mute-while-recording.
 - **Models:** Parakeet, Whisper, Moonshine, SenseVoice, GigaAM, Canary, Cohere, and custom Whisper GGML `.bin` files.
-- **Text output:** language selection where supported, translation where supported, trailing spaces, paste method, clipboard handling, and raw lowercased output.
+- **Text output:** spoken-number formatting (digits, currency, and percentages), a tray switch between formatted and raw transcript output, language selection where supported, translation where supported, trailing spaces, paste method, clipboard handling, and raw lowercased output.
 - **Vocabulary:** custom words plus deterministic word replacements for names, jargon, and common mishears.
 - **Personalization (opt-in):** on-device learning from your own dictation history -- frequently used words offered as suggestions you accept or dismiss and then applied to later dictations, with view, export, and reset controls for everything it has learned.
 - **Post-processing:** optional cleanup through OpenAI, Anthropic, Z.AI, OpenRouter, Groq, Cerebras, AWS Bedrock via Mantle, or a custom OpenAI-compatible endpoint. API keys stay in local settings.
