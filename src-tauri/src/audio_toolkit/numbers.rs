@@ -22,9 +22,14 @@
 //!
 //! # Known limitations
 //!
-//! Years and clock times spoken as two groups ("nineteen eighty four", "three thirty") are
-//! not stitched into a single token; each valid cardinal group is converted independently
-//! ("19 84", "3 30"). Thousands separators are not inserted ("$1200", not "$1,200").
+//! Years spoken as two groups ("nineteen eighty four") are not stitched into a single
+//! token; each valid cardinal group is converted independently ("19 84"). A clock time is
+//! stitched only when a meridiem follows it ("three thirty pm" -> "3:30 pm"); without one
+//! the same two-group shape is ordinary prose more often than it is a time, so "at three
+//! thirty" stays "at 3 30". The one o'clock hour is the exception to even that: a bare
+//! "one" is deliberately kept as a word (see below), so no digit is ever produced for the
+//! hour and "one thirty pm" stays "one 30 pm". Thousands separators are not inserted
+//! ("$1200", not "$1,200").
 
 /// A classified English number word (or word fragment from a hyphenated compound).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -487,6 +492,74 @@ pub fn format_numbers(text: &str) -> String {
         i = end;
     }
 
+    stitch_clock_times(&out.join(" "))
+}
+
+/// Strips trailing boundary punctuation so a word can be matched on its own.
+fn core_of(word: &str) -> &str {
+    word.trim_end_matches(is_boundary)
+}
+
+/// Whether `word` is a spoken meridiem marker, with or without its periods.
+fn is_meridiem(word: &str) -> bool {
+    matches!(
+        // core_of has already stripped the trailing period, so "a.m." arrives as "a.m".
+        core_of(word).to_ascii_lowercase().as_str(),
+        "am" | "pm" | "a.m" | "p.m"
+    )
+}
+
+/// Whether `word` is bare digits that parse to a value in `range`, returning it.
+fn bare_number(word: &str, lo: u32, hi: u32) -> Option<u32> {
+    if word.is_empty() || !word.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    word.parse().ok().filter(|v| (lo..=hi).contains(v))
+}
+
+/// Joins an hour and a minute that the group converter emitted as two separate numbers
+/// ("three thirty pm" -> "3 30 pm") into a clock time ("3:30 pm").
+///
+/// Anchored on a following meridiem, and on nothing else. The bare two-group shape is far
+/// more often not a time than a time -- "three thirty-inch monitors", "two fifty gram bags"
+/// -- so a rule that fired on the shape alone would rewrite ordinary prose, and this
+/// module's standing trade is that a wrong rewrite costs more than a missed one. The
+/// meridiem is the one signal that settles it, which is why the quieter "at three thirty"
+/// is deliberately left as "at 3 30".
+///
+/// The minute must be a bare two-digit token, which is what one spoken group yields
+/// ("thirty" -> "30", "forty five" -> "45"). That skips "three oh five pm": "oh" is not a
+/// number word, so it survives as itself and no two-digit minute is ever formed.
+fn stitch_clock_times(text: &str) -> String {
+    let words: Vec<&str> = text.split(' ').collect();
+    let mut out: Vec<String> = Vec::with_capacity(words.len());
+    let mut i = 0;
+
+    while i < words.len() {
+        // Guard the window first: the checks below index i+1 and i+2, and combinators
+        // would evaluate those eagerly even when the window is short.
+        if i + 2 < words.len() {
+            // The hour carries no punctuation of its own -- "3, 30 pm" is a list, not a
+            // time -- and bare_number rejects anything that is not pure digits.
+            let hour = bare_number(words[i], 1, 12);
+            // A single spoken group always yields two digits, so the width check is what
+            // keeps "three five pm" from being read as 3:05.
+            let minute = bare_number(words[i + 1], 0, 59).filter(|_| words[i + 1].len() == 2);
+            if let (Some(hour), Some(minute)) = (hour, minute) {
+                if is_meridiem(words[i + 2]) {
+                    out.push(format!("{hour}:{minute:02}"));
+                    // Both the hour and the minute went into that one token; the meridiem
+                    // is left for the next turn so its own punctuation passes through.
+                    i += 2;
+                    continue;
+                }
+            }
+        }
+
+        out.push(words[i].to_string());
+        i += 1;
+    }
+
     out.join(" ")
 }
 
@@ -755,5 +828,84 @@ mod tests {
             format_numbers("one point blank range"),
             "one point blank range"
         );
+    }
+
+    // #65: a spoken time is one of the things the reporter listed, and it was the one
+    // the group converter left as two numbers ("3 30 pm").
+    #[test]
+    fn clock_time_with_meridiem_is_stitched() {
+        assert_eq!(
+            format_numbers("meet me at three thirty pm"),
+            "meet me at 3:30 pm"
+        );
+        assert_eq!(format_numbers("three thirty PM"), "3:30 PM");
+        assert_eq!(format_numbers("eleven forty five a.m."), "11:45 a.m.");
+    }
+
+    // Without the two-digit width rule this reads as 3:05, inventing a leading zero the
+    // speaker never said. Two single-digit groups are not a time.
+    #[test]
+    fn two_single_digit_groups_are_not_a_time() {
+        assert_eq!(format_numbers("three five pm"), "3 5 pm");
+    }
+
+    // One o'clock cannot stitch, and it is worth pinning so the next reader finds a
+    // recorded decision rather than what looks like a bug. Two correct rules meet here:
+    // a bare "one" stays a word because it is so often non-numeric, which means the hour
+    // never becomes a digit for the stitcher to use. Reaching 1:30 would mean punching
+    // through that carve-out, a worse trade in a module that would rather miss a rewrite
+    // than make a wrong one.
+    #[test]
+    fn one_oclock_does_not_stitch_because_bare_one_stays_a_word() {
+        assert_eq!(format_numbers("one thirty pm"), "one 30 pm");
+        // Every other hour is unaffected, including the neighbouring twelve.
+        assert_eq!(format_numbers("twelve thirty am"), "12:30 am");
+        assert_eq!(format_numbers("two thirty pm"), "2:30 pm");
+    }
+
+    #[test]
+    fn stitched_minute_keeps_two_digits() {
+        // "oh eight" is not a number group, so the minute never forms; the hour still
+        // converts and the rest is left alone rather than guessed at.
+        assert_eq!(format_numbers("nine oh eight pm"), "9 oh 8 pm");
+    }
+
+    // The meridiem is the whole license for the rewrite. Without it the same shape is
+    // ordinary prose far more often than it is a time.
+    #[test]
+    fn two_numbers_without_a_meridiem_are_left_apart() {
+        assert_eq!(format_numbers("three thirty"), "3 30");
+        assert_eq!(format_numbers("at three thirty"), "at 3 30");
+        assert_eq!(
+            format_numbers("three thirty inch monitors"),
+            "3 30 inch monitors"
+        );
+    }
+
+    #[test]
+    fn out_of_range_pairs_are_not_times() {
+        // 13 is not an hour on a spoken clock, and 74 is not a minute.
+        assert_eq!(format_numbers("thirteen thirty pm"), "13 30 pm");
+        assert_eq!(format_numbers("three seventy four pm"), "3 74 pm");
+    }
+
+    #[test]
+    fn punctuation_between_the_parts_blocks_the_stitch() {
+        // A comma makes it a list. The hour is not a bare token any more.
+        assert_eq!(format_numbers("three, thirty pm"), "3, 30 pm");
+    }
+
+    #[test]
+    fn trailing_punctuation_after_the_meridiem_survives() {
+        assert_eq!(
+            format_numbers("call at four fifteen pm."),
+            "call at 4:15 pm."
+        );
+    }
+
+    #[test]
+    fn a_single_hour_before_a_meridiem_is_untouched() {
+        // Nothing to stitch: one group, and "3 pm" already reads correctly.
+        assert_eq!(format_numbers("three pm"), "3 pm");
     }
 }
