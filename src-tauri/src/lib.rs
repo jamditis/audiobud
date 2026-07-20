@@ -288,6 +288,16 @@ fn initialize_core_logic(app_handle: &AppHandle) {
                     tray::update_tray_menu(&app_clone, &tray::TrayIconState::Idle, None);
                 });
             }
+            id if id.starts_with("output_mode:") => {
+                // Radio-style switch between the formatted and raw transcript modes. Routes through
+                // the same setting command the settings window uses; it emits "settings-changed",
+                // which rebuilds the tray so the checkmark follows the active mode.
+                let mode = id.strip_prefix("output_mode:").unwrap();
+                let raw = mode == "raw";
+                if let Err(e) = shortcut::change_raw_output_setting(app.clone(), raw) {
+                    log::error!("Failed to switch output mode via tray: {}", e);
+                }
+            }
             id if id.starts_with("toggle:") => {
                 let key = id.strip_prefix("toggle:").unwrap();
                 let current = settings::get_settings(app);
@@ -310,6 +320,10 @@ fn initialize_core_logic(app_handle: &AppHandle) {
                     "auto_submit" => {
                         shortcut::change_auto_submit_setting(app.clone(), !current.auto_submit)
                     }
+                    "format_numbers" => shortcut::change_format_numbers_setting(
+                        app.clone(),
+                        !current.format_numbers,
+                    ),
                     "overlay_visible" => shortcut::toggle_overlay_visibility(app.clone()),
                     other => {
                         log::warn!("Unknown tray toggle: {}", other);
@@ -443,6 +457,7 @@ pub fn run(cli_args: CliArgs) {
             shortcut::change_mute_while_recording_setting,
             shortcut::change_append_trailing_space_setting,
             shortcut::change_raw_output_setting,
+            shortcut::change_format_numbers_setting,
             shortcut::update_word_replacements,
             shortcut::change_lazy_stream_close_setting,
             shortcut::change_app_language_setting,

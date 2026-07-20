@@ -501,6 +501,12 @@ pub struct AppSettings {
     /// A per-dictation shortcut / CLI flag can override this at runtime without persisting.
     #[serde(default)]
     pub raw_output: bool,
+    /// When true (default), a formatted (non-raw) transcript has its spelled-out numbers rewritten
+    /// as digits and symbols — "twenty five dollars" -> "$25", "ten percent" -> "10%", "three point
+    /// five" -> "3.5". Applied only on the normal dictation path; raw output and LLM post-processing
+    /// are left untouched. See [`crate::audio_toolkit::format_numbers`].
+    #[serde(default = "default_format_numbers")]
+    pub format_numbers: bool,
     #[serde(default = "default_app_language")]
     pub app_language: String,
     #[serde(default)]
@@ -542,6 +548,10 @@ fn default_always_on_microphone() -> bool {
 
 fn default_translate_to_english() -> bool {
     false
+}
+
+fn default_format_numbers() -> bool {
+    true
 }
 
 fn default_start_hidden() -> bool {
@@ -939,6 +949,7 @@ pub fn get_default_settings() -> AppSettings {
         mute_while_recording: false,
         append_trailing_space: false,
         raw_output: false,
+        format_numbers: default_format_numbers(),
         app_language: default_app_language(),
         experimental_enabled: false,
         lazy_stream_close: false,

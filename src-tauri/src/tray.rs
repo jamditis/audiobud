@@ -264,6 +264,36 @@ pub fn update_tray_menu(app: &AppHandle, state: &TrayIconState, locale: Option<&
     )
     .expect("failed to create show-overlay toggle item");
 
+    // Output-mode submenu: switch dictation between a formatted transcript (punctuation, casing,
+    // and digit/currency number formatting) and a raw transcript (verbatim, lowercased). The two
+    // items act as radio buttons over the `raw_output` setting; the checked one is derived fresh on
+    // every rebuild, and the `output_mode:` handler in lib.rs applies the switch.
+    let output_mode_submenu = {
+        let submenu = Submenu::with_id(app, "output_mode_submenu", &strings.output_mode, true)
+            .expect("failed to create output mode submenu");
+        let formatted_i = CheckMenuItem::with_id(
+            app,
+            "output_mode:formatted",
+            &strings.formatted,
+            true,
+            !settings.raw_output,
+            None::<&str>,
+        )
+        .expect("failed to create formatted output item");
+        let raw_i = CheckMenuItem::with_id(
+            app,
+            "output_mode:raw",
+            &strings.raw_transcript,
+            true,
+            settings.raw_output,
+            None::<&str>,
+        )
+        .expect("failed to create raw output item");
+        let _ = submenu.append(&formatted_i);
+        let _ = submenu.append(&raw_i);
+        submenu
+    };
+
     let menu = match state {
         TrayIconState::Recording | TrayIconState::Transcribing => {
             let cancel_i = MenuItem::with_id(app, "cancel", &strings.cancel, true, None::<&str>)
@@ -294,6 +324,8 @@ pub fn update_tray_menu(app: &AppHandle, state: &TrayIconState, locale: Option<&
                 &separator(),
                 &model_submenu,
                 &unload_model_i,
+                &separator(),
+                &output_mode_submenu,
                 &separator(),
                 &toggle_ptt_i,
                 &toggle_mute_i,

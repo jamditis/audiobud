@@ -11,7 +11,10 @@
     "muteWhileRecording": "Muet pendant l'enregistrement",
     "appendTrailingSpace": "Ajouter une espace final",
     "autoSubmit": "Envoi automatique",
-    "showOverlay": "Afficher l'incrustation"
+    "showOverlay": "Afficher l'incrustation",
+    "outputMode": "Mode de sortie",
+    "formatted": "Formaté",
+    "rawTranscript": "Transcription brute"
   },
   "sidebar": {
     "navLabel": "Sections des paramètres",
@@ -488,6 +491,10 @@
       "rawOutput": {
         "label": "Transcription brute",
         "description": "Produit du texte en minuscules, sans majuscules ni ponctuation finale. Les acronymes (API, GPU) et le « I » anglais isolé sont conservés. Utile pour alimenter d'autres outils ou quand le modèle formate trop. Vous pouvez aussi associer un raccourci distinct pour des dictées brutes ponctuelles."
+      },
+      "formatNumbers": {
+        "label": "Formater les nombres",
+        "description": "Convertit les nombres dictés en chiffres et symboles dans une transcription formatée, par exemple 25 $, 10 % ou 3,5. Fonctionne hors ligne, sans clé API. Ne s'applique pas aux transcriptions brutes."
       }
     },
     "postProcessing": {

@@ -11,7 +11,10 @@
     "muteWhileRecording": "Ztlumit při nahrávání",
     "appendTrailingSpace": "Přidat koncovou mezeru",
     "autoSubmit": "Automatické odeslání",
-    "showOverlay": "Zobrazit překryv"
+    "showOverlay": "Zobrazit překryv",
+    "outputMode": "Režim výstupu",
+    "formatted": "Formátováno",
+    "rawTranscript": "Surový přepis"
   },
   "sidebar": {
     "navLabel": "Sekce nastavení",
@@ -490,6 +493,10 @@
       "rawOutput": {
         "label": "Surový přepis",
         "description": "Vypisuje text malými písmeny, bez velkých písmen a bez koncové interpunkce. Zkratky (API, GPU) a samostatné anglické \"I\" zůstávají zachovány. Hodí se pro předávání dalším nástrojům nebo když model formátuje příliš. Pro jednorázové surové diktáty si můžete nastavit i samostatnou zkratku."
+      },
+      "formatNumbers": {
+        "label": "Formátovat čísla",
+        "description": "Převádí vyslovená čísla na číslice a symboly ve formátovaném přepisu, například $25, 10 % nebo 3.5. Funguje offline bez klíče API. Nevztahuje se na neupravené přepisy."
       }
     },
     "postProcessing": {

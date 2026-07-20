@@ -11,7 +11,10 @@
     "muteWhileRecording": "Silenciar Durante Gravação",
     "appendTrailingSpace": "Adicionar Espaço Final",
     "autoSubmit": "Envio automático",
-    "showOverlay": "Mostrar sobreposição"
+    "showOverlay": "Mostrar sobreposição",
+    "outputMode": "Modo de saída",
+    "formatted": "Formatado",
+    "rawTranscript": "Transcrição bruta"
   },
   "sidebar": {
     "navLabel": "Seções de configurações",
@@ -488,6 +491,10 @@
       "rawOutput": {
         "label": "Transcrição bruta",
         "description": "Gera texto em minúsculas, sem maiúsculas iniciais nem pontuação final. Siglas (API, GPU) e o \"I\" isolado do inglês são mantidos. Útil para alimentar outras ferramentas ou quando o modelo formata demais. Você também pode definir um atalho separado para ditados brutos pontuais."
+      },
+      "formatNumbers": {
+        "label": "Formatar números",
+        "description": "Converte números falados em dígitos e símbolos numa transcrição formatada, por exemplo $25, 10% ou 3.5. Funciona offline, sem chave de API. Não se aplica a transcrições em bruto."
       }
     },
     "postProcessing": {

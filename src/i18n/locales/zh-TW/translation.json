@@ -11,7 +11,10 @@
     "muteWhileRecording": "錄製時靜音",
     "appendTrailingSpace": "附加尾部空格",
     "autoSubmit": "自動送出",
-    "showOverlay": "顯示懸浮窗"
+    "showOverlay": "顯示懸浮窗",
+    "outputMode": "輸出模式",
+    "formatted": "已格式化",
+    "rawTranscript": "原始轉錄文字"
   },
   "sidebar": {
     "navLabel": "設定區塊",
@@ -488,6 +491,10 @@
       "rawOutput": {
         "label": "原始轉錄文字",
         "description": "輸出全部小寫的文字，移除大寫和句尾標點。縮寫（API、GPU）和英文單獨的「I」會保留。適合把文字餵給其他工具，或在模型格式化過度時使用。您也可以另外綁定一組快捷鍵，供單次原始聽寫使用。"
+      },
+      "formatNumbers": {
+        "label": "格式化數字",
+        "description": "在格式化的轉錄中，將口述的數字轉換為數字和符號，例如 $25、10% 或 3.5。無需 API 金鑰，可離線執行。不適用於原始轉錄。"
       }
     },
     "postProcessing": {

@@ -164,6 +164,8 @@ const settingUpdaters: {
   append_trailing_space: (value) =>
     commands.changeAppendTrailingSpaceSetting(value as boolean),
   raw_output: (value) => commands.changeRawOutputSetting(value as boolean),
+  format_numbers: (value) =>
+    commands.changeFormatNumbersSetting(value as boolean),
   log_level: (value) => commands.setLogLevel(value as any),
   app_language: (value) => commands.changeAppLanguageSetting(value as string),
   experimental_enabled: (value) =>

@@ -11,7 +11,10 @@
     "muteWhileRecording": "Tắt tiếng khi ghi âm",
     "appendTrailingSpace": "Thêm dấu cách cuối",
     "autoSubmit": "Gửi tự động",
-    "showOverlay": "Hiện lớp phủ"
+    "showOverlay": "Hiện lớp phủ",
+    "outputMode": "Chế độ đầu ra",
+    "formatted": "Đã định dạng",
+    "rawTranscript": "Văn bản thô"
   },
   "sidebar": {
     "navLabel": "Các mục cài đặt",
@@ -488,6 +491,10 @@
       "rawOutput": {
         "label": "Văn bản thô",
         "description": "Xuất văn bản chữ thường, bỏ viết hoa và dấu câu ở cuối. Các từ viết tắt (API, GPU) và chữ \"I\" đứng riêng trong tiếng Anh được giữ nguyên. Hữu ích khi đưa văn bản sang công cụ khác hoặc khi mô hình định dạng quá tay. Bạn cũng có thể gán một phím tắt riêng cho những lần đọc thô lẻ tẻ."
+      },
+      "formatNumbers": {
+        "label": "Định dạng số",
+        "description": "Chuyển các số được nói thành chữ số và ký hiệu trong bản ghi đã định dạng, ví dụ $25, 10% hoặc 3.5. Hoạt động ngoại tuyến, không cần khóa API. Không áp dụng cho bản ghi thô."
       }
     },
     "postProcessing": {

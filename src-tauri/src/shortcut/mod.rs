@@ -1277,6 +1277,25 @@ pub fn change_raw_output_setting(app: AppHandle, enabled: bool) -> Result<(), St
     let mut settings = settings::get_settings(&app);
     settings.raw_output = enabled;
     settings::write_settings(&app, settings);
+    // Emitted so the tray "Output mode" items and the settings window reflect the switch between
+    // raw and formatted transcripts immediately.
+    let _ = app.emit(
+        "settings-changed",
+        serde_json::json!({ "setting": "raw_output", "value": enabled }),
+    );
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn change_format_numbers_setting(app: AppHandle, enabled: bool) -> Result<(), String> {
+    let mut settings = settings::get_settings(&app);
+    settings.format_numbers = enabled;
+    settings::write_settings(&app, settings);
+    let _ = app.emit(
+        "settings-changed",
+        serde_json::json!({ "setting": "format_numbers", "value": enabled }),
+    );
     Ok(())
 }
 

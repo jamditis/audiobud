@@ -11,7 +11,10 @@
     "muteWhileRecording": "録音中にミュート",
     "appendTrailingSpace": "末尾にスペースを追加",
     "autoSubmit": "自動送信",
-    "showOverlay": "オーバーレイを表示"
+    "showOverlay": "オーバーレイを表示",
+    "outputMode": "出力モード",
+    "formatted": "整形あり",
+    "rawTranscript": "未加工の文字起こし"
   },
   "sidebar": {
     "navLabel": "設定セクション",
@@ -488,6 +491,10 @@
       "rawOutput": {
         "label": "未加工の文字起こし",
         "description": "大文字化と文末の句読点を取り除いた小文字のテキストを出力します。頭字語（API、GPU）と単独の英語の「I」はそのまま残ります。他のツールに渡すときや、モデルの整形が過剰なときに便利です。一回限りの未加工入力用に、別のショートカットを割り当てることもできます。"
+      },
+      "formatNumbers": {
+        "label": "数字を整形",
+        "description": "整形済みの文字起こしで、話した数字を数字や記号に変換します（例: $25、10%、3.5）。APIキー不要でオフラインで動作します。生の文字起こしには適用されません。"
       }
     },
     "postProcessing": {

@@ -11,7 +11,10 @@
     "muteWhileRecording": "Kayıt Sırasında Sessize Al",
     "appendTrailingSpace": "Sonuna Boşluk Ekle",
     "autoSubmit": "Otomatik gönder",
-    "showOverlay": "Kaplamayı göster"
+    "showOverlay": "Kaplamayı göster",
+    "outputMode": "Çıktı modu",
+    "formatted": "Biçimlendirilmiş",
+    "rawTranscript": "Ham transkript"
   },
   "sidebar": {
     "navLabel": "Ayar bölümleri",
@@ -488,6 +491,10 @@
       "rawOutput": {
         "label": "Ham transkript",
         "description": "Büyük harfler ve cümle sonu noktalaması kaldırılmış, küçük harfli metin üretir. Kısaltmalar (API, GPU) ve İngilizcede tek başına kullanılan \"I\" korunur. Metni başka araçlara aktarırken veya model fazla biçimlendirme yaptığında kullanışlıdır. Tek seferlik ham dikteler için ayrı bir kısayol da atayabilirsiniz."
+      },
+      "formatNumbers": {
+        "label": "Sayıları biçimlendir",
+        "description": "Biçimlendirilmiş bir dökümde söylenen sayıları rakamlara ve sembollere dönüştürür; örneğin $25, %10 veya 3.5. API anahtarı olmadan çevrimdışı çalışır. Ham dökümlere uygulanmaz."
       }
     },
     "postProcessing": {

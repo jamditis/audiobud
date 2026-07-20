@@ -11,7 +11,10 @@
     "muteWhileRecording": "Mute while recording",
     "appendTrailingSpace": "Append trailing space",
     "autoSubmit": "Auto-submit",
-    "showOverlay": "Show overlay"
+    "showOverlay": "Show overlay",
+    "outputMode": "Output mode",
+    "formatted": "Formatted",
+    "rawTranscript": "Raw transcript"
   },
   "sidebar": {
     "navLabel": "Settings sections",
@@ -488,6 +491,10 @@
       "rawOutput": {
         "label": "Raw transcript",
         "description": "Output lowercase text with capitalization and end punctuation removed. Acronyms (API, GPU) and the standalone English \"I\" are kept. Useful for feeding other tools or when the model over-formats. You can also bind a separate shortcut for one-off raw dictations."
+      },
+      "formatNumbers": {
+        "label": "Format numbers",
+        "description": "Rewrite spoken numbers as digits and symbols on a formatted transcript — \"twenty five dollars\" becomes \"$25\", \"ten percent\" becomes \"10%\", and \"three point five\" becomes \"3.5\". Runs offline with no API key. Does not apply to raw transcripts."
       }
     },
     "postProcessing": {

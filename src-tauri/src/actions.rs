@@ -3,7 +3,7 @@ use crate::apple_intelligence;
 use crate::audio_feedback::{play_feedback_sound, play_feedback_sound_blocking, SoundType};
 use crate::audio_toolkit::constants::WHISPER_SAMPLE_RATE;
 use crate::audio_toolkit::{
-    is_microphone_access_denied, is_no_input_device_error, strip_to_raw_text,
+    format_numbers, is_microphone_access_denied, is_no_input_device_error, strip_to_raw_text,
 };
 use crate::managers::audio::AudioRecordingManager;
 use crate::managers::history::HistoryManager;
@@ -429,8 +429,19 @@ pub(crate) async fn process_transcription_output(
                 }
             }
         }
-    } else if final_text != transcription {
-        post_processed_text = Some(final_text.clone());
+    } else {
+        // Normal path (neither raw nor LLM post-processing). Rewrite spelled-out numbers as digits
+        // and symbols ("$25", "10%", "3.5") so amounts, currencies, and decimals read naturally.
+        // Raw output is deliberately verbatim, and the LLM path handles its own formatting, so both
+        // skip this step.
+        if settings.format_numbers {
+            final_text = format_numbers(&final_text);
+        }
+        // Record the formatted variant for history whenever a deterministic transform (Chinese
+        // conversion, number formatting) changed the text from the verbatim transcript.
+        if final_text != transcription {
+            post_processed_text = Some(final_text.clone());
+        }
     }
 
     ProcessedTranscription {
