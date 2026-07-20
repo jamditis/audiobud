@@ -501,12 +501,31 @@ pub struct AppSettings {
     /// A per-dictation shortcut / CLI flag can override this at runtime without persisting.
     #[serde(default)]
     pub raw_output: bool,
-    /// When true (default), a formatted (non-raw) transcript has its spelled-out numbers rewritten
-    /// as digits and symbols — "twenty five dollars" -> "$25", "ten percent" -> "10%", "three point
-    /// five" -> "3.5". Applied only on the normal dictation path; raw output and LLM post-processing
-    /// are left untouched. See [`crate::audio_toolkit::format_numbers`].
+    /// When true (default), a transcript has its spelled-out numbers rewritten as digits and
+    /// symbols — "twenty five dollars" -> "$25", "ten percent" -> "10%", "three point five" ->
+    /// "3.5". Applied on the normal dictation path, and on raw output when `format_raw_output`
+    /// is also on. The LLM post-processing path does its own formatting and is left untouched.
+    /// See [`crate::audio_toolkit::format_numbers`].
     #[serde(default = "default_format_numbers")]
     pub format_numbers: bool,
+    /// When true, raw output interprets spoken punctuation ("question mark" -> "?") and applies
+    /// `format_numbers` if that is also on, so raw mode is usable for dictation with no model in
+    /// the loop (issue #66).
+    ///
+    /// Defaults to false: turning it on rewrites text that raw mode has always passed through
+    /// verbatim, and there is no settings toggle yet (issue #115), so a true default would change
+    /// every existing raw-mode install on upgrade with no supported way back.
+    ///
+    /// Until #115 lands there is no in-app writer for this either -- every other setting is
+    /// changed through its own `change_*_setting` command and this one has none, so switching it
+    /// on means editing the persisted settings store by hand. `get_settings` is read per
+    /// transcription, so an edit takes effect on the next dictation. The default is worth
+    /// revisiting once the toggle ships.
+    ///
+    /// Turning it off is also how you type the command words themselves, since there is no
+    /// escape word. See [`crate::audio_toolkit::apply_spoken_punctuation`].
+    #[serde(default = "default_format_raw_output")]
+    pub format_raw_output: bool,
     #[serde(default = "default_app_language")]
     pub app_language: String,
     #[serde(default)]
@@ -552,6 +571,10 @@ fn default_translate_to_english() -> bool {
 
 fn default_format_numbers() -> bool {
     true
+}
+
+fn default_format_raw_output() -> bool {
+    false
 }
 
 fn default_start_hidden() -> bool {
@@ -950,6 +973,7 @@ pub fn get_default_settings() -> AppSettings {
         append_trailing_space: false,
         raw_output: false,
         format_numbers: default_format_numbers(),
+        format_raw_output: default_format_raw_output(),
         app_language: default_app_language(),
         experimental_enabled: false,
         lazy_stream_close: false,
