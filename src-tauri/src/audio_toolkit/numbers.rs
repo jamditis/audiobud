@@ -349,6 +349,49 @@ fn is_combinator_word(word: &str) -> bool {
     )
 }
 
+/// English ordinal words. A cardinal directly followed by one of these forms a compound ordinal
+/// ("twenty first"), so the cardinal is left as a word rather than half-converted to "20 first".
+/// The plural time unit "seconds" is intentionally absent so "twenty seconds" still becomes
+/// "20 seconds"; the singular "second" is included so dates like "July twenty second" are not
+/// mangled into "July 20 second".
+fn is_ordinal_word(word: &str) -> bool {
+    matches!(
+        word,
+        "first"
+            | "second"
+            | "third"
+            | "fourth"
+            | "fifth"
+            | "sixth"
+            | "seventh"
+            | "eighth"
+            | "ninth"
+            | "tenth"
+            | "eleventh"
+            | "twelfth"
+            | "thirteenth"
+            | "fourteenth"
+            | "fifteenth"
+            | "sixteenth"
+            | "seventeenth"
+            | "eighteenth"
+            | "nineteenth"
+            | "twentieth"
+            | "thirtieth"
+            | "fortieth"
+            | "fiftieth"
+            | "sixtieth"
+            | "seventieth"
+            | "eightieth"
+            | "ninetieth"
+            | "hundredth"
+            | "thousandth"
+            | "millionth"
+            | "billionth"
+            | "trillionth"
+    )
+}
+
 /// Rewrites spelled-out English numbers in `text` into digits and symbols. See the module docs
 /// for the precision rules and known limitations.
 pub fn format_numbers(text: &str) -> String {
@@ -371,7 +414,34 @@ pub fn format_numbers(text: &str) -> String {
             is_bare_one,
         } = group;
         let next_word = abutting_core_lower(&tokens, end);
-        let next_is_combinator = next_word.as_deref().is_some_and(is_combinator_word);
+
+        // A cardinal immediately followed by an ordinal word reads as a compound ordinal
+        // ("July twenty first", "the twenty first century"). Converting only the cardinal would
+        // emit "July 20 first", which is worse than leaving it alone, so emit the group's words
+        // verbatim and let the ordinal pass through. (Full ordinal formatting — "21st" — is
+        // deliberately out of scope: it would require converting bare "first"/"second", which are
+        // far more often prose than numbers.)
+        if trail.is_empty() && next_word.as_deref().is_some_and(is_ordinal_word) {
+            for token in &tokens[i..end] {
+                out.push(token.original.clone());
+            }
+            i = end;
+            continue;
+        }
+
+        // A decimal only forms when "point" is followed by spoken digits; resolve it up front so the
+        // bare-"one" rule below can distinguish a real decimal ("one point five" → "1.5") from a
+        // dangling "point" ("one point blank"), where the word "one" must be kept.
+        let decimal = if trail.is_empty() && next_word.as_deref() == Some("point") {
+            parse_decimal_digits(&tokens, end)
+        } else {
+            None
+        };
+
+        // "point" only counts as a unit word (for overriding the bare-"one" rule) when a decimal
+        // actually formed; otherwise "one point blank" would wrongly emit "1 point blank".
+        let next_is_combinator = next_word.as_deref().is_some_and(is_combinator_word)
+            && (next_word.as_deref() != Some("point") || decimal.is_some());
 
         // Bare, standalone "one" is usually not a number ("no one", "one of them"); keep the word
         // unless a unit word makes the numeric reading unambiguous ("one dollar" → "$1").
@@ -384,6 +454,11 @@ pub fn format_numbers(text: &str) -> String {
         // Symbol/decimal combinations only fire when the number itself ended cleanly (no trailing
         // punctuation between it and the unit word).
         if trail.is_empty() {
+            if let Some((frac, frac_trail, next_i)) = decimal {
+                out.push(format!("{lead}{value}.{frac}{frac_trail}"));
+                i = next_i;
+                continue;
+            }
             match next_word.as_deref() {
                 Some("percent") => {
                     let unit = &tokens[end];
@@ -403,14 +478,6 @@ pub fn format_numbers(text: &str) -> String {
                         i = end + 1;
                     }
                     continue;
-                }
-                Some("point") => {
-                    if let Some((frac, frac_trail, next_i)) = parse_decimal_digits(&tokens, end) {
-                        out.push(format!("{lead}{value}.{frac}{frac_trail}"));
-                        i = next_i;
-                        continue;
-                    }
-                    // No single-digit fraction followed; fall through and let "point" stand.
                 }
                 _ => {}
             }
@@ -457,8 +524,8 @@ fn parse_trailing_cents(
 }
 
 /// Parses a decimal fraction spoken as single digits after a "point" token located at `point_idx`.
-/// Requires "point" to carry no trailing punctuation and to be followed by at least one
-/// single-digit number. Returns `(fraction_digits, trailing_punctuation, index_after_fraction)`.
+/// Requires "point" to carry no trailing punctuation and to be followed by at least one spoken
+/// digit. Returns `(fraction_digits, trailing_punctuation, index_after_fraction)`.
 fn parse_decimal_digits(tokens: &[Token], point_idx: usize) -> Option<(String, String, usize)> {
     if !tokens[point_idx].trail.is_empty() {
         return None;
@@ -468,16 +535,26 @@ fn parse_decimal_digits(tokens: &[Token], point_idx: usize) -> Option<(String, S
     let mut idx = point_idx + 1;
 
     loop {
-        let Some(group) = parse_number_group(tokens, idx) else {
-            break;
+        // Each fractional position is one spoken digit: a cardinal 0–9 ("one point four" → ".4",
+        // "zero" → "0") or the spoken zero "oh"/"o" ("one point oh" → "1.0"). A multi-digit word
+        // (e.g. "fourteen") or a non-digit word ends the fraction.
+        let (digit, next_idx, trail) = match parse_number_group(tokens, idx) {
+            Some(group) if group.lead.is_empty() && group.value <= 9 && group.end == idx + 1 => {
+                (group.value, group.end, group.trail)
+            }
+            _ => match tokens.get(idx) {
+                Some(token)
+                    if token.lead.is_empty()
+                        && matches!(token.core.to_lowercase().as_str(), "oh" | "o") =>
+                {
+                    (0, idx + 1, token.trail.clone())
+                }
+                _ => break,
+            },
         };
-        // Only single spoken digits (0–9) form the fractional part, so "point one four" → ".14".
-        if !group.lead.is_empty() || group.value > 9 || group.end != idx + 1 {
-            break;
-        }
-        frac.push_str(&group.value.to_string());
-        last_trail = group.trail.clone();
-        idx = group.end;
+        frac.push_str(&digit.to_string());
+        last_trail = trail;
+        idx = next_idx;
         if !last_trail.is_empty() {
             break;
         }
@@ -637,5 +714,46 @@ mod tests {
     fn zero_converts() {
         assert_eq!(format_numbers("zero"), "0");
         assert_eq!(format_numbers("zero dollars"), "$0");
+    }
+
+    #[test]
+    fn cardinal_before_ordinal_is_left_as_words() {
+        // A cardinal directly before an ordinal reads as a compound ordinal; half-converting it to
+        // "20 first" is worse than leaving it, so the cardinal stays a word.
+        assert_eq!(format_numbers("July twenty first"), "July twenty first");
+        assert_eq!(
+            format_numbers("the twenty first century"),
+            "the twenty first century"
+        );
+        assert_eq!(
+            format_numbers("on the twenty second of June"),
+            "on the twenty second of June"
+        );
+        // Hyphenated ordinals were already safe (never a cardinal token).
+        assert_eq!(
+            format_numbers("the twenty-first amendment"),
+            "the twenty-first amendment"
+        );
+        // The plural time unit is a cardinal + noun, not an ordinal, and still converts.
+        assert_eq!(format_numbers("wait twenty seconds"), "wait 20 seconds");
+        // A one-second duration also stays coherent (bare "one" kept).
+        assert_eq!(format_numbers("give me one second"), "give me one second");
+    }
+
+    #[test]
+    fn decimal_spoken_zero() {
+        assert_eq!(format_numbers("version one point oh"), "version 1.0");
+        assert_eq!(format_numbers("one point oh five"), "1.05");
+        assert_eq!(format_numbers("three point o"), "3.0");
+    }
+
+    #[test]
+    fn point_without_a_fraction_keeps_bare_one() {
+        // "point" is not a real decimal here, so the bare "one" must survive rather than becoming
+        // "1 point blank".
+        assert_eq!(
+            format_numbers("one point blank range"),
+            "one point blank range"
+        );
     }
 }
