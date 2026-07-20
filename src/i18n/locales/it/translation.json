@@ -11,7 +11,10 @@
     "muteWhileRecording": "Silenzia durante la registrazione",
     "appendTrailingSpace": "Aggiungi Spazio Finale",
     "autoSubmit": "Invio automatico",
-    "showOverlay": "Mostra la sovrimpressione"
+    "showOverlay": "Mostra la sovrimpressione",
+    "outputMode": "Modalità di output",
+    "formatted": "Formattato",
+    "rawTranscript": "Trascrizione grezza"
   },
   "sidebar": {
     "navLabel": "Sezioni delle impostazioni",
@@ -488,6 +491,10 @@
       "rawOutput": {
         "label": "Trascrizione grezza",
         "description": "Produce testo in minuscolo, senza maiuscole e senza punteggiatura finale. Gli acronimi (API, GPU) e la \"I\" inglese isolata vengono mantenuti. Utile per alimentare altri strumenti o quando il modello formatta troppo. Puoi anche assegnare una scorciatoia separata per singole dettature grezze."
+      },
+      "formatNumbers": {
+        "label": "Formatta i numeri",
+        "description": "Converte i numeri pronunciati in cifre e simboli in una trascrizione formattata, ad esempio $25, 10% o 3.5. Funziona offline senza chiave API. Non si applica alle trascrizioni non formattate."
       }
     },
     "postProcessing": {

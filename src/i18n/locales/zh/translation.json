@@ -11,7 +11,10 @@
     "muteWhileRecording": "录制时静音",
     "appendTrailingSpace": "追加尾部空格",
     "autoSubmit": "自动提交",
-    "showOverlay": "显示悬浮窗"
+    "showOverlay": "显示悬浮窗",
+    "outputMode": "输出模式",
+    "formatted": "已格式化",
+    "rawTranscript": "原始转录"
   },
   "sidebar": {
     "navLabel": "设置分区",
@@ -488,6 +491,10 @@
       "rawOutput": {
         "label": "原始转录",
         "description": "输出小写文本，去除大写和句末标点。首字母缩略词（API、GPU）和独立的英文 \"I\" 会保留。适合用于向其他工具输入，或当模型格式化过度时使用。您也可以绑定单独的快捷键，用于一次性的原始听写。"
+      },
+      "formatNumbers": {
+        "label": "格式化数字",
+        "description": "在格式化的转录中，将口述的数字转换为数字和符号，例如 $25、10% 或 3.5。无需 API 密钥，可离线运行。不适用于原始转录。"
       }
     },
     "postProcessing": {

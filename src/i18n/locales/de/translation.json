@@ -11,7 +11,10 @@
     "muteWhileRecording": "Während Aufnahme stummschalten",
     "appendTrailingSpace": "Leerzeichen anhängen",
     "autoSubmit": "Automatisch absenden",
-    "showOverlay": "Overlay anzeigen"
+    "showOverlay": "Overlay anzeigen",
+    "outputMode": "Ausgabemodus",
+    "formatted": "Formatiert",
+    "rawTranscript": "Rohtranskript"
   },
   "sidebar": {
     "navLabel": "Einstellungsbereiche",
@@ -488,6 +491,10 @@
       "rawOutput": {
         "label": "Rohtranskript",
         "description": "Gibt Text in Kleinbuchstaben aus, ohne Großschreibung und ohne abschließende Satzzeichen. Abkürzungen (API, GPU) und das alleinstehende englische \"I\" bleiben erhalten. Nützlich, um andere Tools zu füttern, oder wenn das Modell zu stark formatiert. Du kannst auch ein eigenes Tastenkürzel für einmalige Roh-Diktate festlegen."
+      },
+      "formatNumbers": {
+        "label": "Zahlen formatieren",
+        "description": "Wandelt gesprochene Zahlen in einem formatierten Transkript in Ziffern und Symbole um – zum Beispiel $25, 10 % oder 3,5. Läuft offline ohne API-Schlüssel. Gilt nicht für Rohtranskripte."
       }
     },
     "postProcessing": {

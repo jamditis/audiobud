@@ -11,7 +11,10 @@
     "muteWhileRecording": "Ljudlös under inspelning",
     "appendTrailingSpace": "Lägg till avslutande mellanslag",
     "autoSubmit": "Skicka automatiskt",
-    "showOverlay": "Visa överlagring"
+    "showOverlay": "Visa överlagring",
+    "outputMode": "Utdataläge",
+    "formatted": "Formaterad",
+    "rawTranscript": "Rå transkription"
   },
   "sidebar": {
     "navLabel": "Inställningsavsnitt",
@@ -488,6 +491,10 @@
       "rawOutput": {
         "label": "Rå transkription",
         "description": "Ger text med gemener där stor bokstav och avslutande skiljetecken tagits bort. Förkortningar (API, GPU) och det fristående engelska \"I\" behålls. Användbart för att mata andra verktyg eller när modellen formaterar för mycket. Du kan också koppla ett separat kortkommando för enstaka rådikteringar."
+      },
+      "formatNumbers": {
+        "label": "Formatera tal",
+        "description": "Omvandlar talade tal till siffror och symboler i en formaterad transkription, till exempel $25, 10 % eller 3.5. Fungerar offline utan API-nyckel. Gäller inte råa transkriptioner."
       }
     },
     "postProcessing": {

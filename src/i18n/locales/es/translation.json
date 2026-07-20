@@ -11,7 +11,10 @@
     "muteWhileRecording": "Silenciar Durante la Grabación",
     "appendTrailingSpace": "Agregar Espacio Final",
     "autoSubmit": "Envío automático",
-    "showOverlay": "Mostrar superposición"
+    "showOverlay": "Mostrar superposición",
+    "outputMode": "Modo de salida",
+    "formatted": "Con formato",
+    "rawTranscript": "Transcripción sin formato"
   },
   "sidebar": {
     "navLabel": "Secciones de configuración",
@@ -488,6 +491,10 @@
       "rawOutput": {
         "label": "Transcripción sin formato",
         "description": "Genera texto en minúsculas, sin mayúsculas ni puntuación final. Se conservan las siglas (API, GPU) y la \"I\" del inglés cuando va sola. Útil para alimentar otras herramientas o cuando el modelo aplica demasiado formato. También puedes asignar un atajo aparte para dictados puntuales sin formato."
+      },
+      "formatNumbers": {
+        "label": "Formatear números",
+        "description": "Convierte los números hablados en dígitos y símbolos en una transcripción con formato, por ejemplo $25, 10 % o 3.5. Funciona sin conexión y sin clave de API. No se aplica a las transcripciones sin formato."
       }
     },
     "postProcessing": {

@@ -11,7 +11,10 @@
     "muteWhileRecording": "Wycisz podczas nagrywania",
     "appendTrailingSpace": "Dodaj spację na końcu",
     "autoSubmit": "Automatyczne wysyłanie",
-    "showOverlay": "Pokaż nakładkę"
+    "showOverlay": "Pokaż nakładkę",
+    "outputMode": "Tryb wyjścia",
+    "formatted": "Sformatowany",
+    "rawTranscript": "Surowa transkrypcja"
   },
   "sidebar": {
     "navLabel": "Sekcje ustawień",
@@ -492,6 +495,10 @@
       "rawOutput": {
         "label": "Surowa transkrypcja",
         "description": "Zwraca tekst małymi literami, bez wielkich liter i końcowej interpunkcji. Skrótowce (API, GPU) i angielskie samodzielne \"I\" są zachowywane. Przydatne przy przekazywaniu tekstu do innych narzędzi lub gdy model zbyt mocno formatuje. Możesz też przypisać osobny skrót do pojedynczych surowych dyktowań."
+      },
+      "formatNumbers": {
+        "label": "Formatuj liczby",
+        "description": "Zamienia wypowiedziane liczby na cyfry i symbole w sformatowanej transkrypcji, na przykład $25, 10% lub 3.5. Działa offline, bez klucza API. Nie dotyczy surowych transkrypcji."
       }
     },
     "postProcessing": {
