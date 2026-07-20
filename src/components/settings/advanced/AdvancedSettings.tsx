@@ -7,6 +7,7 @@ import { CustomWords } from "../CustomWords";
 import { WordReplacements } from "../WordReplacements";
 import { PersonalizationSettings } from "../PersonalizationSettings";
 import { RawOutput } from "../RawOutput";
+import { FormatNumbers } from "../FormatNumbers";
 import { ShortcutInput } from "../ShortcutInput";
 import { SettingsGroup } from "../../ui/SettingsGroup";
 import { StartHidden } from "../StartHidden";
@@ -54,6 +55,7 @@ export const AdvancedSettings: React.FC = () => {
         <CustomWords descriptionMode="tooltip" grouped />
         <WordReplacements descriptionMode="tooltip" grouped />
         <PersonalizationSettings descriptionMode="tooltip" grouped />
+        <FormatNumbers descriptionMode="tooltip" grouped={true} />
         <RawOutput descriptionMode="tooltip" grouped={true} />
         <ShortcutInput shortcutId="transcribe_raw" grouped={true} />
         <AppendTrailingSpace descriptionMode="tooltip" grouped={true} />
