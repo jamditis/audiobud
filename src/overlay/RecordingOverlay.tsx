@@ -108,21 +108,25 @@ const RecordingOverlay: React.FC = () => {
         {state === "transcribing" && (
           <div className="state-label transcribing-text">
             <span>{t("overlay.transcribing")}</span>
-            <span className="state-dots" aria-hidden="true">
-              <i />
-              <i />
-              <i />
-            </span>
+            {!isRaw && (
+              <span className="state-dots" aria-hidden="true">
+                <i />
+                <i />
+                <i />
+              </span>
+            )}
           </div>
         )}
         {state === "processing" && (
           <div className="state-label transcribing-text">
             <span>{t("overlay.processing")}</span>
-            <span className="state-dots" aria-hidden="true">
-              <i />
-              <i />
-              <i />
-            </span>
+            {!isRaw && (
+              <span className="state-dots" aria-hidden="true">
+                <i />
+                <i />
+                <i />
+              </span>
+            )}
           </div>
         )}
       </div>

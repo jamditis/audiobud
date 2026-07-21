@@ -273,7 +273,7 @@
 
 .content-toolbar-kicker {
   display: block;
-  color: var(--color-mid-gray);
+  color: var(--color-text);
   font-family: "Bungee", system-ui, sans-serif;
   font-size: 0.58rem;
   letter-spacing: 0.12em;

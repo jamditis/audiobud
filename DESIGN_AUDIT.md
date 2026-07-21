@@ -102,8 +102,8 @@ longer creates horizontal overflow.
   overlay states in CI.
 - Run a full keyboard and screen-reader pass in the packaged Windows app,
   including custom selects and model-card actions.
-- Integrate the privacy and required pages into the new header/footer system
-  once their content lands.
+- Keep the privacy and required pages aligned with the shared header/footer
+  system as their content evolves.
 
 ### Medium impact
 

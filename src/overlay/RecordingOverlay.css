@@ -166,7 +166,14 @@
   display: flex;
   align-items: center;
   gap: 6px;
+  min-width: 0;
+  overflow: hidden;
   white-space: nowrap;
+}
+
+.state-label > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .state-dots {
