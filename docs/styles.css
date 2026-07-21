@@ -1244,6 +1244,18 @@ kbd {
   color: var(--green);
 }
 
+.cta-note {
+  position: relative;
+  z-index: 2;
+  grid-column: 1 / -1;
+  max-width: 46ch;
+  margin: 4px auto 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.55;
+  text-align: center;
+}
+
 .site-footer {
   margin-top: 20px;
   padding: 72px 0 28px;
