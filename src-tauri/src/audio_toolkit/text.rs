@@ -948,6 +948,13 @@ fn is_capitalized(value: &str) -> bool {
     letters.next().is_some_and(|first| first.is_uppercase()) && letters.all(|c| c.is_lowercase())
 }
 
+fn alphanumeric_components(value: &str) -> Vec<&str> {
+    value
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|component| !component.is_empty())
+        .collect()
+}
+
 /// Keep target casing when the user explicitly changed presentation or entered an internally
 /// cased brand. Ambiguous matching presentation casing is rejected before this helper is called.
 fn learned_target_presentation(from: &str, to: &str) -> (String, bool) {
@@ -1019,10 +1026,28 @@ fn is_regular_inflection_edit(from: &str, to: &str) -> bool {
         false
     }
 
-    let from_lower = from.to_lowercase();
-    let to_lower = to.to_lowercase();
-    is_inflected_form(&from_lower, &to_lower, to, true)
-        || is_inflected_form(&to_lower, &from_lower, from, false)
+    let is_inflection_pair = |from: &str, to: &str| {
+        let from_lower = from.to_lowercase();
+        let to_lower = to.to_lowercase();
+        is_inflected_form(&from_lower, &to_lower, to, true)
+            || is_inflected_form(&to_lower, &from_lower, from, false)
+    };
+
+    if is_inflection_pair(from, to) {
+        return true;
+    }
+
+    // A grammatical suffix can occur before a shared symbol-delimited tail rather than at the
+    // end of the full token (`mother-in-law` -> `mothers-in-law`, `API/client` -> `APIs/client`).
+    // Compare aligned components so compound syntax cannot hide the same unsafe global edit.
+    let from_components = alphanumeric_components(from);
+    let to_components = alphanumeric_components(to);
+    from_components.len() == to_components.len()
+        && from_components.len() > 1
+        && from_components
+            .iter()
+            .zip(to_components)
+            .any(|(from_component, to_component)| is_inflection_pair(from_component, to_component))
 }
 
 /// Whether one token is just a grammatical contraction of the other. The broad dictionary veto
@@ -1047,6 +1072,55 @@ fn is_contraction_edit(from: &str, to: &str) -> bool {
     let from = normalize(from);
     let to = normalize(to);
     is_contracted_form(&from, &to) || is_contracted_form(&to, &from)
+}
+
+fn has_safe_lexical_evidence(from: &str, to: &str) -> bool {
+    let from_is_dictionary_word = is_known_english_word(from);
+    let to_is_dictionary_word = is_known_english_word(to);
+    let from_is_named_entity = is_known_english_named_entity(from);
+    let to_is_named_entity = is_known_english_named_entity(to);
+
+    // A case-insensitive global rule can never safely start from a token that is both an ordinary
+    // word and a name (`angel`, `mark`, `rose`). Apply the veto independently of the target list:
+    // corrected nicknames and uncommon names may not appear in the pinned named-entity subset.
+    if from_is_dictionary_word && from_is_named_entity {
+        return false;
+    }
+    if from_is_named_entity && to_is_named_entity {
+        // Raw-mode transcripts can lowercase proper names and calendar terms. Treat two known
+        // entities as a semantic swap unless they are an exceptionally close spelling/phonetic
+        // correction such as `jon` -> `John`. The latter remains useful while distant pairs such
+        // as `monday` -> `tuesday` and `paris` -> `london` fail closed.
+        if !has_close_spelling_evidence(from, to) || !has_phonetic_match(from, to) {
+            return false;
+        }
+    } else if (from_is_dictionary_word ^ to_is_dictionary_word)
+        && (from_is_named_entity ^ to_is_named_entity)
+        && !has_phonetic_match(from, to)
+    {
+        // A common-word/name swap is usually semantic (`browser` -> `Firefox`, `monday` ->
+        // `today`). Require the phonetic evidence that distinguishes a genuine dictation mishear
+        // such as `clawed` -> `Claude`.
+        return false;
+    }
+    if has_intentional_mixed_case(from)
+        && has_intentional_mixed_case(to)
+        && !has_strong_mishear_evidence(from, to)
+    {
+        // Unknown mixed-case terms are commonly brands or products. Do not turn a semantic edit
+        // such as `OpenAI` -> `ChatGPT` into a global rule without mishear evidence.
+        return false;
+    }
+    let shares_known_category = (from_is_dictionary_word && to_is_dictionary_word)
+        || (from_is_named_entity && to_is_named_entity);
+    if !shares_known_category && !has_strong_mishear_evidence(from, to) {
+        // Raw mode can remove the presentation cues that distinguish unknown brands and proper
+        // nouns. An unclassified pair such as `figma` -> `gitlab` needs spelling or phonetic
+        // evidence before it can become a global rule.
+        return false;
+    }
+
+    !from_is_dictionary_word || !to_is_dictionary_word
 }
 
 /// Whether a one-for-one `from`->`to` token core is worth learning as a literal
@@ -1115,6 +1189,7 @@ fn is_learnable_substitution(from: &str, to: &str) -> bool {
                 .chars()
                 .filter(|c| c.is_ascii_alphabetic())
                 .all(|c| c.is_ascii_uppercase())
+            && matches!(to, "MP3" | "B2B")
             && from_alpha.eq_ignore_ascii_case(&to_alpha);
         if !is_short_digit_acronym {
             return false;
@@ -1122,28 +1197,25 @@ fn is_learnable_substitution(from: &str, to: &str) -> bool {
     } else if from_has_digit && to_has_digit {
         return false;
     }
-    // A dictionary-word substitution (`their`->`there`, `accept`->`except`) is a grammar or
-    // word-choice edit as often as it is a mishear. The fuzzy matcher can use a small common-word
-    // list because it has several other gates; a learned global replacement cannot take that risk.
-    let from_is_dictionary_word = is_known_english_word(from);
-    let to_is_dictionary_word = is_known_english_word(to);
-    let from_is_named_entity = is_known_english_named_entity(from);
-    let to_is_named_entity = is_known_english_named_entity(to);
-    if from_is_named_entity && to_is_named_entity {
-        // Raw-mode transcripts can lowercase proper names and calendar terms. Treat two known
-        // entities as a semantic swap unless they are an exceptionally close spelling/phonetic
-        // correction such as `jon` -> `John`. The latter remains useful while distant pairs such
-        // as `monday` -> `tuesday` and `paris` -> `london` fail closed.
-        if !has_close_spelling_evidence(from, to) || !has_phonetic_match(from, to) {
-            return false;
-        }
-    } else if (from_is_dictionary_word ^ to_is_dictionary_word)
-        && (from_is_named_entity ^ to_is_named_entity)
-        && !has_phonetic_match(from, to)
+    // Dictionary/name/category safeguards must hold for the complete token and for each changed
+    // component. The generated lexical lists intentionally exclude symbols, so checking only the
+    // full string would let `angel-like` -> `Angela-like` hide the unsafe `angel` homograph.
+    if !has_safe_lexical_evidence(from, to) {
+        return false;
+    }
+    let from_components = alphanumeric_components(from);
+    let to_components = alphanumeric_components(to);
+    if from_components.len() != to_components.len()
+        || from_components
+            .iter()
+            .zip(to_components)
+            .filter(|(from_component, to_component)| {
+                from_component.to_lowercase() != to_component.to_lowercase()
+            })
+            .any(|(from_component, to_component)| {
+                !has_safe_lexical_evidence(from_component, to_component)
+            })
     {
-        // A common-word/name swap is usually semantic (`browser` -> `Firefox`, `monday` ->
-        // `today`). Require the phonetic evidence that distinguishes a genuine dictation mishear
-        // such as `clawed` -> `Claude`.
         return false;
     }
     // Matching title/all-caps presentation is inherently ambiguous even outside the dictionary:
@@ -1154,24 +1226,6 @@ fn is_learnable_substitution(from: &str, to: &str) -> bool {
         && symbol_skeleton(to).is_empty()
         && ((is_capitalized(from) && is_capitalized(to)) || (is_all_caps(from) && is_all_caps(to)))
     {
-        return false;
-    }
-    if has_intentional_mixed_case(from) && has_intentional_mixed_case(to) {
-        if !has_strong_mishear_evidence(from, to) {
-            // Unknown mixed-case terms are commonly brands or products. Do not turn a semantic
-            // edit such as `OpenAI` -> `ChatGPT` into a global rule without mishear evidence.
-            return false;
-        }
-    }
-    let shares_known_category = (from_is_dictionary_word && to_is_dictionary_word)
-        || (from_is_named_entity && to_is_named_entity);
-    if !shares_known_category && !has_strong_mishear_evidence(from, to) {
-        // Raw mode can remove the presentation cues that distinguish unknown brands and proper
-        // nouns. An unclassified pair such as `figma` -> `gitlab` needs spelling or phonetic
-        // evidence before it can become a global rule.
-        return false;
-    }
-    if from_is_dictionary_word && to_is_dictionary_word {
         return false;
     }
     if is_regular_inflection_edit(from, to) {
@@ -1314,13 +1368,13 @@ pub fn extract_learned_replacements(
         pj = aj + 1;
     }
 
-    // Group candidate sources by the same Unicode case-insensitive literal matching production
-    // uses. `to_lowercase()` alone misses simple-fold equivalents such as `ſ` and `s`, allowing an
-    // earlier rule to shadow a conflicting later one. The candidate cap keeps this pairwise check
-    // bounded while avoiding a second, subtly different case-fold implementation.
+    // Group candidate sources by the same literal matching each rule will use in production.
+    // Most learned rules are case-insensitive, while the narrow digit-bearing MP3/B2B rules are
+    // exact-case so they cannot rewrite existing uppercase acronyms. The candidate cap keeps this
+    // pairwise check bounded while avoiding a second, subtly different case-fold implementation.
     let candidate_source_patterns: Vec<Option<Regex>> = candidates
         .iter()
-        .map(|(from, _, _)| replacement_regex(from, false))
+        .map(|(from, to, _)| replacement_regex(from, to.chars().any(char::is_numeric)))
         .collect();
     let runtime_sources_equivalent = |left: usize, right: usize| {
         candidate_source_patterns[left]
@@ -1331,14 +1385,26 @@ pub fn extract_learned_replacements(
                 .is_some_and(|pattern| regex_matches_entire(pattern, &candidates[left].0))
     };
     let mut conflicting_sources = vec![false; candidates.len()];
+    let mut candidate_preserve_flags: Vec<bool> = candidates
+        .iter()
+        .map(|(_, _, preserve_replacement_case)| *preserve_replacement_case)
+        .collect();
     for left in 0..candidates.len() {
         for right in left + 1..candidates.len() {
-            if runtime_sources_equivalent(left, right)
-                && (candidates[left].1 != candidates[right].1
-                    || candidates[left].2 != candidates[right].2)
-            {
-                conflicting_sources[left] = true;
-                conflicting_sources[right] = true;
+            if runtime_sources_equivalent(left, right) {
+                if candidates[left].1 != candidates[right].1 {
+                    conflicting_sources[left] = true;
+                    conflicting_sources[right] = true;
+                } else {
+                    // The same case-insensitive source and literal target can derive different
+                    // presentation metadata from differently cased observations (`Sonet` and
+                    // `sonet` -> `sonnet`). Preserve the literal target if either observation
+                    // requires it, then let the normal deduplication path emit one shared rule.
+                    let preserve_replacement_case =
+                        candidate_preserve_flags[left] || candidate_preserve_flags[right];
+                    candidate_preserve_flags[left] = preserve_replacement_case;
+                    candidate_preserve_flags[right] = preserve_replacement_case;
+                }
             }
         }
     }
@@ -1378,7 +1444,10 @@ pub fn extract_learned_replacements(
                 from: from.clone(),
                 to: to.clone(),
                 whole_word: true,
-                case_sensitive: false,
+                // The only safe digit-bearing targets are the explicit `MP3` and `B2B` cases.
+                // Match their lowercase dictated sources exactly so legitimate uppercase
+                // acronyms such as `MP` and `BB` remain untouched.
+                case_sensitive: to.chars().any(char::is_numeric),
                 preserve_replacement_case: *preserve_replacement_case,
             };
             apply_replacements(corrected, std::slice::from_ref(&rule)) != corrected
@@ -1389,16 +1458,16 @@ pub fn extract_learned_replacements(
 
     let mut out = Vec::new();
     let mut seen_candidate_indexes = Vec::new();
-    for (index, (from, to, preserve_replacement_case)) in candidates.iter().enumerate() {
+    for (index, (from, to, _)) in candidates.iter().enumerate() {
         if conflicting_sources[index] {
             continue;
         }
         let rule = WordReplacement {
             from: from.clone(),
-            preserve_replacement_case: *preserve_replacement_case,
+            preserve_replacement_case: candidate_preserve_flags[index],
             to: to.clone(),
             whole_word: true,
-            case_sensitive: false,
+            case_sensitive: to.chars().any(char::is_numeric),
         };
         if apply_replacements(corrected, std::slice::from_ref(&rule)) != corrected {
             continue;
@@ -1406,7 +1475,7 @@ pub fn extract_learned_replacements(
         let already_seen = seen_candidate_indexes.iter().any(|&seen_index| {
             runtime_sources_equivalent(index, seen_index)
                 && candidates[seen_index].1 == rule.to
-                && candidates[seen_index].2 == rule.preserve_replacement_case
+                && candidate_preserve_flags[seen_index] == rule.preserve_replacement_case
         });
         if already_seen {
             continue;
@@ -1490,14 +1559,19 @@ pub fn extract_learned_replacements(
         .iter()
         .map(|rule| replacement_regex(&rule.from, rule.case_sensitive))
         .collect();
-    // A new source is case-insensitive, so it can be dictated in the exact casing of any preceding
-    // case-sensitive source. These collision patterns ask whether such a runtime source spelling
-    // exists without weakening the preceding rule's actual production behavior elsewhere.
-    let source_collision_patterns: Vec<Option<Regex>> = combined
+    // Detect an earlier target inside a later source using the later rule's actual case behavior.
+    // Keep both compiled forms because the target belongs to the earlier rule but the matching
+    // semantics belong to the later one.
+    let case_sensitive_target_patterns: Vec<Vec<Option<Regex>>> = emitted_targets
         .iter()
-        .map(|rule| replacement_regex(&rule.from, false))
+        .map(|variants| {
+            variants
+                .iter()
+                .map(|target| replacement_regex(target, true))
+                .collect()
+        })
         .collect();
-    let target_patterns: Vec<Vec<Option<Regex>>> = emitted_targets
+    let case_insensitive_target_patterns: Vec<Vec<Option<Regex>>> = emitted_targets
         .iter()
         .map(|variants| {
             variants
@@ -1510,39 +1584,42 @@ pub fn extract_learned_replacements(
         let later = &combined[later_index];
         for earlier_index in 0..later_index {
             let earlier = &combined[earlier_index];
-            let source_preemption = source_collision_patterns[earlier_index]
-                .as_ref()
-                .is_some_and(|pattern| {
-                    regex_has_replacement_match(pattern, &later.from, earlier.whole_word)
-                });
+            let source_preemption =
+                source_patterns[earlier_index]
+                    .as_ref()
+                    .is_some_and(|pattern| {
+                        regex_has_replacement_match(pattern, &later.from, earlier.whole_word)
+                    });
             // An earlier, more contextual source also preempts the new rule when the new source
-            // occurs inside it (`x-sonet` before `sonet`). Match with the new rule's production
-            // case-insensitive regex so a case-sensitive earlier `SONET` is covered as well.
-            let contextual_source_preemption = source_collision_patterns[later_index]
-                .as_ref()
-                .is_some_and(|pattern| {
-                    regex_has_replacement_match(pattern, &earlier.from, later.whole_word)
-                });
-            let partial_source_preemption = source_collision_patterns[later_index]
-                .as_ref()
-                .is_some_and(|pattern| {
-                    partial_overlap_can_complete(
-                        &earlier.from,
-                        &later.from,
-                        pattern,
-                        later.whole_word,
-                    )
-                })
-                || source_collision_patterns[earlier_index]
+            // occurs inside it (`x-sonet` before `sonet`). The new rule's production regex still
+            // covers a case-sensitive earlier `SONET` when the new source is case-insensitive.
+            let contextual_source_preemption =
+                source_patterns[later_index]
+                    .as_ref()
+                    .is_some_and(|pattern| {
+                        regex_has_replacement_match(pattern, &earlier.from, later.whole_word)
+                    });
+            let partial_source_preemption =
+                source_patterns[later_index]
                     .as_ref()
                     .is_some_and(|pattern| {
                         partial_overlap_can_complete(
-                            &later.from,
                             &earlier.from,
+                            &later.from,
                             pattern,
-                            earlier.whole_word,
+                            later.whole_word,
                         )
-                    });
+                    })
+                    || source_patterns[earlier_index]
+                        .as_ref()
+                        .is_some_and(|pattern| {
+                            partial_overlap_can_complete(
+                                &later.from,
+                                &earlier.from,
+                                pattern,
+                                earlier.whole_word,
+                            )
+                        });
             let direct = source_patterns[later_index]
                 .as_ref()
                 .is_some_and(|pattern| {
@@ -1550,6 +1627,11 @@ pub fn extract_learned_replacements(
                         regex_has_replacement_match(pattern, target, later.whole_word)
                     })
                 });
+            let target_patterns = if later.case_sensitive {
+                &case_sensitive_target_patterns
+            } else {
+                &case_insensitive_target_patterns
+            };
             let completed_by_context =
                 target_patterns[earlier_index]
                     .iter()
@@ -1670,6 +1752,20 @@ mod tests {
         assert_eq!(
             learned_pairs(&out),
             vec![("clawed".to_string(), "Claude".to_string())]
+        );
+    }
+
+    #[test]
+    fn extractor_merges_compatible_casing_variants() {
+        let out = extract_learned_replacements("Sonet and sonet", "sonnet and sonnet");
+        assert_eq!(
+            learned_pairs(&out),
+            vec![("Sonet".to_string(), "sonnet".to_string())]
+        );
+        assert!(out[0].preserve_replacement_case);
+        assert_eq!(
+            apply_replacements("Sonet and sonet", &out),
+            "sonnet and sonnet"
         );
     }
 
@@ -1923,6 +2019,15 @@ mod tests {
         );
         assert!(learned[0].preserve_replacement_case);
         assert_eq!(apply_replacements("try aple", &learned), "try Apple");
+    }
+
+    #[test]
+    fn extractor_rejects_a_dictionary_homograph_corrected_to_a_name() {
+        // `angel` is both an ordinary dictionary word and a known name. Even a close
+        // phonetic/name match cannot safely become a global rule because it would rewrite
+        // later ordinary uses of the word.
+        assert!(extract_learned_replacements("ask angel", "ask Angela").is_empty());
+        assert!(extract_learned_replacements("ask rose", "ask Roz").is_empty());
     }
 
     #[test]
@@ -2191,6 +2296,22 @@ mod tests {
     }
 
     #[test]
+    fn extractor_rejects_inflections_inside_compound_terms() {
+        assert!(
+            extract_learned_replacements("visit my mother-in-law", "visit my mothers-in-law",)
+                .is_empty()
+        );
+        assert!(extract_learned_replacements("use Zorp-api", "use Zorps-api").is_empty());
+        assert!(extract_learned_replacements("open API/client", "open APIs/client").is_empty());
+    }
+
+    #[test]
+    fn extractor_rejects_homographs_inside_compound_terms() {
+        assert!(extract_learned_replacements("ask angel-like", "ask Angela-like").is_empty());
+        assert!(extract_learned_replacements("ask rose-api", "ask Roz-api").is_empty());
+    }
+
+    #[test]
     fn extractor_learns_a_target_word_that_naturally_ends_in_s() {
         // Only apostrophe-bearing contraction suffixes are handled here, so a meant word whose
         // canonical spelling ends in `s` (`io` -> `iOS`) is not mistaken for one.
@@ -2217,12 +2338,45 @@ mod tests {
             learned_pairs(&out),
             vec![("mp".to_string(), "MP3".to_string())]
         );
+        assert!(out[0].case_sensitive);
+        assert_eq!(apply_replacements("mp MP", &out), "MP3 MP");
+
+        let b2b = extract_learned_replacements("a bb vendor", "a B2B vendor");
         assert_eq!(
-            learned_pairs(&extract_learned_replacements("a bb vendor", "a B2B vendor")),
+            learned_pairs(&b2b),
             vec![("bb".to_string(), "B2B".to_string())]
         );
+        assert!(b2b[0].case_sensitive);
+        assert_eq!(apply_replacements("bb BB", &b2b), "B2B BB");
         assert!(extract_learned_replacements("say no today", "say NO2 today").is_empty());
+        assert!(extract_learned_replacements("ask ai today", "ask AI2 today").is_empty());
+        assert!(extract_learned_replacements("ask uk today", "ask UK2 today").is_empty());
         assert!(extract_learned_replacements("buy iphone now", "buy iphone16 now").is_empty());
+    }
+
+    #[test]
+    fn extractor_keeps_distinct_case_sensitive_digit_rules() {
+        let out = extract_learned_replacements("Mp and mp", "MP3 and MP3");
+        assert_eq!(
+            learned_pairs(&out),
+            vec![
+                ("Mp".to_string(), "MP3".to_string()),
+                ("mp".to_string(), "MP3".to_string()),
+            ]
+        );
+        assert!(out.iter().all(|rule| rule.case_sensitive));
+        assert_eq!(apply_replacements("Mp mp MP", &out), "MP3 MP3 MP");
+    }
+
+    #[test]
+    fn extractor_allows_case_distinct_preceding_targets_for_digit_rules() {
+        let preceding = vec![repl("foo", "MP")];
+        let out = super::extract_learned_replacements("use mp today", "use MP3 today", &preceding);
+        assert_eq!(
+            learned_pairs(&out),
+            vec![("mp".to_string(), "MP3".to_string())]
+        );
+        assert!(out[0].case_sensitive);
     }
 
     #[test]

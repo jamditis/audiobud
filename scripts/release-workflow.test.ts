@@ -8,6 +8,22 @@ const signingConfig = JSON.parse(
 );
 const signingScript = readFileSync("scripts/sign-windows.ps1", "utf8");
 const nsisTemplate = readFileSync("src-tauri/nsis/installer.nsi", "utf8");
+const thirdPartyNotices = readFileSync("THIRD_PARTY_NOTICES.md", "utf8");
+
+describe("bundled word-list notices", () => {
+  test("carries the pinned SCOWL and VarCon copyright terms", () => {
+    expect(thirdPartyNotices).toContain(
+      "The collective work is Copyright 2000-2018 by Kevin Atkinson",
+    );
+    expect(thirdPartyNotices).toContain(
+      "Copyright 2000-2016 by Kevin Atkinson",
+    );
+    expect(thirdPartyNotices).toContain("Copyright 2016 by Benjamin Titze");
+    expect(thirdPartyNotices).toMatch(
+      /Benjamin Titze makes no\s+representations about the suitability of\s+this array/,
+    );
+  });
+});
 
 function stepPosition(name: string): number {
   const position = workflow.indexOf(`- name: ${name}`);
