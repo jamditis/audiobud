@@ -1005,17 +1005,40 @@ describe("AudioBud public policy pages", () => {
     const mobile = readCssBlock(css, "@media (max-width: 860px)");
 
     expect(mobile).toBeDefined();
-    expectCssRule(
-      mobile ?? "",
-      ".status-row, .steps, .feature-grid, .screens, .install, .roadmap-grid, .data-grid",
-      ["grid-template-columns: 1fr;"],
-    );
+    expectCssRule(mobile ?? "", ".roadmap-grid, .data-grid", [
+      "grid-template-columns: 1fr;",
+    ]);
     expectCssRule(mobile ?? "", ".legal-hero", ["padding: 108px 0 34px;"]);
     expectCssRule(mobile ?? "", ".legal-layout", [
       "grid-template-columns: 1fr;",
       "gap: 30px;",
     ]);
     expectCssRule(mobile ?? "", ".legal-toc", ["position: static;"]);
+  });
+
+  it("collapses the redesigned homepage at its tablet and phone breakpoints", () => {
+    const css = read("styles.css");
+    const tablet = readCssBlock(css, "@media (max-width: 980px)");
+    const phone = readCssBlock(css, "@media (max-width: 560px)");
+
+    expect(tablet).toBeDefined();
+    expectCssRule(tablet ?? "", ".hero-grid", ["grid-template-columns: 1fr;"]);
+    expectCssRule(tablet ?? "", ".feature-wide, .feature-screen", [
+      "grid-template-columns: 1fr;",
+    ]);
+    expectCssRule(tablet ?? "", ".model-row", [
+      "grid-template-columns: 48px 1fr auto;",
+    ]);
+    expectCssRule(tablet ?? "", ".cta-card", [
+      "grid-template-columns: 86px 1fr;",
+    ]);
+
+    expect(phone).toBeDefined();
+    expectCssRule(phone ?? "", ".bento-grid", ["grid-template-columns: 1fr;"]);
+    expectCssRule(phone ?? "", ".model-row", [
+      "grid-template-columns: 42px 1fr;",
+    ]);
+    expectCssRule(phone ?? "", ".cta-card", ["display: block;"]);
   });
 
   it("disables smooth scrolling when reduced motion is requested", () => {
