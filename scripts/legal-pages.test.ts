@@ -5,6 +5,11 @@ import { join } from "node:path";
 const root = join(import.meta.dir, "..");
 const docs = join(root, "docs");
 const read = (name: string) => readFileSync(join(docs, name), "utf8");
+const readText = (name: string) =>
+  read(name)
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 
 const sitePages = [
   { name: "index.html", url: "https://audiobud.amditis.tech/" },
@@ -605,6 +610,49 @@ describe("AudioBud public policy pages", () => {
     expect(privacy).toContain("does not send your audio to that provider");
     expect(privacy).toContain("stored in AudioBud's local settings file");
     expect(privacy.toLowerCase()).not.toContain("encrypted at rest");
+  });
+
+  it("starts the privacy page with a focusable skip link", () => {
+    const privacy = read("privacy.html");
+    const body = privacy.slice(privacy.indexOf("<body>") + "<body>".length);
+    const firstFocusable = body.match(
+      /<(?:a|button|input|select|textarea)\b[^>]*>/i,
+    );
+
+    expect(firstFocusable?.[0]).toBe(
+      '<a class="skip-link" href="#privacy-title">',
+    );
+    expect(body).toContain(
+      '<a class="skip-link" href="#privacy-title">Skip to privacy policy</a>',
+    );
+  });
+
+  it("describes local transcript delivery and later handling", () => {
+    const privacy = readText("privacy.html");
+
+    expect(privacy).toContain(
+      "completed transcript text to the focused application",
+    );
+    expect(privacy).toContain("system clipboard");
+    expect(privacy).toContain("normally restores the previous contents");
+    expect(privacy).toContain("CopyToClipboard");
+    expect(privacy).toContain("Direct mode types the transcript");
+    expect(privacy).toContain("External-script mode passes the transcript");
+    expect(privacy).toContain("one command-line argument");
+    expect(privacy).toContain(
+      "stay local unless the receiving application or script sends the text elsewhere",
+    );
+    expect(privacy).toContain(
+      "receiving application or script controls any later transmission and retention",
+    );
+  });
+
+  it("offers local personalization export and reset choices", () => {
+    const privacy = readText("privacy.html");
+
+    expect(privacy).toContain(
+      "You can export or reset learned personalization on your device",
+    );
   });
 
   it("states the website tracking and sale practices", () => {

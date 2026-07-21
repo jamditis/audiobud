@@ -31,7 +31,10 @@ The terms will omit governing-law, arbitration, class-action waiver, and indemni
 The policy text must follow the shipped code:
 
 - Audio capture, transcription, history, saved recordings, settings, custom words, replacements, and optional personalization are processed or stored on the user's device.
+- Users can export learned personalization as JSON or reset it on their device.
 - The project operator does not receive local audio, transcripts, settings, or history through a first-party AudioBud service.
+- AudioBud delivers completed transcript text to the focused application using the paste method selected by the user. Clipboard modes temporarily write the transcript to the system clipboard and normally restore its previous contents unless the user selects `CopyToClipboard`. Direct mode types the transcript into the focused application.
+- External-script mode passes the transcript as one command-line argument to the configured script. These local delivery paths do not send text off-device by themselves, but the receiving application or script controls any later transmission and retention.
 - AudioBud has no first-party account system, hosted application backend, ads, analytics, or telemetry.
 - Transcription history is stored in a local SQLite database. Recordings are stored as local WAV files. The default history limit is five unsaved entries, and users can change retention or save entries for longer storage.
 - Post-processing is off by default. When a user enables it, AudioBud sends transcript text and the selected prompt, but not audio, to the provider or custom endpoint selected by the user.
@@ -47,11 +50,11 @@ The privacy page will use plain language and include:
 1. An effective date and local-first summary.
 2. The operator, contact address, and policy scope.
 3. Data processed and stored on the device.
-4. The limited cases in which data leaves the device.
+4. The limited cases in which data leaves the device, plus how clipboard, direct, and external-script paste methods deliver transcript text locally and leave later handling to the receiving application or script.
 5. Optional LLM post-processing and the user's responsibility for provider terms, privacy practices, and charges.
 6. Model downloads, GitHub links, and normal network metadata.
 7. GitHub Pages hosting, cookies, and the absence of AudioBud analytics.
-8. Retention, deletion, export, and reset controls.
+8. Retention and deletion controls, including the choice to export or reset learned personalization locally.
 9. No sale, behavioral advertising, or cross-site tracking by AudioBud, including how that affects Do Not Track and Global Privacy Control signals.
 10. Security limits without an absolute security promise.
 11. Privacy rights where applicable, with requests directed to the contact address and third-party requests directed to the relevant provider.
@@ -77,6 +80,8 @@ The terms page will include:
 Both pages will reuse the existing colors, fixed header, frog mark, background layers, cards, buttons, footer, and reduced-motion behavior. Legal content will use a readable column of about 760 pixels rather than the marketing-page width.
 
 Each page will open with a short summary and a compact contents list. The privacy page will include three fact cards that distinguish data that stays on the device, data sent only after a user action, and GitHub's role as site host. These cards summarize the policy but do not replace the detailed sections.
+
+The privacy page will place a `Skip to privacy policy` link to `#privacy-title` before every other focusable body element.
 
 Headings will use sentence case. Links and keyboard focus will remain visible. Mobile layouts will collapse to one column without hiding access to the policy pages.
 

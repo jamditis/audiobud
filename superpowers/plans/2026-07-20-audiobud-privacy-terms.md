@@ -39,6 +39,11 @@ import { join } from "node:path";
 const root = join(import.meta.dir, "..");
 const docs = join(root, "docs");
 const read = (name: string) => readFileSync(join(docs, name), "utf8");
+const readText = (name: string) =>
+  read(name)
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 
 const sitePages = [
   { name: "index.html", url: "https://audiobud.amditis.tech/" },
@@ -641,6 +646,49 @@ describe("AudioBud public policy pages", () => {
     expect(privacy.toLowerCase()).not.toContain("encrypted at rest");
   });
 
+  it("starts the privacy page with a focusable skip link", () => {
+    const privacy = read("privacy.html");
+    const body = privacy.slice(privacy.indexOf("<body>") + "<body>".length);
+    const firstFocusable = body.match(
+      /<(?:a|button|input|select|textarea)\b[^>]*>/i,
+    );
+
+    expect(firstFocusable?.[0]).toBe(
+      '<a class="skip-link" href="#privacy-title">',
+    );
+    expect(body).toContain(
+      '<a class="skip-link" href="#privacy-title">Skip to privacy policy</a>',
+    );
+  });
+
+  it("describes local transcript delivery and later handling", () => {
+    const privacy = readText("privacy.html");
+
+    expect(privacy).toContain(
+      "completed transcript text to the focused application",
+    );
+    expect(privacy).toContain("system clipboard");
+    expect(privacy).toContain("normally restores the previous contents");
+    expect(privacy).toContain("CopyToClipboard");
+    expect(privacy).toContain("Direct mode types the transcript");
+    expect(privacy).toContain("External-script mode passes the transcript");
+    expect(privacy).toContain("one command-line argument");
+    expect(privacy).toContain(
+      "stay local unless the receiving application or script sends the text elsewhere",
+    );
+    expect(privacy).toContain(
+      "receiving application or script controls any later transmission and retention",
+    );
+  });
+
+  it("offers local personalization export and reset choices", () => {
+    const privacy = readText("privacy.html");
+
+    expect(privacy).toContain(
+      "You can export or reset learned personalization on your device",
+    );
+  });
+
   it("states the website tracking and sale practices", () => {
     const privacy = read("privacy.html");
     expect(privacy).toContain("no AudioBud analytics");
@@ -669,7 +717,7 @@ Run:
 bun test scripts/legal-pages.test.ts
 ```
 
-Expected at this checkpoint: FAIL with 30 helper and contract checks passing and 10 contract checks failing. The failures cover missing policy pages and content, the old origin in `docs/index.html` and `docs/roadmap.html` metadata, and pending privacy and terms links across the public pages.
+Expected at this checkpoint: FAIL with 30 helper and contract checks passing and 13 contract checks failing. The failures cover missing policy pages and content, the missing privacy skip link and transcript-delivery and personalization-choice disclosures, the old origin in `docs/index.html` and `docs/roadmap.html` metadata, and pending privacy and terms links across the public pages.
 
 - [ ] **Step 3: Commit the failing contract**
 
@@ -707,6 +755,12 @@ Use the same `doctype`, viewport, favicon, stylesheet, fixed header, `.swamp` la
   property="og:image"
   content="https://audiobud.amditis.tech/assets/og-image.png"
 />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta
+  property="og:image:alt"
+  content="AudioBud local dictation for Windows app interface"
+/>
 <meta name="twitter:card" content="summary_large_image" />
 <meta name="twitter:title" content="AudioBud privacy policy" />
 <meta
@@ -717,9 +771,15 @@ Use the same `doctype`, viewport, favicon, stylesheet, fixed header, `.swamp` la
   name="twitter:image"
   content="https://audiobud.amditis.tech/assets/og-image.png"
 />
+<meta
+  name="twitter:image:alt"
+  content="AudioBud local dictation for Windows app interface"
+/>
 ```
 
 The header navigation must link to Home, Roadmap, Privacy, and Terms, with `aria-current="page"` on Privacy. The footer must link to Privacy, Terms, Changelog, and GitHub.
+
+Add `<a class="skip-link" href="#privacy-title">Skip to privacy policy</a>` as the first focusable element in the body.
 
 - [ ] **Step 2: Add the approved privacy content**
 
@@ -778,6 +838,8 @@ Add a contents navigation and the following sections with these exact facts:
 </p>
 ```
 
+Keep that lead paragraph unchanged. Then explain that AudioBud delivers completed transcript text to the focused application. Clipboard modes temporarily place it in the system clipboard and normally restore the previous contents unless the user selects `CopyToClipboard`. Direct mode types the transcript into the focused application. External-script mode passes the transcript as one command-line argument to the configured script. These delivery paths stay local unless the receiving application or script sends the text elsewhere, and that application or script controls later transmission and retention.
+
 5. `Optional AI post-processing`: include the exact boundary sentences:
 
 ```html
@@ -812,7 +874,7 @@ Add a contents navigation and the following sections with these exact facts:
 
 9. `Retention and deletion`: local unsaved history defaults to five entries; saved entries can remain until deletion; users can delete entries and recordings, change retention, reset personalization, remove keys/settings, and remove app data; provider/GitHub retention is separate; support email is kept only as needed to respond and maintain project records.
 10. `Security`: local-first reduces transfers but no system is perfectly secure; OS/account protection matters; secrets in local settings should not be used on an untrusted shared device.
-11. `Your choices and rights`: users control optional features and local deletion; applicable-law access/correction/deletion requests can be emailed; third-party data requests go to the third party; users may complain to their local authority where applicable.
+11. `Your choices and rights`: users control optional features and local deletion; users can export or reset learned personalization on their device; applicable-law access/correction/deletion requests can be emailed; third-party data requests go to the third party; users may complain to their local authority where applicable.
 12. `Children`: general-purpose tool, not directed to children under 13; contact the maintainer if the project received a child's information.
 13. `Changes`: material changes get a revised effective date and publication at the same URL.
 14. `Contact`: Joe Amditis, AudioBud project maintainer, `mailto:jamditis@gmail.com`.
@@ -823,7 +885,7 @@ Add a contents navigation and the following sections with these exact facts:
 bun test scripts/legal-pages.test.ts
 ```
 
-Expected: FAIL only because `docs/terms.html` is still missing or site-wide links are not complete.
+Expected: FAIL with 37 helper and contract checks passing and 6 contract checks failing. The failures cover the missing terms page and terms content, the old origin in `docs/index.html` and `docs/roadmap.html` metadata, and pending privacy and terms links across the existing public pages.
 
 - [ ] **Step 4: Commit the privacy page**
 
@@ -898,7 +960,7 @@ Do not add arbitration, class-action waiver, indemnity, or governing-law clauses
 bun test scripts/legal-pages.test.ts
 ```
 
-Expected: FAIL only for missing custom-domain metadata or cross-links in the existing pages.
+Expected: FAIL with 40 helper and contract checks passing and 3 contract checks failing. The failures cover the old origin in `docs/index.html` and `docs/roadmap.html` metadata and pending privacy and terms links across the existing public pages.
 
 - [ ] **Step 4: Commit the terms page**
 
@@ -960,7 +1022,7 @@ Replace the current website line near the top with:
 bun test scripts/legal-pages.test.ts
 ```
 
-Expected: PASS.
+Expected: PASS with all 43 helper and contract checks green.
 
 - [ ] **Step 5: Commit the links and metadata**
 
