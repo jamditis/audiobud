@@ -11,6 +11,45 @@ const readText = (name: string) =>
     .replace(/<[^>]+>/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+const compactCss = (value: string) => value.replace(/\s+/g, "");
+const escapeRegExp = (value: string) =>
+  value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const readCssRule = (css: string, selector: string) => {
+  const selectorPattern = selector
+    .trim()
+    .split(/\s+/)
+    .map(escapeRegExp)
+    .join("\\s+");
+  return new RegExp(`${selectorPattern}\\s*\\{([^{}]*)\\}`).exec(css)?.[1];
+};
+const readCssBlock = (css: string, marker: string) => {
+  const markerIndex = css.indexOf(marker);
+  if (markerIndex === -1) return undefined;
+
+  const blockStart = css.indexOf("{", markerIndex + marker.length);
+  if (blockStart === -1) return undefined;
+
+  let depth = 1;
+  for (let cursor = blockStart + 1; cursor < css.length; cursor++) {
+    if (css[cursor] === "{") depth++;
+    if (css[cursor] === "}") depth--;
+    if (depth === 0) return css.slice(blockStart + 1, cursor);
+  }
+
+  return undefined;
+};
+const expectCssRule = (
+  css: string,
+  selector: string,
+  declarations: string[],
+) => {
+  const rule = readCssRule(css, selector);
+  expect(rule, `Missing CSS rule for ${selector}`).toBeDefined();
+  const compactRule = compactCss(rule ?? "");
+  for (const declaration of declarations) {
+    expect(compactRule).toContain(compactCss(declaration));
+  }
+};
 
 const sitePages = [
   {
@@ -757,6 +796,242 @@ describe("Metadata tag matcher", () => {
 });
 
 describe("AudioBud public policy pages", () => {
+  it("provides visible focus and fixed-header-clearing skip behavior", () => {
+    const css = read("styles.css");
+
+    expectCssRule(css, ":focus-visible", [
+      "outline: 3px solid var(--amber);",
+      "outline-offset: 4px;",
+    ]);
+    expectCssRule(css, ".skip-link", [
+      "position: fixed;",
+      "z-index: 30;",
+      "top: 12px;",
+      "left: 12px;",
+      "padding: 10px 14px;",
+      "transform: translateY(-200%);",
+      "border-radius: 6px;",
+      "background: var(--amber);",
+      "color: var(--bg);",
+      "font-weight: 800;",
+    ]);
+    expectCssRule(css, ".skip-link:focus, .skip-link:focus-visible", [
+      "transform: translateY(0);",
+    ]);
+    expectCssRule(
+      css,
+      "#hero-title, #roadmap-title, #privacy-title, #terms-title",
+      ["scroll-margin-top: 80px;"],
+    );
+  });
+
+  it("marks current navigation destinations without extra decoration", () => {
+    const css = read("styles.css");
+
+    expectCssRule(
+      css,
+      '.nav-links a[aria-current="page"], .footer-links a[aria-current="page"]',
+      ["color: var(--amber);", "font-weight: 800;"],
+    );
+  });
+
+  it("styles the legal hero and privacy data summary", () => {
+    const css = read("styles.css");
+
+    expectCssRule(css, ".legal-hero", [
+      "padding: 132px 0 48px;",
+      "border-bottom: 1px solid var(--line);",
+    ]);
+    expectCssRule(css, ".legal-hero h1", ["max-width: 850px;"]);
+    expectCssRule(css, ".legal-meta", [
+      "margin-bottom: 0;",
+      "color: var(--muted);",
+      "font-size: 14px;",
+    ]);
+    expectCssRule(css, ".data-grid", [
+      "display: grid;",
+      "grid-template-columns: repeat(3, minmax(0, 1fr));",
+      "gap: 14px;",
+      "margin-top: 34px;",
+    ]);
+    expectCssRule(css, ".data-card", [
+      "padding: 20px;",
+      "border: 1px solid rgba(243, 247, 238, 0.12);",
+      "border-radius: 8px;",
+      "background: rgba(16, 27, 19, 0.78);",
+    ]);
+    expectCssRule(css, ".data-card h2", [
+      "margin-bottom: 10px;",
+      "font-size: 20px;",
+      "line-height: 1.2;",
+    ]);
+    expectCssRule(css, ".data-card p", [
+      "margin-bottom: 0;",
+      "color: var(--muted);",
+      "line-height: 1.55;",
+    ]);
+    expectCssRule(css, ".data-label", [
+      "display: block;",
+      "margin-bottom: 12px;",
+      "color: var(--green);",
+      "font-size: 12px;",
+      "font-weight: 900;",
+      "letter-spacing: 0.08em;",
+      "text-transform: uppercase;",
+    ]);
+  });
+
+  it("styles the legal layout and semantic contents navigation", () => {
+    const css = read("styles.css");
+
+    expectCssRule(css, ".legal-layout", [
+      "display: grid;",
+      "grid-template-columns: 210px minmax(0, 760px);",
+      "gap: 52px;",
+      "align-items: start;",
+      "justify-content: center;",
+    ]);
+    expectCssRule(css, ".legal-toc", [
+      "position: sticky;",
+      "top: 92px;",
+      "padding: 18px;",
+      "border: 1px solid rgba(243, 247, 238, 0.1);",
+      "border-radius: 8px;",
+      "background: rgba(16, 27, 19, 0.72);",
+    ]);
+    expectCssRule(css, ".legal-toc h2", [
+      "display: block;",
+      "margin-bottom: 10px;",
+      "color: var(--text);",
+      "font-size: 13px;",
+    ]);
+    expectCssRule(css, ".legal-toc ul", [
+      "margin: 0;",
+      "padding: 0;",
+      "list-style: none;",
+    ]);
+    expectCssRule(css, ".legal-toc li", ["list-style: none;"]);
+    expectCssRule(css, ".legal-toc a", [
+      "display: block;",
+      "padding: 5px 0;",
+      "color: var(--muted);",
+      "font-size: 13px;",
+      "line-height: 1.35;",
+      "text-decoration: none;",
+    ]);
+    expectCssRule(css, ".legal-toc a:hover, .legal-toc a:focus-visible", [
+      "color: var(--green);",
+    ]);
+  });
+
+  it("styles legal document sections, links, and callouts", () => {
+    const css = read("styles.css");
+
+    expectCssRule(css, ".legal-document", ["min-width: 0;"]);
+    expectCssRule(css, ".legal-section", [
+      "scroll-margin-top: 90px;",
+      "padding: 0 0 34px;",
+    ]);
+    expectCssRule(css, ".legal-section + .legal-section", [
+      "padding-top: 34px;",
+      "border-top: 1px solid rgba(243, 247, 238, 0.1);",
+    ]);
+    expectCssRule(css, ".legal-section h2", [
+      "margin-bottom: 14px;",
+      "font-size: clamp(24px, 3vw, 34px);",
+      "line-height: 1.12;",
+    ]);
+    expectCssRule(css, ".legal-section h3", [
+      "margin: 24px 0 10px;",
+      "font-size: 18px;",
+    ]);
+    expectCssRule(css, ".legal-section p, .legal-section li", [
+      "color: var(--muted);",
+      "font-size: 16px;",
+      "line-height: 1.72;",
+    ]);
+    expectCssRule(css, ".legal-section li + li", ["margin-top: 8px;"]);
+    expectCssRule(css, ".legal-section a", [
+      "color: var(--green);",
+      "text-underline-offset: 3px;",
+    ]);
+    expectCssRule(css, ".legal-callout", [
+      "margin: 22px 0;",
+      "padding: 18px 20px;",
+      "border-left: 3px solid var(--amber);",
+      "background: rgba(255, 178, 62, 0.08);",
+    ]);
+    expectCssRule(css, ".legal-callout p:last-child", ["margin-bottom: 0;"]);
+  });
+
+  it("keeps roadmap heading dimensions and five footer links usable", () => {
+    const css = read("styles.css");
+
+    expectCssRule(css, ".section-head h1, .section-head h2", [
+      "max-width: 680px;",
+      "margin-bottom: 0;",
+      "font-size: clamp(30px, 4vw, 48px);",
+      "line-height: 1.04;",
+      "letter-spacing: 0;",
+    ]);
+    expectCssRule(css, ".footer-links", ["flex-wrap: wrap;"]);
+  });
+
+  it("collapses the legal layout at the approved mobile breakpoint", () => {
+    const css = read("styles.css");
+    const mobile = readCssBlock(css, "@media (max-width: 860px)");
+
+    expect(mobile).toBeDefined();
+    expectCssRule(
+      mobile ?? "",
+      ".status-row, .steps, .feature-grid, .screens, .install, .roadmap-grid, .data-grid",
+      ["grid-template-columns: 1fr;"],
+    );
+    expectCssRule(mobile ?? "", ".legal-hero", ["padding: 108px 0 34px;"]);
+    expectCssRule(mobile ?? "", ".legal-layout", [
+      "grid-template-columns: 1fr;",
+      "gap: 30px;",
+    ]);
+    expectCssRule(mobile ?? "", ".legal-toc", ["position: static;"]);
+  });
+
+  for (const page of ["privacy.html", "terms.html"]) {
+    it(`uses a semantic contents heading and list in ${page}`, () => {
+      const navigations = extractRealElements(read(page), "nav")?.filter(
+        ({ attributes }) => hasClassToken(attributes, "legal-toc"),
+      );
+      expect(navigations).toHaveLength(1);
+
+      const contents = navigations?.[0].innerHtml ?? "";
+      const headings = extractRealElements(contents, "h2");
+      const lists = extractRealElements(contents, "ul");
+      const allLinks = extractRealElements(contents, "a");
+      const listLinks = extractRealElements(lists?.[0]?.innerHtml ?? "", "a");
+      const listItems = extractRealElements(lists?.[0]?.innerHtml ?? "", "li");
+
+      expect(headings).toHaveLength(1);
+      expect(readElementText(headings?.[0].innerHtml ?? "")).toBe("Contents");
+      expect(lists).toHaveLength(1);
+      expect(listItems?.length).toBe(allLinks?.length);
+      expect(
+        listLinks?.map(({ innerHtml }) => readElementText(innerHtml)),
+      ).toEqual(allLinks?.map(({ innerHtml }) => readElementText(innerHtml)));
+    });
+  }
+
+  it("uses divs for the unlabelled privacy layout wrappers", () => {
+    const privacy = read("privacy.html");
+    const divSections = extractRealElements(privacy, "div")?.filter(
+      ({ attributes }) => hasClassToken(attributes, "section"),
+    );
+    const unlabelledSections = extractRealElements(privacy, "section")?.filter(
+      ({ attributes }) => hasClassToken(attributes, "section"),
+    );
+
+    expect(divSections).toHaveLength(1);
+    expect(unlabelledSections).toHaveLength(0);
+  });
+
   it("publishes the custom domain from docs", () => {
     expect(read("CNAME").trim()).toBe("audiobud.amditis.tech");
   });

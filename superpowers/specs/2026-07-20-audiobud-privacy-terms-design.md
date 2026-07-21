@@ -93,6 +93,12 @@ Both pages will reuse the existing colors, fixed header, frog mark, background l
 
 Each page will open with a short summary and a compact contents navigation with a semantic heading and list of links. A non-section wrapper will hold the contents navigation and legal document when that wrapper has no heading. The privacy page will include three fact cards that distinguish data that stays on the device, data sent only after a user action, and GitHub's role as site host. These cards summarize the policy but do not replace the detailed sections.
 
+The legal hero will clear the fixed header and separate itself from the document with the existing line color. Privacy's three fact cards will form a compact grid on wide screens. The main legal layout will center a 210-pixel sticky contents column beside a document column capped at 760 pixels. The contents heading will be an `h2`, its links will be one unmarked list, and hover and keyboard focus will remain readable. Section separators, muted body copy, green underlined links, and amber callouts will use the existing swamp palette.
+
+Global keyboard focus will use a three-pixel amber outline with visible offset. Skip links will stay fixed off-canvas until focused, then appear above the header with an amber background and dark text. The home, roadmap, privacy, and terms heading targets will each clear the 64-pixel fixed header when reached. Current-page header and footer links will use the existing amber color and stronger weight without extra decoration.
+
+At 860 pixels and below, the privacy fact grid and legal layout will collapse to one column, the contents navigation will stop being sticky, and the legal hero will use reduced padding. Footer links will wrap so all five destinations remain usable without horizontal overflow. The roadmap `h1` and existing section `h2` will share the same approved heading dimensions.
+
 Every public page will use its skip link as the first real element child of `body`, before the decorative swamp. Home uses `Skip to main content` with `#hero-title`, roadmap uses `Skip to roadmap` with `#roadmap-title`, privacy uses `Skip to privacy policy` with `#privacy-title`, and terms uses `Skip to terms of use` with `#terms-title`. Each target ID must occur exactly once as a real `id` attribute; comments and quoted lookalikes do not count.
 
 The roadmap's page-level heading will be its only `h1` and will use `id="roadmap-title"`. The privacy and terms footer links will retain `aria-current="page"` on the current policy destination, and the roadmap footer will retain it on Roadmap.
@@ -123,6 +129,9 @@ Before opening the pull request:
 - verify all four pages use their exact custom-domain canonical and Open Graph URLs, shared custom-domain social image URL and alt text, and inline browser favicon;
 - verify each page has exactly one real semantic footer with one `.footer-links` navigation containing Roadmap, Privacy, Terms, Changelog, and GitHub in order;
 - verify each skip link is the first real element child of `body`, each target ID occurs once as a real attribute, and roadmap has one page-level `h1` with `id="roadmap-title"`;
+- verify global focus, skip-link stacking and reveal behavior, all four fixed-header-clearing heading offsets, and visible current-page navigation treatment;
+- verify both policy contents navigations use one semantic `h2` and one `ul`, and privacy's unlabelled layout wrapper is a `div` rather than a `section`;
+- verify the legal hero, summary cards, sticky contents, document sections, links, callouts, shared roadmap heading treatment, wrapping footer links, and 860-pixel one-column rules match the approved layout;
 - verify README contains the exact Website, Privacy, Terms, and Support URLs and no old GitHub Pages project URL;
 - confirm the old GitHub Pages URL redirects to the matching custom-domain path;
 - confirm the custom-domain CNAME, GitHub Pages build status, certificate, and HTTPS redirect; and
