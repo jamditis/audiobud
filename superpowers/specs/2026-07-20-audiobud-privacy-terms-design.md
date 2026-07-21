@@ -66,9 +66,9 @@ The privacy page will use plain language and include:
 
 The terms page will include:
 
-1. An effective date, operator, scope, and acceptance statement.
-2. A clear distinction between these usage terms and the MIT license, which continues to govern copying, modification, and distribution of the source code.
-3. Lawful-use and user-responsibility terms.
+1. An effective date, operator, and scope statement. Acceptance applies to the official project website, release and support pages, and other maintainer-operated surfaces, not to downloading or using the software.
+2. A clear distinction between these website terms and the MIT License. The MIT License governs downloading, using, copying, modifying, and distributing AudioBud software, and nothing in the terms limits MIT permissions.
+3. Factual legal-compliance and user-responsibility statements that do not create software-license restrictions. No-interference and submitted-content rules apply only to project infrastructure, the issue tracker, release pages, and support channels, and do not narrow MIT permissions.
 4. A statement that users retain their content and AudioBud receives no ownership grant for local content.
 5. Terms for optional third-party providers, user-supplied credentials, provider charges, model hosts, and GitHub-hosted downloads.
 6. A warning that transcription and optional AI output can be wrong and must be reviewed before medical, legal, financial, or safety-related use.
@@ -80,7 +80,7 @@ The terms page will include:
 
 Both pages will reuse the existing colors, fixed header, frog mark, background layers, cards, buttons, footer, and reduced-motion behavior. Legal content will use a readable column of about 760 pixels rather than the marketing-page width.
 
-Each page will open with a short summary and a compact contents list. The privacy page will include three fact cards that distinguish data that stays on the device, data sent only after a user action, and GitHub's role as site host. These cards summarize the policy but do not replace the detailed sections.
+Each page will open with a short summary and a compact contents navigation with a semantic heading and list of links. A non-section wrapper will hold the contents navigation and legal document when that wrapper has no heading. The privacy page will include three fact cards that distinguish data that stays on the device, data sent only after a user action, and GitHub's role as site host. These cards summarize the policy but do not replace the detailed sections.
 
 The privacy page will place a `Skip to privacy policy` link to `#privacy-title` before every other focusable body element.
 

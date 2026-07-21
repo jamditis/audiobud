@@ -672,10 +672,23 @@ describe("AudioBud public policy pages", () => {
 
   it("keeps source-code rights under the MIT license", () => {
     const terms = read("terms.html");
+    const termsText = readText("terms.html");
     const normalizedTerms = terms.toLowerCase();
     expect(terms).toContain("MIT License");
     expect(terms).toContain(
       "copying, modifying, or distributing the source code",
+    );
+    expect(termsText).toContain(
+      "The MIT License governs downloading and using copies of AudioBud software",
+    );
+    expect(termsText).toContain(
+      "Nothing in these terms limits permissions granted by the MIT License",
+    );
+    expect(termsText).toContain(
+      "These terms govern the official project website, release and support pages, and other maintainer-operated surfaces",
+    );
+    expect(termsText).toContain(
+      "They do not govern software-license permissions",
     );
     expect(normalizedTerms).not.toContain("class-action waiver");
     expect(normalizedTerms).not.toContain("binding arbitration");

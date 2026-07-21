@@ -706,10 +706,23 @@ describe("AudioBud public policy pages", () => {
 
   it("keeps source-code rights under the MIT license", () => {
     const terms = read("terms.html");
+    const termsText = readText("terms.html");
     const normalizedTerms = terms.toLowerCase();
     expect(terms).toContain("MIT License");
     expect(terms).toContain(
       "copying, modifying, or distributing the source code",
+    );
+    expect(termsText).toContain(
+      "The MIT License governs downloading and using copies of AudioBud software",
+    );
+    expect(termsText).toContain(
+      "Nothing in these terms limits permissions granted by the MIT License",
+    );
+    expect(termsText).toContain(
+      "These terms govern the official project website, release and support pages, and other maintainer-operated surfaces",
+    );
+    expect(termsText).toContain(
+      "They do not govern software-license permissions",
     );
     expect(normalizedTerms).not.toContain("class-action waiver");
     expect(normalizedTerms).not.toContain("binding arbitration");
@@ -927,16 +940,22 @@ Use this hero:
 <p class="eyebrow">Terms</p>
 <h1 id="terms-title">Use AudioBud carefully, lawfully, and on your terms.</h1>
 <p class="lede">
-  AudioBud is free, open-source software for local dictation. These terms cover
-  use of the app, official downloads, and project website. The MIT License still
-  governs the source code.
+  AudioBud is free, open-source software for local dictation. These terms govern
+  the official project website and other maintainer-operated surfaces. The MIT
+  License governs downloading, using, copying, modifying, and distributing
+  AudioBud software.
 </p>
 <p class="legal-meta">Effective July 20, 2026</p>
 ```
 
-Add a contents navigation and these sections:
+Use a non-section layout wrapper around the contents navigation and legal
+document because that wrapper has no heading. Make `Contents` a heading and put
+the stable section links in a list while preserving `.legal-toc`,
+`.legal-document`, `.legal-section`, and the existing anchor targets.
 
-1. `Agreement and scope`: using the app/site means agreeing to the terms; do not use if unable to agree; official surfaces are the repository, releases, and custom domain.
+Add these sections:
+
+1. `Agreement and scope`: the MIT License governs downloading, using, copying, modifying, and distributing AudioBud software. These terms govern the official project website, release and support pages, and other maintainer-operated surfaces, not software-license permissions. Acceptance applies to use of those maintainer-operated surfaces, not use of the app. Official surfaces include the repository, releases, support pages, and custom domain.
 2. `Open-source license`: include this exact statement:
 
 ```html
@@ -948,7 +967,11 @@ Add a contents navigation and these sections:
 </p>
 ```
 
-3. `Using AudioBud`: lawful use; responsibility for microphone permission, device security, credentials, storage, backups, and content; no interference with project infrastructure or unlawful/harmful content.
+Keep that paragraph unchanged. Follow it with a clear statement that the MIT
+License governs downloading and using copies of AudioBud software and that
+nothing in these terms limits permissions granted by the MIT License.
+
+3. `Using AudioBud`: state legal compliance, microphone permissions, device security, credentials, storage, backups, and content as user responsibilities rather than software-license conditions. Apply no-interference and unlawful or harmful submission rules only to project infrastructure, the issue tracker, release pages, and support channels. State that these responsibilities do not narrow MIT permissions.
 4. `Your content`: users keep ownership; the project receives no license to local audio/transcripts because it does not receive them; third-party provider requests follow provider terms.
 5. `Optional providers and costs`: user-selected post-processing provider or custom endpoint; user provides credentials and accepts provider terms/privacy/charges; no AudioBud promise about provider availability or output handling.
 6. `Models, downloads, and third-party components`: models/downloads can be hosted by third parties; third-party licenses/notices apply; verify official release source; no promise every model remains available.
@@ -957,10 +980,11 @@ Add a contents navigation and these sections:
 9. `Availability, updates, and support`: free project with no uptime, update schedule, compatibility, or individual support promise; features can change; current release facts control over roadmap statements.
 10. `No warranty`: use MIT-aligned language: the app/site are provided “as is” and “as available,” without warranties to the extent permitted by law; nothing excludes non-waivable rights.
 11. `Limits on liability`: to extent permitted by law, maintainer/contributors are not liable for indirect, incidental, special, consequential, or lost-data/profit damages; do not exclude liability that cannot be excluded.
-12. `Stopping use and changes`: users can stop at any time; new terms apply prospectively from revised effective date; continued use after publication means acceptance.
+12. `Stopping use and changes`: users can stop using maintainer-operated surfaces at any time; new terms apply prospectively from the revised effective date; continued use of those surfaces after publication means acceptance.
 13. `Contact`: Joe Amditis, AudioBud project maintainer, `mailto:jamditis@gmail.com`.
 
-Do not add arbitration, class-action waiver, indemnity, or governing-law clauses.
+Do not add arbitration, class-action waiver, indemnity, governing-law, venue, or
+jurisdiction clauses, or any new restriction on MIT-licensed software.
 
 - [ ] **Step 3: Run the contract test**
 
@@ -1129,11 +1153,18 @@ Add before the existing responsive block:
   background: rgba(16, 27, 19, 0.72);
 }
 
-.legal-toc strong {
+.legal-toc strong,
+.legal-toc h2 {
   display: block;
   margin-bottom: 10px;
   color: var(--text);
   font-size: 13px;
+}
+
+.legal-toc ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
 .legal-toc a {
