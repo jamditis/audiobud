@@ -69,6 +69,11 @@ The standard, Open Graph, and Twitter description will be:
 maintainer-operated surfaces, not permissions to download, use, modify, or
 distribute AudioBud software.
 
+The Open Graph and Twitter image alt metadata will use
+`AudioBud terms for the official project website and maintainer-operated surfaces.` Each tag must appear once in the first
+real document head. This social description follows the same website-only
+scope.
+
 The terms page will include:
 
 1. An effective date, operator, and scope statement. Acceptance applies to the official project website, release and support pages, and other maintainer-operated surfaces, not to downloading or using the software.

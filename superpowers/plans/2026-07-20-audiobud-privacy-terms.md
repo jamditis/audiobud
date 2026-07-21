@@ -74,6 +74,34 @@ const hasCanonicalRelToken = (value: string | undefined) =>
   value
     .split(/[ \t\n\r\f]+/)
     .some((token) => token.toLowerCase() === "canonical");
+type MetadataIdentity = readonly [
+  attribute: "rel" | "name" | "property",
+  value: string,
+];
+const metadataIdentityRules = [
+  { attribute: "property", value: "og:url" },
+  { attribute: "property", value: "og:image" },
+  { attribute: "property", value: "og:description" },
+  { attribute: "property", value: "og:image:alt" },
+  { attribute: "name", value: "twitter:image" },
+  { attribute: "name", value: "description" },
+  { attribute: "name", value: "twitter:description" },
+  { attribute: "name", value: "twitter:image:alt" },
+] as const;
+const resolveMetadataIdentity = (
+  tag: MetadataTagName,
+  attributes: Record<string, string>,
+): MetadataIdentity | null => {
+  if (tag === "link" && hasCanonicalRelToken(attributes.rel)) {
+    return ["rel", "canonical"];
+  }
+  if (tag !== "meta") return null;
+
+  const rule = metadataIdentityRules.find(
+    ({ attribute, value }) => attributes[attribute] === value,
+  );
+  return rule ? [rule.attribute, rule.value] : null;
+};
 const parseQuotedAttributes = (source: string) => {
   const attributes = new Map<string, string>();
   let cursor = 0;
@@ -263,22 +291,7 @@ const hasTagWithAttributes = (
   const metadataTags = scanMetadataOpeningTags(html);
   if (!metadataTags) return false;
 
-  const identity =
-    tag === "link" && hasCanonicalRelToken(attributes.rel)
-      ? (["rel", "canonical"] as const)
-      : tag === "meta" &&
-          (attributes.property === "og:url" ||
-            attributes.property === "og:image")
-        ? (["property", attributes.property] as const)
-        : tag === "meta" && attributes.name === "twitter:image"
-          ? (["name", "twitter:image"] as const)
-          : tag === "meta" && attributes.name === "description"
-            ? (["name", "description"] as const)
-            : tag === "meta" && attributes.property === "og:description"
-              ? (["property", "og:description"] as const)
-              : tag === "meta" && attributes.name === "twitter:description"
-                ? (["name", "twitter:description"] as const)
-                : null;
+  const identity = resolveMetadataIdentity(tag, attributes);
   if (!identity) return false;
 
   const candidates = metadataTags.filter(
@@ -716,6 +729,8 @@ describe("AudioBud public policy pages", () => {
     const normalizedTerms = terms.toLowerCase();
     const termsDescription =
       "Terms for AudioBud's official project website, release pages, support channels, and other maintainer-operated surfaces.";
+    const termsImageAlt =
+      "AudioBud terms for the official project website and maintainer-operated surfaces.";
     expectTagWithAttributes(terms, "meta", {
       name: "description",
       content: termsDescription,
@@ -727,6 +742,14 @@ describe("AudioBud public policy pages", () => {
     expectTagWithAttributes(terms, "meta", {
       name: "twitter:description",
       content: termsDescription,
+    });
+    expectTagWithAttributes(terms, "meta", {
+      property: "og:image:alt",
+      content: termsImageAlt,
+    });
+    expectTagWithAttributes(terms, "meta", {
+      name: "twitter:image:alt",
+      content: termsImageAlt,
     });
     expect(terms).toContain("MIT License");
     expect(terms).toContain(
@@ -758,7 +781,7 @@ Run:
 bun test scripts/legal-pages.test.ts
 ```
 
-Expected at this checkpoint: FAIL with 30 helper and contract checks passing and 13 contract checks failing. The failures cover missing policy pages and content, including the website-scoped terms metadata, the missing privacy skip link, mode-by-mode transcript-delivery disclosure, and personalization-choice disclosure, the old origin in `docs/index.html` and `docs/roadmap.html` metadata, and pending privacy and terms links across the public pages.
+Expected at this checkpoint: FAIL with 30 helper and contract checks passing and 13 contract checks failing. The failures cover missing policy pages and content, including the website-scoped terms descriptions and social image alt metadata, the missing privacy skip link, mode-by-mode transcript-delivery disclosure, and personalization-choice disclosure, the old origin in `docs/index.html` and `docs/roadmap.html` metadata, and pending privacy and terms links across the public pages.
 
 - [ ] **Step 3: Commit the failing contract**
 
@@ -948,6 +971,13 @@ Reuse the privacy-page shell. Set the canonical URL to `https://audiobud.amditis
 
 ```text
 Terms for AudioBud's official project website, release pages, support channels, and other maintainer-operated surfaces.
+```
+
+Include exactly one `og:image:alt` tag and one `twitter:image:alt` tag in the
+first real document head. Use this exact content for both:
+
+```text
+AudioBud terms for the official project website and maintainer-operated surfaces.
 ```
 
 Set `aria-current="page"` on the Terms navigation and footer link.
