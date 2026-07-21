@@ -695,8 +695,25 @@ describe("AudioBud public policy pages", () => {
     const normalizedTerms = terms.toLowerCase();
     const termsDescription =
       "Terms for AudioBud's official project website, release pages, support channels, and other maintainer-operated surfaces.";
-    const termsImageAlt =
-      "AudioBud terms for the official project website and maintainer-operated surfaces.";
+    const termsImageAlt = "AudioBud local dictation for Windows app interface";
+    expect(termsText).toContain(
+      "The MIT License's warranty terms govern AudioBud software.",
+    );
+    expect(termsText).toContain(
+      'The official project website and other maintainer-operated surfaces are provided "as is" and "as available," without warranties to the extent permitted by law.',
+    );
+    expect(termsText).toContain(
+      "The MIT License's liability terms govern AudioBud software.",
+    );
+    expect(termsText).toContain(
+      "indirect, incidental, special, consequential, lost-data, or lost-profit damages arising from the official project website or other maintainer-operated surfaces",
+    );
+    expect(termsText).not.toContain(
+      'The app and project website are provided "as is"',
+    );
+    expect(termsText).not.toContain(
+      "damages arising from AudioBud or the project website",
+    );
     expectTagWithAttributes(terms, "meta", {
       name: "description",
       content: termsDescription,

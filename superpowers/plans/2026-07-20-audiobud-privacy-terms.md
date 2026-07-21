@@ -729,8 +729,25 @@ describe("AudioBud public policy pages", () => {
     const normalizedTerms = terms.toLowerCase();
     const termsDescription =
       "Terms for AudioBud's official project website, release pages, support channels, and other maintainer-operated surfaces.";
-    const termsImageAlt =
-      "AudioBud terms for the official project website and maintainer-operated surfaces.";
+    const termsImageAlt = "AudioBud local dictation for Windows app interface";
+    expect(termsText).toContain(
+      "The MIT License's warranty terms govern AudioBud software.",
+    );
+    expect(termsText).toContain(
+      'The official project website and other maintainer-operated surfaces are provided "as is" and "as available," without warranties to the extent permitted by law.',
+    );
+    expect(termsText).toContain(
+      "The MIT License's liability terms govern AudioBud software.",
+    );
+    expect(termsText).toContain(
+      "indirect, incidental, special, consequential, lost-data, or lost-profit damages arising from the official project website or other maintainer-operated surfaces",
+    );
+    expect(termsText).not.toContain(
+      'The app and project website are provided "as is"',
+    );
+    expect(termsText).not.toContain(
+      "damages arising from AudioBud or the project website",
+    );
     expectTagWithAttributes(terms, "meta", {
       name: "description",
       content: termsDescription,
@@ -781,7 +798,7 @@ Run:
 bun test scripts/legal-pages.test.ts
 ```
 
-Expected at this checkpoint: FAIL with 30 helper and contract checks passing and 13 contract checks failing. The failures cover missing policy pages and content, including the website-scoped terms descriptions and social image alt metadata, the missing privacy skip link, mode-by-mode transcript-delivery disclosure, and personalization-choice disclosure, the old origin in `docs/index.html` and `docs/roadmap.html` metadata, and pending privacy and terms links across the public pages.
+Expected at this checkpoint: FAIL with 30 helper and contract checks passing and 13 contract checks failing. The failures cover missing policy pages and content, including MIT-controlled software warranty and liability terms, website-scoped disclaimers, and accurate social image alt metadata, the missing privacy skip link, mode-by-mode transcript-delivery disclosure, and personalization-choice disclosure, the old origin in `docs/index.html` and `docs/roadmap.html` metadata, and pending privacy and terms links across the public pages.
 
 - [ ] **Step 3: Commit the failing contract**
 
@@ -977,7 +994,7 @@ Include exactly one `og:image:alt` tag and one `twitter:image:alt` tag in the
 first real document head. Use this exact content for both:
 
 ```text
-AudioBud terms for the official project website and maintainer-operated surfaces.
+AudioBud local dictation for Windows app interface
 ```
 
 Set `aria-current="page"` on the Terms navigation and footer link.
@@ -1028,8 +1045,8 @@ nothing in these terms limits permissions granted by the MIT License.
 7. `Transcription and AI output`: output can be incomplete or wrong; review before use; do not rely without qualified human review for medical, legal, financial, emergency, accessibility, or other safety-related decisions.
 8. `Privacy`: link `./privacy.html`; explain local-first boundary and third-party policy responsibility.
 9. `Availability, updates, and support`: free project with no uptime, update schedule, compatibility, or individual support promise; features can change; current release facts control over roadmap statements.
-10. `No warranty`: use MIT-aligned language: the app/site are provided “as is” and “as available,” without warranties to the extent permitted by law; nothing excludes non-waivable rights.
-11. `Limits on liability`: to extent permitted by law, maintainer/contributors are not liable for indirect, incidental, special, consequential, or lost-data/profit damages; do not exclude liability that cannot be excluded.
+10. `No warranty`: state that the MIT License's warranty terms govern AudioBud software. Apply the “as is” and “as available” disclaimer only to the official project website and other maintainer-operated surfaces, to the extent permitted by law, and preserve non-waivable rights.
+11. `Limits on liability`: state that the MIT License's liability terms govern AudioBud software. Apply the indirect, incidental, special, consequential, lost-data, and lost-profit limit only to the official project website and other maintainer-operated surfaces, to the extent permitted by law, and preserve liability that cannot be excluded.
 12. `Stopping use and changes`: users can stop using maintainer-operated surfaces at any time; new terms apply prospectively from the revised effective date; continued use of those surfaces after publication means acceptance.
 13. `Contact`: Joe Amditis, AudioBud project maintainer, `mailto:jamditis@gmail.com`.
 
@@ -1128,7 +1145,35 @@ Add near the base link rules:
   outline: 3px solid var(--amber);
   outline-offset: 4px;
 }
+
+.skip-link {
+  position: fixed;
+  z-index: 30;
+  top: 12px;
+  left: 12px;
+  padding: 10px 14px;
+  transform: translateY(-200%);
+  border-radius: 6px;
+  background: var(--amber);
+  color: var(--bg);
+  font-weight: 800;
+}
+
+.skip-link:focus,
+.skip-link:focus-visible {
+  transform: translateY(0);
+}
+
+#privacy-title,
+#terms-title {
+  scroll-margin-top: 80px;
+}
 ```
+
+The skip link must remain off-canvas until focused, then become fully visible
+above the fixed header (`z-index: 20`) with readable contrast and the global
+focus outline. The title offset must clear the 64px fixed header plus spacing
+when a skip or fragment link targets either heading.
 
 - [ ] **Step 2: Add the legal layout styles**
 

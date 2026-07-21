@@ -70,9 +70,9 @@ maintainer-operated surfaces, not permissions to download, use, modify, or
 distribute AudioBud software.
 
 The Open Graph and Twitter image alt metadata will use
-`AudioBud terms for the official project website and maintainer-operated surfaces.` Each tag must appear once in the first
-real document head. This social description follows the same website-only
-scope.
+`AudioBud local dictation for Windows app interface`. Each tag must appear once
+in the first real document head. This text describes the shared image itself,
+not the terms page's legal scope.
 
 The terms page will include:
 
@@ -83,7 +83,7 @@ The terms page will include:
 5. Terms for optional third-party providers, user-supplied credentials, provider charges, model hosts, and GitHub-hosted downloads.
 6. A warning that transcription and optional AI output can be wrong and must be reviewed before medical, legal, financial, or safety-related use.
 7. Availability, updates, support, and policy-change language that makes no uptime or support promise.
-8. MIT-aligned warranty and liability language qualified by applicable law.
+8. Warranty and liability language that defers AudioBud software terms to the MIT License. Separate permitted-law disclaimers and limits apply only to the official project website and other maintainer-operated surfaces, while preserving non-waivable rights and non-excludable liability.
 9. A contact section and a link to the privacy page.
 
 ## Page design
