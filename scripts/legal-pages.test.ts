@@ -995,6 +995,28 @@ describe("AudioBud public policy pages", () => {
     expectCssRule(mobile ?? "", ".legal-toc", ["position: static;"]);
   });
 
+  it("disables smooth scrolling when reduced motion is requested", () => {
+    const css = read("styles.css");
+    const reducedMotion = readCssBlock(
+      css,
+      "@media (prefers-reduced-motion: reduce)",
+    );
+
+    expect(reducedMotion).toBeDefined();
+    expectCssRule(reducedMotion ?? "", "html", ["scroll-behavior: auto;"]);
+  });
+
+  it("keeps legal contents reachable in short desktop viewports", () => {
+    const css = read("styles.css");
+    const shortDesktop = readCssBlock(
+      css,
+      "@media (min-width: 861px) and (max-height: 760px)",
+    );
+
+    expect(shortDesktop).toBeDefined();
+    expectCssRule(shortDesktop ?? "", ".legal-toc", ["position: static;"]);
+  });
+
   for (const page of ["privacy.html", "terms.html"]) {
     it(`uses a semantic contents heading and list in ${page}`, () => {
       const navigations = extractRealElements(read(page), "nav")?.filter(
@@ -1120,6 +1142,12 @@ describe("AudioBud public policy pages", () => {
     it(`starts ${page.name} with the skip link as the first body element`, () => {
       const html = read(page.name);
       const firstElement = getFirstRealBodyElement(html);
+      const targetHeadings = scanRealDocumentTags(html)?.filter(
+        ({ attributes, isClosing, name }) =>
+          !isClosing &&
+          name === "h1" &&
+          attributes.get("id") === page.headingId,
+      );
 
       expect(firstElement?.name).toBe("a");
       expect(
@@ -1130,6 +1158,8 @@ describe("AudioBud public policy pages", () => {
         page.skipLabel,
       );
       expect(countRealIdAttributes(html, page.headingId)).toBe(1);
+      expect(targetHeadings).toHaveLength(1);
+      expect(targetHeadings?.[0].attributes.get("tabindex")).toBe("-1");
     });
   }
 

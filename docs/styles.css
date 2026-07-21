@@ -809,6 +809,12 @@ pre {
   }
 }
 
+@media (min-width: 861px) and (max-height: 760px) {
+  .legal-toc {
+    position: static;
+  }
+}
+
 /* Swamp ambiance. Two decorative layers, both pointer-transparent and
    motion-reduced aware: drifting mist sits behind everything (body::before,
    z-index -1) so it never washes out text; the fireflies are a thin
@@ -907,6 +913,10 @@ body::before {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
   body::before {
     animation: none;
   }

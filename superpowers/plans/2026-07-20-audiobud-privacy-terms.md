@@ -1029,6 +1029,28 @@ describe("AudioBud public policy pages", () => {
     expectCssRule(mobile ?? "", ".legal-toc", ["position: static;"]);
   });
 
+  it("disables smooth scrolling when reduced motion is requested", () => {
+    const css = read("styles.css");
+    const reducedMotion = readCssBlock(
+      css,
+      "@media (prefers-reduced-motion: reduce)",
+    );
+
+    expect(reducedMotion).toBeDefined();
+    expectCssRule(reducedMotion ?? "", "html", ["scroll-behavior: auto;"]);
+  });
+
+  it("keeps legal contents reachable in short desktop viewports", () => {
+    const css = read("styles.css");
+    const shortDesktop = readCssBlock(
+      css,
+      "@media (min-width: 861px) and (max-height: 760px)",
+    );
+
+    expect(shortDesktop).toBeDefined();
+    expectCssRule(shortDesktop ?? "", ".legal-toc", ["position: static;"]);
+  });
+
   for (const page of ["privacy.html", "terms.html"]) {
     it(`uses a semantic contents heading and list in ${page}`, () => {
       const navigations = extractRealElements(read(page), "nav")?.filter(
@@ -1154,6 +1176,12 @@ describe("AudioBud public policy pages", () => {
     it(`starts ${page.name} with the skip link as the first body element`, () => {
       const html = read(page.name);
       const firstElement = getFirstRealBodyElement(html);
+      const targetHeadings = scanRealDocumentTags(html)?.filter(
+        ({ attributes, isClosing, name }) =>
+          !isClosing &&
+          name === "h1" &&
+          attributes.get("id") === page.headingId,
+      );
 
       expect(firstElement?.name).toBe("a");
       expect(
@@ -1164,6 +1192,8 @@ describe("AudioBud public policy pages", () => {
         page.skipLabel,
       );
       expect(countRealIdAttributes(html, page.headingId)).toBe(1);
+      expect(targetHeadings).toHaveLength(1);
+      expect(targetHeadings?.[0].attributes.get("tabindex")).toBe("-1");
     });
   }
 
@@ -1635,7 +1665,10 @@ git commit -m "docs: align public navigation semantics"
 **Files:**
 
 - Modify: `docs/styles.css`
+- Modify: `docs/index.html` (skip target attribute only)
+- Modify: `docs/roadmap.html` (skip target attribute only)
 - Modify: `docs/privacy.html` (semantic contents markup only)
+- Modify: `docs/terms.html` (skip target attribute only)
 - Modify: `scripts/legal-pages.test.ts`
 - Modify: `superpowers/plans/2026-07-20-audiobud-privacy-terms.md`
 - Modify: `superpowers/specs/2026-07-20-audiobud-privacy-terms-design.md`
@@ -1648,7 +1681,9 @@ fixed skip-link behavior, all four fixed-header-clearing title offsets, current
 navigation treatment, every approved legal layout selector, the roadmap `h1`
 heading treatment, wrapping footer links, the 860px mobile collapse, semantic
 contents headings and lists on both policy pages, and privacy's non-section
-layout wrapper.
+layout wrapper. Also require all four `h1` skip targets to retain their unique
+IDs and use `tabindex="-1"`, reduced-motion preferences to disable smooth
+scrolling, and short desktop viewports to disable the sticky legal contents.
 
 Run:
 
@@ -1656,10 +1691,10 @@ Run:
 bun test scripts/legal-pages.test.ts
 ```
 
-Expected at this checkpoint: FAIL with 55 checks passing and 9 checks failing.
-The seven CSS contract groups fail because the task 5 rules are absent, and the
-two privacy semantic checks fail because its contents heading/list and outer
-layout wrapper still use the old markup. The terms semantic check passes.
+Expected at the accessibility checkpoint: FAIL with 60 checks passing and 6
+checks failing. The reduced-motion and short-desktop CSS contracts fail, and
+each of the four page checks fails on its missing `tabindex="-1"` target. The
+repository-defined full suite reports 131 passing and the same 6 failures.
 
 - [ ] **Step 2: Update the approved plan and design notes**
 
@@ -1667,7 +1702,9 @@ Keep the task 1 test block byte-for-byte aligned with
 `scripts/legal-pages.test.ts`. Record the fixed-header focus behavior, current
 page treatment, legal layout selectors, one-column mobile behavior, wrapped
 five-link footer, shared roadmap heading dimensions, and semantic contents
-markup in the approved design.
+markup in the approved design. Record programmatic skip targets,
+reduced-motion scrolling, and short-viewport contents access as accessibility
+requirements.
 
 - [ ] **Step 3: Add visible focus behavior**
 
@@ -1716,6 +1753,9 @@ above the fixed header (`z-index: 20`) with readable contrast and the global
 focus outline. The title offset must clear the 64px fixed header plus spacing
 when a skip or fragment link targets any page heading. Current-page links use
 color and weight from the existing palette without added decoration.
+Each corresponding page-level `h1` must retain its existing ID, text, and level
+and add `tabindex="-1"` so skip-link activation moves programmatic focus to the
+target without placing it in the normal Tab order.
 
 - [ ] **Step 4: Add the legal layout styles**
 
@@ -1901,6 +1941,26 @@ Inside `@media (max-width: 860px)`, include `.data-grid` in the existing one-col
 }
 ```
 
+Outside the max-width block, disable sticky contents for short desktop and
+landscape viewports without adding a nested scrolling region:
+
+```css
+@media (min-width: 861px) and (max-height: 760px) {
+  .legal-toc {
+    position: static;
+  }
+}
+```
+
+Inside the existing reduced-motion query, preserve the ambiance overrides and
+add:
+
+```css
+html {
+  scroll-behavior: auto;
+}
+```
+
 - [ ] **Step 6: Match the privacy contents semantics to terms**
 
 Change only the unlabelled outer `.section` wrapper from `section` to `div`,
@@ -1914,24 +1974,25 @@ Run:
 
 ```powershell
 bun test scripts/legal-pages.test.ts
-bun test
+bun run test
 bunx tsc --noEmit
-bunx prettier --check docs/styles.css docs/privacy.html scripts/legal-pages.test.ts superpowers/plans/2026-07-20-audiobud-privacy-terms.md superpowers/specs/2026-07-20-audiobud-privacy-terms-design.md
+bunx prettier --check docs/styles.css docs/index.html docs/roadmap.html docs/privacy.html docs/terms.html scripts/legal-pages.test.ts superpowers/plans/2026-07-20-audiobud-privacy-terms.md superpowers/specs/2026-07-20-audiobud-privacy-terms-design.md
 git diff --check
 ```
 
-Expected at the focused checkpoint: PASS with 64 checks passing and 0 failing.
-The full suite, TypeScript compiler, formatter, and whitespace check must also
-exit 0. Inspect the CSS for duplicate or conflicting selectors, header/skip-link
-stacking, small-screen overflow, and compatibility with the existing
-reduced-motion rules.
+Expected at the focused checkpoint: PASS with 66 checks passing and 0 failing.
+The repository-defined full suite passes 137 checks with 0 failures. The
+TypeScript compiler, formatter, and whitespace check must also exit 0. Inspect
+the CSS for duplicate or conflicting selectors, header/skip-link stacking,
+small-screen overflow, short-viewport contents access, and compatibility with
+the existing reduced-motion rules.
 
 - [ ] **Step 8: Format the touched files**
 
 Run:
 
 ```powershell
-bunx prettier --write docs/styles.css docs/privacy.html scripts/legal-pages.test.ts superpowers/specs/2026-07-20-audiobud-privacy-terms-design.md superpowers/plans/2026-07-20-audiobud-privacy-terms.md
+bunx prettier --write docs/styles.css docs/index.html docs/roadmap.html docs/privacy.html docs/terms.html scripts/legal-pages.test.ts superpowers/specs/2026-07-20-audiobud-privacy-terms-design.md superpowers/plans/2026-07-20-audiobud-privacy-terms.md
 ```
 
 Expected: command exits 0 and only the listed files are formatted.
@@ -1939,8 +2000,8 @@ Expected: command exits 0 and only the listed files are formatted.
 - [ ] **Step 9: Commit the legal-page presentation**
 
 ```powershell
-git add -- docs/styles.css docs/privacy.html scripts/legal-pages.test.ts superpowers/plans/2026-07-20-audiobud-privacy-terms.md superpowers/specs/2026-07-20-audiobud-privacy-terms-design.md
-git commit -m "docs: style policy pages for clear reading"
+git add -- docs/styles.css docs/index.html docs/roadmap.html docs/privacy.html docs/terms.html scripts/legal-pages.test.ts superpowers/plans/2026-07-20-audiobud-privacy-terms.md superpowers/specs/2026-07-20-audiobud-privacy-terms-design.md
+git commit -m "docs: harden policy navigation behavior"
 ```
 
 ### Task 6: Verify the pages and publish the review PR
@@ -1975,7 +2036,18 @@ Open and inspect:
 - `http://127.0.0.1:4173/privacy.html`
 - `http://127.0.0.1:4173/terms.html`
 
-Check each page at 1440×1000 and 390×844. Verify readable line length, no horizontal overflow, visible focus, working contents links, correct `aria-current`, working footer links, and reduced-motion behavior. Stop the server after inspection:
+Check each page at 1440×1000 and 390×844, plus a legal page at 1024×600.
+Use browser-computed styles and keyboard interaction to verify:
+
+- reduced-motion emulation yields `scroll-behavior: auto` on `html`;
+- a 1024×600 or similar short landscape viewport yields a non-sticky legal contents navigation and every contents link remains reachable through normal page scrolling;
+- the desktop legal grid and mobile one-column layout are the effective computed styles at their intended widths;
+- the focused skip link is visible above the fixed header, activating it moves focus to the matching `tabindex="-1"` heading, and the next Tab proceeds into main content instead of repeating navigation; and
+- no later CSS rule overrides the intended focus outline, heading offset, contents positioning, or mobile behavior.
+
+Also verify readable line length, no horizontal overflow, correct
+`aria-current`, working footer links, and unchanged page content. Stop the
+server after inspection:
 
 ```powershell
 Stop-Process -Id $server.Id
