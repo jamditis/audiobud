@@ -68,6 +68,7 @@ all times remain with Princeton University and LICENSEE agrees to preserve same.
 
 ### Ispell
 
+```text
 Copyright 1993, Geoff Kuenning, Granada Hills, CA. All rights reserved.
 
 Redistribution and use in source and binary forms, with or without modification,
@@ -97,6 +98,7 @@ LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
 ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+```
 
 ## Microsoft Visual C++ runtime
 

@@ -977,6 +977,9 @@ fn is_learnable_substitution(from: &str, to: &str) -> bool {
 /// reorder. A candidate must clear every guard in `is_learnable_substitution`;
 /// if the same heard word was corrected to two different words, none of its
 /// pairs are learned. Duplicates collapse to a single pair.
+/// `preceding_replacements` must contain the user-authored and already-learned rules in their
+/// production order. It lets the extractor reject a new rule that would add a cascade to an
+/// earlier target when the caller appends the returned rules.
 ///
 /// The result is deterministic and does no I/O, so it is unit-tested in
 /// `audio_toolkit` without a running app. Capturing the correction and appending
@@ -986,17 +989,25 @@ fn is_learnable_substitution(from: &str, to: &str) -> bool {
 /// a non-English grammar edit (French `la`->`le`) still passes every guard.
 /// The fix needs the dictation language, which this pure function does not receive; it is
 /// tracked for the parts-1/3 wiring in issue #126.
-pub fn extract_learned_replacements(original: &str, corrected: &str) -> Vec<WordReplacement> {
+pub fn extract_learned_replacements(
+    original: &str,
+    corrected: &str,
+    preceding_replacements: &[WordReplacement],
+) -> Vec<WordReplacement> {
     let orig: Vec<&str> = original.split_whitespace().collect();
     let corr: Vec<&str> = corrected.split_whitespace().collect();
 
-    // The LCS table below is O(n*m). A correction comes from an ordinary
-    // dictation, so cap the token count and learn nothing past it rather than let
-    // a pathological paste allocate a quadratic table on a memory-constrained
-    // device -- precision-safe degradation, in keeping with "a missed pair beats
-    // a wrong one."
+    // The LCS table below is O(n*m). Cap both the individual dimensions and their product so a
+    // long paste cannot allocate or traverse a disproportionate table on a constrained device.
+    // Learning nothing past either bound is precision-safe degradation: a missed pair beats a
+    // wrong one.
     const MAX_TOKENS: usize = 4096;
-    if orig.len() > MAX_TOKENS || corr.len() > MAX_TOKENS {
+    const MAX_LCS_CELLS: usize = 1_000_000;
+    let lcs_cells = (orig.len() + 1).checked_mul(corr.len() + 1);
+    if orig.len() > MAX_TOKENS
+        || corr.len() > MAX_TOKENS
+        || lcs_cells.is_none_or(|cells| cells > MAX_LCS_CELLS)
+    {
         return Vec::new();
     }
 
@@ -1112,15 +1123,24 @@ pub fn extract_learned_replacements(original: &str, corrected: &str) -> Vec<Word
             });
         }
     }
-    // Replacements run sequentially in this order. Reject the whole batch if any later rule would
-    // rewrite an earlier rule's target, including a target compound such as `bar-baz`. This uses
-    // the production matcher so the safety check has exactly the same whole-word and case rules.
-    if out
-        .iter()
-        .enumerate()
-        .any(|(index, rule)| apply_replacements(&rule.to, &out[index + 1..]) != rule.to)
-    {
-        return Vec::new();
+    // Replacements run sequentially. Compare the effective production list before and after this
+    // batch so a new rule cannot introduce a cascade from an existing target, while an unrelated
+    // new correction is not blocked by a user-authored cascade that already existed. New targets
+    // must themselves remain stable through every later new rule. The production matcher keeps
+    // whole-word and case behavior identical to runtime application.
+    let mut combined = Vec::with_capacity(preceding_replacements.len() + out.len());
+    combined.extend_from_slice(preceding_replacements);
+    combined.extend(out.iter().cloned());
+    for (index, rule) in combined.iter().enumerate() {
+        let after = apply_replacements(&rule.to, &combined[index + 1..]);
+        if index < preceding_replacements.len() {
+            let before = apply_replacements(&rule.to, &preceding_replacements[index + 1..]);
+            if after != before {
+                return Vec::new();
+            }
+        } else if after != rule.to {
+            return Vec::new();
+        }
     }
 
     out
@@ -1129,6 +1149,10 @@ pub fn extract_learned_replacements(original: &str, corrected: &str) -> Vec<Word
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn extract_learned_replacements(original: &str, corrected: &str) -> Vec<WordReplacement> {
+        super::extract_learned_replacements(original, corrected, &[])
+    }
 
     fn learned_pairs(v: &[WordReplacement]) -> Vec<(String, String)> {
         v.iter().map(|r| (r.from.clone(), r.to.clone())).collect()
@@ -1378,6 +1402,54 @@ mod tests {
         assert!(extract_learned_replacements("run prent today", "run print() today").is_empty());
         assert!(extract_learned_replacements("ask dokter tomorrow", "ask Dr. tomorrow").is_empty());
         assert!(extract_learned_replacements("run prent.", "run print().").is_empty());
+    }
+
+    #[test]
+    fn extractor_rejects_a_rule_that_would_cascade_from_a_preceding_target() {
+        let preceding = vec![repl("foo", "bar-baz")];
+        assert!(
+            super::extract_learned_replacements("use bar today", "use qux today", &preceding)
+                .is_empty()
+        );
+
+        // An old user-authored cascade does not block an unrelated learned correction: compare
+        // behavior before and after this batch instead of requiring the old list to be pristine.
+        let already_cascading = vec![repl("foo", "bar"), repl("bar", "baz")];
+        let unrelated = super::extract_learned_replacements(
+            "ask clawd today",
+            "ask Claude today",
+            &already_cascading,
+        );
+        assert_eq!(
+            learned_pairs(&unrelated),
+            vec![("clawd".to_string(), "Claude".to_string())]
+        );
+
+        // Earlier rules do not revisit a target emitted by a later rule, so this ordering is safe.
+        let earlier_bar_rule = vec![repl("bar", "qux")];
+        let later_compound = super::extract_learned_replacements(
+            "use foo today",
+            "use bar-baz today",
+            &earlier_bar_rule,
+        );
+        assert_eq!(
+            learned_pairs(&later_compound),
+            vec![("foo".to_string(), "bar-baz".to_string())]
+        );
+    }
+
+    #[test]
+    fn extractor_rejects_an_lcs_table_above_the_cell_budget() {
+        let original = std::iter::repeat_n("same", 1_000)
+            .chain(std::iter::once("clawd"))
+            .collect::<Vec<_>>()
+            .join(" ");
+        let corrected = std::iter::repeat_n("same", 1_000)
+            .chain(std::iter::once("Claude"))
+            .collect::<Vec<_>>()
+            .join(" ");
+
+        assert!(extract_learned_replacements(&original, &corrected).is_empty());
     }
 
     #[test]
