@@ -4,7 +4,10 @@ AudioBud is a local-first dictation app for Windows. Hold a hotkey, speak, and A
 
 AudioBud is a detached fork of [Handy](https://github.com/cjpais/Handy) by CJ Pais. It keeps Handy's Tauri, Rust, React, and local transcription base while adding AudioBud defaults, a dark frog/swamp interface, a Windows-first release path, and local model choices tuned for this fork.
 
-- **Website:** <https://jamditis.github.io/audiobud/>
+- **Website:** <https://audiobud.amditis.tech/>
+- **Privacy:** <https://audiobud.amditis.tech/privacy.html>
+- **Terms:** <https://audiobud.amditis.tech/terms.html>
+- **Support:** <https://github.com/jamditis/audiobud/issues>
 - **Download:** [latest release](https://github.com/jamditis/audiobud/releases/latest)
 - **Changelog:** [CHANGELOG.md](CHANGELOG.md)
 
