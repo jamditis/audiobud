@@ -64,6 +64,11 @@ const isTagNameCharacter = (character: string | undefined) =>
   (character !== undefined && /[0-9:-]/.test(character));
 const isTagNameDelimiter = (character: string | undefined) =>
   isHtmlAsciiWhitespace(character) || character === "/" || character === ">";
+const hasCanonicalRelToken = (value: string | undefined) =>
+  value !== undefined &&
+  value
+    .split(/[ \t\n\r\f]+/)
+    .some((token) => token.toLowerCase() === "canonical");
 const parseQuotedAttributes = (source: string) => {
   const attributes = new Map<string, string>();
   let cursor = 0;
@@ -254,7 +259,7 @@ const hasTagWithAttributes = (
   if (!metadataTags) return false;
 
   const identity =
-    tag === "link" && attributes.rel === "canonical"
+    tag === "link" && hasCanonicalRelToken(attributes.rel)
       ? (["rel", "canonical"] as const)
       : tag === "meta" &&
           (attributes.property === "og:url" ||
@@ -268,14 +273,17 @@ const hasTagWithAttributes = (
   const candidates = metadataTags.filter(
     (candidate) =>
       candidate.name === tag &&
-      candidate.attributes.get(identity[0]) === identity[1],
+      (identity[0] === "rel"
+        ? hasCanonicalRelToken(candidate.attributes.get("rel"))
+        : candidate.attributes.get(identity[0]) === identity[1]),
   );
   return (
     candidates.length === 1 &&
     candidates[0].isInFirstHead &&
-    Object.entries(attributes).every(
-      ([name, value]) =>
-        candidates[0].attributes.get(name.toLowerCase()) === value,
+    Object.entries(attributes).every(([name, value]) =>
+      tag === "link" && name.toLowerCase() === "rel"
+        ? hasCanonicalRelToken(candidates[0].attributes.get("rel"))
+        : candidates[0].attributes.get(name.toLowerCase()) === value,
     )
   );
 };
@@ -469,6 +477,26 @@ describe("Metadata tag matcher", () => {
     ).toBe(false);
   });
 
+  it("rejects an uppercase canonical conflict", () => {
+    expect(
+      hasTagWithAttributes(
+        '<head><link rel="canonical" href="https://example.com/page" /><link rel="CANONICAL" href="https://example.com/wrong" /></head>',
+        "link",
+        { rel: "canonical", href: "https://example.com/page" },
+      ),
+    ).toBe(false);
+  });
+
+  it("rejects a multi-token canonical conflict", () => {
+    expect(
+      hasTagWithAttributes(
+        '<head><link rel="canonical" href="https://example.com/page" /><link rel="alternate canonical" href="https://example.com/wrong" /></head>',
+        "link",
+        { rel: "canonical", href: "https://example.com/page" },
+      ),
+    ).toBe(false);
+  });
+
   it("rejects a conflicting Open Graph URL before the expected tag", () => {
     expect(
       hasTagWithAttributes(
@@ -641,7 +669,7 @@ Run:
 bun test scripts/legal-pages.test.ts
 ```
 
-Expected at this checkpoint: FAIL with 28 helper and contract checks passing and 10 contract checks failing. The failures cover missing policy pages and content, the old origin in `docs/index.html` and `docs/roadmap.html` metadata, and pending privacy and terms links across the public pages.
+Expected at this checkpoint: FAIL with 30 helper and contract checks passing and 10 contract checks failing. The failures cover missing policy pages and content, the old origin in `docs/index.html` and `docs/roadmap.html` metadata, and pending privacy and terms links across the public pages.
 
 - [ ] **Step 3: Commit the failing contract**
 
