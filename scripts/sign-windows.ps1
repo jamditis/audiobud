@@ -18,10 +18,6 @@ $resolvedPath = (Get-Item -LiteralPath $Path).FullName
 $fileName = [System.IO.Path]::GetFileName($resolvedPath)
 $isApplication = $fileName -ieq "audiobud.exe"
 
-if ($TauriNsisUninstaller -and [System.IO.Path]::GetExtension($resolvedPath) -ine ".exe") {
-  throw "The NSIS uninstaller signing input must be an executable: $resolvedPath"
-}
-
 if (-not $isApplication -and -not $TauriNsisUninstaller) {
   Write-Output "Skipping Tauri signing input: $fileName"
   exit 0

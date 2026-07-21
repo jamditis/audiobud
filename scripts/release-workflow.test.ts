@@ -202,6 +202,18 @@ describe("Windows release signing workflow", () => {
     expect(signingScript).toContain("Get-AuthenticodeSignature");
   });
 
+  test("allows NSIS to pass its temporary uninstaller name", () => {
+    expect(nsisTemplate).toContain(
+      "!uninstfinalize '${UNINSTALLERSIGNCOMMAND} -TauriNsisUninstaller' = 0",
+    );
+    expect(signingScript).not.toContain(
+      "[System.IO.Path]::GetExtension($resolvedPath)",
+    );
+    expect(signingScript).not.toContain(
+      "The NSIS uninstaller signing input must be an executable",
+    );
+  });
+
   test("binds credential exclusions as named boolean arguments", () => {
     const credentialExclusions = new Map<string, boolean>([
       ["ExcludeEnvironmentCredential", true],
