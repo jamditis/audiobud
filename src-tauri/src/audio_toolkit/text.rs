@@ -736,6 +736,15 @@ fn word_core(token: &str) -> &str {
         .trim_end_matches(|c: char| CLOSERS.contains(&c))
 }
 
+/// The punctuation trimmed from either side of a token by [`word_core`]. A core is always a
+/// contiguous slice of its token, so its first occurrence marks the boundary after the opener.
+fn word_outer_affixes<'a>(token: &'a str, core: &str) -> (&'a str, &'a str) {
+    let start = token
+        .find(core)
+        .expect("word_core always returns a substring of its token");
+    (&token[..start], &token[start + core.len()..])
+}
+
 /// Positions `(i, j)` of the longest common subsequence of two token lists,
 /// compared on lowercased cores so `"Claude"` and `"claude,"` count as the same
 /// anchor. The backtrack prefers the diagonal, so ties resolve deterministically.
@@ -789,6 +798,25 @@ fn has_intentional_mixed_case(value: &str) -> bool {
     // A conventional Capitalized word adapts to sentence/all-caps context. Any other mixture is
     // treated as intentional internal casing.
     !letters[0].is_uppercase() || letters[1..].iter().any(|c| !c.is_lowercase())
+}
+
+/// Whether `from` and `to` share ordinary presentation casing supplied by their context. If the
+/// corrected form is a dictionary word, matching sentence case or all caps should not become part
+/// of the global replacement itself; the production replacer will restore that presentation when
+/// it sees the same casing again.
+fn has_matching_contextual_case(from: &str, to: &str) -> bool {
+    fn is_all_caps(value: &str) -> bool {
+        let mut letters = value.chars().filter(|c| c.is_alphabetic()).peekable();
+        letters.peek().is_some() && letters.all(|c| c.is_uppercase())
+    }
+
+    fn is_capitalized(value: &str) -> bool {
+        let mut letters = value.chars().filter(|c| c.is_alphabetic());
+        letters.next().is_some_and(|first| first.is_uppercase())
+            && letters.all(|c| c.is_lowercase())
+    }
+
+    (is_all_caps(from) && is_all_caps(to)) || (is_capitalized(from) && is_capitalized(to))
 }
 
 /// Whether two token cores differ only by a regular English inflection. The broad English
@@ -990,9 +1018,17 @@ pub fn extract_learned_replacements(original: &str, corrected: &str) -> Vec<Word
         match (ai - pi, aj - pj) {
             (0, 0) => {}
             (1, 1) => {
-                let from = word_core(orig[pi]);
-                let to = word_core(corr[pj]);
+                let from_token = orig[pi];
+                let to_token = corr[pj];
+                let from = word_core(from_token);
+                let to = word_core(to_token);
                 if !is_learnable_substitution(from, to) {
+                    return Vec::new();
+                }
+                // The extractor trims matching prose delimiters (`clawed.` -> `Claude.`), but a
+                // changed affix may be meaningful target syntax (`prent` -> `print()`, `dokter` ->
+                // `Dr.`). Reject the ambiguous pair instead of persisting a truncated target.
+                if word_outer_affixes(from_token, from) != word_outer_affixes(to_token, to) {
                     return Vec::new();
                 }
                 candidates.push((from.to_string(), to.to_string()));
@@ -1058,9 +1094,18 @@ pub fn extract_learned_replacements(original: &str, corrected: &str) -> Vec<Word
             continue;
         }
         if seen.insert((from_key, to_key)) {
+            let preserve_replacement_case = has_intentional_mixed_case(&to);
+            let to = if !preserve_replacement_case
+                && is_known_english_word(&to)
+                && has_matching_contextual_case(&from, &to)
+            {
+                to.to_lowercase()
+            } else {
+                to
+            };
             out.push(WordReplacement {
                 from,
-                preserve_replacement_case: has_intentional_mixed_case(&to),
+                preserve_replacement_case,
                 to,
                 whole_word: true,
                 case_sensitive: false,
@@ -1303,6 +1348,36 @@ mod tests {
             extract_learned_replacements("read the expose today", "read the exposé today")
                 .is_empty()
         );
+    }
+
+    #[test]
+    fn extractor_normalizes_contextual_case_before_learning() {
+        let sentence_case = extract_learned_replacements("Helo there", "Hello there");
+        assert_eq!(
+            learned_pairs(&sentence_case),
+            vec![("Helo".to_string(), "hello".to_string())]
+        );
+        assert_eq!(
+            apply_replacements("say helo, then Helo", &sentence_case),
+            "say hello, then Hello"
+        );
+
+        let all_caps = extract_learned_replacements("fix SONET today", "fix SONNET today");
+        assert_eq!(
+            learned_pairs(&all_caps),
+            vec![("SONET".to_string(), "sonnet".to_string())]
+        );
+        assert_eq!(
+            apply_replacements("sonet and SONET", &all_caps),
+            "sonnet and SONNET"
+        );
+    }
+
+    #[test]
+    fn extractor_rejects_targets_that_add_outer_syntax() {
+        assert!(extract_learned_replacements("run prent today", "run print() today").is_empty());
+        assert!(extract_learned_replacements("ask dokter tomorrow", "ask Dr. tomorrow").is_empty());
+        assert!(extract_learned_replacements("run prent.", "run print().").is_empty());
     }
 
     #[test]
