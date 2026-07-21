@@ -41,6 +41,40 @@ describe("download verification guidance", () => {
     );
   });
 
+  it("quotes the numbered issuer the shipped certificate actually carries", () => {
+    // v0.4.0 chains to "Microsoft ID Verified CS AOC CA 04". Publishing the
+    // unnumbered base name would tell someone holding a genuine installer that
+    // their issuer does not match.
+    expect(compactHome).toMatch(
+      /<dt>Issuer<\/dt> <dd>Microsoft ID Verified CS AOC CA 04<\/dd>/,
+    );
+    expect(read("README.md")).toContain("Microsoft ID Verified CS AOC CA 04");
+
+    // Compact first: the sentence wraps across lines in the HTML source.
+    for (const source of [home, read("README.md")]) {
+      expect(compact(source)).toMatch(
+        /rotates the number ending (the|that) issuer/,
+      );
+    }
+  });
+
+  it("never sells the signature as a byte-for-byte check", () => {
+    // Authenticode skips the CheckSum field, the certificate table, and any
+    // trailing data, so a patched file can still verify as Valid. Claiming
+    // otherwise invites users to skip the hash comparison that does cover it.
+    for (const source of [home, read("README.md")]) {
+      expect(source).not.toMatch(/bytes are untouched/);
+      expect(source).not.toMatch(/[Cc]hange one byte[\s\S]{0,80}invalid/);
+    }
+
+    expect(compact(home)).toContain(
+      "covers the signed parts of the installer rather than every byte",
+    );
+    expect(read("README.md")).toContain(
+      "the signature alone does not cover the whole file",
+    );
+  });
+
   it("publishes a SHA-256 digest for every shipped installer", () => {
     const rows = [...home.matchAll(/<li class="checksum-row">[\s\S]*?<\/li>/g)];
     expect(rows).toHaveLength(2);

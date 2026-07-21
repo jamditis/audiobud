@@ -422,8 +422,7 @@
               <h3>What the signature proves</h3>
               <p>
                 Right-click the installer, open <strong>Properties</strong>,
-                then the <strong>Digital Signatures</strong> tab. It should
-                match this exactly:
+                then the <strong>Digital Signatures</strong> tab:
               </p>
               <dl class="verify-facts">
                 <div>
@@ -432,7 +431,7 @@
                 </div>
                 <div>
                   <dt>Issuer</dt>
-                  <dd>Microsoft ID Verified CS AOC CA</dd>
+                  <dd>Microsoft ID Verified CS AOC CA 04</dd>
                 </div>
                 <div>
                   <dt>Timestamp</dt>
@@ -440,9 +439,14 @@
                 </div>
               </dl>
               <p>
-                Change one byte of a signed installer and Windows reports the
-                signature as invalid instead of naming a publisher. Do not run a
-                download that fails to name Joseph Amditis.
+                The publisher has to read Joseph Amditis. Microsoft rotates the
+                number ending the issuer, so a different two-digit suffix there
+                is normal. Refuse a download that names anyone else.
+              </p>
+              <p>
+                A valid signature covers the signed parts of the installer
+                rather than every byte, so it cannot stand in for the checksum
+                below. Run both checks.
               </p>
             </article>
           </div>
