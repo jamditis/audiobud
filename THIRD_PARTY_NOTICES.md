@@ -1,16 +1,36 @@
 # Third-party notices
 
-AudioBud is MIT-licensed (see [LICENSE](LICENSE)). Its Windows installers also
-redistribute a small set of runtime libraries app-locally, staged next to the
-executable so the app launches on a clean machine that lacks the Microsoft
-Visual C++ Redistributable or a driver-supplied Vulkan loader. Those libraries
-are third-party components under their own licenses, reproduced below.
+AudioBud is MIT-licensed (see [LICENSE](LICENSE)). It bundles an English word
+list used by correction capture and redistributes a small set of Windows runtime
+libraries app-locally. Those third-party components remain under their own
+licenses, reproduced below.
 
-The bundled set is defined by the packaging path, not by this document:
+The bundled Windows runtime set is defined by the packaging path, not by this document:
 `scripts/bundle-runtime-dlls.mjs` (Tauri `beforeBundleCommand`) stages the VC++
 runtime and the Vulkan loader, the WiX/MSI bundler harvests the executable's
 sibling DLLs automatically, and `src-tauri/nsis/installer.nsi` copies each one
 explicitly for parity. If that set changes, update this file to match.
+
+## SCOWL English word list
+
+File: `src-tauri/src/audio_toolkit/english_words_en.txt`
+
+This lowercase, alphabetic-only word list is derived from the American English
+dictionary distributed by Debian's `wamerican` package, which is generated from
+SCOWL (Spell Checker Oriented Word Lists): https://wordlist.aspell.net/
+
+The collective work is Copyright 2000-2011 by Kevin Atkinson as well as any of
+the copyrights mentioned in the SCOWL documentation.
+
+Copyright 2000-2011 by Kevin Atkinson
+
+Permission to use, copy, modify, distribute and sell these word lists, the
+associated scripts, the output created from the scripts, and its documentation
+for any purpose is hereby granted without fee, provided that the above copyright
+notice appears in all copies and that both that copyright notice and this
+permission notice appear in supporting documentation. Kevin Atkinson makes no
+representations about the suitability of this array for any purpose. It is
+provided "as is" without express or implied warranty.
 
 ## Microsoft Visual C++ runtime
 
