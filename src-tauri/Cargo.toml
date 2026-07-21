@@ -65,6 +65,7 @@ rustfft = "6.4.0"
 strsim = "0.11.0"
 rphonetic = "3.0.6"
 regex = "1"
+unicode-normalization = "0.1.25"
 chrono = "0.4"
 rusqlite = { version = "0.37", features = ["bundled"] }
 tar = "0.4.44"

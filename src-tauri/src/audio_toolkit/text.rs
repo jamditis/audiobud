@@ -4,6 +4,8 @@ use regex::{Captures, Regex};
 use rphonetic::{DoubleMetaphone, Encoder, Metaphone};
 use std::collections::{HashMap, HashSet};
 use strsim::{damerau_levenshtein, jaro_winkler};
+use unicode_normalization::char::is_combining_mark;
+use unicode_normalization::UnicodeNormalization;
 
 /// Common English words used as a "do not overwrite a common word" veto in the matcher.
 /// Loaded once from the bundled list; lines starting with `#` are provenance/comments.
@@ -848,6 +850,30 @@ fn is_regular_inflection_edit(from: &str, to: &str) -> bool {
         || is_inflected_form(&to_lower, &from_lower, from, false)
 }
 
+/// Whether one token is just a grammatical contraction of the other. The broad dictionary veto
+/// catches ordinary pairs, but unknown names and brands need the same protection (`Claude` ->
+/// `Claude'll`). Curly apostrophes are normalized because platform text input commonly produces
+/// them. A few irregular negative contractions need explicit stems after their spelling change.
+fn is_contraction_edit(from: &str, to: &str) -> bool {
+    fn is_contracted_form(base: &str, contracted: &str) -> bool {
+        for suffix in ["'s", "'ll", "'re", "'ve", "'d", "'m", "n't"] {
+            if contracted.strip_suffix(suffix) == Some(base) {
+                return true;
+            }
+        }
+
+        matches!(
+            (base, contracted),
+            ("can", "can't") | ("will", "won't") | ("shall", "shan't")
+        )
+    }
+
+    let normalize = |value: &str| value.to_lowercase().replace('\u{2019}', "'");
+    let from = normalize(from);
+    let to = normalize(to);
+    is_contracted_form(&from, &to) || is_contracted_form(&to, &from)
+}
+
 /// Whether a one-for-one `from`->`to` token core is worth learning as a literal
 /// replacement. See `extract_learned_replacements` for the rationale of each guard.
 fn is_learnable_substitution(from: &str, to: &str) -> bool {
@@ -858,33 +884,24 @@ fn is_learnable_substitution(from: &str, to: &str) -> bool {
     if from.to_lowercase() == to.to_lowercase() {
         return false;
     }
-    // Typography and punctuation edits (`US`->`U.S.`) are not mishears. Learning one would be
-    // especially dangerous because the case-insensitive rule would also rewrite the pronoun `us`.
-    let alphanumeric_key = |w: &str| -> String {
-        w.chars()
+    // Typography, punctuation, and diacritic-only edits (`US`->`U.S.`, `expose`->`exposé`) are not
+    // mishears. Learning one would be especially dangerous because the case-insensitive rule could
+    // rewrite an otherwise valid spelling everywhere. Canonical decomposition handles both
+    // precomposed and combining-mark forms of the same accent.
+    let orthographic_key = |w: &str| -> String {
+        w.nfd()
+            .filter(|c| !is_combining_mark(*c))
             .filter(|c| c.is_alphanumeric())
             .flat_map(char::to_lowercase)
             .collect()
     };
-    let from_alphanumeric = alphanumeric_key(from);
-    if !from_alphanumeric.is_empty() && from_alphanumeric == alphanumeric_key(to) {
+    let from_orthographic = orthographic_key(from);
+    if !from_orthographic.is_empty() && from_orthographic == orthographic_key(to) {
         return false;
     }
-    // A possessive edit -- `Claude` -> `Claude's` -- is a grammar fix, not a mishear. Learning it
-    // would rewrite every future `Claude` into `Claude's`. Strip a trailing possessive "'s" from
-    // each core; if they then match, one is just the other made possessive, so do not learn it.
-    // Only the "'s" is stripped: a bare trailing `s` is left alone so words whose canonical
-    // spelling ends in `s` (`io` -> `iOS`, `cris` -> `Chris`) stay learnable, and only a trailing
-    // suffix is touched so interior-apostrophe contractions (`were` -> `we're`) do too.
-    let possessive_core = |w: &str| -> String {
-        let lower = w.to_lowercase();
-        lower
-            .strip_suffix("'s")
-            .or_else(|| lower.strip_suffix("\u{2019}s"))
-            .unwrap_or(lower.as_str())
-            .to_string()
-    };
-    if possessive_core(from) == possessive_core(to) {
+    // A contextual contraction (`Claude` -> `Claude'll`) is a grammar edit, not a mishear.
+    // Learning it would rewrite every future occurrence even when the suffix does not belong.
+    if is_contraction_edit(from, to) {
         return false;
     }
     // A version bump on the same identifier (`GPT-4`->`GPT-5`, `v2`->`v3`) differs only in its
@@ -893,7 +910,7 @@ fn is_learnable_substitution(from: &str, to: &str) -> bool {
     // correction that *adds* digits to a
     // digit-free mishear (`bb`->`B2B`, `mp`->`MP3`) is still learned rather than mistaken for a
     // version bump. (The pure-number case `204`->`205` is already dropped by the shape guard.)
-    let has_digit = |w: &str| w.chars().any(|c| c.is_ascii_digit());
+    let has_digit = |w: &str| w.chars().any(char::is_numeric);
     if has_digit(from) && has_digit(to) {
         let version_stem = |w: &str| -> String {
             w.chars()
@@ -1050,6 +1067,17 @@ pub fn extract_learned_replacements(original: &str, corrected: &str) -> Vec<Word
             });
         }
     }
+    // Replacements run sequentially in this order. Reject the whole batch if any later rule would
+    // rewrite an earlier rule's target, including a target compound such as `bar-baz`. This uses
+    // the production matcher so the safety check has exactly the same whole-word and case rules.
+    if out
+        .iter()
+        .enumerate()
+        .any(|(index, rule)| apply_replacements(&rule.to, &out[index + 1..]) != rule.to)
+    {
+        return Vec::new();
+    }
+
     out
 }
 
@@ -1198,9 +1226,8 @@ mod tests {
 
     #[test]
     fn extractor_rejects_a_possessive_edit_with_a_curly_apostrophe() {
-        // In-place edits typed on macOS/iOS use a curly apostrophe (U+2019). `possessive_core`
-        // strips that form too, so `Claude` -> `Claude\u{2019}s` is rejected like the straight-
-        // quote case rather than slipping through as a new word.
+        // In-place edits typed on macOS/iOS use a curly apostrophe (U+2019). Contraction matching
+        // normalizes that form, so it cannot slip through as a new word.
         assert!(
             extract_learned_replacements("ask Claude team", "ask Claude\u{2019}s team").is_empty()
         );
@@ -1213,6 +1240,8 @@ mod tests {
         // shape guard; this is the alphanumeric sibling.)
         assert!(extract_learned_replacements("try GPT-4 first", "try GPT-5 first").is_empty());
         assert!(extract_learned_replacements("try GPT4 first", "try GPT-5 first").is_empty());
+        assert!(extract_learned_replacements("try GPT-٤ first", "try GPT-٥ first").is_empty());
+        assert!(extract_learned_replacements("try GPT-４ first", "try GPT-５ first").is_empty());
     }
 
     #[test]
@@ -1263,6 +1292,20 @@ mod tests {
     }
 
     #[test]
+    fn extractor_rejects_contractions_of_unknown_names() {
+        assert!(extract_learned_replacements("ask Claude today", "ask Claude'll today").is_empty());
+        assert!(extract_learned_replacements("ask Claude today", "ask Claude’ll today").is_empty());
+    }
+
+    #[test]
+    fn extractor_rejects_diacritic_only_edits() {
+        assert!(
+            extract_learned_replacements("read the expose today", "read the exposé today")
+                .is_empty()
+        );
+    }
+
+    #[test]
     fn extractor_rejects_pairs_that_would_cascade_when_applied() {
         // These pairs would be applied sequentially as crowd->cloud->Claude, so learning both
         // would silently turn a future standalone "crowd" into "Claude".
@@ -1270,6 +1313,7 @@ mod tests {
             extract_learned_replacements("crowd here and cloud", "cloud here and Claude")
                 .is_empty()
         );
+        assert!(extract_learned_replacements("use foo and bar", "use bar-baz and qux").is_empty());
     }
 
     #[test]
@@ -1294,8 +1338,8 @@ mod tests {
 
     #[test]
     fn extractor_learns_a_target_word_that_naturally_ends_in_s() {
-        // Only a possessive "'s" is stripped, so a meant word whose canonical spelling ends in
-        // `s` (`io` -> `iOS`) is not mistaken for a plural inflection and is still learned.
+        // Only apostrophe-bearing contraction suffixes are handled here, so a meant word whose
+        // canonical spelling ends in `s` (`io` -> `iOS`) is not mistaken for one.
         let out = extract_learned_replacements("open io settings", "open iOS settings");
         assert_eq!(
             learned_pairs(&out),
