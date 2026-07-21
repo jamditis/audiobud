@@ -836,6 +836,16 @@ describe("AudioBud public policy pages", () => {
       "#hero-title, #roadmap-title, #privacy-title, #terms-title",
       ["scroll-margin-top: 80px;"],
     );
+    expect(css.match(/(^|})\s*:focus-visible\s*{/g)).toHaveLength(1);
+    expect(css.match(/(^|})\s*\.skip-link\s*{/g)).toHaveLength(1);
+  });
+
+  it("keeps public-page typography local", () => {
+    for (const page of sitePages) {
+      const html = read(page.name);
+      expect(html).not.toContain("fonts.googleapis.com");
+      expect(html).not.toContain("fonts.gstatic.com");
+    }
   });
 
   it("marks current navigation destinations without extra decoration", () => {

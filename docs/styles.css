@@ -18,7 +18,11 @@
   --glass: rgba(14, 34, 22, 0.72);
   --shadow: 0 28px 80px rgba(0, 0, 0, 0.42);
   --wrap: min(1180px, calc(100% - 40px));
-  font-family: "Fredoka", ui-rounded, system-ui, sans-serif;
+  --font-body: ui-rounded, "Segoe UI", system-ui, sans-serif;
+  --font-display:
+    "Arial Rounded MT Bold", "Segoe UI Black", "Arial Black", ui-rounded,
+    system-ui, sans-serif;
+  font-family: var(--font-body);
   background: var(--bg);
   color: var(--text);
 }
@@ -122,29 +126,6 @@ p {
   text-wrap: pretty;
 }
 
-:focus-visible {
-  outline: 3px solid var(--amber);
-  outline-offset: 4px;
-}
-
-.skip-link {
-  position: fixed;
-  z-index: 100;
-  top: 12px;
-  left: 12px;
-  padding: 10px 14px;
-  border-radius: 10px;
-  background: var(--text);
-  color: var(--bg);
-  font-weight: 700;
-  text-decoration: none;
-  transform: translateY(-180%);
-}
-
-.skip-link:focus {
-  transform: translateY(0);
-}
-
 .wrap {
   width: var(--wrap);
   margin: 0 auto;
@@ -186,8 +167,9 @@ p {
   justify-self: start;
   gap: 10px;
   color: var(--green);
-  font-family: "Bungee", system-ui, sans-serif;
+  font-family: var(--font-display);
   font-size: 18px;
+  font-weight: 800;
   letter-spacing: -0.025em;
   text-decoration: none;
 }
@@ -314,9 +296,9 @@ p {
 .eyebrow {
   margin-bottom: 18px;
   color: var(--amber);
-  font-family: "Bungee", system-ui, sans-serif;
+  font-family: var(--font-display);
   font-size: 12px;
-  font-weight: 400;
+  font-weight: 800;
   letter-spacing: 0.1em;
   text-transform: uppercase;
 }
@@ -349,9 +331,9 @@ p {
 h1 {
   max-width: 650px;
   margin-bottom: 24px;
-  font-family: "Bungee", system-ui, sans-serif;
+  font-family: var(--font-display);
   font-size: clamp(50px, 5.7vw, 82px);
-  font-weight: 400;
+  font-weight: 800;
   letter-spacing: -0.045em;
   line-height: 0.98;
 }
@@ -789,9 +771,9 @@ kbd {
 .section-head h2 {
   max-width: 680px;
   margin-bottom: 0;
-  font-family: "Bungee", system-ui, sans-serif;
+  font-family: var(--font-display);
   font-size: clamp(30px, 4vw, 48px);
-  font-weight: 400;
+  font-weight: 800;
   letter-spacing: 0;
   line-height: 1.04;
 }
@@ -857,8 +839,9 @@ kbd {
   top: 22px;
   right: 24px;
   color: rgba(245, 249, 238, 0.2);
-  font-family: "Bungee", system-ui, sans-serif;
+  font-family: var(--font-display);
   font-size: 15px;
+  font-weight: 800;
 }
 
 .step-icon,
@@ -957,9 +940,9 @@ kbd {
 .feature-wide h3,
 .feature-screen h3 {
   max-width: 560px;
-  font-family: "Bungee", system-ui, sans-serif;
+  font-family: var(--font-display);
   font-size: clamp(30px, 3vw, 42px);
-  font-weight: 400;
+  font-weight: 800;
   letter-spacing: -0.03em;
 }
 
@@ -1136,8 +1119,9 @@ kbd {
   border-radius: 13px;
   background: rgba(139, 220, 82, 0.07);
   color: var(--green);
-  font-family: "Bungee", system-ui, sans-serif;
+  font-family: var(--font-display);
   font-size: 14px;
+  font-weight: 800;
 }
 
 .model-main strong {
@@ -1249,9 +1233,9 @@ kbd {
 
 .cta-copy h2 {
   margin-bottom: 10px;
-  font-family: "Bungee", system-ui, sans-serif;
+  font-family: var(--font-display);
   font-size: clamp(30px, 3.5vw, 46px);
-  font-weight: 400;
+  font-weight: 800;
   letter-spacing: -0.035em;
   line-height: 1.05;
 }
