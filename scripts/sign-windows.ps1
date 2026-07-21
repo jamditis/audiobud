@@ -52,16 +52,16 @@ Invoke-ArtifactSigning `
   -TimestampDigest SHA256 `
   -Description "AudioBud" `
   -DescriptionUrl "https://audiobud.amditis.tech/" `
-  -ExcludeEnvironmentCredential $true `
-  -ExcludeWorkloadIdentityCredential $true `
-  -ExcludeManagedIdentityCredential $true `
-  -ExcludeSharedTokenCacheCredential $true `
-  -ExcludeVisualStudioCredential $true `
-  -ExcludeVisualStudioCodeCredential $true `
-  -ExcludeAzureCliCredential $false `
-  -ExcludeAzurePowerShellCredential $true `
-  -ExcludeAzureDeveloperCliCredential $true `
-  -ExcludeInteractiveBrowserCredential $true
+  -ExcludeEnvironmentCredential:$true `
+  -ExcludeWorkloadIdentityCredential:$true `
+  -ExcludeManagedIdentityCredential:$true `
+  -ExcludeSharedTokenCacheCredential:$true `
+  -ExcludeVisualStudioCredential:$true `
+  -ExcludeVisualStudioCodeCredential:$true `
+  -ExcludeAzureCliCredential:$false `
+  -ExcludeAzurePowerShellCredential:$true `
+  -ExcludeAzureDeveloperCliCredential:$true `
+  -ExcludeInteractiveBrowserCredential:$true
 
 $signature = Get-AuthenticodeSignature -LiteralPath $resolvedPath
 if ($signature.Status -ne [System.Management.Automation.SignatureStatus]::Valid) {

@@ -198,7 +198,30 @@ describe("Windows release signing workflow", () => {
       "Import-Module ArtifactSigning -RequiredVersion 0.1.8",
     );
     expect(signingScript).toContain("Invoke-ArtifactSigning");
-    expect(signingScript).toContain("-ExcludeAzureCliCredential $false");
+    expect(signingScript).toContain("-ExcludeAzureCliCredential:$false");
     expect(signingScript).toContain("Get-AuthenticodeSignature");
+  });
+
+  test("binds credential exclusions as named boolean arguments", () => {
+    const credentialExclusions = new Map<string, boolean>([
+      ["ExcludeEnvironmentCredential", true],
+      ["ExcludeWorkloadIdentityCredential", true],
+      ["ExcludeManagedIdentityCredential", true],
+      ["ExcludeSharedTokenCacheCredential", true],
+      ["ExcludeVisualStudioCredential", true],
+      ["ExcludeVisualStudioCodeCredential", true],
+      ["ExcludeAzureCliCredential", false],
+      ["ExcludeAzurePowerShellCredential", true],
+      ["ExcludeAzureDeveloperCliCredential", true],
+      ["ExcludeInteractiveBrowserCredential", true],
+    ]);
+
+    for (const [parameter, value] of credentialExclusions) {
+      expect(signingScript).toContain(`-${parameter}:$${value}`);
+    }
+
+    expect(signingScript).not.toMatch(
+      /-Exclude[A-Za-z]+Credential\s+\$(?:true|false)/,
+    );
   });
 });
