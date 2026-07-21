@@ -813,31 +813,14 @@ fn is_capitalized(value: &str) -> bool {
     letters.next().is_some_and(|first| first.is_uppercase()) && letters.all(|c| c.is_lowercase())
 }
 
-/// Canonicalize casing only when the surrounding tokens make presentation casing unambiguous.
-/// Otherwise keep behaviorally meaningful casing in both the target and its preservation flag.
-fn learned_target_presentation(
-    from: &str,
-    to: &str,
-    sentence_case_context: bool,
-    all_caps_context: bool,
-) -> (String, bool) {
+/// Keep target casing when the user explicitly changed presentation or entered an internally
+/// cased brand. Ambiguous matching presentation casing is rejected before this helper is called.
+fn learned_target_presentation(to: &str) -> (String, bool) {
     if has_intentional_mixed_case(to) {
         return (to.to_string(), true);
     }
 
-    let dictionary_target = is_known_english_word(to);
-    let matching_capitalized = is_capitalized(from) && is_capitalized(to);
-    let matching_all_caps = is_all_caps(from) && is_all_caps(to);
-    if dictionary_target
-        && ((matching_capitalized && sentence_case_context)
-            || (matching_all_caps && all_caps_context))
-    {
-        return (to.to_lowercase(), false);
-    }
-
-    // A dictionary homograph with presentation casing outside a clear sentence/all-caps context
-    // may be a name or acronym (`Apple`, `US`). Keep exactly what the user entered.
-    let preserve = dictionary_target && (matching_capitalized || matching_all_caps);
+    let preserve = is_known_english_word(to) && (is_capitalized(to) || is_all_caps(to));
     (to.to_string(), preserve)
 }
 
@@ -934,6 +917,14 @@ fn is_learnable_substitution(from: &str, to: &str) -> bool {
     if from.to_lowercase() == to.to_lowercase() {
         return false;
     }
+    // Symbols inside the core are part of a term's identity. Matching symbol structure can safely
+    // learn `C#` -> `F#`, but adding syntax (`clawed` -> `Claude.md`) would append it to every
+    // future occurrence and must not become a global rule.
+    let symbol_skeleton =
+        |w: &str| -> String { w.chars().filter(|c| !c.is_alphanumeric()).collect() };
+    if symbol_skeleton(from) != symbol_skeleton(to) {
+        return false;
+    }
     // Typography, punctuation, and diacritic-only edits (`US`->`U.S.`, `expose`->`exposé`) are not
     // mishears. Learning one would be especially dangerous because the case-insensitive rule could
     // rewrite an otherwise valid spelling everywhere. Canonical decomposition handles both
@@ -976,7 +967,18 @@ fn is_learnable_substitution(from: &str, to: &str) -> bool {
     // A dictionary-word substitution (`their`->`there`, `accept`->`except`) is a grammar or
     // word-choice edit as often as it is a mishear. The fuzzy matcher can use a small common-word
     // list because it has several other gates; a learned global replacement cannot take that risk.
-    if is_known_english_word(from) && is_known_english_word(to) {
+    let from_is_dictionary_word = is_known_english_word(from);
+    let to_is_dictionary_word = is_known_english_word(to);
+    // Matching title/all-caps presentation on a dictionary target is inherently ambiguous: it may
+    // be sentence formatting (`Helo` -> `Hello`) or a homographic name (`Aple` -> `Apple`). There
+    // is no safe global choice, so reject it. An explicit lowercase-to-titlecase edit remains
+    // learnable and preserves the user's casing.
+    if to_is_dictionary_word
+        && ((is_capitalized(from) && is_capitalized(to)) || (is_all_caps(from) && is_all_caps(to)))
+    {
+        return false;
+    }
+    if from_is_dictionary_word && to_is_dictionary_word {
         return false;
     }
     if is_regular_inflection_edit(from, to) {
@@ -1041,14 +1043,6 @@ pub fn extract_learned_replacements(
     // Every changed gap must be exactly one token on each side. If an insertion, deletion, or
     // multi-token rewrite appears anywhere in the edit, learn nothing from the whole transcript:
     // that more complex edit can contradict an otherwise plausible one-token pair.
-    let all_caps_context = {
-        let alphabetic: Vec<&str> = corr
-            .iter()
-            .map(|token| word_core(token))
-            .filter(|core| core.chars().any(|c| c.is_alphabetic()))
-            .collect();
-        alphabetic.len() >= 2 && alphabetic.iter().all(|core| is_all_caps(core))
-    };
     let mut candidates: Vec<(String, String, bool)> = Vec::new();
     let (mut pi, mut pj) = (0usize, 0usize);
     for (ai, aj) in anchors
@@ -1072,15 +1066,7 @@ pub fn extract_learned_replacements(
                 if word_outer_affixes(from_token, from) != word_outer_affixes(to_token, to) {
                     return Vec::new();
                 }
-                let sentence_case_context = pj == 0
-                    && corr.get(1).is_some_and(|next| {
-                        word_core(next)
-                            .chars()
-                            .find(|c| c.is_alphabetic())
-                            .is_some_and(|c| c.is_lowercase())
-                    });
-                let (to, preserve_replacement_case) =
-                    learned_target_presentation(from, to, sentence_case_context, all_caps_context);
+                let (to, preserve_replacement_case) = learned_target_presentation(to);
                 candidates.push((from.to_string(), to, preserve_replacement_case));
             }
             _ => return Vec::new(),
@@ -1127,10 +1113,11 @@ pub fn extract_learned_replacements(
     // The heard word must not survive unchanged at an anchor. If it does, the user did not reject
     // it everywhere, so a global replacement would corrupt that kept occurrence ("ask cloud about
     // the cloud" -> "ask Claude about the cloud" must not learn `cloud`->`Claude`).
-    let kept_unchanged: HashSet<&str> = anchors
+    let kept_unchanged = anchors
         .iter()
-        .map(|&(i, _)| orig_keys[i].as_str())
-        .collect();
+        .map(|&(_, j)| corr[j])
+        .collect::<Vec<_>>()
+        .join(" ");
 
     let mut seen: HashSet<(String, String, bool)> = HashSet::new();
     let mut out = Vec::new();
@@ -1139,17 +1126,18 @@ pub fn extract_learned_replacements(
         if targets_for.get(&from_key).map_or(0, |s| s.len()) > 1 {
             continue;
         }
-        if kept_unchanged.contains(from_key.as_str()) {
+        let rule = WordReplacement {
+            from,
+            preserve_replacement_case,
+            to,
+            whole_word: true,
+            case_sensitive: false,
+        };
+        if apply_replacements(&kept_unchanged, std::slice::from_ref(&rule)) != kept_unchanged {
             continue;
         }
-        if seen.insert((from_key, to.clone(), preserve_replacement_case)) {
-            out.push(WordReplacement {
-                from,
-                preserve_replacement_case,
-                to,
-                whole_word: true,
-                case_sensitive: false,
-            });
+        if seen.insert((from_key, rule.to.clone(), rule.preserve_replacement_case)) {
+            out.push(rule);
         }
     }
     // Replacements run sequentially. Compare the effective production list before and after this
@@ -1404,34 +1392,22 @@ mod tests {
     }
 
     #[test]
-    fn extractor_normalizes_contextual_case_before_learning() {
-        let sentence_case = extract_learned_replacements("Helo there", "Hello there");
-        assert_eq!(
-            learned_pairs(&sentence_case),
-            vec![("Helo".to_string(), "hello".to_string())]
+    fn extractor_rejects_ambiguous_presentation_case() {
+        assert!(extract_learned_replacements("Helo there", "Hello there").is_empty());
+        assert!(
+            extract_learned_replacements("Goodbye. Helo there", "Goodbye. Hello there").is_empty()
         );
-        assert_eq!(
-            apply_replacements("say helo, then Helo", &sentence_case),
-            "say hello, then Hello"
-        );
-
-        let all_caps = extract_learned_replacements("FIX SONET TODAY", "FIX SONNET TODAY");
-        assert_eq!(
-            learned_pairs(&all_caps),
-            vec![("SONET".to_string(), "sonnet".to_string())]
-        );
-        assert_eq!(
-            apply_replacements("sonet and SONET", &all_caps),
-            "sonnet and SONNET"
+        assert!(extract_learned_replacements("FIX SONET TODAY", "FIX SONNET TODAY").is_empty());
+        assert!(
+            extract_learned_replacements("Aple released updates", "Apple released updates")
+                .is_empty()
         );
 
-        // An isolated all-caps correction inside lowercase prose is semantic, not presentation.
-        let acronym_like = extract_learned_replacements("fix SONET today", "fix SONNET today");
+        let lowercase = extract_learned_replacements("fix sonet today", "fix sonnet today");
         assert_eq!(
-            learned_pairs(&acronym_like),
-            vec![("SONET".to_string(), "SONNET".to_string())]
+            learned_pairs(&lowercase),
+            vec![("sonet".to_string(), "sonnet".to_string())]
         );
-        assert!(acronym_like[0].preserve_replacement_case);
     }
 
     #[test]
@@ -1439,6 +1415,8 @@ mod tests {
         assert!(extract_learned_replacements("run prent today", "run print() today").is_empty());
         assert!(extract_learned_replacements("ask dokter tomorrow", "ask Dr. tomorrow").is_empty());
         assert!(extract_learned_replacements("run prent.", "run print().").is_empty());
+        assert!(extract_learned_replacements("open clawed", "open Claude.md").is_empty());
+        assert!(extract_learned_replacements("ask clawed", "ask Claude-Code").is_empty());
     }
 
     #[test]
@@ -1448,17 +1426,32 @@ mod tests {
 
     #[test]
     fn extractor_preserves_a_dictionary_homograph_used_as_a_name() {
-        let learned = extract_learned_replacements("Use Aple Music", "Use Apple Music");
+        assert!(extract_learned_replacements("Use Aple Music", "Use Apple Music").is_empty());
+        assert!(extract_learned_replacements("Aple Music", "Apple Music").is_empty());
+
+        // Lowercase-to-titlecase is an explicit semantic case edit rather than presentation copied
+        // from the source token, so it can safely retain the exact name.
+        let learned = extract_learned_replacements("Use aple Music", "Use Apple Music");
         assert_eq!(
             learned_pairs(&learned),
-            vec![("Aple".to_string(), "Apple".to_string())]
+            vec![("aple".to_string(), "Apple".to_string())]
         );
         assert!(learned[0].preserve_replacement_case);
         assert_eq!(apply_replacements("try aple", &learned), "try Apple");
+    }
 
-        let at_sentence_start = extract_learned_replacements("Aple Music", "Apple Music");
-        assert_eq!(learned_pairs(&at_sentence_start), learned_pairs(&learned));
-        assert!(at_sentence_start[0].preserve_replacement_case);
+    #[test]
+    fn extractor_rejects_a_source_retained_inside_a_runtime_word_boundary() {
+        assert!(extract_learned_replacements(
+            "ask cloud about cloud-based storage",
+            "ask Claude about cloud-based storage"
+        )
+        .is_empty());
+        assert!(extract_learned_replacements(
+            "ask cloud about cloud's storage",
+            "ask Claude about cloud's storage"
+        )
+        .is_empty());
     }
 
     #[test]
@@ -1492,15 +1485,15 @@ mod tests {
         );
 
         // Earlier rules do not revisit a target emitted by a later rule, so this ordering is safe.
-        let earlier_bar_rule = vec![repl("bar", "qux")];
-        let later_compound = super::extract_learned_replacements(
-            "use foo today",
-            "use bar-baz today",
-            &earlier_bar_rule,
+        let earlier_zorp_rule = vec![repl("zorp", "qux")];
+        let later_target = super::extract_learned_replacements(
+            "use blorf today",
+            "use zorp today",
+            &earlier_zorp_rule,
         );
         assert_eq!(
-            learned_pairs(&later_compound),
-            vec![("foo".to_string(), "bar-baz".to_string())]
+            learned_pairs(&later_target),
+            vec![("blorf".to_string(), "zorp".to_string())]
         );
     }
 
