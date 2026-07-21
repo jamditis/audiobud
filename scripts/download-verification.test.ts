@@ -125,6 +125,17 @@ describe("download verification guidance", () => {
     );
   });
 
+  it("documents provenance verification against the release workflow", () => {
+    const readme = read("README.md");
+    expect(readme).toContain(
+      "gh attestation verify .\\AudioBud_<version>_x64-setup.exe",
+    );
+    expect(readme).toContain("--repo jamditis/audiobud");
+    expect(readme).toContain(
+      "--signer-workflow jamditis/audiobud/.github/workflows/release.yml",
+    );
+  });
+
   it("refreshes the checksums from the release API without trusting it", () => {
     const script = compact(read("docs/site.js"));
 

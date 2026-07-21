@@ -31,6 +31,23 @@ function stepPosition(name: string): number {
   return position;
 }
 
+function stepBlock(name: string): string {
+  const position = stepPosition(name);
+  const nextStep = workflow.indexOf("\n      - name:", position + 1);
+  return workflow.slice(position, nextStep === -1 ? undefined : nextStep);
+}
+
+function multilineInput(step: string, name: string): string[] {
+  const values = new RegExp(
+    `${name}: \\|\\r?\\n((?:[ \\t]{12}[^\\r\\n]+\\r?\\n?)+)`,
+  ).exec(step)?.[1];
+  expect(values, `Missing multiline input: ${name}`).toBeDefined();
+  return values!
+    .trim()
+    .split(/\r?\n/)
+    .map((value) => value.trim());
+}
+
 describe("Windows release signing workflow", () => {
   test("limits signing to the protected environment and approved refs", () => {
     expect(workflow).toContain("group: release-windows");
@@ -162,6 +179,43 @@ describe("Windows release signing workflow", () => {
       '"$hash  $([System.IO.Path]::GetFileName($path))"',
     );
     expect(workflow).toContain("[System.Text.UTF8Encoding]::new($false)");
+  });
+
+  test("attests every uploaded release artifact before publication", () => {
+    expect(workflow).toContain("attestations: write");
+
+    const attestationStep = stepBlock("Attest release artifacts");
+    expect(attestationStep).toContain(
+      "uses: actions/attest@f7c74d28b9d84cb8768d0b8ca14a4bac6ef463e6 # v4.2.0",
+    );
+    expect(attestationStep).not.toContain("\n        if:");
+
+    const uploadedPaths = [
+      "${{ steps.signing-paths.outputs.nsis }}",
+      "${{ steps.signing-paths.outputs.msi }}",
+      "${{ steps.checksums.outputs.path }}",
+    ];
+    expect(multilineInput(attestationStep, "subject-path")).toEqual(
+      uploadedPaths,
+    );
+    expect(
+      multilineInput(
+        stepBlock("Upload signed installers as CI artifact"),
+        "path",
+      ),
+    ).toEqual(uploadedPaths);
+
+    const steps = [
+      "Write SHA256SUMS",
+      "Attest release artifacts",
+      "Find or create draft release",
+      "Upload signed installers to GitHub release",
+      "Upload signed installers as CI artifact",
+    ].map(stepPosition);
+
+    for (let index = 1; index < steps.length; index += 1) {
+      expect(steps[index]).toBeGreaterThan(steps[index - 1]);
+    }
   });
 
   test("binds release assets to one commit and keeps reruns separate", () => {

@@ -94,6 +94,14 @@ Get-FileHash -Algorithm SHA256 .\AudioBud_<version>_x64-setup.exe
 
 A mismatch means the download was corrupted, tampered with, or replaced in transit. Delete it and download again.
 
+Security reviewers can also use the [GitHub CLI](https://cli.github.com/) to confirm that AudioBud's release workflow produced the downloaded bytes:
+
+```powershell
+gh attestation verify .\AudioBud_<version>_x64-setup.exe --repo jamditis/audiobud --signer-workflow jamditis/audiobud/.github/workflows/release.yml
+```
+
+The attestation identifies the GitHub build workflow and source commit. It does not replace the signature and hash checks above.
+
 ## Build from source
 
 Prerequisites: [Rust](https://rustup.rs/), [Bun](https://bun.sh/), and the platform build tools. On Windows, install Visual Studio 2022 with the v143 toolset, the Vulkan SDK, and Ninja. See [BUILD.md](BUILD.md) for platform notes.

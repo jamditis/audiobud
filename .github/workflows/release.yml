@@ -1,7 +1,7 @@
 # AudioBud signed Windows release build. The workflow builds the application,
 # signs Tauri's patched package contents while bundling, signs the standalone
-# executable and both finished installers, then verifies the packaged files
-# before uploading any artifact.
+# executable and both finished installers, then verifies and attests the
+# packaged files before uploading any artifact.
 #
 #   - workflow_dispatch (make_release: false) builds and signs a CI artifact.
 #   - workflow_dispatch (make_release: true) or a pushed v* tag also creates or
@@ -36,6 +36,7 @@ jobs:
     runs-on: windows-2025
     timeout-minutes: 60
     permissions:
+      attestations: write
       contents: write
       id-token: write
     env:
@@ -460,6 +461,19 @@ jobs:
           "path=$checksumPath" |
             Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           Get-Content -LiteralPath $checksumPath
+
+      # Bind every uploaded file to this workflow run and commit. Keep this
+      # unconditional so both release assets and CI artifacts can be verified
+      # with `gh attestation verify <file> --repo jamditis/audiobud
+      # --signer-workflow jamditis/audiobud/.github/workflows/release.yml`.
+      # A failed attestation blocks both upload paths below.
+      - name: Attest release artifacts
+        uses: actions/attest@f7c74d28b9d84cb8768d0b8ca14a4bac6ef463e6 # v4.2.0
+        with:
+          subject-path: |
+            ${{ steps.signing-paths.outputs.nsis }}
+            ${{ steps.signing-paths.outputs.msi }}
+            ${{ steps.checksums.outputs.path }}
 
       # A draft is created only after all signatures pass. Reruns reuse the
       # draft, but they refuse to replace assets on a published release.
