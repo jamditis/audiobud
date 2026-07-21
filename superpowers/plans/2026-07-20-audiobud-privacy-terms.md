@@ -143,11 +143,13 @@ const scanMetadataOpeningTags = (html: string) => {
   const tags: Array<{
     name: MetadataTagName;
     attributes: Map<string, string>;
+    isInFirstHead: boolean;
   }> = [];
   let cursor = 0;
   let hasSeenHead = false;
   let hasSeenBody = false;
   let isInsideHead = false;
+  let templateDepth = 0;
 
   while (cursor < html.length) {
     const tagStart = html.indexOf("<", cursor);
@@ -179,7 +181,38 @@ const scanMetadataOpeningTags = (html: string) => {
     if (tagEnd === null) return null;
 
     if (isClosingTag) {
-      if (hasValidNameDelimiter && name === "head") isInsideHead = false;
+      if (hasValidNameDelimiter && name === "template" && templateDepth > 0) {
+        templateDepth--;
+      } else if (
+        templateDepth === 0 &&
+        hasValidNameDelimiter &&
+        name === "head"
+      ) {
+        isInsideHead = false;
+      }
+      cursor = tagEnd + 1;
+      continue;
+    }
+
+    if (hasValidNameDelimiter && name === "template") {
+      templateDepth++;
+      cursor = tagEnd + 1;
+      continue;
+    }
+
+    if (
+      hasValidNameDelimiter &&
+      ["script", "style", "title", "textarea"].includes(name)
+    ) {
+      const closingTag = new RegExp(`</${name}[ \\t\\n\\r\\f]*>`, "gi");
+      closingTag.lastIndex = tagEnd + 1;
+      const closingMatch = closingTag.exec(html);
+      if (!closingMatch) return null;
+      cursor = closingTag.lastIndex;
+      continue;
+    }
+
+    if (templateDepth > 0) {
       cursor = tagEnd + 1;
       continue;
     }
@@ -200,32 +233,17 @@ const scanMetadataOpeningTags = (html: string) => {
       continue;
     }
 
-    if (
-      hasValidNameDelimiter &&
-      ["script", "style", "template", "title", "textarea"].includes(name)
-    ) {
-      const closingTag = new RegExp(`</${name}[ \\t\\n\\r\\f]*>`, "gi");
-      closingTag.lastIndex = tagEnd + 1;
-      const closingMatch = closingTag.exec(html);
-      if (!closingMatch) return null;
-      cursor = closingTag.lastIndex;
-      continue;
-    }
-
-    if (
-      isInsideHead &&
-      hasValidNameDelimiter &&
-      (name === "link" || name === "meta")
-    ) {
+    if (hasValidNameDelimiter && (name === "link" || name === "meta")) {
       tags.push({
         name,
         attributes: parseQuotedAttributes(html.slice(nameEnd, tagEnd)),
+        isInFirstHead: isInsideHead,
       });
     }
     cursor = tagEnd + 1;
   }
 
-  return tags;
+  return templateDepth === 0 ? tags : null;
 };
 const hasTagWithAttributes = (
   html: string,
@@ -254,6 +272,7 @@ const hasTagWithAttributes = (
   );
   return (
     candidates.length === 1 &&
+    candidates[0].isInFirstHead &&
     Object.entries(attributes).every(
       ([name, value]) =>
         candidates[0].attributes.get(name.toLowerCase()) === value,
@@ -410,6 +429,16 @@ describe("Metadata tag matcher", () => {
     ).toBe(false);
   });
 
+  it("rejects metadata after a nested template", () => {
+    expect(
+      hasTagWithAttributes(
+        '<head><template><template></template><meta property="og:url" content="https://example.com/page" /></template></head>',
+        "meta",
+        { property: "og:url", content: "https://example.com/page" },
+      ),
+    ).toBe(false);
+  });
+
   it("rejects metadata inside style text", () => {
     expect(
       hasTagWithAttributes(
@@ -460,7 +489,47 @@ describe("Metadata tag matcher", () => {
     ).toBe(false);
   });
 
-  it("rejects a later duplicate with the expected value", () => {
+  it("rejects a canonical duplicate in the body", () => {
+    expect(
+      hasTagWithAttributes(
+        '<html><head><link rel="canonical" href="https://example.com/page" /></head><body><link rel="canonical" href="https://example.com/wrong" /></body></html>',
+        "link",
+        { rel: "canonical", href: "https://example.com/page" },
+      ),
+    ).toBe(false);
+  });
+
+  it("rejects a canonical duplicate in a second head", () => {
+    expect(
+      hasTagWithAttributes(
+        '<html><head><link rel="canonical" href="https://example.com/page" /></head><head><link rel="canonical" href="https://example.com/wrong" /></head></html>',
+        "link",
+        { rel: "canonical", href: "https://example.com/page" },
+      ),
+    ).toBe(false);
+  });
+
+  it("rejects an Open Graph URL duplicate in the body", () => {
+    expect(
+      hasTagWithAttributes(
+        '<html><head><meta property="og:url" content="https://example.com/page" /></head><body><meta property="og:url" content="https://example.com/wrong" /></body></html>',
+        "meta",
+        { property: "og:url", content: "https://example.com/page" },
+      ),
+    ).toBe(false);
+  });
+
+  it("rejects an Open Graph URL duplicate in a second head", () => {
+    expect(
+      hasTagWithAttributes(
+        '<html><head><meta property="og:url" content="https://example.com/page" /></head><head><meta property="og:url" content="https://example.com/wrong" /></head></html>',
+        "meta",
+        { property: "og:url", content: "https://example.com/page" },
+      ),
+    ).toBe(false);
+  });
+
+  it("rejects duplicate attributes on one element", () => {
     expect(
       hasTagWithAttributes(
         '<head><meta property="wrong" property="og:url" content="https://example.com/page" /></head>',
@@ -572,7 +641,7 @@ Run:
 bun test scripts/legal-pages.test.ts
 ```
 
-Expected at this checkpoint: FAIL with 23 helper and contract checks passing and 10 contract checks failing. The failures cover missing policy pages and content, the old origin in `docs/index.html` and `docs/roadmap.html` metadata, and pending privacy and terms links across the public pages.
+Expected at this checkpoint: FAIL with 28 helper and contract checks passing and 10 contract checks failing. The failures cover missing policy pages and content, the old origin in `docs/index.html` and `docs/roadmap.html` metadata, and pending privacy and terms links across the public pages.
 
 - [ ] **Step 3: Commit the failing contract**
 
