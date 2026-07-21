@@ -49,12 +49,13 @@
       content="AudioBud local dictation for Windows app interface"
     />
     <link rel="stylesheet" href="./styles.css" />
+    <script src="./site.js" defer></script>
   </head>
   <body>
     <a class="skip-link" href="#roadmap-title">Skip to roadmap</a>
     <div class="swamp" aria-hidden="true"></div>
     <header class="site-header">
-      <nav class="nav" aria-label="Primary">
+      <nav class="nav nav-with-cta" aria-label="Primary">
         <a class="brand" href="./index.html#top" aria-label="AudioBud home">
           <img class="brand-mark" src="./favicon.svg" alt="" />
           <span>AudioBud</span>
@@ -66,14 +67,15 @@
           <a href="./index.html#install">Install</a>
           <a href="./roadmap.html" aria-current="page">Roadmap</a>
         </div>
+        <a class="nav-cta" href="./index.html#install">Get AudioBud</a>
       </nav>
     </header>
 
     <main id="top">
-      <section class="section">
+      <section class="section roadmap-hero">
         <div class="wrap">
           <p class="eyebrow">Roadmap</p>
-          <div class="section-head">
+          <div class="section-head" data-reveal>
             <h1 id="roadmap-title" tabindex="-1">Where AudioBud is headed.</h1>
             <p>
               Themes and status, not dates. Each milestone links to its issues
@@ -82,7 +84,7 @@
             </p>
           </div>
           <div class="roadmap-grid">
-            <article class="roadmap-card">
+            <article class="roadmap-card" data-reveal>
               <div class="roadmap-card-head">
                 <h3>v0.4.0 &mdash; signed &amp; distributable</h3>
                 <span class="status-pill status-planned">planned</span>
@@ -98,7 +100,7 @@
                 >View milestone &rarr;</a
               >
             </article>
-            <article class="roadmap-card">
+            <article class="roadmap-card" data-reveal data-reveal-delay="1">
               <div class="roadmap-card-head">
                 <h3>v0.5.0 &mdash; stability &amp; reliability</h3>
                 <span class="status-pill status-planned">planned</span>
@@ -114,7 +116,7 @@
                 >View milestone &rarr;</a
               >
             </article>
-            <article class="roadmap-card">
+            <article class="roadmap-card" data-reveal>
               <div class="roadmap-card-head">
                 <h3>v0.6.0 &mdash; on-device AI cleanup</h3>
                 <span class="status-pill status-planned">planned</span>
@@ -130,7 +132,7 @@
                 >View milestone &rarr;</a
               >
             </article>
-            <article class="roadmap-card">
+            <article class="roadmap-card" data-reveal data-reveal-delay="1">
               <div class="roadmap-card-head">
                 <h3>v0.7.0 &mdash; interaction &amp; personality</h3>
                 <span class="status-pill status-planned">planned</span>
@@ -145,7 +147,7 @@
                 >View milestone &rarr;</a
               >
             </article>
-            <article class="roadmap-card">
+            <article class="roadmap-card" data-reveal>
               <div class="roadmap-card-head">
                 <h3>v1.0.0 &mdash; cross-platform &amp; stable</h3>
                 <span class="status-pill status-planned">planned</span>
@@ -166,7 +168,7 @@
 
       <section class="section alt">
         <div class="wrap">
-          <div class="section-head">
+          <div class="section-head" data-reveal>
             <h2>What has shipped.</h2>
             <p>
               Released builds, newest first. The full notes live in the
@@ -309,10 +311,14 @@
     </main>
 
     <footer class="site-footer">
-      <div class="wrap">
-        <span
-          >AudioBud is a detached fork of Handy by CJ Pais. MIT licensed.</span
-        >
+      <div class="wrap footer-grid">
+        <div>
+          <a class="brand footer-brand" href="./index.html#top">
+            <img class="brand-mark" src="./favicon.svg" alt="" />
+            <span>AudioBud</span>
+          </a>
+          <p>Local dictation for Windows. MIT licensed.</p>
+        </div>
         <nav class="footer-links" aria-label="Footer">
           <a href="./roadmap.html" aria-current="page">Roadmap</a>
           <a href="./privacy.html">Privacy</a>
@@ -322,6 +328,10 @@
           >
           <a href="https://github.com/jamditis/audiobud">GitHub</a>
         </nav>
+      </div>
+      <div class="wrap footer-bottom">
+        <span>AudioBud is a detached fork of Handy by CJ Pais.</span>
+        <span>Made beside the pond.</span>
       </div>
     </footer>
   </body>

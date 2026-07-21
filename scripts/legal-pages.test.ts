@@ -836,6 +836,16 @@ describe("AudioBud public policy pages", () => {
       "#hero-title, #roadmap-title, #privacy-title, #terms-title",
       ["scroll-margin-top: 80px;"],
     );
+    expect(css.match(/(^|})\s*:focus-visible\s*{/g)).toHaveLength(1);
+    expect(css.match(/(^|})\s*\.skip-link\s*{/g)).toHaveLength(1);
+  });
+
+  it("keeps public-page typography local", () => {
+    for (const page of sitePages) {
+      const html = read(page.name);
+      expect(html).not.toContain("fonts.googleapis.com");
+      expect(html).not.toContain("fonts.gstatic.com");
+    }
   });
 
   it("marks current navigation destinations without extra decoration", () => {
@@ -995,17 +1005,40 @@ describe("AudioBud public policy pages", () => {
     const mobile = readCssBlock(css, "@media (max-width: 860px)");
 
     expect(mobile).toBeDefined();
-    expectCssRule(
-      mobile ?? "",
-      ".status-row, .steps, .feature-grid, .screens, .install, .roadmap-grid, .data-grid",
-      ["grid-template-columns: 1fr;"],
-    );
+    expectCssRule(mobile ?? "", ".roadmap-grid, .data-grid", [
+      "grid-template-columns: 1fr;",
+    ]);
     expectCssRule(mobile ?? "", ".legal-hero", ["padding: 108px 0 34px;"]);
     expectCssRule(mobile ?? "", ".legal-layout", [
       "grid-template-columns: 1fr;",
       "gap: 30px;",
     ]);
     expectCssRule(mobile ?? "", ".legal-toc", ["position: static;"]);
+  });
+
+  it("collapses the redesigned homepage at its tablet and phone breakpoints", () => {
+    const css = read("styles.css");
+    const tablet = readCssBlock(css, "@media (max-width: 980px)");
+    const phone = readCssBlock(css, "@media (max-width: 560px)");
+
+    expect(tablet).toBeDefined();
+    expectCssRule(tablet ?? "", ".hero-grid", ["grid-template-columns: 1fr;"]);
+    expectCssRule(tablet ?? "", ".feature-wide, .feature-screen", [
+      "grid-template-columns: 1fr;",
+    ]);
+    expectCssRule(tablet ?? "", ".model-row", [
+      "grid-template-columns: 48px 1fr auto;",
+    ]);
+    expectCssRule(tablet ?? "", ".cta-card", [
+      "grid-template-columns: 86px 1fr;",
+    ]);
+
+    expect(phone).toBeDefined();
+    expectCssRule(phone ?? "", ".bento-grid", ["grid-template-columns: 1fr;"]);
+    expectCssRule(phone ?? "", ".model-row", [
+      "grid-template-columns: 42px 1fr;",
+    ]);
+    expectCssRule(phone ?? "", ".cta-card", ["display: block;"]);
   });
 
   it("disables smooth scrolling when reduced motion is requested", () => {
@@ -1076,6 +1109,15 @@ describe("AudioBud public policy pages", () => {
       expect(existsSync(join(docs, page))).toBe(true);
     });
   }
+
+  it("keeps the current unsigned-installer warning beside the download CTA", () => {
+    const home = read("index.html");
+
+    expect(home).toContain('class="install-note"');
+    expect(home).toContain("<strong>Unsigned release:</strong>");
+    expect(home).toContain("Windows SmartScreen warns on first");
+    expect(home).toContain("Choose More info, then Run anyway");
+  });
 
   for (const page of sitePages) {
     it(`uses exact custom-domain metadata in ${page.name}`, () => {

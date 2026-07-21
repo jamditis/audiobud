@@ -93,13 +93,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
     .map(([id, config]) => ({ id: id as SidebarSection, ...config }));
 
   return (
-    <div className="flex flex-col w-48 h-full border-e border-mid-gray/20 items-center px-2">
-      <div className="w-full flex items-center py-4 pl-1 pr-5">
+    <aside className="sidebar-shell flex flex-col w-48 h-full items-center px-2">
+      <div className="sidebar-brand w-full flex items-center py-4 pl-1 pr-5">
         <HandyTextLogo width={138} />
       </div>
       <nav
         aria-label={t("sidebar.navLabel")}
-        className="flex flex-col w-full items-center gap-1 pt-2 border-t border-mid-gray/20"
+        className="sidebar-nav flex flex-col w-full items-center gap-1 pt-2"
       >
         {availableSections.map((section) => {
           const Icon = section.icon;
@@ -110,9 +110,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
               key={section.id}
               type="button"
               aria-current={isActive ? "page" : undefined}
-              className={`flex gap-2 items-center p-2 w-full text-start rounded-xl cursor-pointer transition-colors ${
+              className={`sidebar-link flex gap-2 items-center p-2 w-full text-start rounded-xl cursor-pointer ${
                 isActive
-                  ? "bg-logo-primary/90 text-[#0e1c0c] font-semibold nav-pad"
+                  ? "is-active bg-logo-primary/90 text-[#0e1c0c] font-semibold nav-pad"
                   : "hover:bg-logo-primary/10 hover:opacity-100 opacity-85"
               }`}
               onClick={() => onSectionChange(section.id)}
@@ -133,6 +133,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
           );
         })}
       </nav>
-    </div>
+      <div className="sidebar-pond" aria-hidden="true">
+        <span />
+        <span />
+        <span />
+      </div>
+    </aside>
   );
 };

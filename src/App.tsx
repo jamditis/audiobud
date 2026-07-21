@@ -24,6 +24,7 @@ import { commands } from "@/bindings";
 import { getLanguageDirection, initializeRTL } from "@/lib/utils/rtl";
 
 type OnboardingStep = "accessibility" | "model" | "done";
+const PRODUCT_NAME = "AudioBud";
 
 const renderSettingsContent = (section: SidebarSection) => {
   const ActiveComponent =
@@ -295,10 +296,13 @@ function App() {
     return <Onboarding onModelSelected={handleModelSelected} />;
   }
 
+  const activeSection = SECTIONS_CONFIG[currentSection];
+  const ActiveSectionIcon = activeSection.icon;
+
   return (
     <div
       dir={direction}
-      className="h-screen flex flex-col select-none cursor-default relative isolate"
+      className="app-shell h-screen flex flex-col select-none cursor-default relative isolate"
     >
       <SwampBackground />
       <Toaster
@@ -314,20 +318,38 @@ function App() {
         }}
       />
       {/* Main content area that takes remaining space */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex overflow-hidden min-h-0">
         <Sidebar
           activeSection={currentSection}
           onSectionChange={setCurrentSection}
         />
         {/* Scrollable content area */}
-        <div className="flex-1 flex flex-col overflow-hidden">
-          <div className="flex-1 overflow-y-auto">
-            <div className="flex flex-col items-center p-4 gap-4">
+        <main className="app-main flex-1 flex flex-col overflow-hidden min-w-0">
+          <header className="content-toolbar">
+            <div className="content-toolbar-icon" aria-hidden="true">
+              <ActiveSectionIcon width={19} height={19} />
+            </div>
+            <div className="min-w-0">
+              <span className="content-toolbar-kicker">{PRODUCT_NAME}</span>
+              <h1 className="content-toolbar-title">
+                {t(activeSection.labelKey)}
+              </h1>
+            </div>
+            <div className="content-toolbar-pond" aria-hidden="true">
+              <span className="content-toolbar-ripple" />
+              <span className="content-toolbar-ripple content-toolbar-ripple-delay" />
+            </div>
+          </header>
+          <div className="app-scroll flex-1 overflow-y-auto">
+            <div
+              key={currentSection}
+              className="app-content flex flex-col items-center gap-4"
+            >
               <AccessibilityPermissions />
               {renderSettingsContent(currentSection)}
             </div>
           </div>
-        </div>
+        </main>
       </div>
       {/* Fixed footer at bottom */}
       <Footer />
