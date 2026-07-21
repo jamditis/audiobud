@@ -428,6 +428,39 @@ jobs:
             throw "NSIS uninstaller failed with exit code $($uninstallProcess.ExitCode)"
           }
 
+      # Publish the digests as a release asset so the website can link to one
+      # stable URL instead of carrying hashes in its markup, which go stale the
+      # moment the next release ships and then tell a user with a good file
+      # that it is bad. Computed from the signed installers after every
+      # signature check has passed, so the file describes exactly the bytes a
+      # user downloads -- signature block included.
+      - name: Write SHA256SUMS
+        id: checksums
+        shell: pwsh
+        env:
+          NSIS_PATH: ${{ steps.signing-paths.outputs.nsis }}
+          MSI_PATH: ${{ steps.signing-paths.outputs.msi }}
+        run: |
+          $checksumPath = Join-Path $env:RUNNER_TEMP "SHA256SUMS.txt"
+          $lines = foreach ($path in @($env:NSIS_PATH, $env:MSI_PATH)) {
+            if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+              throw "Cannot checksum a missing installer: $path"
+            }
+            $hash = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
+            "$hash  $([System.IO.Path]::GetFileName($path))"
+          }
+
+          # Two spaces between hash and name, LF endings, no BOM: the format
+          # sha256sum -c reads. Out-File would write CRLF and PowerShell's
+          # default UTF-8 carries a BOM, and either one breaks that check.
+          $content = ($lines -join "`n") + "`n"
+          [System.IO.File]::WriteAllText(
+            $checksumPath, $content, [System.Text.UTF8Encoding]::new($false))
+
+          "path=$checksumPath" |
+            Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          Get-Content -LiteralPath $checksumPath
+
       # A draft is created only after all signatures pass. Reruns reuse the
       # draft, but they refuse to replace assets on a published release.
       - name: Find or create draft release
@@ -473,8 +506,10 @@ jobs:
           RELEASE_TAG: ${{ steps.meta.outputs.tag }}
           NSIS_PATH: ${{ steps.signing-paths.outputs.nsis }}
           MSI_PATH: ${{ steps.signing-paths.outputs.msi }}
+          CHECKSUM_PATH: ${{ steps.checksums.outputs.path }}
         run: |
-          gh release upload $env:RELEASE_TAG $env:NSIS_PATH $env:MSI_PATH --clobber
+          gh release upload $env:RELEASE_TAG `
+            $env:NSIS_PATH $env:MSI_PATH $env:CHECKSUM_PATH --clobber
           if ($LASTEXITCODE -ne 0) {
             throw "Failed to upload signed installers to $env:RELEASE_TAG"
           }
@@ -486,5 +521,6 @@ jobs:
           path: |
             ${{ steps.signing-paths.outputs.nsis }}
             ${{ steps.signing-paths.outputs.msi }}
+            ${{ steps.checksums.outputs.path }}
           retention-days: 30
           if-no-files-found: error

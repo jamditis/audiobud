@@ -80,6 +80,7 @@ describe("Windows release signing workflow", () => {
       "Sign release outputs",
       "Verify Authenticode signatures",
       "Verify packaged application signatures",
+      "Write SHA256SUMS",
       "Find or create draft release",
       "Upload signed installers to GitHub release",
       "Upload signed installers as CI artifact",
@@ -133,6 +134,34 @@ describe("Windows release signing workflow", () => {
     expect(workflow).toContain("TimeStamperCertificate");
     expect(workflow).toContain("CN=Joseph Amditis");
     expect(workflow).toContain("uninstall.exe");
+  });
+
+  test("publishes digests of the signed installers as a release asset", () => {
+    // The website links to SHA256SUMS.txt at a fixed URL instead of carrying
+    // hashes in its markup, so a missing asset leaves that link dead.
+    expect(workflow).toContain(
+      '$checksumPath = Join-Path $env:RUNNER_TEMP "SHA256SUMS.txt"',
+    );
+    expect(workflow).toContain(
+      "$env:NSIS_PATH $env:MSI_PATH $env:CHECKSUM_PATH --clobber",
+    );
+    expect(workflow).toContain(
+      "CHECKSUM_PATH: ${{ steps.checksums.outputs.path }}",
+    );
+
+    // Hashing a path that does not exist would otherwise publish a file
+    // listing one installer and silently omit the other.
+    expect(workflow).toContain("Cannot checksum a missing installer");
+
+    // sha256sum -c wants lowercase hex, two spaces, a bare file name, LF, and
+    // no BOM. Get-FileHash returns uppercase and Out-File writes CRLF+BOM.
+    expect(workflow).toContain(
+      "(Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()",
+    );
+    expect(workflow).toContain(
+      '"$hash  $([System.IO.Path]::GetFileName($path))"',
+    );
+    expect(workflow).toContain("[System.Text.UTF8Encoding]::new($false)");
   });
 
   test("binds release assets to one commit and keeps reruns separate", () => {
