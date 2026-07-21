@@ -372,10 +372,20 @@
             </p>
           </div>
           <div class="cta-actions">
+            <!-- The href stays on the releases page so the button always
+                 resolves, with no version to keep in sync here. site.js
+                 upgrades it to the current installer once the release
+                 answers. -->
             <a
               class="button primary"
+              data-download=".exe"
               href="https://github.com/jamditis/audiobud/releases/latest"
               >Download AudioBud</a
+            >
+            <a
+              class="text-link"
+              href="https://github.com/jamditis/audiobud/releases/latest"
+              >All downloads <span aria-hidden="true">→</span></a
             >
             <a
               class="text-link"
@@ -391,11 +401,11 @@
           <div class="section-head" data-reveal>
             <div>
               <p class="eyebrow">Before you install</p>
-              <h2>That warning counts downloads, not risks.</h2>
+              <h2>Windows hasn't seen this installer yet.</h2>
             </div>
             <p>
-              Windows flags installers hardly anyone has fetched yet. Here is
-              what it means and how to confirm you have the real file.
+              SmartScreen warns about files hardly anyone has fetched. Here is
+              what that means and how to confirm you have the real one.
             </p>
           </div>
 
@@ -405,10 +415,10 @@
               <p>
                 When Edge says a file
                 <em>isn't commonly downloaded</em>, SmartScreen is reporting how
-                many people have downloaded that exact build so far. It is a
-                popularity score, not a security verdict, and every release
-                starts at zero no matter who signed it. AudioBud is a small
-                project, so new versions will trip this for a while.
+                many people have downloaded that exact build so far. The count
+                says nothing about what the file does, and every release starts
+                at zero no matter who signed it. AudioBud is a small project, so
+                new versions will trip this for a while.
               </p>
               <p>
                 To continue, choose <strong>Keep</strong> in the download list,

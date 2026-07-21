@@ -30,7 +30,7 @@ describe("download verification guidance", () => {
 
     const text = compact(section!.replace(/<[^>]+>/g, " ")).toLowerCase();
     expect(text).toContain("isn't commonly downloaded");
-    expect(text).toContain("popularity score, not a security verdict");
+    expect(text).toContain("says nothing about what the file does");
     expect(text).toContain("digital signatures");
   });
 
@@ -114,6 +114,34 @@ describe("download verification guidance", () => {
     // Digests are written as text so a hostile response cannot inject markup.
     expect(script).toMatch(/value\.textContent = asset\.digest/);
     expect(script).not.toMatch(/innerHTML/);
+  });
+
+  it("hands the download button the installer from that same release", () => {
+    // The href in the markup stays on the releases page: it can never 404 and
+    // it names no version, so a release does not drag a site edit behind it.
+    expect(compactHome).toMatch(
+      /<a class="button primary" data-download="\.exe" href="https:\/\/github\.com\/jamditis\/audiobud\/releases\/latest"/,
+    );
+
+    // Direct-downloading the .exe hides the MSI and the notes, so the card has
+    // to keep a way through to the release itself.
+    expect(compactHome).toMatch(
+      /href="https:\/\/github\.com\/jamditis\/audiobud\/releases\/latest" >All downloads/,
+    );
+
+    const script = compact(read("docs/site.js"));
+
+    expect(script).toContain("link.href = asset.browser_download_url");
+    // One request feeds both the checksums and the button, so the file the
+    // button serves is the file the page publishes a digest for.
+    expect(script.match(/fetch\(/g)).toHaveLength(1);
+    // A hostile or mistaken response must not be able to retarget the button
+    // at a javascript: URL, another host, or another repository.
+    expect(script).toContain('url.protocol === "https:"');
+    expect(script).toContain('url.hostname === "github.com"');
+    expect(script).toContain(
+      'url.pathname.startsWith("/jamditis/audiobud/releases/download/")',
+    );
   });
 
   it("keeps the verification cards readable on narrow screens", () => {

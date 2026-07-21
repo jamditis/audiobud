@@ -78,21 +78,38 @@
           <div class="section-head" data-reveal>
             <h1 id="roadmap-title" tabindex="-1">Where AudioBud is headed.</h1>
             <p>
-              Themes and status, not dates. Each milestone links to its issues
-              on GitHub. Near-term versions carry firm issue lists; the later
-              feature bets are directional, and v1.0.0 is a quality gate.
+              Themes and status, not dates. Every card links to a milestone
+              whose issues say what the work actually is, down to the files
+              involved. Near-term versions carry firm lists; the later ones are
+              directional, and v1.0.0 is a decision as much as a quality gate.
             </p>
           </div>
           <div class="roadmap-grid">
             <article class="roadmap-card" data-reveal data-reveal-delay="1">
               <div class="roadmap-card-head">
-                <h3>v0.5.0 &mdash; stability &amp; reliability</h3>
+                <h3>v0.4.1 &mdash; release integrity</h3>
+                <span class="status-pill status-progress">next up</span>
+              </div>
+              <p>
+                Make the build pipeline test what it actually ships, publish
+                provenance you can check for every artifact, and turn on
+                auto-update so a bad build can be fixed after it leaves.
+              </p>
+              <a
+                class="roadmap-link"
+                href="https://github.com/jamditis/audiobud/milestone/10"
+                >View milestone &rarr;</a
+              >
+            </article>
+            <article class="roadmap-card" data-reveal>
+              <div class="roadmap-card-head">
+                <h3>v0.5.0 &mdash; output routing</h3>
                 <span class="status-pill status-planned">planned</span>
               </div>
               <p>
-                The remaining inherited reliability bugs and a full
-                accessibility pass across the settings, model picker, and
-                dialogs.
+                Pin dictation to a window you chose and keep working somewhere
+                else. Underneath it, the pipeline learns to carry what you asked
+                for from the moment you start speaking through to the paste.
               </p>
               <a
                 class="roadmap-link"
@@ -100,15 +117,15 @@
                 >View milestone &rarr;</a
               >
             </article>
-            <article class="roadmap-card" data-reveal>
+            <article class="roadmap-card" data-reveal data-reveal-delay="1">
               <div class="roadmap-card-head">
-                <h3>v0.6.0 &mdash; on-device AI cleanup</h3>
+                <h3>v0.6.0 &mdash; transcription quality</h3>
                 <span class="status-pill status-planned">planned</span>
               </div>
               <p>
-                Optional transcript cleanup with a local LLM &mdash; never the
-                cloud &mdash; plus cheaper accuracy wins, the long-audio fix,
-                and a real-time preview.
+                One text pipeline instead of stages that disagree with each
+                other, optional cleanup with a local LLM &mdash; never the cloud
+                &mdash; the long-audio fix, and a streaming preview.
               </p>
               <a
                 class="roadmap-link"
@@ -116,7 +133,7 @@
                 >View milestone &rarr;</a
               >
             </article>
-            <article class="roadmap-card" data-reveal data-reveal-delay="1">
+            <article class="roadmap-card" data-reveal>
               <div class="roadmap-card-head">
                 <h3>v0.7.0 &mdash; interaction &amp; personality</h3>
                 <span class="status-pill status-planned">planned</span>
@@ -131,14 +148,31 @@
                 >View milestone &rarr;</a
               >
             </article>
-            <article class="roadmap-card" data-reveal>
+            <article class="roadmap-card" data-reveal data-reveal-delay="1">
               <div class="roadmap-card-head">
-                <h3>v1.0.0 &mdash; cross-platform &amp; stable</h3>
+                <h3>v0.8.0 &mdash; reliability &amp; accessibility</h3>
                 <span class="status-pill status-planned">planned</span>
               </div>
               <p>
-                Validate the macOS and Linux builds, finish the remaining
-                hardening, and complete the documentation.
+                The inherited robustness bugs, an error-handling pass so
+                failures surface instead of hanging, and the accessibility audit
+                across settings, the model picker, and dialogs.
+              </p>
+              <a
+                class="roadmap-link"
+                href="https://github.com/jamditis/audiobud/milestone/11"
+                >View milestone &rarr;</a
+              >
+            </article>
+            <article class="roadmap-card" data-reveal>
+              <div class="roadmap-card-head">
+                <h3>v1.0.0 &mdash; platform decision</h3>
+                <span class="status-pill status-planned">planned</span>
+              </div>
+              <p>
+                Finish the rebrand down to the plumbing, then make an explicit
+                call on macOS and Linux: validate them, or hand them back to
+                upstream. Right now nothing tests either one.
               </p>
               <a
                 class="roadmap-link"
