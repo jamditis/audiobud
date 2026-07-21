@@ -100,7 +100,7 @@ VIAddVersionKey "ProductVersion" "${VERSION}"
 
 ; Uninstaller signing command
 !if "${UNINSTALLERSIGNCOMMAND}" != ""
-  !uninstfinalize '${UNINSTALLERSIGNCOMMAND}'
+  !uninstfinalize '${UNINSTALLERSIGNCOMMAND} -TauriNsisUninstaller' = 0
 !endif
 
 ; Handle install mode, `perUser`, `perMachine` or `both`
