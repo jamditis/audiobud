@@ -4,6 +4,11 @@
 # release + updater pipeline are deliberately milestone B: they need AudioBud's
 # own signing identity and provenance, not the inherited cjpais/Handy config.
 # See superpowers/DEFERRED-issues.md ("Milestone B" section).
+#
+# The two Rust jobs below mock the transcription engine to stay fast. That is a
+# deliberate trade, not full coverage: engine.yml builds the real engine on
+# Windows whenever src-tauri changes, so the code these jobs skip is still
+# compiled and tested before it can reach a release (issue #146).
 name: CI
 
 on:
@@ -78,6 +83,7 @@ jobs:
         working-directory: src-tauri
         run: |
           # Swap to the mock adapter so cargo test does not compile whisper/Vulkan/ONNX.
+          # The real transcription.rs is compiled and tested by engine.yml.
           cp src/managers/transcription_mock.rs src/managers/transcription.rs
           sed -i '/^transcribe-rs/d' Cargo.toml
 
@@ -113,6 +119,7 @@ jobs:
         shell: bash
         run: |
           # Swap to the mock adapter so cargo test does not compile whisper/Vulkan/ONNX.
+          # The real transcription.rs is compiled and tested by engine.yml.
           cp src/managers/transcription_mock.rs src/managers/transcription.rs
           sed -i '/^transcribe-rs/d' Cargo.toml
 
