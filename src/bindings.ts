@@ -1118,7 +1118,7 @@ whole_word?: boolean;
 case_sensitive?: boolean;
 /**
  * Keep the replacement's exact casing instead of adapting it to the matched text.
- * Reserved for learned brand corrections whose internal casing carries meaning.
+ * Used by learned names, brands, and acronyms whose casing carries meaning.
  */
 preserve_replacement_case?: boolean }
 /**

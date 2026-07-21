@@ -117,7 +117,7 @@ pub struct WordReplacement {
     #[serde(default)]
     pub case_sensitive: bool,
     /// Keep the replacement's exact casing instead of adapting it to the matched text.
-    /// Reserved for learned brand corrections whose internal casing carries meaning.
+    /// Used by learned names, brands, and acronyms whose casing carries meaning.
     #[serde(default)]
     pub preserve_replacement_case: bool,
 }

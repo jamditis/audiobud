@@ -343,7 +343,7 @@ fn is_word_boundary_match(haystack: &str, start: usize, end: usize) -> bool {
 ///   text when it is ALL CAPS or Capitalized; otherwise the replacement's own casing is kept (so a
 ///   lowercase match of `clawed` still yields `Claude`, not `claude`). See [`preserve_case_pattern`].
 /// - `preserve_replacement_case` (default false): keeps the exact replacement casing for learned
-///   brand corrections such as `io` -> `iOS`, regardless of the matched source casing.
+///   names, brands, and acronyms such as `io` -> `iOS`, regardless of the matched source casing.
 /// - An empty `to` deletes the match; spaces left dangling by a deletion (doubled, leading/trailing,
 ///   or stranded before punctuation) are cleaned up afterwards.
 pub fn apply_replacements(text: &str, replacements: &[WordReplacement]) -> String {
@@ -775,9 +775,12 @@ fn lcs_anchors(a: &[String], b: &[String]) -> Vec<(usize, usize)> {
             anchors.push((i, j));
             i += 1;
             j += 1;
-        } else if dp[at(i + 1, j)] >= dp[at(i, j + 1)] {
+        } else if dp[at(i + 1, j)] > dp[at(i, j + 1)] {
             i += 1;
         } else {
+            // Prefer advancing the corrected side on a tie. This keeps a later unchanged target
+            // anchored to itself (`jon John` -> `John John`) so the adjacent typo remains a
+            // one-for-one substitution instead of becoming a deletion plus insertion.
             j += 1;
         }
     }
@@ -800,23 +803,42 @@ fn has_intentional_mixed_case(value: &str) -> bool {
     !letters[0].is_uppercase() || letters[1..].iter().any(|c| !c.is_lowercase())
 }
 
-/// Whether `from` and `to` share ordinary presentation casing supplied by their context. If the
-/// corrected form is a dictionary word, matching sentence case or all caps should not become part
-/// of the global replacement itself; the production replacer will restore that presentation when
-/// it sees the same casing again.
-fn has_matching_contextual_case(from: &str, to: &str) -> bool {
-    fn is_all_caps(value: &str) -> bool {
-        let mut letters = value.chars().filter(|c| c.is_alphabetic()).peekable();
-        letters.peek().is_some() && letters.all(|c| c.is_uppercase())
+fn is_all_caps(value: &str) -> bool {
+    let mut letters = value.chars().filter(|c| c.is_alphabetic()).peekable();
+    letters.peek().is_some() && letters.all(|c| c.is_uppercase())
+}
+
+fn is_capitalized(value: &str) -> bool {
+    let mut letters = value.chars().filter(|c| c.is_alphabetic());
+    letters.next().is_some_and(|first| first.is_uppercase()) && letters.all(|c| c.is_lowercase())
+}
+
+/// Canonicalize casing only when the surrounding tokens make presentation casing unambiguous.
+/// Otherwise keep behaviorally meaningful casing in both the target and its preservation flag.
+fn learned_target_presentation(
+    from: &str,
+    to: &str,
+    sentence_case_context: bool,
+    all_caps_context: bool,
+) -> (String, bool) {
+    if has_intentional_mixed_case(to) {
+        return (to.to_string(), true);
     }
 
-    fn is_capitalized(value: &str) -> bool {
-        let mut letters = value.chars().filter(|c| c.is_alphabetic());
-        letters.next().is_some_and(|first| first.is_uppercase())
-            && letters.all(|c| c.is_lowercase())
+    let dictionary_target = is_known_english_word(to);
+    let matching_capitalized = is_capitalized(from) && is_capitalized(to);
+    let matching_all_caps = is_all_caps(from) && is_all_caps(to);
+    if dictionary_target
+        && ((matching_capitalized && sentence_case_context)
+            || (matching_all_caps && all_caps_context))
+    {
+        return (to.to_lowercase(), false);
     }
 
-    (is_all_caps(from) && is_all_caps(to)) || (is_capitalized(from) && is_capitalized(to))
+    // A dictionary homograph with presentation casing outside a clear sentence/all-caps context
+    // may be a name or acronym (`Apple`, `US`). Keep exactly what the user entered.
+    let preserve = dictionary_target && (matching_capitalized || matching_all_caps);
+    (to.to_string(), preserve)
 }
 
 /// Whether two token cores differ only by a regular English inflection. The broad English
@@ -1019,7 +1041,15 @@ pub fn extract_learned_replacements(
     // Every changed gap must be exactly one token on each side. If an insertion, deletion, or
     // multi-token rewrite appears anywhere in the edit, learn nothing from the whole transcript:
     // that more complex edit can contradict an otherwise plausible one-token pair.
-    let mut candidates: Vec<(String, String)> = Vec::new();
+    let all_caps_context = {
+        let alphabetic: Vec<&str> = corr
+            .iter()
+            .map(|token| word_core(token))
+            .filter(|core| core.chars().any(|c| c.is_alphabetic()))
+            .collect();
+        alphabetic.len() >= 2 && alphabetic.iter().all(|core| is_all_caps(core))
+    };
+    let mut candidates: Vec<(String, String, bool)> = Vec::new();
     let (mut pi, mut pj) = (0usize, 0usize);
     for (ai, aj) in anchors
         .iter()
@@ -1042,7 +1072,16 @@ pub fn extract_learned_replacements(
                 if word_outer_affixes(from_token, from) != word_outer_affixes(to_token, to) {
                     return Vec::new();
                 }
-                candidates.push((from.to_string(), to.to_string()));
+                let sentence_case_context = pj == 0
+                    && corr.get(1).is_some_and(|next| {
+                        word_core(next)
+                            .chars()
+                            .find(|c| c.is_alphabetic())
+                            .is_some_and(|c| c.is_lowercase())
+                    });
+                let (to, preserve_replacement_case) =
+                    learned_target_presentation(from, to, sentence_case_context, all_caps_context);
+                candidates.push((from.to_string(), to, preserve_replacement_case));
             }
             _ => return Vec::new(),
         }
@@ -1050,15 +1089,15 @@ pub fn extract_learned_replacements(
         pj = aj + 1;
     }
 
-    // Drop any heard word that was corrected inconsistently, then dedupe on the
-    // lowercased pair while keeping the first-seen casing. Both passes preserve
-    // reading order, so the output is stable.
-    let mut targets_for: HashMap<String, HashSet<String>> = HashMap::new();
-    for (from, to) in &candidates {
+    // Drop any heard word that was corrected inconsistently, then dedupe on the exact effective
+    // target and its case-preservation behavior. Both passes preserve reading order, so the output
+    // is stable without collapsing semantic case differences such as `OpenAI` versus `Openai`.
+    let mut targets_for: HashMap<String, HashSet<(String, bool)>> = HashMap::new();
+    for (from, to, preserve_replacement_case) in &candidates {
         targets_for
             .entry(from.to_lowercase())
             .or_default()
-            .insert(to.to_lowercase());
+            .insert((to.clone(), *preserve_replacement_case));
     }
 
     // A token present on both sides must be fully accounted for by LCS anchors. Otherwise it moved
@@ -1093,27 +1132,17 @@ pub fn extract_learned_replacements(
         .map(|&(i, _)| orig_keys[i].as_str())
         .collect();
 
-    let mut seen: HashSet<(String, String)> = HashSet::new();
+    let mut seen: HashSet<(String, String, bool)> = HashSet::new();
     let mut out = Vec::new();
-    for (from, to) in candidates {
+    for (from, to, preserve_replacement_case) in candidates {
         let from_key = from.to_lowercase();
-        let to_key = to.to_lowercase();
         if targets_for.get(&from_key).map_or(0, |s| s.len()) > 1 {
             continue;
         }
         if kept_unchanged.contains(from_key.as_str()) {
             continue;
         }
-        if seen.insert((from_key, to_key)) {
-            let preserve_replacement_case = has_intentional_mixed_case(&to);
-            let to = if !preserve_replacement_case
-                && is_known_english_word(&to)
-                && has_matching_contextual_case(&from, &to)
-            {
-                to.to_lowercase()
-            } else {
-                to
-            };
+        if seen.insert((from_key, to.clone(), preserve_replacement_case)) {
             out.push(WordReplacement {
                 from,
                 preserve_replacement_case,
@@ -1386,7 +1415,7 @@ mod tests {
             "say hello, then Hello"
         );
 
-        let all_caps = extract_learned_replacements("fix SONET today", "fix SONNET today");
+        let all_caps = extract_learned_replacements("FIX SONET TODAY", "FIX SONNET TODAY");
         assert_eq!(
             learned_pairs(&all_caps),
             vec![("SONET".to_string(), "sonnet".to_string())]
@@ -1395,6 +1424,14 @@ mod tests {
             apply_replacements("sonet and SONET", &all_caps),
             "sonnet and SONNET"
         );
+
+        // An isolated all-caps correction inside lowercase prose is semantic, not presentation.
+        let acronym_like = extract_learned_replacements("fix SONET today", "fix SONNET today");
+        assert_eq!(
+            learned_pairs(&acronym_like),
+            vec![("SONET".to_string(), "SONNET".to_string())]
+        );
+        assert!(acronym_like[0].preserve_replacement_case);
     }
 
     #[test]
@@ -1402,6 +1439,35 @@ mod tests {
         assert!(extract_learned_replacements("run prent today", "run print() today").is_empty());
         assert!(extract_learned_replacements("ask dokter tomorrow", "ask Dr. tomorrow").is_empty());
         assert!(extract_learned_replacements("run prent.", "run print().").is_empty());
+    }
+
+    #[test]
+    fn extractor_rejects_targets_with_conflicting_semantic_case() {
+        assert!(extract_learned_replacements("opnai and opnai", "OpenAI and Openai").is_empty());
+    }
+
+    #[test]
+    fn extractor_preserves_a_dictionary_homograph_used_as_a_name() {
+        let learned = extract_learned_replacements("Use Aple Music", "Use Apple Music");
+        assert_eq!(
+            learned_pairs(&learned),
+            vec![("Aple".to_string(), "Apple".to_string())]
+        );
+        assert!(learned[0].preserve_replacement_case);
+        assert_eq!(apply_replacements("try aple", &learned), "try Apple");
+
+        let at_sentence_start = extract_learned_replacements("Aple Music", "Apple Music");
+        assert_eq!(learned_pairs(&at_sentence_start), learned_pairs(&learned));
+        assert!(at_sentence_start[0].preserve_replacement_case);
+    }
+
+    #[test]
+    fn extractor_learns_an_adjacent_typo_when_its_target_follows() {
+        let learned = extract_learned_replacements("jon John", "John John");
+        assert_eq!(
+            learned_pairs(&learned),
+            vec![("jon".to_string(), "John".to_string())]
+        );
     }
 
     #[test]
