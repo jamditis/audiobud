@@ -145,6 +145,9 @@ const scanMetadataOpeningTags = (html: string) => {
     attributes: Map<string, string>;
   }> = [];
   let cursor = 0;
+  let hasSeenHead = false;
+  let hasSeenBody = false;
+  let isInsideHead = false;
 
   while (cursor < html.length) {
     const tagStart = html.indexOf("<", cursor);
@@ -152,38 +155,68 @@ const scanMetadataOpeningTags = (html: string) => {
 
     if (html.startsWith("<!--", tagStart)) {
       const commentEnd = html.indexOf("-->", tagStart + 4);
-      if (commentEnd === -1) break;
+      if (commentEnd === -1) return null;
       cursor = commentEnd + 3;
       continue;
     }
 
-    if (!isAsciiLetter(html[tagStart + 1])) {
+    let nameStart = tagStart + 1;
+    const isClosingTag = html[nameStart] === "/";
+    if (isClosingTag) nameStart++;
+
+    if (!isAsciiLetter(html[nameStart])) {
       cursor = tagStart + 1;
       continue;
     }
 
-    let nameEnd = tagStart + 1;
+    let nameEnd = nameStart;
     while (nameEnd < html.length && isTagNameCharacter(html[nameEnd]))
       nameEnd++;
 
-    const name = html.slice(tagStart + 1, nameEnd).toLowerCase();
+    const name = html.slice(nameStart, nameEnd).toLowerCase();
     const hasValidNameDelimiter = isTagNameDelimiter(html[nameEnd]);
     const tagEnd = findOpeningTagEnd(html, nameEnd);
-    if (tagEnd === null) break;
+    if (tagEnd === null) return null;
+
+    if (isClosingTag) {
+      if (hasValidNameDelimiter && name === "head") isInsideHead = false;
+      cursor = tagEnd + 1;
+      continue;
+    }
+
+    if (hasValidNameDelimiter && name === "head") {
+      if (!hasSeenHead && !hasSeenBody) {
+        hasSeenHead = true;
+        isInsideHead = true;
+      }
+      cursor = tagEnd + 1;
+      continue;
+    }
+
+    if (hasValidNameDelimiter && name === "body") {
+      hasSeenBody = true;
+      isInsideHead = false;
+      cursor = tagEnd + 1;
+      continue;
+    }
 
     if (
       hasValidNameDelimiter &&
-      ["script", "style", "title", "textarea"].includes(name)
+      ["script", "style", "template", "title", "textarea"].includes(name)
     ) {
       const closingTag = new RegExp(`</${name}[ \\t\\n\\r\\f]*>`, "gi");
       closingTag.lastIndex = tagEnd + 1;
       const closingMatch = closingTag.exec(html);
-      if (!closingMatch) break;
+      if (!closingMatch) return null;
       cursor = closingTag.lastIndex;
       continue;
     }
 
-    if (hasValidNameDelimiter && (name === "link" || name === "meta")) {
+    if (
+      isInsideHead &&
+      hasValidNameDelimiter &&
+      (name === "link" || name === "meta")
+    ) {
       tags.push({
         name,
         attributes: parseQuotedAttributes(html.slice(nameEnd, tagEnd)),
@@ -199,13 +232,32 @@ const hasTagWithAttributes = (
   tag: MetadataTagName,
   attributes: Record<string, string>,
 ) => {
-  return scanMetadataOpeningTags(html).some(
+  const metadataTags = scanMetadataOpeningTags(html);
+  if (!metadataTags) return false;
+
+  const identity =
+    tag === "link" && attributes.rel === "canonical"
+      ? (["rel", "canonical"] as const)
+      : tag === "meta" &&
+          (attributes.property === "og:url" ||
+            attributes.property === "og:image")
+        ? (["property", attributes.property] as const)
+        : tag === "meta" && attributes.name === "twitter:image"
+          ? (["name", "twitter:image"] as const)
+          : null;
+  if (!identity) return false;
+
+  const candidates = metadataTags.filter(
     (candidate) =>
       candidate.name === tag &&
-      Object.entries(attributes).every(
-        ([name, value]) =>
-          candidate.attributes.get(name.toLowerCase()) === value,
-      ),
+      candidate.attributes.get(identity[0]) === identity[1],
+  );
+  return (
+    candidates.length === 1 &&
+    Object.entries(attributes).every(
+      ([name, value]) =>
+        candidates[0].attributes.get(name.toLowerCase()) === value,
+    )
   );
 };
 const expectTagWithAttributes = (
@@ -219,7 +271,7 @@ const expectTagWithAttributes = (
 describe("Metadata tag matcher", () => {
   it("accepts reordered real attributes", () => {
     expectTagWithAttributes(
-      '<meta content="https://example.com/page" property="og:url" />',
+      '<head><meta content="https://example.com/page" property="og:url" /></head>',
       "meta",
       { property: "og:url", content: "https://example.com/page" },
     );
@@ -227,12 +279,12 @@ describe("Metadata tag matcher", () => {
 
   it("accepts single or double quotes", () => {
     expectTagWithAttributes(
-      "<link rel='canonical' href='https://example.com/page' />",
+      "<head><link rel='canonical' href='https://example.com/page' /></head>",
       "link",
       { rel: "canonical", href: "https://example.com/page" },
     );
     expectTagWithAttributes(
-      '<link rel="canonical" href="https://example.com/page" />',
+      '<head><link rel="canonical" href="https://example.com/page" /></head>',
       "link",
       { rel: "canonical", href: "https://example.com/page" },
     );
@@ -241,7 +293,7 @@ describe("Metadata tag matcher", () => {
   it("accepts HTML ASCII whitespace around attributes and equals signs", () => {
     for (const whitespace of [" ", "\t", "\n", "\r", "\f"]) {
       expectTagWithAttributes(
-        `<meta${whitespace}property${whitespace}=${whitespace}"og:url"${whitespace}content${whitespace}=${whitespace}"https://example.com/page" />`,
+        `<head><meta${whitespace}property${whitespace}=${whitespace}"og:url"${whitespace}content${whitespace}=${whitespace}"https://example.com/page" /></head>`,
         "meta",
         { property: "og:url", content: "https://example.com/page" },
       );
@@ -251,7 +303,7 @@ describe("Metadata tag matcher", () => {
   it("rejects data attribute suffixes", () => {
     expect(
       hasTagWithAttributes(
-        '<link data-rel="canonical" data-href="https://example.com/page" />',
+        '<head><link data-rel="canonical" data-href="https://example.com/page" /></head>',
         "link",
         { rel: "canonical", href: "https://example.com/page" },
       ),
@@ -261,7 +313,7 @@ describe("Metadata tag matcher", () => {
   it("rejects attributes embedded inside another quoted value", () => {
     expect(
       hasTagWithAttributes(
-        `<meta data-copy='property="og:url" content="https://example.com/page"' />`,
+        `<head><meta data-copy='property="og:url" content="https://example.com/page"' /></head>`,
         "meta",
         { property: "og:url", content: "https://example.com/page" },
       ),
@@ -271,7 +323,7 @@ describe("Metadata tag matcher", () => {
   it("rejects a complete tag inside an HTML comment", () => {
     expect(
       hasTagWithAttributes(
-        '<!-- <meta property="og:url" content="https://example.com/page" /> -->',
+        '<head><!-- <meta property="og:url" content="https://example.com/page" /> --></head>',
         "meta",
         { property: "og:url", content: "https://example.com/page" },
       ),
@@ -281,7 +333,7 @@ describe("Metadata tag matcher", () => {
   it("rejects a complete tag inside another element attribute", () => {
     expect(
       hasTagWithAttributes(
-        `<div data-copy='<meta property="og:url" content="https://example.com/page" />'></div>`,
+        `<head><div data-copy='<meta property="og:url" content="https://example.com/page" />'></div></head>`,
         "meta",
         { property: "og:url", content: "https://example.com/page" },
       ),
@@ -291,7 +343,7 @@ describe("Metadata tag matcher", () => {
   it("rejects a complete tag inside script text", () => {
     expect(
       hasTagWithAttributes(
-        `<script>const tag = '<meta property="og:url" content="https://example.com/page" />';</script>`,
+        `<head><script>const tag = '<meta property="og:url" content="https://example.com/page" />';</script></head>`,
         "meta",
         { property: "og:url", content: "https://example.com/page" },
       ),
@@ -301,7 +353,7 @@ describe("Metadata tag matcher", () => {
   it("rejects a punctuation-suffixed meta tag name", () => {
     expect(
       hasTagWithAttributes(
-        '<meta! property="og:url" content="https://example.com/page" />',
+        '<head><meta! property="og:url" content="https://example.com/page" /></head>',
         "meta",
         { property: "og:url", content: "https://example.com/page" },
       ),
@@ -311,7 +363,7 @@ describe("Metadata tag matcher", () => {
   it("rejects an underscore-suffixed link tag name", () => {
     expect(
       hasTagWithAttributes(
-        '<link_ rel="canonical" href="https://example.com/page" />',
+        '<head><link_ rel="canonical" href="https://example.com/page" /></head>',
         "link",
         { rel: "canonical", href: "https://example.com/page" },
       ),
@@ -321,7 +373,7 @@ describe("Metadata tag matcher", () => {
   it("rejects a complete tag inside title text", () => {
     expect(
       hasTagWithAttributes(
-        '<title><meta property="og:url" content="https://example.com/page" /></title>',
+        '<head><title><meta property="og:url" content="https://example.com/page" /></title></head>',
         "meta",
         { property: "og:url", content: "https://example.com/page" },
       ),
@@ -331,7 +383,77 @@ describe("Metadata tag matcher", () => {
   it("rejects a complete tag inside textarea text", () => {
     expect(
       hasTagWithAttributes(
-        '<textarea><meta property="og:url" content="https://example.com/page" /></textarea>',
+        '<head><textarea><meta property="og:url" content="https://example.com/page" /></textarea></head>',
+        "meta",
+        { property: "og:url", content: "https://example.com/page" },
+      ),
+    ).toBe(false);
+  });
+
+  it("rejects metadata in the document body", () => {
+    expect(
+      hasTagWithAttributes(
+        '<html><head></head><body><meta property="og:url" content="https://example.com/page" /></body></html>',
+        "meta",
+        { property: "og:url", content: "https://example.com/page" },
+      ),
+    ).toBe(false);
+  });
+
+  it("rejects metadata inside template content", () => {
+    expect(
+      hasTagWithAttributes(
+        '<head><template><meta property="og:url" content="https://example.com/page" /></template></head>',
+        "meta",
+        { property: "og:url", content: "https://example.com/page" },
+      ),
+    ).toBe(false);
+  });
+
+  it("rejects metadata inside style text", () => {
+    expect(
+      hasTagWithAttributes(
+        `<head><style>.example { content: '<meta property="og:url" content="https://example.com/page" />'; }</style></head>`,
+        "meta",
+        { property: "og:url", content: "https://example.com/page" },
+      ),
+    ).toBe(false);
+  });
+
+  it("rejects a conflicting canonical before the expected tag", () => {
+    expect(
+      hasTagWithAttributes(
+        '<head><link rel="canonical" href="https://example.com/wrong" /><link rel="canonical" href="https://example.com/page" /></head>',
+        "link",
+        { rel: "canonical", href: "https://example.com/page" },
+      ),
+    ).toBe(false);
+  });
+
+  it("rejects a conflicting canonical after the expected tag", () => {
+    expect(
+      hasTagWithAttributes(
+        '<head><link rel="canonical" href="https://example.com/page" /><link rel="canonical" href="https://example.com/wrong" /></head>',
+        "link",
+        { rel: "canonical", href: "https://example.com/page" },
+      ),
+    ).toBe(false);
+  });
+
+  it("rejects a conflicting Open Graph URL before the expected tag", () => {
+    expect(
+      hasTagWithAttributes(
+        '<head><meta property="og:url" content="https://example.com/wrong" /><meta property="og:url" content="https://example.com/page" /></head>',
+        "meta",
+        { property: "og:url", content: "https://example.com/page" },
+      ),
+    ).toBe(false);
+  });
+
+  it("rejects a conflicting Open Graph URL after the expected tag", () => {
+    expect(
+      hasTagWithAttributes(
+        '<head><meta property="og:url" content="https://example.com/page" /><meta property="og:url" content="https://example.com/wrong" /></head>',
         "meta",
         { property: "og:url", content: "https://example.com/page" },
       ),
@@ -341,7 +463,7 @@ describe("Metadata tag matcher", () => {
   it("rejects a later duplicate with the expected value", () => {
     expect(
       hasTagWithAttributes(
-        '<meta property="wrong" property="og:url" content="https://example.com/page" />',
+        '<head><meta property="wrong" property="og:url" content="https://example.com/page" /></head>',
         "meta",
         { property: "og:url", content: "https://example.com/page" },
       ),
@@ -351,7 +473,7 @@ describe("Metadata tag matcher", () => {
   it("fails closed for an unmatched quote", () => {
     expect(
       hasTagWithAttributes(
-        '<meta property="og:url content="https://example.com/page">',
+        '<head><meta property="og:url content="https://example.com/page"></head>',
         "meta",
         { property: "og:url", content: "https://example.com/page" },
       ),
@@ -361,7 +483,7 @@ describe("Metadata tag matcher", () => {
   it("fails closed for a truncated tag", () => {
     expect(
       hasTagWithAttributes(
-        '<meta property="og:url" content="https://example.com/page"',
+        '<head><meta property="og:url" content="https://example.com/page"',
         "meta",
         { property: "og:url", content: "https://example.com/page" },
       ),
@@ -450,7 +572,7 @@ Run:
 bun test scripts/legal-pages.test.ts
 ```
 
-Expected at this checkpoint: FAIL with 16 helper and contract checks passing and 10 contract checks failing. The failures cover missing policy pages and content, the old origin in `docs/index.html` and `docs/roadmap.html` metadata, and pending privacy and terms links across the public pages.
+Expected at this checkpoint: FAIL with 23 helper and contract checks passing and 10 contract checks failing. The failures cover missing policy pages and content, the old origin in `docs/index.html` and `docs/roadmap.html` metadata, and pending privacy and terms links across the public pages.
 
 - [ ] **Step 3: Commit the failing contract**
 
