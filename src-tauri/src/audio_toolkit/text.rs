@@ -340,6 +340,8 @@ fn is_word_boundary_match(haystack: &str, start: usize, end: usize) -> bool {
 /// - `case_sensitive` (default false): matching ignores case and the output mirrors the matched
 ///   text when it is ALL CAPS or Capitalized; otherwise the replacement's own casing is kept (so a
 ///   lowercase match of `clawed` still yields `Claude`, not `claude`). See [`preserve_case_pattern`].
+/// - `preserve_replacement_case` (default false): keeps the exact replacement casing for learned
+///   brand corrections such as `io` -> `iOS`, regardless of the matched source casing.
 /// - An empty `to` deletes the match; spaces left dangling by a deletion (doubled, leading/trailing,
 ///   or stranded before punctuation) are cleaned up afterwards.
 pub fn apply_replacements(text: &str, replacements: &[WordReplacement]) -> String {
@@ -364,6 +366,7 @@ pub fn apply_replacements(text: &str, replacements: &[WordReplacement]) -> Strin
 
         let to = replacement.to.clone();
         let case_sensitive = replacement.case_sensitive;
+        let preserve_replacement_case = replacement.preserve_replacement_case;
         let whole_word = replacement.whole_word;
         if to.is_empty() {
             deleted_any = true;
@@ -379,7 +382,7 @@ pub fn apply_replacements(text: &str, replacements: &[WordReplacement]) -> Strin
                 if whole_word && !is_word_boundary_match(&source, m.start(), m.end()) {
                     return m.as_str().to_string();
                 }
-                if case_sensitive {
+                if case_sensitive || preserve_replacement_case {
                     to.clone()
                 } else {
                     // Adapt the replacement to how the user dictated the source phrase.
@@ -770,6 +773,81 @@ fn lcs_anchors(a: &[String], b: &[String]) -> Vec<(usize, usize)> {
     anchors
 }
 
+/// Whether casing inside a replacement is semantic rather than an ordinary lowercase,
+/// ALL-CAPS, or Capitalized presentation. Brand forms such as `iOS`, `eBay`, and `OpenAI` carry
+/// casing that must survive regardless of how the misheard source was capitalized.
+fn has_intentional_mixed_case(value: &str) -> bool {
+    let letters: Vec<char> = value.chars().filter(|c| c.is_alphabetic()).collect();
+    let has_upper = letters.iter().any(|c| c.is_uppercase());
+    let has_lower = letters.iter().any(|c| c.is_lowercase());
+    if !has_upper || !has_lower {
+        return false;
+    }
+
+    // A conventional Capitalized word adapts to sentence/all-caps context. Any other mixture is
+    // treated as intentional internal casing.
+    !letters[0].is_uppercase() || letters[1..].iter().any(|c| !c.is_lowercase())
+}
+
+/// Whether two token cores differ only by a regular English inflection. The broad English
+/// dictionary catches ordinary words; this guard covers acronyms, brands, and invented terms that
+/// are intentionally absent from it (`API`->`APIs`, `Zorp`->`Zorped`). Precision wins over recall:
+/// a contextual grammar edit must never become a permanent global replacement.
+fn is_regular_inflection_edit(from: &str, to: &str) -> bool {
+    fn is_inflected_form(
+        base: &str,
+        inflected: &str,
+        surface: &str,
+        allow_stylized_s: bool,
+    ) -> bool {
+        for suffix in ["s", "es", "ed", "ing", "er", "est"] {
+            let Some(stem) = inflected.strip_suffix(suffix) else {
+                continue;
+            };
+
+            if stem == base {
+                // `io` -> `iOS` is a canonical brand recasing, not a plural. Preserve this narrow
+                // addition case while still rejecting `API` -> `APIs` and `Claude` -> `Claudes`.
+                if suffix == "s"
+                    && allow_stylized_s
+                    && surface.chars().last().is_some_and(|c| c.is_uppercase())
+                    && has_intentional_mixed_case(surface)
+                {
+                    return false;
+                }
+                return true;
+            }
+
+            if base
+                .strip_suffix('e')
+                .is_some_and(|base_stem| stem == base_stem)
+            {
+                return true;
+            }
+
+            let mut stem_chars = stem.chars();
+            if let Some(last) = stem_chars.next_back() {
+                let shortened: String = stem_chars.collect();
+                if shortened.ends_with(last) && shortened == base {
+                    return true;
+                }
+            }
+        }
+
+        if let Some(base_stem) = base.strip_suffix('y') {
+            return inflected == format!("{base_stem}ies")
+                || inflected == format!("{base_stem}ied");
+        }
+
+        false
+    }
+
+    let from_lower = from.to_lowercase();
+    let to_lower = to.to_lowercase();
+    is_inflected_form(&from_lower, &to_lower, to, true)
+        || is_inflected_form(&to_lower, &from_lower, from, false)
+}
+
 /// Whether a one-for-one `from`->`to` token core is worth learning as a literal
 /// replacement. See `extract_learned_replacements` for the rationale of each guard.
 fn is_learnable_substitution(from: &str, to: &str) -> bool {
@@ -778,6 +856,18 @@ fn is_learnable_substitution(from: &str, to: &str) -> bool {
         return false;
     }
     if from.to_lowercase() == to.to_lowercase() {
+        return false;
+    }
+    // Typography and punctuation edits (`US`->`U.S.`) are not mishears. Learning one would be
+    // especially dangerous because the case-insensitive rule would also rewrite the pronoun `us`.
+    let alphanumeric_key = |w: &str| -> String {
+        w.chars()
+            .filter(|c| c.is_alphanumeric())
+            .flat_map(char::to_lowercase)
+            .collect()
+    };
+    let from_alphanumeric = alphanumeric_key(from);
+    if !from_alphanumeric.is_empty() && from_alphanumeric == alphanumeric_key(to) {
         return false;
     }
     // A possessive edit -- `Claude` -> `Claude's` -- is a grammar fix, not a mishear. Learning it
@@ -820,6 +910,9 @@ fn is_learnable_substitution(from: &str, to: &str) -> bool {
     // word-choice edit as often as it is a mishear. The fuzzy matcher can use a small common-word
     // list because it has several other gates; a learned global replacement cannot take that risk.
     if is_known_english_word(from) && is_known_english_word(to) {
+        return false;
+    }
+    if is_regular_inflection_edit(from, to) {
         return false;
     }
     true
@@ -950,6 +1043,7 @@ pub fn extract_learned_replacements(original: &str, corrected: &str) -> Vec<Word
         if seen.insert((from_key, to_key)) {
             out.push(WordReplacement {
                 from,
+                preserve_replacement_case: has_intentional_mixed_case(&to),
                 to,
                 whole_word: true,
                 case_sensitive: false,
@@ -975,6 +1069,7 @@ mod tests {
             vec![("clawed".to_string(), "Claude".to_string())]
         );
         assert!(out[0].whole_word && !out[0].case_sensitive);
+        assert!(!out[0].preserve_replacement_case);
     }
 
     #[test]
@@ -1184,6 +1279,20 @@ mod tests {
     }
 
     #[test]
+    fn extractor_rejects_punctuation_only_edits() {
+        assert!(extract_learned_replacements("the US market", "the U.S. market").is_empty());
+        assert!(extract_learned_replacements("tell us tomorrow", "tell U.S. tomorrow").is_empty());
+    }
+
+    #[test]
+    fn extractor_rejects_inflection_only_edits_for_unknown_terms() {
+        assert!(extract_learned_replacements("these API work", "these APIs work").is_empty());
+        assert!(extract_learned_replacements("ask Claude now", "ask Claudes now").is_empty());
+        assert!(extract_learned_replacements("we Zorp daily", "we Zorped daily").is_empty());
+        assert!(extract_learned_replacements("start Zorp now", "start Zorping now").is_empty());
+    }
+
+    #[test]
     fn extractor_learns_a_target_word_that_naturally_ends_in_s() {
         // Only a possessive "'s" is stripped, so a meant word whose canonical spelling ends in
         // `s` (`io` -> `iOS`) is not mistaken for a plural inflection and is still learned.
@@ -1192,6 +1301,13 @@ mod tests {
             learned_pairs(&out),
             vec![("io".to_string(), "iOS".to_string())]
         );
+        assert!(out[0].preserve_replacement_case);
+    }
+
+    #[test]
+    fn learned_replacement_preserves_intentional_mixed_case() {
+        let learned = extract_learned_replacements("open io settings", "open iOS settings");
+        assert_eq!(apply_replacements("io Io IO", &learned), "iOS iOS iOS");
     }
 
     #[test]
@@ -1489,6 +1605,7 @@ mod tests {
             to: to.to_string(),
             whole_word: true,
             case_sensitive: false,
+            preserve_replacement_case: false,
         }
     }
 
@@ -1546,6 +1663,7 @@ mod tests {
             to: "work in progress".to_string(),
             whole_word: true,
             case_sensitive: true,
+            preserve_replacement_case: false,
         };
         assert_eq!(
             apply_replacements("WIP and wip", &[r]),
@@ -1562,6 +1680,7 @@ mod tests {
             to: "CSharp".to_string(),
             whole_word: true,
             case_sensitive: true,
+            preserve_replacement_case: false,
         };
         assert_eq!(
             apply_replacements("C#12 ships", std::slice::from_ref(&r)),
@@ -1582,6 +1701,7 @@ mod tests {
             to: "dotenv".to_string(),
             whole_word: true,
             case_sensitive: true,
+            preserve_replacement_case: false,
         };
         assert_eq!(
             apply_replacements("edit foo.env now", std::slice::from_ref(&r)),
@@ -1601,6 +1721,7 @@ mod tests {
             to: String::new(),
             whole_word: true,
             case_sensitive: false,
+            preserve_replacement_case: false,
         };
         assert_eq!(
             apply_replacements("this is basically, fine", std::slice::from_ref(&r)),
