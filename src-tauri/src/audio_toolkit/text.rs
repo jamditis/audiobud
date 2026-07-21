@@ -330,6 +330,21 @@ fn is_word_boundary_match(haystack: &str, start: usize, end: usize) -> bool {
     before_ok && after_ok
 }
 
+fn replacement_regex(value: &str, case_sensitive: bool) -> Option<Regex> {
+    let escaped = regex::escape(value);
+    let pattern = if case_sensitive {
+        escaped
+    } else {
+        format!("(?i){escaped}")
+    };
+    Regex::new(&pattern).ok()
+}
+
+fn regex_has_replacement_match(re: &Regex, text: &str, whole_word: bool) -> bool {
+    re.find_iter(text)
+        .any(|matched| !whole_word || is_word_boundary_match(text, matched.start(), matched.end()))
+}
+
 /// Applies deterministic literal replacements, in order, to the text.
 ///
 /// Each [`WordReplacement`] maps an exact `from` phrase to an exact `to` output. This is the
@@ -355,14 +370,7 @@ pub fn apply_replacements(text: &str, replacements: &[WordReplacement]) -> Strin
             continue;
         }
 
-        let escaped = regex::escape(&replacement.from);
-        let pattern = if replacement.case_sensitive {
-            escaped
-        } else {
-            format!("(?i){}", escaped)
-        };
-
-        let Ok(re) = Regex::new(&pattern) else {
+        let Some(re) = replacement_regex(&replacement.from, replacement.case_sensitive) else {
             continue;
         };
 
@@ -969,11 +977,12 @@ fn is_learnable_substitution(from: &str, to: &str) -> bool {
     // list because it has several other gates; a learned global replacement cannot take that risk.
     let from_is_dictionary_word = is_known_english_word(from);
     let to_is_dictionary_word = is_known_english_word(to);
-    // Matching title/all-caps presentation on a dictionary target is inherently ambiguous: it may
-    // be sentence formatting (`Helo` -> `Hello`) or a homographic name (`Aple` -> `Apple`). There
-    // is no safe global choice, so reject it. An explicit lowercase-to-titlecase edit remains
-    // learnable and preserves the user's casing.
-    if to_is_dictionary_word
+    // Matching title/all-caps presentation is inherently ambiguous even outside the dictionary:
+    // it may be sentence formatting (`Helo` -> `Hello`) or a semantic proper-name/calendar swap
+    // (`Monday` -> `Tuesday`). There is no safe global choice, so reject it. An explicit
+    // lowercase-to-titlecase edit remains learnable and preserves the user's casing.
+    if symbol_skeleton(from).is_empty()
+        && symbol_skeleton(to).is_empty()
         && ((is_capitalized(from) && is_capitalized(to)) || (is_all_caps(from) && is_all_caps(to)))
     {
         return false;
@@ -1140,23 +1149,45 @@ pub fn extract_learned_replacements(
             out.push(rule);
         }
     }
-    // Replacements run sequentially. Compare the effective production list before and after this
-    // batch so a new rule cannot introduce a cascade from an existing target, while an unrelated
-    // new correction is not blocked by a user-authored cascade that already existed. New targets
-    // must themselves remain stable through every later new rule. The production matcher keeps
-    // whole-word and case behavior identical to runtime application.
+    // Replacements run sequentially. Only interactions whose later rule is new can introduce a
+    // cascade, so check each new source against every earlier target. Test both directions: a new
+    // rule can directly rewrite an earlier target, or surrounding input can complete the new
+    // source around that target (`foo` -> `bar`, then `bar-baz` -> `qux`). Compile each literal
+    // once and reuse the production boundary matcher instead of replaying full replacement
+    // suffixes and recompiling their regexes for every target.
     let mut combined = Vec::with_capacity(preceding_replacements.len() + out.len());
     combined.extend_from_slice(preceding_replacements);
     combined.extend(out.iter().cloned());
-    for (index, rule) in combined.iter().enumerate() {
-        let after = apply_replacements(&rule.to, &combined[index + 1..]);
-        if index < preceding_replacements.len() {
-            let before = apply_replacements(&rule.to, &preceding_replacements[index + 1..]);
-            if after != before {
+    let source_patterns: Vec<Option<Regex>> = combined
+        .iter()
+        .map(|rule| replacement_regex(&rule.from, rule.case_sensitive))
+        .collect();
+    let target_patterns: Vec<Option<Regex>> = combined
+        .iter()
+        .map(|rule| {
+            (!rule.to.is_empty())
+                .then(|| replacement_regex(&rule.to, false))
+                .flatten()
+        })
+        .collect();
+    for later_index in preceding_replacements.len()..combined.len() {
+        let later = &combined[later_index];
+        for earlier_index in 0..later_index {
+            let earlier = &combined[earlier_index];
+            let direct = source_patterns[later_index]
+                .as_ref()
+                .is_some_and(|pattern| {
+                    regex_has_replacement_match(pattern, &earlier.to, later.whole_word)
+                });
+            let completed_by_context =
+                target_patterns[earlier_index]
+                    .as_ref()
+                    .is_some_and(|pattern| {
+                        regex_has_replacement_match(pattern, &later.from, earlier.whole_word)
+                    });
+            if direct || completed_by_context {
                 return Vec::new();
             }
-        } else if after != rule.to {
-            return Vec::new();
         }
     }
 
@@ -1402,6 +1433,11 @@ mod tests {
             extract_learned_replacements("Aple released updates", "Apple released updates")
                 .is_empty()
         );
+        assert!(
+            extract_learned_replacements("meet Monday morning", "meet Tuesday morning").is_empty()
+        );
+        assert!(extract_learned_replacements("visit Paris", "visit London").is_empty());
+        assert!(extract_learned_replacements("ask USA", "ask UK").is_empty());
 
         let lowercase = extract_learned_replacements("fix sonet today", "fix sonnet today");
         assert_eq!(
@@ -1471,8 +1507,16 @@ mod tests {
                 .is_empty()
         );
 
-        // An old user-authored cascade does not block an unrelated learned correction: compare
-        // behavior before and after this batch instead of requiring the old list to be pristine.
+        let contextual_preceding = vec![repl("foo", "bar")];
+        assert!(super::extract_learned_replacements(
+            "use bar-baz today",
+            "use qux-quux today",
+            &contextual_preceding,
+        )
+        .is_empty());
+
+        // An old user-authored cascade does not block an unrelated learned correction: only pairs
+        // whose later rule is new are considered instead of requiring the old list to be pristine.
         let already_cascading = vec![repl("foo", "bar"), repl("bar", "baz")];
         let unrelated = super::extract_learned_replacements(
             "ask clawd today",
