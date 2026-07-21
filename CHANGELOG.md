@@ -6,7 +6,50 @@ All notable changes to AudioBud are recorded here. The format follows
 AudioBud is a detached fork of [Handy](https://github.com/cjpais/Handy) by CJ Pais
 (MIT). This log records what AudioBud changed from its fork point; it does not
 restate Handy's own history. AudioBud versions independently of Handy, starting at
-`0.1.0`. Releases are not yet code-signed; signing arrives in milestone B.
+`0.1.0`. Windows releases are code-signed beginning with `0.4.0`.
+
+## 0.4.0 - 2026-07-21
+
+A distribution release. The Windows installers, application executable, and
+NSIS uninstaller are signed and timestamped through Microsoft Artifact Signing.
+The public site now has privacy and terms pages for the verified publisher
+domain. Windows (x64) remains the validated target; the macOS and Linux code is
+inherited and untested.
+
+### Added
+
+- Public privacy and terms pages, plus the Microsoft publisher-domain
+  association used to verify `audiobud.amditis.tech` for the AudioBud Entra
+  application (#128).
+- Local correction capture can recognize an immediate undo-and-retype correction
+  and turn it into a deterministic learned replacement. The extractor rejects
+  edits that do not look like transcription corrections (#125, #134).
+
+### Changed
+
+- Windows release builds use passwordless GitHub OIDC authentication and
+  Microsoft Artifact Signing. The release job signs the application during
+  packaging, signs the finished NSIS and MSI installers, verifies signatures and
+  timestamps, extracts both packages to verify the bundled application and NSIS
+  uninstaller, and uploads assets only after every check passes (#129-#133).
+- The app and public website received a focused visual and accessibility pass,
+  including clearer navigation, controls, responsive layouts, and updated
+  screenshots (#127).
+
+### Fixed
+
+- Spoken clock times keep their opening punctuation when a meridiem resolves an
+  otherwise ambiguous phrase (#113).
+- Learned-replacement extraction rejects broader edits that happen to contain a
+  shorter correction, reducing false learning (#134).
+
+### Known issues
+
+- Automatic update checks remain disabled until AudioBud has its own signed
+  updater feed. Downloads and manual installs work normally.
+- SmartScreen can still show a reputation warning for a new signed release. The
+  signature identifies the publisher and detects modified files; it does not
+  guarantee an immediate reputation score.
 
 ## 0.3.4 - 2026-07-20
 
