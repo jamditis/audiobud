@@ -227,7 +227,7 @@ jobs:
 
       - name: Bundle installers
         shell: pwsh
-        run: bun run tauri bundle --bundles nsis,msi --config src-tauri/tauri.signing.conf.json --ci
+        run: bun run tauri bundle --verbose --bundles nsis,msi --config src-tauri/tauri.signing.conf.json --ci
 
       - name: Resolve installer paths
         shell: pwsh

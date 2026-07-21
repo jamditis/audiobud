@@ -43,7 +43,7 @@ describe("Windows release signing workflow", () => {
     expect(workflow).not.toContain("tauri-apps/tauri-action");
     expect(workflow).toContain("bun run tauri build --no-bundle --ci");
     expect(workflow).toContain(
-      "bun run tauri bundle --bundles nsis,msi --config src-tauri/tauri.signing.conf.json --ci",
+      "bun run tauri bundle --verbose --bundles nsis,msi --config src-tauri/tauri.signing.conf.json --ci",
     );
 
     const signingUses = workflow.match(
@@ -169,6 +169,12 @@ describe("Windows release signing workflow", () => {
 
     expect(nsisTemplate).toContain(
       "!uninstfinalize '${UNINSTALLERSIGNCOMMAND} -TauriNsisUninstaller' = 0",
+    );
+  });
+
+  test("keeps custom signer failures visible in the bundle log", () => {
+    expect(workflow).toContain(
+      "bun run tauri bundle --verbose --bundles nsis,msi --config src-tauri/tauri.signing.conf.json --ci",
     );
   });
 
