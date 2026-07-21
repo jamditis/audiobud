@@ -238,7 +238,13 @@ const hasTagWithAttributes = (
         ? (["property", attributes.property] as const)
         : tag === "meta" && attributes.name === "twitter:image"
           ? (["name", "twitter:image"] as const)
-          : null;
+          : tag === "meta" && attributes.name === "description"
+            ? (["name", "description"] as const)
+            : tag === "meta" && attributes.property === "og:description"
+              ? (["property", "og:description"] as const)
+              : tag === "meta" && attributes.name === "twitter:description"
+                ? (["name", "twitter:description"] as const)
+                : null;
   if (!identity) return false;
 
   const candidates = metadataTags.filter(
@@ -674,6 +680,20 @@ describe("AudioBud public policy pages", () => {
     const terms = read("terms.html");
     const termsText = readText("terms.html");
     const normalizedTerms = terms.toLowerCase();
+    const termsDescription =
+      "Terms for AudioBud's official project website, release pages, support channels, and other maintainer-operated surfaces.";
+    expectTagWithAttributes(terms, "meta", {
+      name: "description",
+      content: termsDescription,
+    });
+    expectTagWithAttributes(terms, "meta", {
+      property: "og:description",
+      content: termsDescription,
+    });
+    expectTagWithAttributes(terms, "meta", {
+      name: "twitter:description",
+      content: termsDescription,
+    });
     expect(terms).toContain("MIT License");
     expect(terms).toContain(
       "copying, modifying, or distributing the source code",

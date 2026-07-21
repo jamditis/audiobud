@@ -272,7 +272,13 @@ const hasTagWithAttributes = (
         ? (["property", attributes.property] as const)
         : tag === "meta" && attributes.name === "twitter:image"
           ? (["name", "twitter:image"] as const)
-          : null;
+          : tag === "meta" && attributes.name === "description"
+            ? (["name", "description"] as const)
+            : tag === "meta" && attributes.property === "og:description"
+              ? (["property", "og:description"] as const)
+              : tag === "meta" && attributes.name === "twitter:description"
+                ? (["name", "twitter:description"] as const)
+                : null;
   if (!identity) return false;
 
   const candidates = metadataTags.filter(
@@ -708,6 +714,20 @@ describe("AudioBud public policy pages", () => {
     const terms = read("terms.html");
     const termsText = readText("terms.html");
     const normalizedTerms = terms.toLowerCase();
+    const termsDescription =
+      "Terms for AudioBud's official project website, release pages, support channels, and other maintainer-operated surfaces.";
+    expectTagWithAttributes(terms, "meta", {
+      name: "description",
+      content: termsDescription,
+    });
+    expectTagWithAttributes(terms, "meta", {
+      property: "og:description",
+      content: termsDescription,
+    });
+    expectTagWithAttributes(terms, "meta", {
+      name: "twitter:description",
+      content: termsDescription,
+    });
     expect(terms).toContain("MIT License");
     expect(terms).toContain(
       "copying, modifying, or distributing the source code",
@@ -738,7 +758,7 @@ Run:
 bun test scripts/legal-pages.test.ts
 ```
 
-Expected at this checkpoint: FAIL with 30 helper and contract checks passing and 13 contract checks failing. The failures cover missing policy pages and content, the missing privacy skip link, mode-by-mode transcript-delivery disclosure, and personalization-choice disclosure, the old origin in `docs/index.html` and `docs/roadmap.html` metadata, and pending privacy and terms links across the public pages.
+Expected at this checkpoint: FAIL with 30 helper and contract checks passing and 13 contract checks failing. The failures cover missing policy pages and content, including the website-scoped terms metadata, the missing privacy skip link, mode-by-mode transcript-delivery disclosure, and personalization-choice disclosure, the old origin in `docs/index.html` and `docs/roadmap.html` metadata, and pending privacy and terms links across the public pages.
 
 - [ ] **Step 3: Commit the failing contract**
 
@@ -927,7 +947,7 @@ git commit -m "docs: publish AudioBud privacy policy"
 Reuse the privacy-page shell. Set the canonical URL to `https://audiobud.amditis.tech/terms.html`, set the page title to `AudioBud terms of use`, and use this description in standard, Open Graph, and Twitter metadata:
 
 ```text
-The terms that apply when you download, use, modify, or access AudioBud and its project website.
+Terms for AudioBud's official project website, release pages, support channels, and other maintainer-operated surfaces.
 ```
 
 Set `aria-current="page"` on the Terms navigation and footer link.

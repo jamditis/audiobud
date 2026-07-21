@@ -64,6 +64,11 @@ The privacy page will use plain language and include:
 
 ## Terms page
 
+The standard, Open Graph, and Twitter description will be:
+`Terms for AudioBud's official project website, release pages, support channels, and other maintainer-operated surfaces.` This metadata describes the website and
+maintainer-operated surfaces, not permissions to download, use, modify, or
+distribute AudioBud software.
+
 The terms page will include:
 
 1. An effective date, operator, and scope statement. Acceptance applies to the official project website, release and support pages, and other maintainer-operated surfaces, not to downloading or using the software.
