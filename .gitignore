@@ -32,11 +32,6 @@ dist-ssr
 recording_*
 .crush/
 
-# Playwright
-playwright-report/
-test-results/
-blob-report/
-
 .direnv
 .envrc
 
