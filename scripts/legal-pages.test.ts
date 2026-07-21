@@ -19,31 +19,58 @@ const sitePages = [
   { name: "terms.html", url: "https://audiobud.amditis.tech/terms.html" },
 ];
 const socialImage = "https://audiobud.amditis.tech/assets/og-image.png";
+type MetadataTagName = "link" | "meta";
+const htmlAsciiWhitespace = new Set([" ", "\t", "\n", "\r", "\f"]);
+const isHtmlAsciiWhitespace = (character: string | undefined) =>
+  character !== undefined && htmlAsciiWhitespace.has(character);
+const isAsciiLetter = (character: string | undefined) =>
+  character !== undefined && /[A-Za-z]/.test(character);
+const isTagNameCharacter = (character: string | undefined) =>
+  isAsciiLetter(character) ||
+  (character !== undefined && /[0-9:-]/.test(character));
 const parseQuotedAttributes = (source: string) => {
   const attributes = new Map<string, string>();
   let cursor = 0;
 
   while (cursor < source.length) {
-    while (cursor < source.length && /[\s/]/.test(source[cursor])) cursor++;
+    while (
+      cursor < source.length &&
+      (isHtmlAsciiWhitespace(source[cursor]) || source[cursor] === "/")
+    )
+      cursor++;
 
     const nameStart = cursor;
-    while (cursor < source.length && !/[\s=/'"<>]/.test(source[cursor]))
+    while (
+      cursor < source.length &&
+      !isHtmlAsciiWhitespace(source[cursor]) &&
+      !"=/'\"<>".includes(source[cursor])
+    )
       cursor++;
-    const name = source.slice(nameStart, cursor);
+    const name = source.slice(nameStart, cursor).toLowerCase();
 
-    while (cursor < source.length && /\s/.test(source[cursor])) cursor++;
+    while (cursor < source.length && isHtmlAsciiWhitespace(source[cursor]))
+      cursor++;
     if (!name) {
       cursor++;
       continue;
     }
-    if (source[cursor] !== "=") continue;
+    if (source[cursor] !== "=") {
+      if (!attributes.has(name)) attributes.set(name, "");
+      continue;
+    }
 
     cursor++;
-    while (cursor < source.length && /\s/.test(source[cursor])) cursor++;
+    while (cursor < source.length && isHtmlAsciiWhitespace(source[cursor]))
+      cursor++;
 
     const quote = source[cursor];
     if (quote !== '"' && quote !== "'") {
-      while (cursor < source.length && !/\s/.test(source[cursor])) cursor++;
+      const valueStart = cursor;
+      while (cursor < source.length && !isHtmlAsciiWhitespace(source[cursor]))
+        cursor++;
+      if (!attributes.has(name)) {
+        attributes.set(name, source.slice(valueStart, cursor));
+      }
       continue;
     }
 
@@ -52,50 +79,101 @@ const parseQuotedAttributes = (source: string) => {
     while (cursor < source.length && source[cursor] !== quote) cursor++;
     if (cursor === source.length) break;
 
-    attributes.set(name, source.slice(valueStart, cursor));
+    if (!attributes.has(name)) {
+      attributes.set(name, source.slice(valueStart, cursor));
+    }
     cursor++;
   }
 
   return attributes;
 };
-const openingTagAttributes = (html: string, tag: "link" | "meta") => {
-  const tags: Map<string, string>[] = [];
-  const tagStart = new RegExp(`<${tag}(?=[\\s/>])`, "g");
-  let match: RegExpExecArray | null;
+const findOpeningTagEnd = (html: string, start: number) => {
+  let quote: string | null = null;
 
-  while ((match = tagStart.exec(html)) !== null) {
-    let cursor = tagStart.lastIndex;
-    let quote: string | null = null;
-
-    for (; cursor < html.length; cursor++) {
-      const character = html[cursor];
-      if (quote) {
-        if (character === quote) quote = null;
-      } else if (character === '"' || character === "'") {
-        quote = character;
-      } else if (character === ">") {
-        tags.push(
-          parseQuotedAttributes(html.slice(tagStart.lastIndex, cursor)),
-        );
-        tagStart.lastIndex = cursor + 1;
-        break;
-      }
+  for (let cursor = start; cursor < html.length; cursor++) {
+    const character = html[cursor];
+    if (quote) {
+      if (character === quote) quote = null;
+    } else if (character === '"' || character === "'") {
+      quote = character;
+    } else if (character === ">") {
+      return cursor;
     }
+  }
+
+  return null;
+};
+const scanMetadataOpeningTags = (html: string) => {
+  const tags: Array<{
+    name: MetadataTagName;
+    attributes: Map<string, string>;
+  }> = [];
+  let cursor = 0;
+
+  while (cursor < html.length) {
+    const tagStart = html.indexOf("<", cursor);
+    if (tagStart === -1) break;
+
+    if (html.startsWith("<!--", tagStart)) {
+      const commentEnd = html.indexOf("-->", tagStart + 4);
+      if (commentEnd === -1) break;
+      cursor = commentEnd + 3;
+      continue;
+    }
+
+    if (!isAsciiLetter(html[tagStart + 1])) {
+      cursor = tagStart + 1;
+      continue;
+    }
+
+    let nameEnd = tagStart + 1;
+    while (nameEnd < html.length && isTagNameCharacter(html[nameEnd]))
+      nameEnd++;
+
+    const name = html.slice(tagStart + 1, nameEnd).toLowerCase();
+    const tagEnd = findOpeningTagEnd(html, nameEnd);
+    if (tagEnd === null) break;
+
+    if (name === "script" || name === "style") {
+      const closingTag = new RegExp(`</${name}[ \\t\\n\\r\\f]*>`, "gi");
+      closingTag.lastIndex = tagEnd + 1;
+      const closingMatch = closingTag.exec(html);
+      if (!closingMatch) break;
+      cursor = closingTag.lastIndex;
+      continue;
+    }
+
+    if (name === "link" || name === "meta") {
+      tags.push({
+        name,
+        attributes: parseQuotedAttributes(html.slice(nameEnd, tagEnd)),
+      });
+    }
+    cursor = tagEnd + 1;
   }
 
   return tags;
 };
-const expectTagWithAttributes = (
+const hasTagWithAttributes = (
   html: string,
-  tag: "link" | "meta",
+  tag: MetadataTagName,
   attributes: Record<string, string>,
 ) => {
-  const hasMatch = openingTagAttributes(html, tag).some((candidate) =>
-    Object.entries(attributes).every(
-      ([name, value]) => candidate.get(name) === value,
-    ),
+  return scanMetadataOpeningTags(html).some(
+    (candidate) =>
+      candidate.name === tag &&
+      Object.entries(attributes).every(
+        ([name, value]) =>
+          candidate.attributes.get(name.toLowerCase()) === value,
+      ),
   );
-  expect(hasMatch).toBe(true);
+};
+const expectTagWithAttributes = (
+  html: string,
+  tag: MetadataTagName,
+  attributes: Record<string, string>,
+) => {
+  expect(hasTagWithAttributes(html, tag, attributes)).toBe(true);
 };
 
 describe("Metadata tag matcher", () => {
@@ -120,32 +198,94 @@ describe("Metadata tag matcher", () => {
     );
   });
 
-  it("accepts whitespace around equals signs", () => {
-    expectTagWithAttributes(
-      '<meta property = "og:url" content= "https://example.com/page" />',
-      "meta",
-      { property: "og:url", content: "https://example.com/page" },
-    );
+  it("accepts HTML ASCII whitespace around attributes and equals signs", () => {
+    for (const whitespace of [" ", "\t", "\n", "\r", "\f"]) {
+      expectTagWithAttributes(
+        `<meta${whitespace}property${whitespace}=${whitespace}"og:url"${whitespace}content${whitespace}=${whitespace}"https://example.com/page" />`,
+        "meta",
+        { property: "og:url", content: "https://example.com/page" },
+      );
+    }
   });
 
   it("rejects data attribute suffixes", () => {
-    expect(() =>
-      expectTagWithAttributes(
+    expect(
+      hasTagWithAttributes(
         '<link data-rel="canonical" data-href="https://example.com/page" />',
         "link",
         { rel: "canonical", href: "https://example.com/page" },
       ),
-    ).toThrow();
+    ).toBe(false);
   });
 
   it("rejects attributes embedded inside another quoted value", () => {
-    expect(() =>
-      expectTagWithAttributes(
+    expect(
+      hasTagWithAttributes(
         `<meta data-copy='property="og:url" content="https://example.com/page"' />`,
         "meta",
         { property: "og:url", content: "https://example.com/page" },
       ),
-    ).toThrow();
+    ).toBe(false);
+  });
+
+  it("rejects a complete tag inside an HTML comment", () => {
+    expect(
+      hasTagWithAttributes(
+        '<!-- <meta property="og:url" content="https://example.com/page" /> -->',
+        "meta",
+        { property: "og:url", content: "https://example.com/page" },
+      ),
+    ).toBe(false);
+  });
+
+  it("rejects a complete tag inside another element attribute", () => {
+    expect(
+      hasTagWithAttributes(
+        `<div data-copy='<meta property="og:url" content="https://example.com/page" />'></div>`,
+        "meta",
+        { property: "og:url", content: "https://example.com/page" },
+      ),
+    ).toBe(false);
+  });
+
+  it("rejects a complete tag inside script text", () => {
+    expect(
+      hasTagWithAttributes(
+        `<script>const tag = '<meta property="og:url" content="https://example.com/page" />';</script>`,
+        "meta",
+        { property: "og:url", content: "https://example.com/page" },
+      ),
+    ).toBe(false);
+  });
+
+  it("rejects a later duplicate with the expected value", () => {
+    expect(
+      hasTagWithAttributes(
+        '<meta property="wrong" property="og:url" content="https://example.com/page" />',
+        "meta",
+        { property: "og:url", content: "https://example.com/page" },
+      ),
+    ).toBe(false);
+  });
+
+  it("fails closed for an unmatched quote", () => {
+    expect(
+      hasTagWithAttributes(
+        '<meta property="og:url content="https://example.com/page">',
+        "meta",
+        { property: "og:url", content: "https://example.com/page" },
+      ),
+    ).toBe(false);
+  });
+
+  it("fails closed for a truncated tag", () => {
+    expect(
+      hasTagWithAttributes(
+        '<meta property="og:url" content="https://example.com/page"',
+        "meta",
+        { property: "og:url", content: "https://example.com/page" },
+      ),
+    ).toBe(false);
   });
 });
 
