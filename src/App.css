@@ -417,8 +417,18 @@
     0 4px 14px color-mix(in srgb, var(--color-logo-primary) 24%, transparent);
 }
 
+.toggle-switch .peer:focus-visible + .toggle-track {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
 .app-button {
   box-shadow: inset 0 1px 0 var(--surface-highlight);
+}
+
+.app-button:focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 2px;
 }
 
 .app-button:hover:not(:disabled) {

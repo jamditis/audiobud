@@ -128,4 +128,20 @@ describe("visual polish regression contracts", () => {
       /\.content-toolbar-kicker \{[^}]*color: var\(--color-text\);/,
     );
   });
+
+  it("keeps keyboard focus visible on shared buttons and toggles", () => {
+    const css = compact(read("src/App.css"));
+
+    for (const selector of [
+      ".toggle-switch .peer:focus-visible + .toggle-track",
+      ".app-button:focus-visible",
+    ]) {
+      const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      expect(css).toMatch(
+        new RegExp(
+          `${escaped} \\{[^}]*outline: 3px solid var\\(--focus-ring\\);[^}]*outline-offset: 2px;`,
+        ),
+      );
+    }
+  });
 });
