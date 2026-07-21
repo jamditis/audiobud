@@ -9,7 +9,7 @@
           "-NoProfile",
           "-NonInteractive",
           "-File",
-          "scripts/sign-windows.ps1",
+          "../scripts/sign-windows.ps1",
           "%1"
         ]
       }

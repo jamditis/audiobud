@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
 
 const workflow = readFileSync(".github/workflows/release.yml", "utf8");
 const signingConfig = JSON.parse(
@@ -158,7 +159,7 @@ describe("Windows release signing workflow", () => {
               "-NoProfile",
               "-NonInteractive",
               "-File",
-              "scripts/sign-windows.ps1",
+              "../scripts/sign-windows.ps1",
               "%1",
             ],
           },
@@ -169,6 +170,16 @@ describe("Windows release signing workflow", () => {
     expect(nsisTemplate).toContain(
       "!uninstfinalize '${UNINSTALLERSIGNCOMMAND} -TauriNsisUninstaller' = 0",
     );
+  });
+
+  test("resolves the signing script from Tauri's project directory", () => {
+    const args = signingConfig.bundle.windows.signCommand.args as string[];
+    const fileArgument = args.indexOf("-File");
+    expect(fileArgument).toBeGreaterThan(-1);
+
+    const scriptPath = args[fileArgument + 1];
+    const tauriDirectory = dirname(resolve("src-tauri/tauri.conf.json"));
+    expect(existsSync(resolve(tauriDirectory, scriptPath))).toBe(true);
   });
 
   test("limits the Tauri signer to patched app copies and the NSIS uninstaller", () => {
