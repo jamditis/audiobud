@@ -116,6 +116,10 @@ pub struct WordReplacement {
     /// replacement adapts to the matched text's case pattern.
     #[serde(default)]
     pub case_sensitive: bool,
+    /// Keep the replacement's exact casing instead of adapting it to the matched text.
+    /// Used by learned names, brands, and acronyms whose casing carries meaning.
+    #[serde(default)]
+    pub preserve_replacement_case: bool,
 }
 
 /// Opt-in, on-device personalization data (issue #16, Tier 1).
