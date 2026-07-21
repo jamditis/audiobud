@@ -43,7 +43,7 @@ describe("Windows release signing workflow", () => {
     expect(workflow).not.toContain("tauri-apps/tauri-action");
     expect(workflow).toContain("bun run tauri build --no-bundle --ci");
     expect(workflow).toContain(
-      "bun run tauri bundle --bundles nsis,msi --config src-tauri/tauri.signing.conf.json --ci",
+      "bun run tauri bundle --verbose --bundles nsis,msi --config src-tauri/tauri.signing.conf.json --ci",
     );
 
     const signingUses = workflow.match(
@@ -172,6 +172,12 @@ describe("Windows release signing workflow", () => {
     );
   });
 
+  test("keeps custom signer failures visible in the bundle log", () => {
+    expect(workflow).toContain(
+      "bun run tauri bundle --verbose --bundles nsis,msi --config src-tauri/tauri.signing.conf.json --ci",
+    );
+  });
+
   test("resolves the signing script from Tauri's project directory", () => {
     const args = signingConfig.bundle.windows.signCommand.args as string[];
     const fileArgument = args.indexOf("-File");
@@ -192,7 +198,42 @@ describe("Windows release signing workflow", () => {
       "Import-Module ArtifactSigning -RequiredVersion 0.1.8",
     );
     expect(signingScript).toContain("Invoke-ArtifactSigning");
-    expect(signingScript).toContain("-ExcludeAzureCliCredential $false");
+    expect(signingScript).toContain("-ExcludeAzureCliCredential:$false");
     expect(signingScript).toContain("Get-AuthenticodeSignature");
+  });
+
+  test("allows NSIS to pass its temporary uninstaller name", () => {
+    expect(nsisTemplate).toContain(
+      "!uninstfinalize '${UNINSTALLERSIGNCOMMAND} -TauriNsisUninstaller' = 0",
+    );
+    expect(signingScript).not.toContain(
+      "[System.IO.Path]::GetExtension($resolvedPath)",
+    );
+    expect(signingScript).not.toContain(
+      "The NSIS uninstaller signing input must be an executable",
+    );
+  });
+
+  test("binds credential exclusions as named boolean arguments", () => {
+    const credentialExclusions = new Map<string, boolean>([
+      ["ExcludeEnvironmentCredential", true],
+      ["ExcludeWorkloadIdentityCredential", true],
+      ["ExcludeManagedIdentityCredential", true],
+      ["ExcludeSharedTokenCacheCredential", true],
+      ["ExcludeVisualStudioCredential", true],
+      ["ExcludeVisualStudioCodeCredential", true],
+      ["ExcludeAzureCliCredential", false],
+      ["ExcludeAzurePowerShellCredential", true],
+      ["ExcludeAzureDeveloperCliCredential", true],
+      ["ExcludeInteractiveBrowserCredential", true],
+    ]);
+
+    for (const [parameter, value] of credentialExclusions) {
+      expect(signingScript).toContain(`-${parameter}:$${value}`);
+    }
+
+    expect(signingScript).not.toMatch(
+      /-Exclude[A-Za-z]+Credential\s+\$(?:true|false)/,
+    );
   });
 });

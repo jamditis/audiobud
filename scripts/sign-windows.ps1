@@ -18,10 +18,6 @@ $resolvedPath = (Get-Item -LiteralPath $Path).FullName
 $fileName = [System.IO.Path]::GetFileName($resolvedPath)
 $isApplication = $fileName -ieq "audiobud.exe"
 
-if ($TauriNsisUninstaller -and [System.IO.Path]::GetExtension($resolvedPath) -ine ".exe") {
-  throw "The NSIS uninstaller signing input must be an executable: $resolvedPath"
-}
-
 if (-not $isApplication -and -not $TauriNsisUninstaller) {
   Write-Output "Skipping Tauri signing input: $fileName"
   exit 0
@@ -52,16 +48,16 @@ Invoke-ArtifactSigning `
   -TimestampDigest SHA256 `
   -Description "AudioBud" `
   -DescriptionUrl "https://audiobud.amditis.tech/" `
-  -ExcludeEnvironmentCredential $true `
-  -ExcludeWorkloadIdentityCredential $true `
-  -ExcludeManagedIdentityCredential $true `
-  -ExcludeSharedTokenCacheCredential $true `
-  -ExcludeVisualStudioCredential $true `
-  -ExcludeVisualStudioCodeCredential $true `
-  -ExcludeAzureCliCredential $false `
-  -ExcludeAzurePowerShellCredential $true `
-  -ExcludeAzureDeveloperCliCredential $true `
-  -ExcludeInteractiveBrowserCredential $true
+  -ExcludeEnvironmentCredential:$true `
+  -ExcludeWorkloadIdentityCredential:$true `
+  -ExcludeManagedIdentityCredential:$true `
+  -ExcludeSharedTokenCacheCredential:$true `
+  -ExcludeVisualStudioCredential:$true `
+  -ExcludeVisualStudioCodeCredential:$true `
+  -ExcludeAzureCliCredential:$false `
+  -ExcludeAzurePowerShellCredential:$true `
+  -ExcludeAzureDeveloperCliCredential:$true `
+  -ExcludeInteractiveBrowserCredential:$true
 
 $signature = Get-AuthenticodeSignature -LiteralPath $resolvedPath
 if ($signature.Status -ne [System.Management.Automation.SignatureStatus]::Valid) {
