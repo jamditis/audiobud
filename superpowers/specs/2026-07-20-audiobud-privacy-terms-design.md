@@ -11,10 +11,11 @@ Publish accurate privacy and terms pages for AudioBud, link them from the public
 The change will:
 
 - add `docs/privacy.html` and `docs/terms.html`;
-- add privacy and terms links to the footers in `docs/index.html` and `docs/roadmap.html`;
-- cross-link the two policy pages;
-- add the public website, privacy, and terms URLs to `README.md`;
-- update canonical, Open Graph, and Twitter URLs from the old GitHub Pages project path to `https://audiobud.amditis.tech`;
+- link privacy and terms from all four public pages, including footer links in `docs/index.html` and `docs/roadmap.html`;
+- add the exact public website, privacy, terms, and support URLs to `README.md` and remove the old GitHub Pages project URL;
+- use each page's exact `https://audiobud.amditis.tech` canonical and Open Graph URL, plus the shared custom-domain Open Graph and Twitter image URL;
+- give every page exactly one Open Graph image alt and one Twitter image alt in the first real head, using `AudioBud local dictation for Windows app interface`;
+- use the same inline geometric frog SVG data-URI browser favicon on every page while retaining `./favicon.svg` as the visible brand image;
 - extend `docs/styles.css` with a narrow legal-document layout, summary cards, a contents list, visible focus states, and mobile rules; and
 - preserve the existing frog-and-swamp visual system.
 
@@ -92,7 +93,7 @@ Both pages will reuse the existing colors, fixed header, frog mark, background l
 
 Each page will open with a short summary and a compact contents navigation with a semantic heading and list of links. A non-section wrapper will hold the contents navigation and legal document when that wrapper has no heading. The privacy page will include three fact cards that distinguish data that stays on the device, data sent only after a user action, and GitHub's role as site host. These cards summarize the policy but do not replace the detailed sections.
 
-The privacy page will place a `Skip to privacy policy` link to `#privacy-title` before every other focusable body element.
+Every public page will place its skip link before every other focusable body element. Home uses `Skip to main content` with `#hero-title`, roadmap uses `Skip to roadmap` with `#roadmap-title`, privacy uses `Skip to privacy policy` with `#privacy-title`, and terms uses `Skip to terms of use` with `#terms-title`.
 
 Headings will use sentence case. Links and keyboard focus will remain visible. Mobile layouts will collapse to one column without hiding access to the policy pages.
 
@@ -101,6 +102,7 @@ Headings will use sentence case. Links and keyboard focus will remain visible. M
 The stable URLs will be:
 
 - Home: `https://audiobud.amditis.tech/`
+- Roadmap: `https://audiobud.amditis.tech/roadmap.html`
 - Privacy: `https://audiobud.amditis.tech/privacy.html`
 - Terms: `https://audiobud.amditis.tech/terms.html`
 - Support: `https://github.com/jamditis/audiobud/issues`
@@ -116,7 +118,8 @@ Before opening the pull request:
 - serve `docs/` locally and verify the home, roadmap, privacy, and terms pages at desktop and mobile widths;
 - check headings, landmarks, `aria-current`, visible focus, reduced motion, and keyboard navigation;
 - verify every local link and asset target;
-- verify canonical, Open Graph, and Twitter URLs use the custom HTTPS hostname;
+- verify all four pages use their exact custom-domain canonical and Open Graph URLs, shared custom-domain social image URL and alt text, inline browser favicon, first-focusable skip-link target, and privacy and terms links;
+- verify README contains the exact Website, Privacy, Terms, and Support URLs and no old GitHub Pages project URL;
 - confirm the old GitHub Pages URL redirects to the matching custom-domain path;
 - confirm the custom-domain CNAME, GitHub Pages build status, certificate, and HTTPS redirect; and
 - preserve unrelated untracked files when staging and committing.
@@ -133,4 +136,4 @@ Before opening the pull request:
 
 ## Approval record
 
-Joe approved two separate pages, the public contact address, the implementation-aligned content, the restrained legal-page layout, site-wide links, custom-domain canonical URLs, and omission of unreviewed governing-law and dispute clauses.
+Joe approved two separate pages, the public contact address, the implementation-aligned content, the restrained legal-page layout, site-wide policy links and skip links, custom-domain canonical and social metadata, inline browser favicons, exact README URLs, and omission of unreviewed governing-law and dispute clauses.

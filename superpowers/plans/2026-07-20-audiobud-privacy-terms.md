@@ -39,6 +39,7 @@ import { join } from "node:path";
 const root = join(import.meta.dir, "..");
 const docs = join(root, "docs");
 const read = (name: string) => readFileSync(join(docs, name), "utf8");
+const readRoot = (name: string) => readFileSync(join(root, name), "utf8");
 const readText = (name: string) =>
   read(name)
     .replace(/<[^>]+>/g, " ")
@@ -46,18 +47,35 @@ const readText = (name: string) =>
     .trim();
 
 const sitePages = [
-  { name: "index.html", url: "https://audiobud.amditis.tech/" },
+  {
+    name: "index.html",
+    url: "https://audiobud.amditis.tech/",
+    headingId: "hero-title",
+    skipLabel: "Skip to main content",
+  },
   {
     name: "roadmap.html",
     url: "https://audiobud.amditis.tech/roadmap.html",
+    headingId: "roadmap-title",
+    skipLabel: "Skip to roadmap",
   },
   {
     name: "privacy.html",
     url: "https://audiobud.amditis.tech/privacy.html",
+    headingId: "privacy-title",
+    skipLabel: "Skip to privacy policy",
   },
-  { name: "terms.html", url: "https://audiobud.amditis.tech/terms.html" },
+  {
+    name: "terms.html",
+    url: "https://audiobud.amditis.tech/terms.html",
+    headingId: "terms-title",
+    skipLabel: "Skip to terms of use",
+  },
 ];
 const socialImage = "https://audiobud.amditis.tech/assets/og-image.png";
+const socialImageAlt = "AudioBud local dictation for Windows app interface";
+const browserFavicon =
+  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23101b13'/%3E%3Ccircle cx='32' cy='34' r='20' fill='%2384d150'/%3E%3Ccircle cx='22' cy='22' r='8' fill='%23f3f7ee'/%3E%3Ccircle cx='42' cy='22' r='8' fill='%23f3f7ee'/%3E%3Ccircle cx='22' cy='22' r='4' fill='%23ff5147'/%3E%3Ccircle cx='42' cy='22' r='4' fill='%23ff5147'/%3E%3Cpath d='M22 39c5 5 15 5 20 0' fill='none' stroke='%23101b13' stroke-width='4' stroke-linecap='round'/%3E%3Cpath d='M17 52h30' stroke='%23ffb23e' stroke-width='5' stroke-linecap='round'/%3E%3C/svg%3E";
 type MetadataTagName = "link" | "meta";
 const htmlAsciiWhitespace = new Set([" ", "\t", "\n", "\r", "\f"]);
 const isHtmlAsciiWhitespace = (character: string | undefined) =>
@@ -642,6 +660,26 @@ describe("AudioBud public policy pages", () => {
         name: "twitter:image",
         content: socialImage,
       });
+      expectTagWithAttributes(html, "meta", {
+        property: "og:image:alt",
+        content: socialImageAlt,
+      });
+      expectTagWithAttributes(html, "meta", {
+        name: "twitter:image:alt",
+        content: socialImageAlt,
+      });
+      const faviconTags = scanMetadataOpeningTags(html)?.filter(
+        ({ name, attributes }) =>
+          name === "link" &&
+          attributes
+            .get("rel")
+            ?.split(/[ \t\n\r\f]+/)
+            .some((token) => token.toLowerCase() === "icon"),
+      );
+      expect(faviconTags).toHaveLength(1);
+      expect(faviconTags?.[0].isInFirstHead).toBe(true);
+      expect(faviconTags?.[0].attributes.get("type")).toBe("image/svg+xml");
+      expect(faviconTags?.[0].attributes.get("href")).toBe(browserFavicon);
       expect(html).not.toContain("https://jamditis.github.io/audiobud");
     });
   }
@@ -665,19 +703,39 @@ describe("AudioBud public policy pages", () => {
     expect(privacy.toLowerCase()).not.toContain("encrypted at rest");
   });
 
-  it("starts the privacy page with a focusable skip link", () => {
-    const privacy = read("privacy.html");
-    const body = privacy.slice(privacy.indexOf("<body>") + "<body>".length);
-    const firstFocusable = body.match(
-      /<(?:a|button|input|select|textarea)\b[^>]*>/i,
-    );
+  for (const page of sitePages) {
+    it(`starts ${page.name} with a focusable skip link`, () => {
+      const html = read(page.name);
+      const body = html.slice(html.indexOf("<body>") + "<body>".length);
+      const firstFocusable = body.match(
+        /<(?:a|button|input|select|textarea)\b[^>]*>/i,
+      );
 
-    expect(firstFocusable?.[0]).toBe(
-      '<a class="skip-link" href="#privacy-title">',
+      expect(firstFocusable?.[0]).toBe(
+        `<a class="skip-link" href="#${page.headingId}">`,
+      );
+      expect(body).toContain(
+        `<a class="skip-link" href="#${page.headingId}">${page.skipLabel}</a>`,
+      );
+      expect(html).toMatch(
+        new RegExp(`<h[1-6]\\b[^>]*\\bid=["']${page.headingId}["'][^>]*>`, "i"),
+      );
+    });
+  }
+
+  it("lists the exact public URLs in README", () => {
+    const readme = readRoot("README.md");
+    expect(readme).toContain("- **Website:** <https://audiobud.amditis.tech/>");
+    expect(readme).toContain(
+      "- **Privacy:** <https://audiobud.amditis.tech/privacy.html>",
     );
-    expect(body).toContain(
-      '<a class="skip-link" href="#privacy-title">Skip to privacy policy</a>',
+    expect(readme).toContain(
+      "- **Terms:** <https://audiobud.amditis.tech/terms.html>",
     );
+    expect(readme).toContain(
+      "- **Support:** <https://github.com/jamditis/audiobud/issues>",
+    );
+    expect(readme).not.toContain("https://jamditis.github.io/audiobud");
   });
 
   it("distinguishes transcript delivery modes and later handling", () => {
@@ -798,7 +856,7 @@ Run:
 bun test scripts/legal-pages.test.ts
 ```
 
-Expected at this checkpoint: FAIL with 30 helper and contract checks passing and 13 contract checks failing. The failures cover missing policy pages and content, including MIT-controlled software warranty and liability terms, website-scoped disclaimers, and accurate social image alt metadata, the missing privacy skip link, mode-by-mode transcript-delivery disclosure, and personalization-choice disclosure, the old origin in `docs/index.html` and `docs/roadmap.html` metadata, and pending privacy and terms links across the public pages.
+Expected at this checkpoint: FAIL with 30 helper and contract checks passing and 17 contract checks failing. The failures cover missing policy pages and content, including MIT-controlled software warranty and liability terms, website-scoped disclaimers, accurate social image alt metadata, and mode-by-mode transcript-delivery and personalization-choice disclosures; missing site-wide skip links and inline browser favicons; the old origin in `docs/index.html` and `docs/roadmap.html` metadata; the pending README URLs; and pending privacy and terms links across the public pages.
 
 - [ ] **Step 3: Commit the failing contract**
 
@@ -966,7 +1024,7 @@ Keep that lead paragraph unchanged. Then distinguish every delivery path in user
 bun test scripts/legal-pages.test.ts
 ```
 
-Expected: FAIL with 37 helper and contract checks passing and 6 contract checks failing. The failures cover the missing terms page and terms content, the old origin in `docs/index.html` and `docs/roadmap.html` metadata, and pending privacy and terms links across the existing public pages.
+Expected: FAIL with 37 helper and contract checks passing and 10 contract checks failing. The failures cover the missing terms page and terms content, the old origin and missing social metadata and inline favicons in `docs/index.html` and `docs/roadmap.html`, missing site-wide skip links, the pending README URLs, and pending privacy and terms links across the existing public pages.
 
 - [ ] **Step 4: Commit the privacy page**
 
@@ -1059,7 +1117,7 @@ jurisdiction clauses, or any new restriction on MIT-licensed software.
 bun test scripts/legal-pages.test.ts
 ```
 
-Expected: FAIL with 40 helper and contract checks passing and 3 contract checks failing. The failures cover the old origin in `docs/index.html` and `docs/roadmap.html` metadata and pending privacy and terms links across the existing public pages.
+Expected: FAIL with 41 helper and contract checks passing and 6 contract checks failing. The failures cover the old origin and missing social metadata and inline favicons in `docs/index.html` and `docs/roadmap.html`, missing skip links on those pages, the pending README URLs, and pending privacy and terms links across the existing public pages.
 
 - [ ] **Step 4: Commit the terms page**
 
@@ -1075,11 +1133,25 @@ git commit -m "docs: publish AudioBud terms of use"
 - Modify: `docs/index.html`
 - Modify: `docs/roadmap.html`
 - Modify: `README.md`
-- Test: `scripts/legal-pages.test.ts`
+- Modify: `scripts/legal-pages.test.ts`
+- Modify: `superpowers/plans/2026-07-20-audiobud-privacy-terms.md`
+- Modify: `superpowers/specs/2026-07-20-audiobud-privacy-terms-design.md`
 
-- [ ] **Step 1: Update custom-domain metadata**
+- [ ] **Step 1: Extend the contract and verify the red checkpoint**
+
+Require every page in `sitePages` to use its exact custom-domain canonical and Open Graph URL, the shared custom-domain Open Graph and Twitter image, one shared image-alt tag for each platform in the first real head, and the shared inline geometric frog SVG browser favicon. Require each page's first focusable body element to be its page-specific skip link and require its heading target to exist. Keep the site-wide policy-link contract. Require README to publish the exact Website, Privacy, Terms, and Support lines and reject the old GitHub Pages project URL.
+
+```powershell
+bun test scripts/legal-pages.test.ts
+```
+
+Expected: FAIL with 41 helper and contract checks passing and 6 contract checks failing. The failures cover `docs/index.html`, `docs/roadmap.html`, and `README.md` pending work.
+
+- [ ] **Step 2: Update metadata, favicons, and skip links**
 
 In `docs/index.html`, replace every `https://jamditis.github.io/audiobud/` metadata origin with `https://audiobud.amditis.tech/`.
+
+In both existing pages, use `https://audiobud.amditis.tech/assets/og-image.png` for `og:image` and `twitter:image`, retain the `1200` by `630` Open Graph dimensions, and add exactly one `og:image:alt` and one `twitter:image:alt` with `AudioBud local dictation for Windows app interface` in the first real head. Replace the browser favicon with the inline geometric frog SVG data URI used by the policy pages, while keeping `./favicon.svg` as the visible brand image.
 
 In `docs/roadmap.html`, use:
 
@@ -1096,7 +1168,9 @@ In `docs/roadmap.html`, use:
 />
 ```
 
-- [ ] **Step 2: Add footer links to both existing pages**
+Add `<a class="skip-link" href="#hero-title">Skip to main content</a>` as the first focusable body element in `docs/index.html`. Add `<a class="skip-link" href="#roadmap-title">Skip to roadmap</a>` in the same position in `docs/roadmap.html` and add `id="roadmap-title"` to its main roadmap heading. Do not add skip-link or focus styling in this task.
+
+- [ ] **Step 3: Add footer links to both existing pages**
 
 Insert before Changelog in both footers:
 
@@ -1104,7 +1178,7 @@ Insert before Changelog in both footers:
 <a href="./privacy.html">Privacy</a> <a href="./terms.html">Terms</a>
 ```
 
-- [ ] **Step 3: Add public links to README**
+- [ ] **Step 4: Add public links to README**
 
 Replace the current website line near the top with:
 
@@ -1115,18 +1189,22 @@ Replace the current website line near the top with:
 - **Support:** <https://github.com/jamditis/audiobud/issues>
 ```
 
-- [ ] **Step 4: Run the contract test**
+- [ ] **Step 5: Sync the approved plan and design**
+
+Keep the task 1 test block byte-for-byte aligned with `scripts/legal-pages.test.ts`. Record the site-wide metadata, inline favicon, first-focusable skip-link targets, policy links, and exact public README URLs in the approved design.
+
+- [ ] **Step 6: Run the contract test**
 
 ```powershell
 bun test scripts/legal-pages.test.ts
 ```
 
-Expected: PASS with all 43 helper and contract checks green.
+Expected: PASS with all 47 helper and contract checks green.
 
-- [ ] **Step 5: Commit the links and metadata**
+- [ ] **Step 7: Commit the links and metadata**
 
 ```powershell
-git add -- README.md docs/index.html docs/roadmap.html
+git add -- README.md docs/index.html docs/roadmap.html scripts/legal-pages.test.ts superpowers/plans/2026-07-20-audiobud-privacy-terms.md superpowers/specs/2026-07-20-audiobud-privacy-terms-design.md
 git commit -m "docs: connect policies to public site"
 ```
 

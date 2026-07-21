@@ -5,6 +5,7 @@ import { join } from "node:path";
 const root = join(import.meta.dir, "..");
 const docs = join(root, "docs");
 const read = (name: string) => readFileSync(join(docs, name), "utf8");
+const readRoot = (name: string) => readFileSync(join(root, name), "utf8");
 const readText = (name: string) =>
   read(name)
     .replace(/<[^>]+>/g, " ")
@@ -12,18 +13,35 @@ const readText = (name: string) =>
     .trim();
 
 const sitePages = [
-  { name: "index.html", url: "https://audiobud.amditis.tech/" },
+  {
+    name: "index.html",
+    url: "https://audiobud.amditis.tech/",
+    headingId: "hero-title",
+    skipLabel: "Skip to main content",
+  },
   {
     name: "roadmap.html",
     url: "https://audiobud.amditis.tech/roadmap.html",
+    headingId: "roadmap-title",
+    skipLabel: "Skip to roadmap",
   },
   {
     name: "privacy.html",
     url: "https://audiobud.amditis.tech/privacy.html",
+    headingId: "privacy-title",
+    skipLabel: "Skip to privacy policy",
   },
-  { name: "terms.html", url: "https://audiobud.amditis.tech/terms.html" },
+  {
+    name: "terms.html",
+    url: "https://audiobud.amditis.tech/terms.html",
+    headingId: "terms-title",
+    skipLabel: "Skip to terms of use",
+  },
 ];
 const socialImage = "https://audiobud.amditis.tech/assets/og-image.png";
+const socialImageAlt = "AudioBud local dictation for Windows app interface";
+const browserFavicon =
+  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23101b13'/%3E%3Ccircle cx='32' cy='34' r='20' fill='%2384d150'/%3E%3Ccircle cx='22' cy='22' r='8' fill='%23f3f7ee'/%3E%3Ccircle cx='42' cy='22' r='8' fill='%23f3f7ee'/%3E%3Ccircle cx='22' cy='22' r='4' fill='%23ff5147'/%3E%3Ccircle cx='42' cy='22' r='4' fill='%23ff5147'/%3E%3Cpath d='M22 39c5 5 15 5 20 0' fill='none' stroke='%23101b13' stroke-width='4' stroke-linecap='round'/%3E%3Cpath d='M17 52h30' stroke='%23ffb23e' stroke-width='5' stroke-linecap='round'/%3E%3C/svg%3E";
 type MetadataTagName = "link" | "meta";
 const htmlAsciiWhitespace = new Set([" ", "\t", "\n", "\r", "\f"]);
 const isHtmlAsciiWhitespace = (character: string | undefined) =>
@@ -608,6 +626,26 @@ describe("AudioBud public policy pages", () => {
         name: "twitter:image",
         content: socialImage,
       });
+      expectTagWithAttributes(html, "meta", {
+        property: "og:image:alt",
+        content: socialImageAlt,
+      });
+      expectTagWithAttributes(html, "meta", {
+        name: "twitter:image:alt",
+        content: socialImageAlt,
+      });
+      const faviconTags = scanMetadataOpeningTags(html)?.filter(
+        ({ name, attributes }) =>
+          name === "link" &&
+          attributes
+            .get("rel")
+            ?.split(/[ \t\n\r\f]+/)
+            .some((token) => token.toLowerCase() === "icon"),
+      );
+      expect(faviconTags).toHaveLength(1);
+      expect(faviconTags?.[0].isInFirstHead).toBe(true);
+      expect(faviconTags?.[0].attributes.get("type")).toBe("image/svg+xml");
+      expect(faviconTags?.[0].attributes.get("href")).toBe(browserFavicon);
       expect(html).not.toContain("https://jamditis.github.io/audiobud");
     });
   }
@@ -631,19 +669,39 @@ describe("AudioBud public policy pages", () => {
     expect(privacy.toLowerCase()).not.toContain("encrypted at rest");
   });
 
-  it("starts the privacy page with a focusable skip link", () => {
-    const privacy = read("privacy.html");
-    const body = privacy.slice(privacy.indexOf("<body>") + "<body>".length);
-    const firstFocusable = body.match(
-      /<(?:a|button|input|select|textarea)\b[^>]*>/i,
-    );
+  for (const page of sitePages) {
+    it(`starts ${page.name} with a focusable skip link`, () => {
+      const html = read(page.name);
+      const body = html.slice(html.indexOf("<body>") + "<body>".length);
+      const firstFocusable = body.match(
+        /<(?:a|button|input|select|textarea)\b[^>]*>/i,
+      );
 
-    expect(firstFocusable?.[0]).toBe(
-      '<a class="skip-link" href="#privacy-title">',
+      expect(firstFocusable?.[0]).toBe(
+        `<a class="skip-link" href="#${page.headingId}">`,
+      );
+      expect(body).toContain(
+        `<a class="skip-link" href="#${page.headingId}">${page.skipLabel}</a>`,
+      );
+      expect(html).toMatch(
+        new RegExp(`<h[1-6]\\b[^>]*\\bid=["']${page.headingId}["'][^>]*>`, "i"),
+      );
+    });
+  }
+
+  it("lists the exact public URLs in README", () => {
+    const readme = readRoot("README.md");
+    expect(readme).toContain("- **Website:** <https://audiobud.amditis.tech/>");
+    expect(readme).toContain(
+      "- **Privacy:** <https://audiobud.amditis.tech/privacy.html>",
     );
-    expect(body).toContain(
-      '<a class="skip-link" href="#privacy-title">Skip to privacy policy</a>',
+    expect(readme).toContain(
+      "- **Terms:** <https://audiobud.amditis.tech/terms.html>",
     );
+    expect(readme).toContain(
+      "- **Support:** <https://github.com/jamditis/audiobud/issues>",
+    );
+    expect(readme).not.toContain("https://jamditis.github.io/audiobud");
   });
 
   it("distinguishes transcript delivery modes and later handling", () => {
