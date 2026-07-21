@@ -203,11 +203,11 @@
       },
       "language": {
         "title": "Idioma",
-        "description": "Selecciona el idioma para el reconocimiento de voz. Auto detectará automáticamente el idioma, mientras que seleccionar un idioma específico puede mejorar la precisión para ese idioma.",
+        "description": "Selecciona el idioma para el reconocimiento de voz. La selección automática detectará el idioma, mientras que seleccionar un idioma específico puede mejorar la precisión para ese idioma.",
         "descriptionUnsupported": "El modelo Parakeet detecta automáticamente el idioma. No se necesita selección manual.",
         "searchPlaceholder": "Buscar idiomas...",
         "noResults": "No se encontraron idiomas",
-        "auto": "Auto"
+        "auto": "Automático"
       },
       "pushToTalk": {
         "label": "Presionar para Hablar",
@@ -294,8 +294,8 @@
         },
         "gpuDevice": {
           "title": "Dispositivo GPU",
-          "description": "Seleccione qué GPU usar para la inferencia de Whisper. Auto elige la GPU dedicada.",
-          "auto": "Auto"
+          "description": "Seleccione qué GPU usar para la inferencia de Whisper. Con la selección automática se elige la GPU dedicada.",
+          "auto": "Automático"
         }
       },
       "startHidden": {
@@ -703,9 +703,9 @@
     "installing": "Instalando...",
     "preparing": "Preparando...",
     "checkForUpdates": "Buscar actualizaciones",
-    "portableUpdateTitle": "Manual update required",
-    "portableUpdateMessage": "Portable installs cannot be updated automatically. To update: download the latest NSIS installer from GitHub Releases, install it to the same folder, then copy your Data/ folder (settings, models, recordings) from the old version to the new one.",
-    "portableUpdateButton": "Open GitHub Releases"
+    "portableUpdateTitle": "Se requiere una actualización manual",
+    "portableUpdateMessage": "Las instalaciones portátiles no se pueden actualizar automáticamente. Para actualizar: descarga el instalador NSIS más reciente desde GitHub Releases, instálalo en la misma carpeta y copia la carpeta Data/ (ajustes, modelos y grabaciones) de la versión anterior a la nueva.",
+    "portableUpdateButton": "Abrir GitHub Releases"
   },
   "common": {
     "loading": "Cargando...",

@@ -1,5 +1,9 @@
 import { describe, it, expect } from "bun:test";
-import { findExtraKeys, findMissingKeys } from "./check-translations";
+import {
+  findExtraKeys,
+  findMissingKeys,
+  findUntranslatedKeys,
+} from "./check-translations";
 
 // en carries only the two plural categories English has.
 const reference = {
@@ -110,5 +114,140 @@ describe("findMissingKeys", () => {
       },
     };
     expect(findMissingKeys(reference, ru)).toEqual([]);
+  });
+});
+
+describe("findUntranslatedKeys", () => {
+  const copied = {
+    customWords: {
+      import: {
+        added_one: "Ajout de {{count}} mot",
+        added_other: "Ajout de {{count}} mots",
+      },
+      title: "Custom words",
+    },
+  };
+
+  it("reports a string copied unchanged from the reference", () => {
+    expect(findUntranslatedKeys(reference, copied, "fr", {})).toEqual([
+      ["customWords", "title"],
+    ]);
+  });
+
+  it("reports copied English despite case and whitespace drift", () => {
+    const stale = structuredClone(copied);
+    stale.customWords.title = "  CUSTOM   WORDS  ";
+    expect(findUntranslatedKeys(reference, stale, "fr", {})).toEqual([
+      ["customWords", "title"],
+    ]);
+  });
+
+  it("reports copied English written with compatibility characters", () => {
+    expect(
+      findUntranslatedKeys(
+        { status: "Model 1" },
+        { status: "Ｍｏｄｅｌ １" },
+        "ja",
+        {},
+      ),
+    ).toEqual([["status"]]);
+  });
+
+  it("accepts a key that is invariant in every language", () => {
+    const allowlist = {
+      "customWords.title": { source: "Custom words", locales: "*" as const },
+    };
+    expect(findUntranslatedKeys(reference, copied, "fr", allowlist)).toEqual(
+      [],
+    );
+  });
+
+  it("keeps language-specific exceptions scoped to one locale", () => {
+    const allowlist = {
+      "customWords.title": {
+        source: "Custom words",
+        locales: ["fr"],
+      },
+    };
+    expect(findUntranslatedKeys(reference, copied, "fr", allowlist)).toEqual(
+      [],
+    );
+    expect(findUntranslatedKeys(reference, copied, "de", allowlist)).toEqual([
+      ["customWords", "title"],
+    ]);
+  });
+
+  it("keeps literal dots in key segments distinct from nested paths", () => {
+    const dottedReference = {
+      "a.b": { label: "Same" },
+      a: { b: { label: "Same" } },
+    };
+    const allowlist = {
+      "a\\.b.label": { source: "Same", locales: "*" as const },
+    };
+
+    expect(
+      findUntranslatedKeys(dottedReference, dottedReference, "fr", allowlist),
+    ).toEqual([["a", "b", "label"]]);
+  });
+
+  it("expires an exception when the English source changes", () => {
+    const changedReference = structuredClone(reference);
+    changedReference.customWords.title = "Personal vocabulary";
+    const stale = structuredClone(copied);
+    stale.customWords.title = "Personal vocabulary";
+    const allowlist = {
+      "customWords.title": { source: "Custom words", locales: "*" as const },
+    };
+    expect(
+      findUntranslatedKeys(changedReference, stale, "fr", allowlist),
+    ).toEqual([["customWords", "title"]]);
+  });
+
+  it("accepts translated prose that preserves an interpolation token", () => {
+    expect(
+      findUntranslatedKeys(
+        { status: "Added {{count}} words" },
+        { status: "{{count}} mots ajoutés" },
+        "fr",
+        {},
+      ),
+    ).toEqual([]);
+  });
+
+  it("does not double-report a missing key as untranslated", () => {
+    const partial = {
+      customWords: {
+        import: {
+          added_one: "Ajout de {{count}} mot",
+          added_other: "Ajout de {{count}} mots",
+        },
+      },
+    };
+    expect(findUntranslatedKeys(reference, partial, "fr", {})).toEqual([]);
+  });
+
+  it("ignores identical non-string metadata", () => {
+    expect(findUntranslatedKeys({ count: 1 }, { count: 1 }, "fr", {})).toEqual(
+      [],
+    );
+  });
+
+  it("flags a copied reference plural without rejecting locale-only variants", () => {
+    const ru = {
+      customWords: {
+        import: {
+          added_one: "Added {{count}} word",
+          added_few: "Добавлено {{count}} слова",
+          added_many: "Добавлено {{count}} слов",
+          added_other: "Добавлено {{count}} слова",
+        },
+        title: "Пользовательские слова",
+      },
+    };
+    expect(findExtraKeys(reference, ru)).toEqual([]);
+    expect(findUntranslatedKeys(reference, ru, "ru", {})).toEqual([
+      ["customWords", "import", "added_one"],
+    ]);
   });
 });

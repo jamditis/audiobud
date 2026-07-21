@@ -40,11 +40,10 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      # Blocking as of #88: every locale now carries the full en key set, so a new
-      # en key that lands without translations fails here instead of silently
-      # falling back to English. Guards key parity only -- a present-but-stale
-      # value still passes, so this cannot catch a translation that goes out of
-      # date after its en string is reworded.
+      # Every locale must carry the full en key set, and user-facing values that
+      # still match English after Unicode compatibility, case, and whitespace
+      # normalization fail unless their path, source, and locale scope have a
+      # reviewed exception.
       - name: Check translation consistency
         run: bun run check:translations
 

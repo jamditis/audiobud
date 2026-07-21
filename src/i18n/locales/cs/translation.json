@@ -203,11 +203,11 @@
       },
       "language": {
         "title": "Jazyk",
-        "description": "Vyberte jazyk rozpoznávání řeči. Auto jazyk určí automaticky, zatímco výběr konkrétního jazyka může zlepšit přesnost.",
+        "description": "Vyberte jazyk rozpoznávání řeči. Automatická volba určí jazyk, zatímco výběr konkrétního jazyka může zlepšit přesnost.",
         "descriptionUnsupported": "Model Parakeet rozpozná jazyk automaticky. Ruční výběr není potřeba.",
         "searchPlaceholder": "Hledat jazyky...",
         "noResults": "Žádné jazyky nenalezeny",
-        "auto": "Auto"
+        "auto": "Automaticky"
       },
       "pushToTalk": {
         "label": "Stisk a mluv",
@@ -705,9 +705,9 @@
     "installing": "Instalace...",
     "preparing": "Příprava...",
     "checkForUpdates": "Zkontrolovat aktualizace",
-    "portableUpdateTitle": "Manual update required",
-    "portableUpdateMessage": "Portable installs cannot be updated automatically. To update: download the latest NSIS installer from GitHub Releases, install it to the same folder, then copy your Data/ folder (settings, models, recordings) from the old version to the new one.",
-    "portableUpdateButton": "Open GitHub Releases"
+    "portableUpdateTitle": "Je nutná ruční aktualizace",
+    "portableUpdateMessage": "Přenosné instalace nelze aktualizovat automaticky. Postup aktualizace: stáhněte nejnovější instalační program NSIS z GitHub Releases, nainstalujte ho do stejné složky a poté zkopírujte složku Data/ (nastavení, modely a nahrávky) ze staré verze do nové.",
+    "portableUpdateButton": "Otevřít GitHub Releases"
   },
   "common": {
     "loading": "Načítání...",

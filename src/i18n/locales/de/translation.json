@@ -203,11 +203,11 @@
       },
       "language": {
         "title": "Sprache",
-        "description": "Wähle die Sprache für die Spracherkennung. Auto erkennt die Sprache automatisch, die Auswahl einer bestimmten Sprache kann die Genauigkeit verbessern.",
+        "description": "Wähle die Sprache für die Spracherkennung. Die automatische Auswahl erkennt die Sprache, die Auswahl einer bestimmten Sprache kann die Genauigkeit verbessern.",
         "descriptionUnsupported": "Das Parakeet-Modell erkennt die Sprache automatisch. Keine manuelle Auswahl erforderlich.",
         "searchPlaceholder": "Sprachen suchen...",
         "noResults": "Keine Sprachen gefunden",
-        "auto": "Auto"
+        "auto": "Automatisch"
       },
       "pushToTalk": {
         "label": "Push-to-Talk",
@@ -294,8 +294,8 @@
         },
         "gpuDevice": {
           "title": "GPU-Gerät",
-          "description": "Wähle die GPU für die Whisper-Inferenz. Auto wählt die dedizierte GPU.",
-          "auto": "Auto"
+          "description": "Wähle die GPU für die Whisper-Inferenz. Bei automatischer Auswahl wird die dedizierte GPU verwendet.",
+          "auto": "Automatisch"
         }
       },
       "startHidden": {
