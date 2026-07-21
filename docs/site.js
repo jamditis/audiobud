@@ -30,8 +30,9 @@ window.addEventListener("scroll", updateHeader, { passive: true });
 
 /* Read the latest release once, then use it for both the published checksums
    and the download buttons, so neither can describe an older build than the
-   other. The markup keeps the most recent known checksums and links to the
-   releases page, so a failed or blocked request changes nothing. */
+   other. No digest and no version live in the markup -- either would be wrong
+   from the next release onward -- so a failed or blocked request leaves the
+   page pointing at SHA256SUMS.txt and the releases page instead. */
 const checksumList = document.querySelector("[data-checksum-list]");
 const downloadLinks = document.querySelectorAll("[data-download]");
 
@@ -102,16 +103,23 @@ if (checksumList || downloadLinks.length > 0) {
         asset?.digest?.startsWith("sha256:"),
       );
 
-      if (assets.length === 0) return;
+      /* SHA256SUMS.txt is itself a release asset and carries its own digest.
+         Listing it beside the installers would publish the hash of the hash
+         file, so the rows and the buttons cover installers only. */
+      const installers = assets.filter((asset) =>
+        /\.(exe|msi)$/i.test(asset.name),
+      );
 
-      linkDownloads(assets);
-      renderChecksums(assets);
+      if (installers.length === 0) return;
+
+      linkDownloads(installers);
+      renderChecksums(installers);
 
       if (releaseLabel && release.tag_name) {
         releaseLabel.textContent = `Release ${release.tag_name}`;
       }
 
-      const installer = assets.find((asset) => asset.name.endsWith(".exe"));
+      const installer = installers.find((asset) => asset.name.endsWith(".exe"));
       if (commandLine && installer) {
         commandLine.textContent = `Get-FileHash -Algorithm SHA256 .\\${installer.name}`;
       }
@@ -122,6 +130,7 @@ if (checksumList || downloadLinks.length > 0) {
       }
     })
     .catch(() => {
-      /* The markup already carries the last published checksums. */
+      /* The markup's SHA256SUMS.txt link resolves to the latest release on
+         its own, so it needs nothing from this request to stay correct. */
     });
 }

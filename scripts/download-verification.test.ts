@@ -75,30 +75,53 @@ describe("download verification guidance", () => {
     );
   });
 
-  it("publishes a SHA-256 digest for every shipped installer", () => {
-    const rows = [...home.matchAll(/<li class="checksum-row">[\s\S]*?<\/li>/g)];
-    expect(rows).toHaveLength(2);
+  it("hard-codes no digest, so the page can never publish a stale one", () => {
+    // A hash in the markup is correct for exactly one release and wrong
+    // afterwards, and a wrong published hash tells someone holding a good
+    // installer that theirs is bad. Digests come from the release API.
+    expect(home).not.toMatch(/\b[0-9a-f]{64}\b/);
 
-    const names = rows.map(
-      ([row]) => /<span class="checksum-name">([^<]+)</.exec(row)?.[1],
+    // Nothing on the page is allowed to name a version either (#152): the
+    // last time this page carried one, it went stale on the next release.
+    // SVG path data holds decimals like 4.6, so match version shapes only.
+    expect(home).not.toMatch(/\b\d+\.\d+\.\d+\b/);
+    expect(home).not.toMatch(/\bv\d+\.\d+/);
+    expect(home).not.toMatch(/AudioBud_\d/);
+  });
+
+  it("falls back to the release's SHA256SUMS.txt rather than to nothing", () => {
+    // Before the API answers -- or if it never does -- the row has to lead
+    // somewhere that still lets a user check their file.
+    const fallback =
+      /<li class="checksum-row checksum-row-pending">[\s\S]*?<\/li>/.exec(
+        home,
+      )?.[0];
+    expect(fallback).toBeDefined();
+    expect(compact(fallback!)).toContain(
+      'href="https://github.com/jamditis/audiobud/releases/latest/download/SHA256SUMS.txt"',
     );
-    expect(names).toEqual([
-      "AudioBud_0.4.0_x64-setup.exe",
-      "AudioBud_0.4.0_x64_en-US.msi",
-    ]);
 
-    for (const [row] of rows) {
-      const digest = /<code class="checksum-value"\s*>([^<]+)</.exec(row)?.[1];
-      expect(digest?.trim()).toMatch(/^[0-9a-f]{64}$/);
-    }
+    // That row holds a link, not a digest, so it must not inherit the
+    // select-all monospace styling that makes a hash look copyable.
+    const css = compact(read("docs/styles.css"));
+    expect(css).toMatch(
+      /\.checksum-row-pending \.checksum-value \{[^}]*user-select: auto;/,
+    );
   });
 
   it("ships a verification command users can copy", () => {
-    expect(compactHome).toMatch(
-      /Get-FileHash -Algorithm SHA256 \.\\AudioBud_[\d.]+_x64-setup\.exe/,
+    // <version> rather than a number: the command outlives the release.
+    expect(compactHome).toContain(
+      "Get-FileHash -Algorithm SHA256 .\\AudioBud_&lt;version&gt;_x64-setup.exe",
     );
     expect(read("README.md")).toMatch(
       /Get-AuthenticodeSignature \.\\AudioBud_<version>_x64-setup\.exe/,
+    );
+
+    // Once the release is known the placeholder is replaced with the real
+    // file name, which is the form a user can paste unedited.
+    expect(compact(read("docs/site.js"))).toContain(
+      "commandLine.textContent = `Get-FileHash -Algorithm SHA256 .\\\\${installer.name}`",
     );
   });
 
@@ -110,7 +133,13 @@ describe("download verification guidance", () => {
     );
     // A blocked or failing request must leave the published fallback in place.
     expect(script).toMatch(/\.catch\(\(\) => \{/);
-    expect(script).toMatch(/if \(assets\.length === 0\) return;/);
+    expect(script).toMatch(/if \(installers\.length === 0\) return;/);
+    // SHA256SUMS.txt is a release asset and carries its own digest. Rendering
+    // it as a row would publish the hash of the hash file next to the two
+    // that matter, which reads as a third installer.
+    expect(script).toMatch(
+      /const installers = assets\.filter\(\(asset\) => \/\\\.\(exe\|msi\)\$\/i\.test\(asset\.name\)/,
+    );
     // Digests are written as text so a hostile response cannot inject markup.
     expect(script).toMatch(/value\.textContent = asset\.digest/);
     expect(script).not.toMatch(/innerHTML/);

@@ -1578,6 +1578,26 @@ main > .section:first-child:not(.hero) {
   user-select: all;
 }
 
+/* Before the release API answers, the row holds a link to SHA256SUMS.txt
+   rather than a digest. Select-all and the monospace face suit a hash you
+   copy, not something you click, and a link that reads like a hash invites
+   people to compare against it. */
+.checksum-row-pending .checksum-name {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.checksum-row-pending .checksum-value {
+  color: var(--green);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  -webkit-user-select: auto;
+  user-select: auto;
+}
+
 .checksum-status,
 .checksum-note {
   margin: 0 0 16px;

@@ -465,20 +465,25 @@
             <div class="checksum-head">
               <h3>SHA-256 checksums</h3>
               <p class="checksum-release" data-checksum-release>
-                Release v0.4.0
+                Latest release
               </p>
             </div>
+            <!--
+              No hashes and no version live in this markup. Every release would
+              need them rewritten, and a stale digest is worse than none: it
+              tells someone holding a good installer that it is bad. The list
+              fills in from the release below; SHA256SUMS.txt is the fallback,
+              and its URL resolves to whatever the latest release is.
+            -->
             <ul class="checksum-list" data-checksum-list>
-              <li class="checksum-row">
-                <span class="checksum-name">AudioBud_0.4.0_x64-setup.exe</span>
-                <code class="checksum-value"
-                  >b58616dfb11d80ef2b9491d454517440447e536cbbdf5293699a4915b08ce16e</code
+              <li class="checksum-row checksum-row-pending">
+                <span class="checksum-name"
+                  >Checksums load from the latest GitHub release.</span
                 >
-              </li>
-              <li class="checksum-row">
-                <span class="checksum-name">AudioBud_0.4.0_x64_en-US.msi</span>
-                <code class="checksum-value"
-                  >e9b5f6302ba887854d6682f9e4f773877883eb4420cf56a5913055308420c734</code
+                <a
+                  class="checksum-value"
+                  href="https://github.com/jamditis/audiobud/releases/latest/download/SHA256SUMS.txt"
+                  >Open SHA256SUMS.txt</a
                 >
               </li>
             </ul>
@@ -488,7 +493,7 @@
             </p>
             <figure class="checksum-command">
               <figcaption>Run this in PowerShell, then compare</figcaption>
-              <pre><code data-checksum-command>Get-FileHash -Algorithm SHA256 .\AudioBud_0.4.0_x64-setup.exe</code></pre>
+              <pre><code data-checksum-command>Get-FileHash -Algorithm SHA256 .\AudioBud_&lt;version&gt;_x64-setup.exe</code></pre>
             </figure>
             <p class="checksum-note">
               A matching hash means the file arrived intact. A mismatch means it
