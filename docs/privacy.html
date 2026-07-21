@@ -203,19 +203,22 @@
                 that feature.
               </p>
               <p>
-                AudioBud delivers completed transcript text to the focused
-                application using the paste method you select. Clipboard modes
-                temporarily place the transcript in the system clipboard and
-                AudioBud normally restores the previous contents unless you
-                select CopyToClipboard. Direct mode types the transcript into
-                the focused application. External-script mode passes the
-                transcript as one command-line argument to the configured
-                script.
+                Clipboard paste modes (Ctrl+V, Ctrl+Shift+V, and Shift+Insert)
+                temporarily place the transcript in the system clipboard, paste
+                the transcript into the focused application, and then try to
+                restore the previous clipboard contents. Direct types the
+                transcript into the focused application without using the
+                clipboard paste path. External Script sends the transcript as
+                one command-line argument to the configured script. None skips
+                transcript delivery through paste or script.
               </p>
               <p>
-                These delivery paths stay local unless the receiving application
-                or script sends the text elsewhere. The receiving application or
-                script controls any later transmission and retention.
+                The Copy to clipboard setting runs after every paste method,
+                including Direct, External Script, and None, and leaves the
+                transcript in the system clipboard. These delivery paths and
+                copying actions do not send text off-device by themselves.
+                Receiving applications and scripts, along with applications that
+                read copied text, control any later transmission and retention.
               </p>
             </section>
 
@@ -308,9 +311,9 @@
                 or reset learned personalization on your device. Where
                 applicable law gives you rights to access, correct, or delete
                 information handled by the project, email
-                <a href="mailto:jamditis@gmail.com">jamditis@gmail.com</a>.
-                Direct requests about data held by a provider or GitHub to that
-                third party. You may also complain to your local data protection
+                <a href="mailto:jamditis@gmail.com">jamditis@gmail.com</a>. Send
+                requests about data held by a provider or GitHub to that third
+                party. You may also complain to your local data protection
                 authority where applicable.
               </p>
             </section>

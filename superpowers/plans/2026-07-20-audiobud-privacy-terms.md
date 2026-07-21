@@ -661,24 +661,32 @@ describe("AudioBud public policy pages", () => {
     );
   });
 
-  it("describes local transcript delivery and later handling", () => {
+  it("distinguishes transcript delivery modes and later handling", () => {
     const privacy = readText("privacy.html");
 
     expect(privacy).toContain(
-      "completed transcript text to the focused application",
-    );
-    expect(privacy).toContain("system clipboard");
-    expect(privacy).toContain("normally restores the previous contents");
-    expect(privacy).toContain("CopyToClipboard");
-    expect(privacy).toContain("Direct mode types the transcript");
-    expect(privacy).toContain("External-script mode passes the transcript");
-    expect(privacy).toContain("one command-line argument");
-    expect(privacy).toContain(
-      "stay local unless the receiving application or script sends the text elsewhere",
+      "Clipboard paste modes (Ctrl+V, Ctrl+Shift+V, and Shift+Insert)",
     );
     expect(privacy).toContain(
-      "receiving application or script controls any later transmission and retention",
+      "paste the transcript into the focused application",
     );
+    expect(privacy).toContain("try to restore the previous clipboard contents");
+    expect(privacy).toContain(
+      "Direct types the transcript into the focused application",
+    );
+    expect(privacy).toContain("without using the clipboard paste path");
+    expect(privacy).toContain(
+      "External Script sends the transcript as one command-line argument to the configured script",
+    );
+    expect(privacy).toContain("None skips transcript delivery");
+    expect(privacy).toContain(
+      "The Copy to clipboard setting runs after every paste method",
+    );
+    expect(privacy).toContain("including Direct, External Script, and None");
+    expect(privacy).toContain("leaves the transcript in the system clipboard");
+    expect(privacy).toContain("do not send text off-device by themselves");
+    expect(privacy).toContain("applications that read copied text");
+    expect(privacy).toContain("control any later transmission and retention");
   });
 
   it("offers local personalization export and reset choices", () => {
@@ -717,7 +725,7 @@ Run:
 bun test scripts/legal-pages.test.ts
 ```
 
-Expected at this checkpoint: FAIL with 30 helper and contract checks passing and 13 contract checks failing. The failures cover missing policy pages and content, the missing privacy skip link and transcript-delivery and personalization-choice disclosures, the old origin in `docs/index.html` and `docs/roadmap.html` metadata, and pending privacy and terms links across the public pages.
+Expected at this checkpoint: FAIL with 30 helper and contract checks passing and 13 contract checks failing. The failures cover missing policy pages and content, the missing privacy skip link, mode-by-mode transcript-delivery disclosure, and personalization-choice disclosure, the old origin in `docs/index.html` and `docs/roadmap.html` metadata, and pending privacy and terms links across the public pages.
 
 - [ ] **Step 3: Commit the failing contract**
 
@@ -838,7 +846,7 @@ Add a contents navigation and the following sections with these exact facts:
 </p>
 ```
 
-Keep that lead paragraph unchanged. Then explain that AudioBud delivers completed transcript text to the focused application. Clipboard modes temporarily place it in the system clipboard and normally restore the previous contents unless the user selects `CopyToClipboard`. Direct mode types the transcript into the focused application. External-script mode passes the transcript as one command-line argument to the configured script. These delivery paths stay local unless the receiving application or script sends the text elsewhere, and that application or script controls later transmission and retention.
+Keep that lead paragraph unchanged. Then distinguish every delivery path in user-facing terms. The Ctrl+V, Ctrl+Shift+V, and Shift+Insert clipboard paste modes temporarily place the transcript in the system clipboard, paste it into the focused application, and then try to restore the previous clipboard contents. Direct types the transcript into the focused application without using that clipboard paste path. External Script sends the transcript as one command-line argument to the configured script. None skips paste or script delivery. The `Copy to clipboard` setting runs after every paste method, including Direct, External Script, and None, and leaves the transcript in the system clipboard. State that these actions do not send text off-device by themselves, while receiving applications and scripts, and applications that read copied text, control later transmission and retention.
 
 5. `Optional AI post-processing`: include the exact boundary sentences:
 

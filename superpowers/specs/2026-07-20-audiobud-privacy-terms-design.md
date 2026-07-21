@@ -33,8 +33,9 @@ The policy text must follow the shipped code:
 - Audio capture, transcription, history, saved recordings, settings, custom words, replacements, and optional personalization are processed or stored on the user's device.
 - Users can export learned personalization as JSON or reset it on their device.
 - The project operator does not receive local audio, transcripts, settings, or history through a first-party AudioBud service.
-- AudioBud delivers completed transcript text to the focused application using the paste method selected by the user. Clipboard modes temporarily write the transcript to the system clipboard and normally restore its previous contents unless the user selects `CopyToClipboard`. Direct mode types the transcript into the focused application.
-- External-script mode passes the transcript as one command-line argument to the configured script. These local delivery paths do not send text off-device by themselves, but the receiving application or script controls any later transmission and retention.
+- The Ctrl+V, Ctrl+Shift+V, and Shift+Insert clipboard paste modes temporarily write the transcript to the system clipboard, paste it into the focused application, and then try to restore the previous clipboard contents.
+- Direct types the transcript into the focused application without using the clipboard paste path. External Script sends the transcript as one command-line argument to the configured script. None skips transcript delivery through paste or script.
+- The user-facing `Copy to clipboard` setting runs after every paste method, including Direct, External Script, and None, and leaves the transcript in the system clipboard. These actions do not send text off-device by themselves. Receiving applications and scripts, along with applications that read copied text, control any later transmission and retention.
 - AudioBud has no first-party account system, hosted application backend, ads, analytics, or telemetry.
 - Transcription history is stored in a local SQLite database. Recordings are stored as local WAV files. The default history limit is five unsaved entries, and users can change retention or save entries for longer storage.
 - Post-processing is off by default. When a user enables it, AudioBud sends transcript text and the selected prompt, but not audio, to the provider or custom endpoint selected by the user.

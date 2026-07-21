@@ -627,24 +627,32 @@ describe("AudioBud public policy pages", () => {
     );
   });
 
-  it("describes local transcript delivery and later handling", () => {
+  it("distinguishes transcript delivery modes and later handling", () => {
     const privacy = readText("privacy.html");
 
     expect(privacy).toContain(
-      "completed transcript text to the focused application",
-    );
-    expect(privacy).toContain("system clipboard");
-    expect(privacy).toContain("normally restores the previous contents");
-    expect(privacy).toContain("CopyToClipboard");
-    expect(privacy).toContain("Direct mode types the transcript");
-    expect(privacy).toContain("External-script mode passes the transcript");
-    expect(privacy).toContain("one command-line argument");
-    expect(privacy).toContain(
-      "stay local unless the receiving application or script sends the text elsewhere",
+      "Clipboard paste modes (Ctrl+V, Ctrl+Shift+V, and Shift+Insert)",
     );
     expect(privacy).toContain(
-      "receiving application or script controls any later transmission and retention",
+      "paste the transcript into the focused application",
     );
+    expect(privacy).toContain("try to restore the previous clipboard contents");
+    expect(privacy).toContain(
+      "Direct types the transcript into the focused application",
+    );
+    expect(privacy).toContain("without using the clipboard paste path");
+    expect(privacy).toContain(
+      "External Script sends the transcript as one command-line argument to the configured script",
+    );
+    expect(privacy).toContain("None skips transcript delivery");
+    expect(privacy).toContain(
+      "The Copy to clipboard setting runs after every paste method",
+    );
+    expect(privacy).toContain("including Direct, External Script, and None");
+    expect(privacy).toContain("leaves the transcript in the system clipboard");
+    expect(privacy).toContain("do not send text off-device by themselves");
+    expect(privacy).toContain("applications that read copied text");
+    expect(privacy).toContain("control any later transmission and retention");
   });
 
   it("offers local personalization export and reset choices", () => {
