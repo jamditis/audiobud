@@ -22,10 +22,10 @@ pub fn is_common_word(word: &str) -> bool {
     COMMON_WORDS.contains(word.to_lowercase().as_str())
 }
 
-/// Lowercase dictionary words used only by correction capture. Unlike [`COMMON_WORDS`], this is
-/// intentionally broad: two valid English words are too ambiguous to turn into a permanent global
-/// replacement. Capitalized names and brands are excluded when the bundled list is generated, so
-/// a correction such as `clawed` -> `Claude` remains learnable.
+/// Lowercase dictionary words and contractions used only by correction capture. Unlike
+/// [`COMMON_WORDS`], this is intentionally broad: two valid English forms are too ambiguous to
+/// turn into a permanent global replacement. Capitalized names and brands are excluded when the
+/// bundled list is generated, so a correction such as `clawed` -> `Claude` remains learnable.
 static ENGLISH_WORDS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
     include_str!("english_words_en.txt")
         .lines()
@@ -35,7 +35,8 @@ static ENGLISH_WORDS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
 });
 
 fn is_known_english_word(word: &str) -> bool {
-    ENGLISH_WORDS.contains(word.to_lowercase().as_str())
+    let normalized = word.to_lowercase().replace('\u{2019}', "'");
+    ENGLISH_WORDS.contains(normalized.as_str())
 }
 
 static METAPHONE: Lazy<Metaphone> = Lazy::new(Metaphone::default);
@@ -1155,13 +1156,14 @@ mod tests {
     }
 
     #[test]
-    fn extractor_learns_a_contraction_mishear() {
-        // `were` -> `we're` is a genuine mishear, not an inflection: the inflection guard strips
-        // only a trailing "'s"/"s", so an interior apostrophe leaves the pair learnable.
-        let out = extract_learned_replacements("i think were going", "i think we're going");
-        assert_eq!(
-            learned_pairs(&out),
-            vec![("were".to_string(), "we're".to_string())]
+    fn extractor_rejects_a_common_contraction_edit() {
+        // `were` -> `we're` is a grammar correction between two common forms. Learning it would
+        // corrupt every future valid use, such as `we were going` -> `we we're going`.
+        assert!(
+            extract_learned_replacements("i think were going", "i think we're going").is_empty()
+        );
+        assert!(
+            extract_learned_replacements("i think were going", "i think we’re going").is_empty()
         );
     }
 
