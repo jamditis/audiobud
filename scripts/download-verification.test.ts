@@ -30,7 +30,7 @@ describe("download verification guidance", () => {
 
     const text = compact(section!.replace(/<[^>]+>/g, " ")).toLowerCase();
     expect(text).toContain("isn't commonly downloaded");
-    expect(text).toContain("popularity score, not a security verdict");
+    expect(text).toContain("says nothing about what the file does");
     expect(text).toContain("digital signatures");
   });
 
