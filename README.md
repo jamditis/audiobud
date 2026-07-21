@@ -72,6 +72,28 @@ Download the Windows installer from the [latest release](https://github.com/jamd
 
 On first run, choose a model if one is not already installed and grant microphone permission when Windows asks.
 
+## Verify your download
+
+Edge and SmartScreen warn that a new installer "isn't commonly downloaded" until enough people have fetched that exact build. It is a popularity score rather than a security verdict, and it resets with every release regardless of who signed the file. Two checks confirm you have a genuine AudioBud installer.
+
+Check the signature. Right-click the installer, open **Properties**, then the **Digital Signatures** tab, or run:
+
+```powershell
+Get-AuthenticodeSignature .\AudioBud_<version>_x64-setup.exe | Format-List Status, SignerCertificate
+```
+
+`Status` must be `Valid` and the signer subject must read `CN=Joseph Amditis, O=Joseph Amditis, L=Bloomfield, S=nj, C=US`, issued by `Microsoft ID Verified CS AOC CA 04`. Microsoft rotates the number ending that issuer, so a different two-digit suffix is expected; the signer subject is the part that must match. Do not run an installer that reports anything else.
+
+Check the hash too, because the signature alone does not cover the whole file. Authenticode hashes the signed parts of a PE image and leaves out the `CheckSum` field, the certificate table, and anything trailing the final section. Patching an excluded byte changes the file's SHA-256 while `Get-AuthenticodeSignature` still returns `Valid` under the correct signer, so treat the two checks as complementary rather than redundant.
+
+Every release asset's SHA-256 digest is published by GitHub on the [releases page](https://github.com/jamditis/audiobud/releases/latest), on the [AudioBud site](https://audiobud.amditis.tech/#verify), and through the API:
+
+```powershell
+Get-FileHash -Algorithm SHA256 .\AudioBud_<version>_x64-setup.exe
+```
+
+A mismatch means the download was corrupted, tampered with, or replaced in transit. Delete it and download again.
+
 ## Build from source
 
 Prerequisites: [Rust](https://rustup.rs/), [Bun](https://bun.sh/), and the platform build tools. On Windows, install Visual Studio 2022 with the v143 toolset, the Vulkan SDK, and Ninja. See [BUILD.md](BUILD.md) for platform notes.

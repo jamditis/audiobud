@@ -1426,6 +1426,199 @@ main > .section:first-child:not(.hero) {
   color: var(--amber);
 }
 
+.install-note a {
+  color: var(--green);
+  font-weight: 700;
+}
+
+/* Download verification. Checksums refresh from the GitHub release API, so the
+   values in the markup are the no-JavaScript fallback. */
+.verify-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  margin-bottom: 18px;
+}
+
+.verify-card,
+.verify-checksums {
+  padding: 28px;
+  border: 1px solid rgba(245, 249, 238, 0.09);
+  border-radius: 20px;
+  background:
+    linear-gradient(145deg, rgba(245, 249, 238, 0.035), transparent 48%),
+    rgba(12, 29, 19, 0.76);
+}
+
+.verify-card h3,
+.verify-checksums h3 {
+  margin: 0 0 12px;
+  font-family: var(--font-display);
+  font-size: 19px;
+  font-weight: 800;
+}
+
+.verify-card p {
+  margin: 0 0 14px;
+  color: var(--muted);
+  font-size: 15px;
+}
+
+.verify-card p:last-child {
+  margin-bottom: 0;
+}
+
+.verify-card strong {
+  color: var(--text);
+}
+
+.verify-card em {
+  color: var(--amber);
+  font-style: normal;
+}
+
+.verify-facts {
+  margin: 0 0 14px;
+  padding: 16px 18px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(7, 16, 11, 0.5);
+}
+
+.verify-facts > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  padding: 7px 0;
+  border-bottom: 1px solid rgba(245, 249, 238, 0.07);
+}
+
+.verify-facts > div:first-child {
+  padding-top: 0;
+}
+
+.verify-facts > div:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.verify-facts dt {
+  flex: 0 0 96px;
+  color: var(--muted);
+  font-size: 13px;
+  text-transform: lowercase;
+}
+
+.verify-facts dd {
+  flex: 1 1 200px;
+  margin: 0;
+  color: var(--green);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.checksum-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.checksum-head h3 {
+  margin: 0;
+}
+
+.checksum-release {
+  margin: 0;
+  padding: 4px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--green);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.checksum-list {
+  margin: 0 0 14px;
+  padding: 0;
+  list-style: none;
+}
+
+.checksum-row {
+  display: grid;
+  gap: 6px;
+  padding: 14px 0;
+  border-bottom: 1px solid rgba(245, 249, 238, 0.07);
+}
+
+.checksum-row:first-child {
+  padding-top: 0;
+}
+
+.checksum-row:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.checksum-name {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.checksum-value {
+  overflow-wrap: anywhere;
+  color: var(--water);
+  font-family: ui-monospace, "Cascadia Code", "Consolas", monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  -webkit-user-select: all;
+  user-select: all;
+}
+
+.checksum-status,
+.checksum-note {
+  margin: 0 0 16px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.checksum-note {
+  margin-bottom: 0;
+}
+
+.checksum-note a {
+  color: var(--green);
+  font-weight: 700;
+}
+
+.checksum-command {
+  margin: 0 0 16px;
+  padding: 16px 18px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(7, 16, 11, 0.5);
+}
+
+.checksum-command figcaption {
+  margin-bottom: 10px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.checksum-command pre {
+  overflow-x: auto;
+  margin: 0;
+}
+
+.checksum-command code {
+  color: var(--green);
+  font-family: ui-monospace, "Cascadia Code", "Consolas", monospace;
+  font-size: 13px;
+}
+
 /* Progressive reveal. Content remains visible when JavaScript is unavailable. */
 .js [data-reveal] {
   opacity: 0;
@@ -1813,6 +2006,10 @@ body::before {
     --wrap: min(100% - 30px, 680px);
   }
 
+  .verify-grid {
+    grid-template-columns: 1fr;
+  }
+
   .nav {
     grid-template-columns: 1fr auto;
     min-height: 68px;
@@ -1930,6 +2127,22 @@ body::before {
 @media (max-width: 560px) {
   :root {
     --wrap: calc(100% - 24px);
+  }
+
+  .verify-card,
+  .verify-checksums {
+    padding: 22px 18px;
+  }
+
+  .verify-facts dt {
+    flex-basis: 100%;
+  }
+
+  /* Soft-wrap the command rather than hiding its tail behind a scrollbar.
+     Copying a wrapped block still yields the original single line. */
+  .checksum-command pre {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
   }
 
   .brand {

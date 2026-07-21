@@ -81,6 +81,7 @@ const sitePages = [
   },
 ];
 const footerLinks = [
+  { label: "Verify a download", href: "./index.html#verify" },
   { label: "Roadmap", href: "./roadmap.html" },
   { label: "Privacy", href: "./privacy.html" },
   { label: "Terms", href: "./terms.html" },
@@ -460,6 +461,7 @@ describe("Real document tag scanner", () => {
       <div data-copy="<footer><nav class='footer-links'></nav></footer>"></div>
       <!-- <footer><nav class="footer-links"><a href="./wrong.html">Wrong</a></nav></footer> -->
       <footer><nav class="footer-links">
+        <a href="./index.html#verify">Verify a download</a>
         <a href="./roadmap.html">Roadmap</a>
         <a href="./privacy.html">Privacy</a>
         <a href="./terms.html">Terms</a>
