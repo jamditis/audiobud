@@ -368,6 +368,7 @@
               Signing. The signature identifies Joseph Amditis as the publisher.
               SmartScreen can still show a reputation warning while the release
               builds reputation.
+              <a href="#verify">Check the download yourself</a>.
             </p>
           </div>
           <div class="cta-actions">
@@ -384,6 +385,108 @@
           </div>
         </div>
       </section>
+
+      <section id="verify" class="section alt section-verify">
+        <div class="wrap">
+          <div class="section-head" data-reveal>
+            <div>
+              <p class="eyebrow">Before you install</p>
+              <h2>That warning counts downloads, not risks.</h2>
+            </div>
+            <p>
+              Windows flags installers hardly anyone has fetched yet. Here is
+              what it means and how to confirm you have the real file.
+            </p>
+          </div>
+
+          <div class="verify-grid">
+            <article class="verify-card" data-reveal>
+              <h3>Why the warning appears</h3>
+              <p>
+                When Edge says a file
+                <em>isn't commonly downloaded</em>, SmartScreen is reporting how
+                many people have downloaded that exact build so far. It is a
+                popularity score, not a security verdict, and every release
+                starts at zero no matter who signed it. AudioBud is a small
+                project, so new versions will trip this for a while.
+              </p>
+              <p>
+                To continue, choose <strong>Keep</strong> in the download list,
+                then <strong>More info</strong> and
+                <strong>Run anyway</strong> if Windows prompts again. Read the
+                publisher name before you accept.
+              </p>
+            </article>
+
+            <article class="verify-card" data-reveal data-reveal-delay="1">
+              <h3>What the signature proves</h3>
+              <p>
+                Right-click the installer, open <strong>Properties</strong>,
+                then the <strong>Digital Signatures</strong> tab. It should
+                match this exactly:
+              </p>
+              <dl class="verify-facts">
+                <div>
+                  <dt>Publisher</dt>
+                  <dd>Joseph Amditis</dd>
+                </div>
+                <div>
+                  <dt>Issuer</dt>
+                  <dd>Microsoft ID Verified CS AOC CA</dd>
+                </div>
+                <div>
+                  <dt>Timestamp</dt>
+                  <dd>Microsoft Public RSA Time Stamping Authority</dd>
+                </div>
+              </dl>
+              <p>
+                Change one byte of a signed installer and Windows reports the
+                signature as invalid instead of naming a publisher. Do not run a
+                download that fails to name Joseph Amditis.
+              </p>
+            </article>
+          </div>
+
+          <div class="verify-checksums" data-reveal>
+            <div class="checksum-head">
+              <h3>SHA-256 checksums</h3>
+              <p class="checksum-release" data-checksum-release>
+                Release v0.4.0
+              </p>
+            </div>
+            <ul class="checksum-list" data-checksum-list>
+              <li class="checksum-row">
+                <span class="checksum-name">AudioBud_0.4.0_x64-setup.exe</span>
+                <code class="checksum-value"
+                  >b58616dfb11d80ef2b9491d454517440447e536cbbdf5293699a4915b08ce16e</code
+                >
+              </li>
+              <li class="checksum-row">
+                <span class="checksum-name">AudioBud_0.4.0_x64_en-US.msi</span>
+                <code class="checksum-value"
+                  >e9b5f6302ba887854d6682f9e4f773877883eb4420cf56a5913055308420c734</code
+                >
+              </li>
+            </ul>
+            <p class="checksum-status" data-checksum-status>
+              Published by GitHub for the release assets. Compare against your
+              own copy before installing.
+            </p>
+            <figure class="checksum-command">
+              <figcaption>Run this in PowerShell, then compare</figcaption>
+              <pre><code data-checksum-command>Get-FileHash -Algorithm SHA256 .\AudioBud_0.4.0_x64-setup.exe</code></pre>
+            </figure>
+            <p class="checksum-note">
+              A matching hash means the file arrived intact. A mismatch means it
+              was corrupted or replaced in transit, so delete it and download
+              again from
+              <a href="https://github.com/jamditis/audiobud/releases/latest"
+                >the releases page</a
+              >.
+            </p>
+          </div>
+        </div>
+      </section>
     </main>
 
     <footer class="site-footer">
@@ -396,6 +499,7 @@
           <p>Local dictation for Windows. MIT licensed.</p>
         </div>
         <nav class="footer-links" aria-label="Footer">
+          <a href="./index.html#verify">Verify a download</a>
           <a href="./roadmap.html">Roadmap</a>
           <a href="./privacy.html">Privacy</a>
           <a href="./terms.html">Terms</a>
