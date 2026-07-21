@@ -62,6 +62,42 @@ a {
   -webkit-tap-highlight-color: transparent;
 }
 
+:focus-visible {
+  outline: 3px solid var(--amber);
+  outline-offset: 4px;
+}
+
+.skip-link {
+  position: fixed;
+  z-index: 30;
+  top: 12px;
+  left: 12px;
+  padding: 10px 14px;
+  transform: translateY(-200%);
+  border-radius: 6px;
+  background: var(--amber);
+  color: var(--bg);
+  font-weight: 800;
+}
+
+.skip-link:focus,
+.skip-link:focus-visible {
+  transform: translateY(0);
+}
+
+#hero-title,
+#roadmap-title,
+#privacy-title,
+#terms-title {
+  scroll-margin-top: 80px;
+}
+
+.nav-links a[aria-current="page"],
+.footer-links a[aria-current="page"] {
+  color: var(--amber);
+  font-weight: 800;
+}
+
 img,
 svg {
   display: block;
@@ -749,14 +785,15 @@ kbd {
   margin-bottom: 12px;
 }
 
+.section-head h1,
 .section-head h2 {
-  max-width: 740px;
+  max-width: 680px;
   margin-bottom: 0;
   font-family: "Bungee", system-ui, sans-serif;
-  font-size: clamp(36px, 4.2vw, 58px);
+  font-size: clamp(30px, 4vw, 48px);
   font-weight: 400;
-  letter-spacing: -0.035em;
-  line-height: 1.03;
+  letter-spacing: 0;
+  line-height: 1.04;
 }
 
 .section-head > p {
@@ -1253,7 +1290,7 @@ kbd {
 
 .footer-grid {
   display: grid;
-  grid-template-columns: 1fr 180px 180px;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 430px);
   gap: 40px;
 }
 
@@ -1268,17 +1305,10 @@ kbd {
 
 .footer-links {
   display: flex;
-  flex-direction: column;
+  flex-wrap: wrap;
   align-items: flex-start;
-  gap: 8px;
-}
-
-.footer-links strong {
-  margin-bottom: 6px;
-  color: var(--text);
-  font-size: 13px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  justify-content: flex-end;
+  gap: 12px 20px;
 }
 
 .footer-links a {
@@ -1401,6 +1431,18 @@ main > .section:first-child:not(.hero) {
   color: var(--amber);
 }
 
+.install-note {
+  max-width: 650px;
+  margin: 14px 0 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.install-note strong {
+  color: var(--amber);
+}
+
 /* Progressive reveal. Content remains visible when JavaScript is unavailable. */
 .js [data-reveal] {
   opacity: 0;
@@ -1424,6 +1466,245 @@ main > .section:first-child:not(.hero) {
 }
 
 /* Swamp ambiance */
+.legal-hero {
+  padding: 132px 0 48px;
+  border-bottom: 1px solid var(--line);
+}
+
+.legal-hero h1 {
+  max-width: 850px;
+}
+
+.legal-meta {
+  margin-bottom: 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.data-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 34px;
+}
+
+.data-card {
+  padding: 20px;
+  border: 1px solid rgba(243, 247, 238, 0.12);
+  border-radius: 8px;
+  background: rgba(16, 27, 19, 0.78);
+}
+
+.data-card h2 {
+  margin-bottom: 10px;
+  font-size: 20px;
+  line-height: 1.2;
+}
+
+.data-card p {
+  margin-bottom: 0;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.data-label {
+  display: block;
+  margin-bottom: 12px;
+  color: var(--green);
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.legal-layout {
+  display: grid;
+  grid-template-columns: 210px minmax(0, 760px);
+  gap: 52px;
+  align-items: start;
+  justify-content: center;
+}
+
+.legal-toc {
+  position: sticky;
+  top: 92px;
+  padding: 18px;
+  border: 1px solid rgba(243, 247, 238, 0.1);
+  border-radius: 8px;
+  background: rgba(16, 27, 19, 0.72);
+}
+
+.legal-toc h2 {
+  display: block;
+  margin-bottom: 10px;
+  color: var(--text);
+  font-size: 13px;
+}
+
+.legal-toc ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.legal-toc li {
+  list-style: none;
+}
+
+.legal-toc a {
+  display: block;
+  padding: 5px 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.35;
+  text-decoration: none;
+}
+
+.legal-toc a:hover,
+.legal-toc a:focus-visible {
+  color: var(--green);
+}
+
+.legal-document {
+  min-width: 0;
+}
+
+.legal-section {
+  scroll-margin-top: 90px;
+  padding: 0 0 34px;
+}
+
+.legal-section + .legal-section {
+  padding-top: 34px;
+  border-top: 1px solid rgba(243, 247, 238, 0.1);
+}
+
+.legal-section h2 {
+  margin-bottom: 14px;
+  font-size: clamp(24px, 3vw, 34px);
+  line-height: 1.12;
+}
+
+.legal-section h3 {
+  margin: 24px 0 10px;
+  font-size: 18px;
+}
+
+.legal-section p,
+.legal-section li {
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1.72;
+}
+
+.legal-section li + li {
+  margin-top: 8px;
+}
+
+.legal-section a {
+  color: var(--green);
+  text-underline-offset: 3px;
+}
+
+.legal-callout {
+  margin: 22px 0;
+  padding: 18px 20px;
+  border-left: 3px solid var(--amber);
+  background: rgba(255, 178, 62, 0.08);
+}
+
+.legal-callout p:last-child {
+  margin-bottom: 0;
+}
+
+@media (max-width: 860px) {
+  .nav-links {
+    display: none;
+  }
+
+  .hero {
+    min-height: 74svh;
+  }
+
+  .hero::before {
+    background:
+      linear-gradient(180deg, rgba(11, 18, 14, 0.82), rgba(11, 18, 14, 0.96)),
+      url("./assets/app-general.png") center bottom / 900px auto no-repeat;
+    opacity: 0.82;
+  }
+
+  .hero-inner {
+    padding: 42px 0 24px;
+  }
+
+  h1 {
+    font-size: clamp(38px, 11vw, 52px);
+  }
+
+  .lede {
+    font-size: 18px;
+  }
+
+  .actions {
+    margin-bottom: 20px;
+  }
+
+  .status-row span {
+    min-height: 0;
+    padding: 10px 14px;
+    font-size: 13px;
+  }
+
+  .status-row,
+  .steps,
+  .feature-grid,
+  .screens,
+  .install,
+  .roadmap-grid,
+  .data-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .legal-hero {
+    padding: 108px 0 34px;
+  }
+
+  .legal-layout {
+    grid-template-columns: 1fr;
+    gap: 30px;
+  }
+
+  .legal-toc {
+    position: static;
+  }
+
+  .section-head,
+  .notice,
+  .site-footer .wrap {
+    display: block;
+  }
+
+  .footer-links {
+    margin-top: 14px;
+  }
+
+  .section-head p,
+  .notice .button {
+    margin-top: 14px;
+  }
+
+  .model-row {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+}
+
+@media (min-width: 861px) and (max-height: 760px) {
+  .legal-toc {
+    position: static;
+  }
+}
+
 body::before {
   content: "";
   position: fixed;
@@ -1850,11 +2131,15 @@ body::before {
   }
 
   .footer-grid {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr;
   }
 
   .footer-grid > div:first-child {
-    grid-column: 1 / -1;
+    grid-column: auto;
+  }
+
+  .footer-links {
+    justify-content: flex-start;
   }
 
   .footer-bottom {
@@ -1895,6 +2180,10 @@ body::before {
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
+  }
+
+  body::before {
+    animation: none;
   }
 
   *,

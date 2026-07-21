@@ -1,23 +1,21 @@
-# AudioBud release build (milestone B): produces the downloadable Windows
-# installers (NSIS .exe + MSI). Inert until manually dispatched or a v* tag is
-# pushed, so merging it never triggers a build on its own.
+# AudioBud signed Windows release build. The workflow builds the application,
+# signs Tauri's patched package contents while bundling, signs the standalone
+# executable and both finished installers, then verifies the packaged files
+# before uploading any artifact.
 #
-#   - workflow_dispatch (make_release: false) -> build + upload the installers
-#     as a CI artifact only. Use this to verify the build without cutting a
-#     release.
-#   - workflow_dispatch (make_release: true) or a pushed v* tag -> also create a
-#     draft GitHub Release and attach the installers to it.
+#   - workflow_dispatch (make_release: false) builds and signs a CI artifact.
+#   - workflow_dispatch (make_release: true) or a pushed v* tag also creates or
+#     reuses a draft GitHub release and attaches the signed installers.
 #
-# Windows-only for now (issues #3/#13 are Windows-NSIS packaging). No code
-# signing (milestone C) and no updater feed (gated off, see #32/#33), so the
-# build runs unsigned and createUpdaterArtifacts is false in tauri.conf.json.
+# The job can run only from main or a v* tag and uses the protected
+# artifact-signing environment for passwordless Azure authentication.
 name: Release
 
 on:
   workflow_dispatch:
     inputs:
       make_release:
-        description: "Create a draft GitHub Release and attach the installers (otherwise upload as a CI artifact only)"
+        description: "Create a draft GitHub release and attach the signed installers"
         type: boolean
         default: false
   push:
@@ -25,19 +23,32 @@ on:
       - "v*"
 
 concurrency:
-  group: release-${{ github.ref }}
+  # One group prevents main and tag jobs for the same version from replacing
+  # each other's draft assets.
+  group: release-windows
   cancel-in-progress: false
 
 jobs:
   build-windows:
-    name: Build Windows installers
-    runs-on: windows-latest
-    timeout-minutes: 45
+    name: Build and sign Windows installers
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
+    environment: artifact-signing
+    runs-on: windows-2025
+    timeout-minutes: 60
     permissions:
       contents: write
+      id-token: write
+    env:
+      ARTIFACT_SIGNING_ENDPOINT: ${{ vars.ARTIFACT_SIGNING_ENDPOINT }}
+      ARTIFACT_SIGNING_ACCOUNT_NAME: ${{ vars.ARTIFACT_SIGNING_ACCOUNT_NAME }}
+      ARTIFACT_SIGNING_CERTIFICATE_PROFILE_NAME: ${{ vars.ARTIFACT_SIGNING_CERTIFICATE_PROFILE_NAME }}
+      SILERO_VAD_SHA256: a35ebf52fd3ce5f1469b2a36158dba761bc47b973ea3382b3186ca15b1f5af28
+      SILERO_VAD_BYTES: 1807522
+      VULKAN_RUNTIME_ARCHIVE_SHA256: 7d969f4d7b44e387667d3148f61559497c22d50cbe3d50adc9e5409afbce2df1
+      VULKAN_RUNTIME_ARCHIVE_BYTES: 15738272
     steps:
       # whisper-rs-sys cmake builds and the VS toolchain create paths well past
-      # the legacy 260-char MAX_PATH; enable long paths before anything checks out.
+      # the legacy 260-character MAX_PATH limit.
       - name: Enable long paths
         shell: pwsh
         run: |
@@ -45,10 +56,11 @@ jobs:
             -Name "LongPathsEnabled" -Value 1 -PropertyType DWORD -Force
           git config --system core.longpaths true
 
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Resolve version and release tag
         id: meta
@@ -57,9 +69,6 @@ jobs:
           VERSION=$(grep -o '"version": "[^"]*"' src-tauri/tauri.conf.json | cut -d'"' -f4)
           APP_TAG="v$VERSION"
           if [[ "${{ github.ref_type }}" == "tag" ]]; then
-            # A tag-triggered run must publish to the tag that was actually
-            # pushed; fail loudly if it disagrees with the app version rather
-            # than drafting a release for the wrong tag.
             PUSHED="${{ github.ref_name }}"
             if [[ "$PUSHED" != "$APP_TAG" ]]; then
               echo "::error::Pushed tag '$PUSHED' does not match app version '$APP_TAG' from src-tauri/tauri.conf.json. Bump the version or push the matching tag."
@@ -73,27 +82,28 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
-      # Keep this an exact semver, as in ci.yml: an unpinned setup-bun resolves
-      # the version through an authenticated api.github.com call, which would
-      # fail the release build before it compiles anything.
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+      # Keep this an exact semver. An unpinned setup-bun resolves its version
+      # through an authenticated api.github.com request before compilation.
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version: 1.3.14
 
       - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+        with:
+          toolchain: stable
 
-      - name: Rust cache
-        uses: swatinem/rust-cache@v2
+      - name: Restore Rust cache
+        uses: swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
         with:
           workspaces: "./src-tauri -> target"
           key: windows-x86_64
 
-      # The Windows build links whisper-vulkan; the SDK provides glslc + the
-      # Vulkan headers/libs the native build needs.
+      # The Windows build links whisper-vulkan. The SDK provides glslc and the
+      # Vulkan headers and libraries required by the native build.
       - name: Install Vulkan SDK
-        uses: humbletim/install-vulkan-sdk@v1.2
+        uses: humbletim/install-vulkan-sdk@30ba978f977e81b72d091fc8888feb1fb26f9aff # v1.2
         with:
           version: 1.4.309.0
           cache: true
@@ -101,110 +111,380 @@ jobs:
       - name: Install frontend dependencies
         run: bun install --frozen-lockfile
 
-      # silero_vad_v4.onnx is gitignored (binary blob), but bundle.resources
-      # ships resources/**/* and the app needs the VAD model at runtime, so a
-      # clean CI checkout has to fetch it before bundling.
+      # silero_vad_v4.onnx is gitignored, but bundle.resources ships
+      # resources/**/* and the application needs the VAD model at runtime. The
+      # commit-pinned Handy file is byte-identical to the hosted copy.
       - name: Download Silero VAD model
-        shell: bash
+        shell: pwsh
         run: |
-          mkdir -p src-tauri/resources/models
-          curl -fL --retry 3 -o src-tauri/resources/models/silero_vad_v4.onnx \
-            https://blob.handy.computer/silero_vad_v4.onnx
-          ls -l src-tauri/resources/models/silero_vad_v4.onnx
+          $directory = "src-tauri/resources/models"
+          $model = Join-Path $directory "silero_vad_v4.onnx"
+          New-Item -ItemType Directory -Force -Path $directory | Out-Null
+          Invoke-WebRequest `
+            -Uri "https://raw.githubusercontent.com/cjpais/Handy/17d6c763413e3e29ec5cee76aa19ad01eccb73b2/src-tauri/resources/models/silero_vad_v4.onnx" `
+            -OutFile $model -MaximumRetryCount 3 -RetryIntervalSec 5
+          $modelBytes = (Get-Item -LiteralPath $model).Length
+          if ($modelBytes -ne [long]$env:SILERO_VAD_BYTES) {
+            throw "Downloaded Silero VAD model size mismatch: $modelBytes"
+          }
+          $modelHash = (Get-FileHash -LiteralPath $model -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($modelHash -ne $env:SILERO_VAD_SHA256) {
+            throw "Downloaded Silero VAD model hash mismatch: $modelHash"
+          }
+          Get-Item -LiteralPath $model | Select-Object FullName, Length
 
-      # vulkan-1.dll (the Vulkan loader) ships with GPU drivers, not the SDK, so
-      # the build host has none to bundle. Fetch the LunarG runtime components
-      # (pinned to the SDK version) and expose the x64 loader path; the
-      # beforeBundleCommand stages it next to the exe so the installer launches
-      # on a machine without a driver-supplied loader. See issue #36.
+      # vulkan-1.dll ships with GPU drivers, not the SDK. Fetch the pinned
+      # LunarG runtime and expose its x64 loader to beforeBundleCommand.
       - name: Fetch Vulkan loader for bundling
         shell: pwsh
         run: |
-          $ver = "1.4.309.0"
-          $url = "https://sdk.lunarg.com/sdk/download/$ver/windows/VulkanRT-$ver-Components.zip"
-          $zip = Join-Path $env:RUNNER_TEMP "vulkanrt.zip"
-          $dir = Join-Path $env:RUNNER_TEMP "vulkanrt"
-          Invoke-WebRequest -Uri $url -OutFile $zip -MaximumRetryCount 3 -RetryIntervalSec 5
-          Expand-Archive -Path $zip -DestinationPath $dir -Force
-          $dll = Get-ChildItem -Recurse -Path $dir -Filter "vulkan-1.dll" |
-            Where-Object { $_.FullName -match "\\x64\\" } | Select-Object -First 1
+          $version = "1.4.309.0"
+          $url = "https://sdk.lunarg.com/sdk/download/$version/windows/VulkanRT-$version-Components.zip"
+          $archive = Join-Path $env:RUNNER_TEMP "vulkanrt.zip"
+          $directory = Join-Path $env:RUNNER_TEMP "vulkanrt"
+          Invoke-WebRequest -Uri $url -OutFile $archive -MaximumRetryCount 3 -RetryIntervalSec 5
+          $archiveBytes = (Get-Item -LiteralPath $archive).Length
+          if ($archiveBytes -ne [long]$env:VULKAN_RUNTIME_ARCHIVE_BYTES) {
+            throw "Downloaded Vulkan runtime archive size mismatch: $archiveBytes"
+          }
+          $archiveHash = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($archiveHash -ne $env:VULKAN_RUNTIME_ARCHIVE_SHA256) {
+            throw "Downloaded Vulkan runtime archive hash mismatch: $archiveHash"
+          }
+          Expand-Archive -Path $archive -DestinationPath $directory -Force
+          $dll = Get-ChildItem -Recurse -Path $directory -Filter "vulkan-1.dll" |
+            Where-Object { $_.FullName -match "\\x64\\" } |
+            Select-Object -First 1
           if (-not $dll) { throw "vulkan-1.dll (x64) not found in $url" }
-          "VULKAN_RUNTIME_DLL=$($dll.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "VULKAN_RUNTIME_DLL=$($dll.FullName)" |
+            Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           Write-Output "Staged Vulkan loader: $($dll.FullName) ($($dll.Length) bytes)"
 
-      # Keep the cargo target dir short (drive root) so whisper-rs-sys cmake
-      # paths stay under MAX_PATH.
+      # Keep Cargo's target directory short so whisper-rs-sys cmake paths stay
+      # below MAX_PATH. This is also the root for every signing path.
       - name: Shorten build path
         shell: pwsh
         run: |
           $drive = Split-Path -Qualifier $env:GITHUB_WORKSPACE
-          $targetDir = "$drive\t"
-          New-Item -ItemType Directory -Force -Path $targetDir | Out-Null
-          echo "CARGO_TARGET_DIR=$targetDir" >> $env:GITHUB_ENV
+          $targetDirectory = "$drive\t"
+          New-Item -ItemType Directory -Force -Path $targetDirectory | Out-Null
+          "CARGO_TARGET_DIR=$targetDirectory" |
+            Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
-      - name: Find or create draft release
-        id: create-release
-        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.make_release) || github.ref_type == 'tag' }}
-        uses: actions/github-script@v7
+      # Disable native CPU targeting and SIMD above SSE4.2 so the x86_64 build
+      # runs on CPUs without AVX or FMA. Vulkan handles the main compute load.
+      - name: Build application without bundling
+        shell: pwsh
         env:
-          RELEASE_TAG: ${{ steps.meta.outputs.tag }}
-        with:
-          script: |
-            const tag = process.env.RELEASE_TAG;
-            // Reuse an existing release for this tag so a retried run (after a
-            // failed build/upload) attaches to the same draft instead of failing
-            // because the release/tag already exists.
-            const releases = await github.paginate(github.rest.repos.listReleases, {
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              per_page: 100,
-            });
-            let release = releases.find((r) => r.tag_name === tag);
-            if (!release) {
-              const { data } = await github.rest.repos.createRelease({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                tag_name: tag,
-                name: `AudioBud ${tag}`,
-                draft: true,
-                prerelease: false,
-                generate_release_notes: true,
-              });
-              release = data;
-            }
-            return release.id;
-
-      - name: Build with Tauri
-        uses: tauri-apps/tauri-action@v0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Disable -march=native and SIMD above SSE4.2 so the x86_64 build runs
-          # on CPUs without AVX/FMA (they would SIGILL otherwise). The Vulkan
-          # backend does the heavy compute, so the perf cost is negligible.
           GGML_NATIVE: "OFF"
           GGML_AVX: "OFF"
           GGML_AVX2: "OFF"
           GGML_FMA: "OFF"
           GGML_F16C: "OFF"
-        with:
-          tagName: ${{ steps.create-release.outputs.result && steps.meta.outputs.tag || '' }}
-          releaseName: ${{ steps.create-release.outputs.result && format('AudioBud {0}', steps.meta.outputs.tag) || '' }}
-          releaseId: ${{ steps.create-release.outputs.result }}
-          args: ""
+        run: bun run tauri build --no-bundle --ci
 
-      - name: Resolve bundle path
-        id: bundle-path
+      - name: Resolve signing paths
+        id: signing-paths
+        shell: pwsh
+        env:
+          APP_VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          if (-not [System.IO.Path]::IsPathRooted($env:CARGO_TARGET_DIR)) {
+            throw "CARGO_TARGET_DIR must be an absolute path"
+          }
+
+          $application = Join-Path $env:CARGO_TARGET_DIR "release\audiobud.exe"
+          $nsis = Join-Path $env:CARGO_TARGET_DIR "release\bundle\nsis\AudioBud_$($env:APP_VERSION)_x64-setup.exe"
+          $msi = Join-Path $env:CARGO_TARGET_DIR "release\bundle\msi\AudioBud_$($env:APP_VERSION)_x64_en-US.msi"
+
+          if (-not (Test-Path -LiteralPath $application -PathType Leaf)) {
+            throw "Application executable not found: $application"
+          }
+
+          "app=$application" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "nsis=$nsis" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "msi=$msi" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      # Authenticate after compilation so no signing token is requested for a
+      # build that cannot produce the application executable.
+      - name: Authenticate to Azure
+        uses: azure/login@532459ea530d8321f2fb9bb10d1e0bcf23869a43 # v3
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      # Tauri patches the application executable separately for MSI and NSIS.
+      # Its signing hook must run after each patch or the packages contain an
+      # unsigned executable. Pin the module to the version used by the action.
+      - name: Install Artifact Signing module
         shell: pwsh
         run: |
-          $base = if ($env:CARGO_TARGET_DIR) { $env:CARGO_TARGET_DIR } else { "src-tauri/target" }
-          echo "base=$base" >> $env:GITHUB_OUTPUT
+          Install-Module -Name ArtifactSigning -RequiredVersion 0.1.8 `
+            -Force -Repository PSGallery -Scope CurrentUser
+          Import-Module ArtifactSigning -RequiredVersion 0.1.8 -Force
+          Get-Command Invoke-ArtifactSigning -ErrorAction Stop | Out-Null
 
-      - name: Upload installers as CI artifact
-        uses: actions/upload-artifact@v4
+      - name: Bundle installers
+        shell: pwsh
+        run: bun run tauri bundle --verbose --bundles nsis,msi --config src-tauri/tauri.signing.conf.json --ci
+
+      - name: Resolve installer paths
+        shell: pwsh
+        env:
+          NSIS_PATH: ${{ steps.signing-paths.outputs.nsis }}
+          MSI_PATH: ${{ steps.signing-paths.outputs.msi }}
+        run: |
+          $nsisDirectory = Split-Path -Parent $env:NSIS_PATH
+          $msiDirectory = Split-Path -Parent $env:MSI_PATH
+          $nsisFiles = @(Get-ChildItem -LiteralPath $nsisDirectory -Filter "*.exe" -File)
+          $msiFiles = @(Get-ChildItem -LiteralPath $msiDirectory -Filter "*.msi" -File)
+
+          if ($nsisFiles.Count -ne 1) {
+            throw "Expected one NSIS installer, found $($nsisFiles.Count)"
+          }
+          if ($msiFiles.Count -ne 1) {
+            throw "Expected one MSI installer, found $($msiFiles.Count)"
+          }
+          if ($nsisFiles[0].FullName -ne $env:NSIS_PATH) {
+            throw "Unexpected NSIS installer path: $($nsisFiles[0].FullName)"
+          }
+          if ($msiFiles[0].FullName -ne $env:MSI_PATH) {
+            throw "Unexpected MSI installer path: $($msiFiles[0].FullName)"
+          }
+
+      # The standalone executable is restored to its pre-bundle state after
+      # Tauri finishes. Sign it alongside both outer installer packages.
+      - name: Sign release outputs
+        uses: azure/artifact-signing-action@c7ab2a863ab5f9a846ddb8265964877ef296ee82 # v2
         with:
-          name: audiobud-windows-x86_64-v${{ steps.meta.outputs.version }}
+          endpoint: ${{ vars.ARTIFACT_SIGNING_ENDPOINT }}
+          signing-account-name: ${{ vars.ARTIFACT_SIGNING_ACCOUNT_NAME }}
+          certificate-profile-name: ${{ vars.ARTIFACT_SIGNING_CERTIFICATE_PROFILE_NAME }}
+          files: |
+            ${{ steps.signing-paths.outputs.app }}
+            ${{ steps.signing-paths.outputs.nsis }}
+            ${{ steps.signing-paths.outputs.msi }}
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+          description: AudioBud
+          description-url: https://audiobud.amditis.tech/
+          timeout: 600
+
+      - name: Verify Authenticode signatures
+        shell: pwsh
+        env:
+          APP_PATH: ${{ steps.signing-paths.outputs.app }}
+          NSIS_PATH: ${{ steps.signing-paths.outputs.nsis }}
+          MSI_PATH: ${{ steps.signing-paths.outputs.msi }}
+        run: |
+          $signTool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" `
+            -Filter "signtool.exe" -File -Recurse |
+            Where-Object { $_.FullName -match "\\x64\\signtool\.exe$" } |
+            Sort-Object FullName |
+            Select-Object -Last 1
+          if (-not $signTool) { throw "signtool.exe was not found" }
+
+          $files = @($env:APP_PATH, $env:NSIS_PATH, $env:MSI_PATH)
+          foreach ($file in $files) {
+            if (-not (Test-Path -LiteralPath $file -PathType Leaf)) {
+              throw "Signed output not found: $file"
+            }
+
+            $signature = Get-AuthenticodeSignature -LiteralPath $file
+            if ($signature.Status -ne [System.Management.Automation.SignatureStatus]::Valid) {
+              throw "Invalid Authenticode signature for $file`: $($signature.StatusMessage)"
+            }
+            if (-not $signature.TimeStamperCertificate) {
+              throw "Timestamp certificate missing from $file"
+            }
+            if ($signature.SignerCertificate.Subject -notlike "*CN=Joseph Amditis*") {
+              throw "Unexpected signer for $file`: $($signature.SignerCertificate.Subject)"
+            }
+
+            & $signTool.FullName verify /pa /all /v $file
+            if ($LASTEXITCODE -ne 0) {
+              throw "signtool verification failed for $file"
+            }
+          }
+
+      # Extract the MSI and perform a silent NSIS install on the disposable
+      # runner. Verify the packaged app copies and the generated uninstaller,
+      # then confirm Tauri did not alter the bundled third-party DLLs.
+      - name: Verify packaged application signatures
+        shell: pwsh
+        env:
+          NSIS_PATH: ${{ steps.signing-paths.outputs.nsis }}
+          MSI_PATH: ${{ steps.signing-paths.outputs.msi }}
+        run: |
+          $signTool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" `
+            -Filter "signtool.exe" -File -Recurse |
+            Where-Object { $_.FullName -match "\\x64\\signtool\.exe$" } |
+            Sort-Object FullName |
+            Select-Object -Last 1
+          if (-not $signTool) { throw "signtool.exe was not found" }
+
+          function Assert-AudioBudSignature {
+            param([Parameter(Mandatory = $true)][string] $Path)
+
+            if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+              throw "Packaged signed file not found: $Path"
+            }
+            $signature = Get-AuthenticodeSignature -LiteralPath $Path
+            if ($signature.Status -ne [System.Management.Automation.SignatureStatus]::Valid) {
+              throw "Invalid packaged signature for $Path`: $($signature.StatusMessage)"
+            }
+            if (-not $signature.TimeStamperCertificate) {
+              throw "Timestamp certificate missing from $Path"
+            }
+            if ($signature.SignerCertificate.Subject -notlike "*CN=Joseph Amditis*") {
+              throw "Unexpected signer for $Path`: $($signature.SignerCertificate.Subject)"
+            }
+
+            & $signTool.FullName verify /pa /all /v $Path
+            if ($LASTEXITCODE -ne 0) {
+              throw "signtool verification failed for packaged file $Path"
+            }
+          }
+
+          $verificationRoot = Join-Path $env:RUNNER_TEMP `
+            "audiobud-signature-verification-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
+          if (Test-Path -LiteralPath $verificationRoot) {
+            throw "Verification directory already exists: $verificationRoot"
+          }
+          $msiDirectory = Join-Path $verificationRoot "msi"
+          $nsisDirectory = Join-Path $verificationRoot "nsis"
+          New-Item -ItemType Directory -Path $msiDirectory, $nsisDirectory | Out-Null
+
+          $msiLog = Join-Path $verificationRoot "msi-extraction.log"
+          $msiArguments = @(
+            "/a",
+            "`"$env:MSI_PATH`"",
+            "/qn",
+            "TARGETDIR=`"$msiDirectory`"",
+            "/l*v",
+            "`"$msiLog`""
+          )
+          $msiProcess = Start-Process -FilePath "$env:SystemRoot\System32\msiexec.exe" `
+            -ArgumentList $msiArguments -Wait -PassThru -NoNewWindow
+          if ($msiProcess.ExitCode -ne 0) {
+            Get-Content -LiteralPath $msiLog -Tail 100 -ErrorAction SilentlyContinue
+            throw "MSI administrative extraction failed with exit code $($msiProcess.ExitCode)"
+          }
+
+          $nsisProcess = Start-Process -FilePath $env:NSIS_PATH `
+            -ArgumentList @("/S", "/D=$nsisDirectory") `
+            -Wait -PassThru
+          if ($nsisProcess.ExitCode -ne 0) {
+            throw "NSIS installation failed with exit code $($nsisProcess.ExitCode)"
+          }
+
+          $msiApplications = @(
+            Get-ChildItem -LiteralPath $msiDirectory -Filter "audiobud.exe" -File -Recurse
+          )
+          if ($msiApplications.Count -ne 1) {
+            throw "Expected one packaged MSI application, found $($msiApplications.Count)"
+          }
+
+          $nsisApplication = Join-Path $nsisDirectory "audiobud.exe"
+          $nsisUninstaller = Join-Path $nsisDirectory "uninstall.exe"
+          Assert-AudioBudSignature -Path $msiApplications[0].FullName
+          Assert-AudioBudSignature -Path $nsisApplication
+          Assert-AudioBudSignature -Path $nsisUninstaller
+
+          $runtimeFiles = @(
+            "msvcp140.dll",
+            "msvcp140_1.dll",
+            "vcruntime140.dll",
+            "vcruntime140_1.dll",
+            "vulkan-1.dll",
+            "DirectML.dll"
+          )
+          foreach ($runtimeFile in $runtimeFiles) {
+            $source = Join-Path $env:CARGO_TARGET_DIR "release\$runtimeFile"
+            if (-not (Test-Path -LiteralPath $source -PathType Leaf)) {
+              throw "Runtime source file not found: $source"
+            }
+            $sourceHash = (Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash
+
+            foreach ($packageDirectory in @($msiDirectory, $nsisDirectory)) {
+              $copies = @(
+                Get-ChildItem -LiteralPath $packageDirectory -Filter $runtimeFile -File -Recurse
+              )
+              if ($copies.Count -ne 1) {
+                throw "Expected one $runtimeFile in $packageDirectory, found $($copies.Count)"
+              }
+              $copyHash = (Get-FileHash -LiteralPath $copies[0].FullName -Algorithm SHA256).Hash
+              if ($copyHash -ne $sourceHash) {
+                throw "Runtime file changed during bundling: $($copies[0].FullName)"
+              }
+            }
+          }
+
+          $uninstallProcess = Start-Process -FilePath $nsisUninstaller `
+            -ArgumentList "/S" -Wait -PassThru
+          if ($uninstallProcess.ExitCode -ne 0) {
+            throw "NSIS uninstaller failed with exit code $($uninstallProcess.ExitCode)"
+          }
+
+      # A draft is created only after all signatures pass. Reruns reuse the
+      # draft, but they refuse to replace assets on a published release.
+      - name: Find or create draft release
+        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.make_release) || github.ref_type == 'tag' }}
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.meta.outputs.tag }}
+        run: |
+          $tagCommit = git rev-list -n 1 "refs/tags/$env:RELEASE_TAG" 2>$null
+          $tagExists = $LASTEXITCODE -eq 0
+          if ($tagExists -and $tagCommit -ne $env:GITHUB_SHA) {
+            throw "Release tag $env:RELEASE_TAG must match workflow commit $env:GITHUB_SHA; found $tagCommit"
+          }
+
+          $releaseJson = gh release view $env:RELEASE_TAG `
+            --json isDraft,targetCommitish 2>$null
+          if ($LASTEXITCODE -eq 0) {
+            $release = $releaseJson | ConvertFrom-Json
+            if (-not $release.isDraft) {
+              throw "Release $env:RELEASE_TAG is already published"
+            }
+            if (-not $tagExists -and $release.targetCommitish -ne $env:GITHUB_SHA) {
+              throw "Draft $env:RELEASE_TAG must match workflow commit $env:GITHUB_SHA; found $($release.targetCommitish)"
+            }
+            Write-Output "Reusing draft release $env:RELEASE_TAG"
+          } else {
+            gh release create $env:RELEASE_TAG `
+              --draft `
+              --generate-notes `
+              --target $env:GITHUB_SHA `
+              --title "AudioBud $env:RELEASE_TAG"
+            if ($LASTEXITCODE -ne 0) {
+              throw "Failed to create draft release $env:RELEASE_TAG"
+            }
+          }
+
+      - name: Upload signed installers to GitHub release
+        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.make_release) || github.ref_type == 'tag' }}
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.meta.outputs.tag }}
+          NSIS_PATH: ${{ steps.signing-paths.outputs.nsis }}
+          MSI_PATH: ${{ steps.signing-paths.outputs.msi }}
+        run: |
+          gh release upload $env:RELEASE_TAG $env:NSIS_PATH $env:MSI_PATH --clobber
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to upload signed installers to $env:RELEASE_TAG"
+          }
+
+      - name: Upload signed installers as CI artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: audiobud-windows-x86_64-v${{ steps.meta.outputs.version }}-${{ github.run_attempt }}
           path: |
-            ${{ steps.bundle-path.outputs.base }}/release/bundle/nsis/*.exe
-            ${{ steps.bundle-path.outputs.base }}/release/bundle/msi/*.msi
+            ${{ steps.signing-paths.outputs.nsis }}
+            ${{ steps.signing-paths.outputs.msi }}
           retention-days: 30
           if-no-files-found: error

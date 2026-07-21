@@ -9,7 +9,11 @@
       content="AudioBud is a private, local-first Windows dictation app. Press a hotkey, speak, and paste fast speech-to-text into any focused text field."
     />
     <link rel="canonical" href="https://audiobud.amditis.tech/" />
-    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <link
+      rel="icon"
+      type="image/svg+xml"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23101b13'/%3E%3Ccircle cx='32' cy='34' r='20' fill='%2384d150'/%3E%3Ccircle cx='22' cy='22' r='8' fill='%23f3f7ee'/%3E%3Ccircle cx='42' cy='22' r='8' fill='%23f3f7ee'/%3E%3Ccircle cx='22' cy='22' r='4' fill='%23ff5147'/%3E%3Ccircle cx='42' cy='22' r='4' fill='%23ff5147'/%3E%3Cpath d='M22 39c5 5 15 5 20 0' fill='none' stroke='%23101b13' stroke-width='4' stroke-linecap='round'/%3E%3Cpath d='M17 52h30' stroke='%23ffb23e' stroke-width='5' stroke-linecap='round'/%3E%3C/svg%3E"
+    />
     <meta
       property="og:title"
       content="AudioBud - private local dictation for Windows"
@@ -26,6 +30,10 @@
     />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
+    <meta
+      property="og:image:alt"
+      content="AudioBud local dictation for Windows app interface"
+    />
     <meta name="twitter:card" content="summary_large_image" />
     <meta
       name="twitter:title"
@@ -39,6 +47,10 @@
       name="twitter:image"
       content="https://audiobud.amditis.tech/assets/og-image.png"
     />
+    <meta
+      name="twitter:image:alt"
+      content="AudioBud local dictation for Windows app interface"
+    />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -49,7 +61,7 @@
     <script src="./site.js" defer></script>
   </head>
   <body>
-    <a class="skip-link" href="#main">Skip to content</a>
+    <a class="skip-link" href="#hero-title">Skip to main content</a>
     <div class="swamp" aria-hidden="true"></div>
     <header class="site-header">
       <nav class="nav" aria-label="Primary">
@@ -77,7 +89,7 @@
         <div class="wrap hero-grid">
           <div class="hero-copy" data-reveal>
             <p class="eyebrow"><span></span>Windows x64 · Local-first</p>
-            <h1 id="hero-title">
+            <h1 id="hero-title" tabindex="-1">
               Talk naturally.<br />
               <span>Type instantly.</span>
             </h1>
@@ -362,6 +374,11 @@
               Download the latest Windows x64 release, or inspect every line on
               GitHub and build AudioBud yourself.
             </p>
+            <p class="install-note">
+              <strong>Unsigned release:</strong> The latest published installer
+              is not code-signed yet, so Windows SmartScreen warns on first
+              launch. Choose More info, then Run anyway, or build from source.
+            </p>
           </div>
           <div class="cta-actions">
             <a
@@ -388,19 +405,14 @@
           </a>
           <p>Local dictation for Windows. MIT licensed.</p>
         </div>
-        <nav class="footer-links" aria-label="Product">
-          <strong>Product</strong>
-          <a href="#features">Features</a>
-          <a href="#models">Models</a>
+        <nav class="footer-links" aria-label="Footer">
           <a href="./roadmap.html">Roadmap</a>
-        </nav>
-        <nav class="footer-links" aria-label="Project">
-          <strong>Project</strong>
-          <a href="https://github.com/jamditis/audiobud">GitHub</a>
+          <a href="./privacy.html">Privacy</a>
+          <a href="./terms.html">Terms</a>
           <a href="https://github.com/jamditis/audiobud/blob/main/CHANGELOG.md"
             >Changelog</a
           >
-          <a href="https://github.com/jamditis/audiobud/issues">Issues</a>
+          <a href="https://github.com/jamditis/audiobud">GitHub</a>
         </nav>
       </div>
       <div class="wrap footer-bottom">
