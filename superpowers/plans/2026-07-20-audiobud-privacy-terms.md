@@ -62,6 +62,8 @@ const isAsciiLetter = (character: string | undefined) =>
 const isTagNameCharacter = (character: string | undefined) =>
   isAsciiLetter(character) ||
   (character !== undefined && /[0-9:-]/.test(character));
+const isTagNameDelimiter = (character: string | undefined) =>
+  isHtmlAsciiWhitespace(character) || character === "/" || character === ">";
 const parseQuotedAttributes = (source: string) => {
   const attributes = new Map<string, string>();
   let cursor = 0;
@@ -165,10 +167,14 @@ const scanMetadataOpeningTags = (html: string) => {
       nameEnd++;
 
     const name = html.slice(tagStart + 1, nameEnd).toLowerCase();
+    const hasValidNameDelimiter = isTagNameDelimiter(html[nameEnd]);
     const tagEnd = findOpeningTagEnd(html, nameEnd);
     if (tagEnd === null) break;
 
-    if (name === "script" || name === "style") {
+    if (
+      hasValidNameDelimiter &&
+      ["script", "style", "title", "textarea"].includes(name)
+    ) {
       const closingTag = new RegExp(`</${name}[ \\t\\n\\r\\f]*>`, "gi");
       closingTag.lastIndex = tagEnd + 1;
       const closingMatch = closingTag.exec(html);
@@ -177,7 +183,7 @@ const scanMetadataOpeningTags = (html: string) => {
       continue;
     }
 
-    if (name === "link" || name === "meta") {
+    if (hasValidNameDelimiter && (name === "link" || name === "meta")) {
       tags.push({
         name,
         attributes: parseQuotedAttributes(html.slice(nameEnd, tagEnd)),
@@ -286,6 +292,46 @@ describe("Metadata tag matcher", () => {
     expect(
       hasTagWithAttributes(
         `<script>const tag = '<meta property="og:url" content="https://example.com/page" />';</script>`,
+        "meta",
+        { property: "og:url", content: "https://example.com/page" },
+      ),
+    ).toBe(false);
+  });
+
+  it("rejects a punctuation-suffixed meta tag name", () => {
+    expect(
+      hasTagWithAttributes(
+        '<meta! property="og:url" content="https://example.com/page" />',
+        "meta",
+        { property: "og:url", content: "https://example.com/page" },
+      ),
+    ).toBe(false);
+  });
+
+  it("rejects an underscore-suffixed link tag name", () => {
+    expect(
+      hasTagWithAttributes(
+        '<link_ rel="canonical" href="https://example.com/page" />',
+        "link",
+        { rel: "canonical", href: "https://example.com/page" },
+      ),
+    ).toBe(false);
+  });
+
+  it("rejects a complete tag inside title text", () => {
+    expect(
+      hasTagWithAttributes(
+        '<title><meta property="og:url" content="https://example.com/page" /></title>',
+        "meta",
+        { property: "og:url", content: "https://example.com/page" },
+      ),
+    ).toBe(false);
+  });
+
+  it("rejects a complete tag inside textarea text", () => {
+    expect(
+      hasTagWithAttributes(
+        '<textarea><meta property="og:url" content="https://example.com/page" /></textarea>',
         "meta",
         { property: "og:url", content: "https://example.com/page" },
       ),
