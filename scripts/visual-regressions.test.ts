@@ -27,6 +27,46 @@ describe("visual polish regression contracts", () => {
     );
   });
 
+  it("keeps legal-page navigation available at tablet widths", () => {
+    const css = compact(read("docs/styles.css"));
+    const home = compact(read("docs/index.html"));
+    const roadmap = compact(read("docs/roadmap.html"));
+    const privacy = compact(read("docs/privacy.html"));
+    const terms = compact(read("docs/terms.html"));
+
+    expect(css).toMatch(
+      /@media \(max-width: 980px\) \{[\s\S]*?\.nav-with-cta \.nav-links \{[^}]*display: none;/,
+    );
+    expect(css).not.toMatch(
+      /@media \(max-width: 980px\) \{[\s\S]*?\n\s*\.nav-links \{[^}]*display: none;/,
+    );
+    expect(home).toMatch(/<nav class="nav nav-with-cta"/);
+    expect(roadmap).toMatch(/<nav class="nav nav-with-cta"/);
+    expect(privacy).toMatch(/<nav class="nav"/);
+    expect(terms).toMatch(/<nav class="nav"/);
+  });
+
+  it("keeps meaningful step numbers at readable contrast", () => {
+    const css = compact(read("docs/styles.css"));
+
+    expect(css).toMatch(/\.step-number \{[^}]*color: var\(--muted\);/);
+  });
+
+  it("uses the redesigned footer grid on every public page", () => {
+    for (const page of [
+      "index.html",
+      "roadmap.html",
+      "privacy.html",
+      "terms.html",
+    ]) {
+      const html = compact(read(`docs/${page}`));
+
+      expect(html).toMatch(
+        /<footer class="site-footer">[\s\S]*?<div class="wrap footer-grid">/,
+      );
+    }
+  });
+
   it("does not paint a second app screenshot behind the mobile hero", () => {
     const css = compact(read("docs/styles.css"));
 

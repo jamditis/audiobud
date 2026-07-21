@@ -837,7 +837,7 @@ kbd {
   position: absolute;
   top: 22px;
   right: 24px;
-  color: rgba(245, 249, 238, 0.2);
+  color: var(--muted);
   font-family: var(--font-display);
   font-size: 15px;
   font-weight: 800;
@@ -1818,7 +1818,7 @@ body::before {
     min-height: 68px;
   }
 
-  .nav-links {
+  .nav-with-cta .nav-links {
     display: none;
   }
 
