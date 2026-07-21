@@ -450,7 +450,7 @@ Run:
 bun test scripts/legal-pages.test.ts
 ```
 
-Expected: FAIL because `docs/privacy.html` and `docs/terms.html` do not exist.
+Expected at this checkpoint: FAIL with 16 helper and contract checks passing and 10 contract checks failing. The failures cover missing policy pages and content, the old origin in `docs/index.html` and `docs/roadmap.html` metadata, and pending privacy and terms links across the public pages.
 
 - [ ] **Step 3: Commit the failing contract**
 
