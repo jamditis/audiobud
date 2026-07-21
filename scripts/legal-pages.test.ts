@@ -1134,6 +1134,25 @@ describe("AudioBud public policy pages", () => {
     expect(roadmap).not.toContain("v0.4.0 &mdash; signed &amp; distributable");
   });
 
+  it("links every open milestone and describes each one by its contents", () => {
+    const roadmap = read("roadmap.html").replace(/\s+/g, " ");
+
+    // The upcoming grid drifted once already: the page advertised v0.5.0 as
+    // "stability & reliability" while that milestone held only the
+    // output-routing epic, so the site misdescribed the next release and the
+    // two milestones holding the reliability work were not linked at all.
+    for (const milestone of [10, 6, 7, 8, 11, 9]) {
+      expect(roadmap).toContain(
+        `href="https://github.com/jamditis/audiobud/milestone/${milestone}"`,
+      );
+    }
+
+    expect(roadmap).toContain("v0.4.1 &mdash; release integrity");
+    expect(roadmap).toContain("v0.5.0 &mdash; output routing");
+    expect(roadmap).toContain("v0.8.0 &mdash; reliability &amp; accessibility");
+    expect(roadmap).not.toContain("v0.5.0 &mdash; stability");
+  });
+
   for (const page of sitePages) {
     it(`uses exact custom-domain metadata in ${page.name}`, () => {
       const html = read(page.name);
