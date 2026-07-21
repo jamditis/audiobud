@@ -13,14 +13,21 @@ explicitly for parity. If that set changes, update this file to match.
 
 ## SCOWL English word list
 
-File: `src-tauri/src/audio_toolkit/english_words_en.txt`
+Files: `src-tauri/src/audio_toolkit/english_words_en.txt` and
+`src-tauri/src/audio_toolkit/english_named_entities_en.txt`
 
-This lowercase word and contraction list is derived from the American English
-dictionary distributed by Debian's `wamerican` package, which is generated from
-SCOWL (Spell Checker Oriented Word Lists): https://wordlist.aspell.net/
-It is a modified subset: Capitalized entries, single-character entries, entries
-longer than 30 characters, and entries containing characters other than
-lowercase letters or straight apostrophes were removed.
+These lowercase word, contraction, and normalized named-entity lists are derived
+from the American English dictionary distributed by Debian's `wamerican`
+package version `2020.12.07-2`, which is generated from SCOWL (Spell Checker
+Oriented Word Lists): https://wordlist.aspell.net/. The pinned source dictionary
+has SHA-256
+`9f513f1ceadb6a01c5485b7dbdfd5118dc66cd70b59cae2851292112d4066a32`.
+They are modified subsets: single-character entries, entries longer than 30
+characters, and entries containing characters other than ASCII letters or
+straight apostrophes were removed. Capitalized entries were excluded from the
+general word list and lowercased into the separate named-entity veto list.
+`scripts/generate-english-wordlists.mjs` verifies the source checksum and
+generates both bundled files together.
 
 The collective work is Copyright 2000-2011 by Kevin Atkinson as well as any of
 the copyrights mentioned in the SCOWL documentation.
