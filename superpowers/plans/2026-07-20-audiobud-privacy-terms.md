@@ -1980,8 +1980,8 @@ bunx prettier --check docs/styles.css docs/index.html docs/roadmap.html docs/pri
 git diff --check
 ```
 
-Expected at the focused checkpoint: PASS with 66 checks passing and 0 failing.
-The repository-defined full suite passes 137 checks with 0 failures. The
+Expected at the focused checkpoint: PASS with 67 checks passing and 0 failing.
+The repository-defined full suite passes 138 checks with 0 failures. The
 TypeScript compiler, formatter, and whitespace check must also exit 0. Inspect
 the CSS for duplicate or conflicting selectors, header/skip-link stacking,
 small-screen overflow, short-viewport contents access, and compatibility with
@@ -2064,6 +2064,8 @@ curl.exe -I https://jamditis.github.io/audiobud/
 
 Expected before merge: DNS points to `jamditis.github.io`; GitHub reports the custom domain; the custom domain serves or is awaiting only GitHub certificate issuance; the old URL redirects to the matching custom path. Enable `Enforce HTTPS` only after GitHub reports the certificate is ready.
 
+Also verify that `docs/.nojekyll` exists and that `docs/.well-known/microsoft-identity-association.json` contains only AudioBud application ID `2fc67628-088e-4eb5-aeab-ffdbd246a42b`. After deployment, require status 200 and an `application/json` content type from `https://audiobud.amditis.tech/.well-known/microsoft-identity-association.json` before asking Microsoft Entra to verify the publisher domain.
+
 - [ ] **Step 4: Inspect the exact publication scope**
 
 ```powershell
@@ -2072,7 +2074,7 @@ git diff --stat origin/main...HEAD
 git diff --name-status origin/main...HEAD
 ```
 
-Expected tracked scope: the approved spec and plan, `scripts/legal-pages.test.ts`, `docs/privacy.html`, `docs/terms.html`, `docs/index.html`, `docs/roadmap.html`, `docs/styles.css`, and `README.md`. No screenshots, `.firecrawl`, credentials, or Azure values are staged.
+Expected tracked scope: the approved spec and plan, `scripts/legal-pages.test.ts`, `docs/.nojekyll`, `docs/.well-known/microsoft-identity-association.json`, `docs/privacy.html`, `docs/terms.html`, `docs/index.html`, `docs/roadmap.html`, `docs/styles.css`, and `README.md`. The Microsoft application ID in the association JSON is a public identifier, not a credential. No screenshots, `.firecrawl`, credentials, or other Azure values are staged.
 
 - [ ] **Step 5: Push the branch**
 

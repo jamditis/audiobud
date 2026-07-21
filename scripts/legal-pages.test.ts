@@ -796,6 +796,19 @@ describe("Metadata tag matcher", () => {
 });
 
 describe("AudioBud public policy pages", () => {
+  it("publishes the Microsoft publisher-domain association", () => {
+    expect(existsSync(join(docs, ".nojekyll"))).toBe(true);
+    expect(
+      JSON.parse(read(".well-known/microsoft-identity-association.json")),
+    ).toEqual({
+      associatedApplications: [
+        {
+          applicationId: "2fc67628-088e-4eb5-aeab-ffdbd246a42b",
+        },
+      ],
+    });
+  });
+
   it("provides visible focus and fixed-header-clearing skip behavior", () => {
     const css = read("styles.css");
 

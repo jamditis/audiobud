@@ -117,6 +117,8 @@ The stable URLs will be:
 
 GitHub Pages is configured to serve `docs/` from `main`. The custom hostname is stored in `docs/CNAME`, and public DNS uses a DNS-only CNAME from `audiobud.amditis.tech` to `jamditis.github.io`. GitHub's HTTPS setting must only be enabled after its certificate is ready.
 
+The site will also publish Microsoft's app-specific publisher-domain association at `https://audiobud.amditis.tech/.well-known/microsoft-identity-association.json`. The JSON will associate only AudioBud application ID `2fc67628-088e-4eb5-aeab-ffdbd246a42b`. An empty `docs/.nojekyll` marker will make GitHub Pages deploy the hidden `.well-known` directory without Jekyll filtering. The application ID is a public identifier, not a credential.
+
 ## Verification
 
 Before opening the pull request:
@@ -135,7 +137,8 @@ Before opening the pull request:
 - verify the legal hero, summary cards, sticky contents, document sections, links, callouts, shared roadmap heading treatment, wrapping footer links, and 860-pixel one-column rules match the approved layout;
 - verify README contains the exact Website, Privacy, Terms, and Support URLs and no old GitHub Pages project URL;
 - confirm the old GitHub Pages URL redirects to the matching custom-domain path;
-- confirm the custom-domain CNAME, GitHub Pages build status, certificate, and HTTPS redirect; and
+- confirm the custom-domain CNAME, GitHub Pages build status, certificate, and HTTPS redirect;
+- verify the live Microsoft association endpoint returns status 200, `application/json`, and the exact AudioBud application ID before selecting **Verify and save domain** in Microsoft Entra; and
 - preserve unrelated untracked files when staging and committing.
 
 ## Research notes
@@ -145,6 +148,8 @@ Before opening the pull request:
 - California guidance favors readable policies that identify collected categories, sharing, retention, choices, change dates, and tracking behavior: <https://oag.ca.gov/privacy/privacy-resources>.
 - The UK ICO lists operator identity, purpose, lawful basis, recipients, retention, rights, and complaint information as core notice fields when UK GDPR applies: <https://ico.org.uk/for-organisations/uk-gdpr-guidance-and-resources/individual-rights/the-right-to-be-informed/what-privacy-information-should-we-provide/>.
 - Microsoft accepts HTTPS privacy and terms URLs up to 2,048 characters for app metadata. Its consent-screen requirement targets multi-tenant apps, while AudioBud's signing identity is single-tenant: <https://learn.microsoft.com/en-us/entra/identity-platform/howto-add-terms-of-service-privacy-statement>.
+- Microsoft verifies an app-specific publisher domain from `/.well-known/microsoft-identity-association.json`: <https://learn.microsoft.com/en-us/entra/identity-platform/howto-configure-publisher-domain>.
+- GitHub documents that `.nojekyll` bypasses its default Jekyll build so static hidden directories are published directly: <https://docs.github.com/en/pages/getting-started-with-github-pages/creating-a-github-pages-site>.
 - GitHub documents the custom-subdomain CNAME, account-level domain verification, and HTTPS sequence: <https://docs.github.com/en/pages/configuring-a-custom-domain-for-your-github-pages-site/managing-a-custom-domain-for-your-github-pages-site>.
 - GitHub Pages is the site host and applies GitHub's own privacy statement to its service: <https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement>.
 - Contract review found that document-wide link checks can pass when a required footer link exists elsewhere, and a partial focusability list can miss elements that precede a skip link. The legal-page test therefore scopes navigation to real semantic footer elements and checks the first real body element directly.
