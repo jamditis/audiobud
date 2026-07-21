@@ -11,7 +11,7 @@ Publish accurate privacy and terms pages for AudioBud, link them from the public
 The change will:
 
 - add `docs/privacy.html` and `docs/terms.html`;
-- link privacy and terms from all four public pages, including footer links in `docs/index.html` and `docs/roadmap.html`;
+- give all four public pages one semantic footer whose `.footer-links` navigation lists Roadmap, Privacy, Terms, Changelog, and GitHub in that order;
 - add the exact public website, privacy, terms, and support URLs to `README.md` and remove the old GitHub Pages project URL;
 - use each page's exact `https://audiobud.amditis.tech` canonical and Open Graph URL, plus the shared custom-domain Open Graph and Twitter image URL;
 - give every page exactly one Open Graph image alt and one Twitter image alt in the first real head, using `AudioBud local dictation for Windows app interface`;
@@ -93,7 +93,9 @@ Both pages will reuse the existing colors, fixed header, frog mark, background l
 
 Each page will open with a short summary and a compact contents navigation with a semantic heading and list of links. A non-section wrapper will hold the contents navigation and legal document when that wrapper has no heading. The privacy page will include three fact cards that distinguish data that stays on the device, data sent only after a user action, and GitHub's role as site host. These cards summarize the policy but do not replace the detailed sections.
 
-Every public page will place its skip link before every other focusable body element. Home uses `Skip to main content` with `#hero-title`, roadmap uses `Skip to roadmap` with `#roadmap-title`, privacy uses `Skip to privacy policy` with `#privacy-title`, and terms uses `Skip to terms of use` with `#terms-title`.
+Every public page will use its skip link as the first real element child of `body`, before the decorative swamp. Home uses `Skip to main content` with `#hero-title`, roadmap uses `Skip to roadmap` with `#roadmap-title`, privacy uses `Skip to privacy policy` with `#privacy-title`, and terms uses `Skip to terms of use` with `#terms-title`. Each target ID must occur exactly once as a real `id` attribute; comments and quoted lookalikes do not count.
+
+The roadmap's page-level heading will be its only `h1` and will use `id="roadmap-title"`. The privacy and terms footer links will retain `aria-current="page"` on the current policy destination, and the roadmap footer will retain it on Roadmap.
 
 Headings will use sentence case. Links and keyboard focus will remain visible. Mobile layouts will collapse to one column without hiding access to the policy pages.
 
@@ -118,7 +120,9 @@ Before opening the pull request:
 - serve `docs/` locally and verify the home, roadmap, privacy, and terms pages at desktop and mobile widths;
 - check headings, landmarks, `aria-current`, visible focus, reduced motion, and keyboard navigation;
 - verify every local link and asset target;
-- verify all four pages use their exact custom-domain canonical and Open Graph URLs, shared custom-domain social image URL and alt text, inline browser favicon, first-focusable skip-link target, and privacy and terms links;
+- verify all four pages use their exact custom-domain canonical and Open Graph URLs, shared custom-domain social image URL and alt text, and inline browser favicon;
+- verify each page has exactly one real semantic footer with one `.footer-links` navigation containing Roadmap, Privacy, Terms, Changelog, and GitHub in order;
+- verify each skip link is the first real element child of `body`, each target ID occurs once as a real attribute, and roadmap has one page-level `h1` with `id="roadmap-title"`;
 - verify README contains the exact Website, Privacy, Terms, and Support URLs and no old GitHub Pages project URL;
 - confirm the old GitHub Pages URL redirects to the matching custom-domain path;
 - confirm the custom-domain CNAME, GitHub Pages build status, certificate, and HTTPS redirect; and
@@ -133,7 +137,8 @@ Before opening the pull request:
 - Microsoft accepts HTTPS privacy and terms URLs up to 2,048 characters for app metadata. Its consent-screen requirement targets multi-tenant apps, while AudioBud's signing identity is single-tenant: <https://learn.microsoft.com/en-us/entra/identity-platform/howto-add-terms-of-service-privacy-statement>.
 - GitHub documents the custom-subdomain CNAME, account-level domain verification, and HTTPS sequence: <https://docs.github.com/en/pages/configuring-a-custom-domain-for-your-github-pages-site/managing-a-custom-domain-for-your-github-pages-site>.
 - GitHub Pages is the site host and applies GitHub's own privacy statement to its service: <https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement>.
+- Contract review found that document-wide link checks can pass when a required footer link exists elsewhere, and a partial focusability list can miss elements that precede a skip link. The legal-page test therefore scopes navigation to real semantic footer elements and checks the first real body element directly.
 
 ## Approval record
 
-Joe approved two separate pages, the public contact address, the implementation-aligned content, the restrained legal-page layout, site-wide policy links and skip links, custom-domain canonical and social metadata, inline browser favicons, exact README URLs, and omission of unreviewed governing-law and dispute clauses.
+Joe approved two separate pages, the public contact address, the implementation-aligned content, the restrained legal-page layout, consistent semantic footer navigation, first-element-child skip links, a single roadmap `h1`, custom-domain canonical and social metadata, inline browser favicons, exact README URLs, and omission of unreviewed governing-law and dispute clauses.

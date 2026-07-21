@@ -58,19 +58,32 @@ const sitePages = [
     url: "https://audiobud.amditis.tech/roadmap.html",
     headingId: "roadmap-title",
     skipLabel: "Skip to roadmap",
+    currentFooterLabel: "Roadmap",
   },
   {
     name: "privacy.html",
     url: "https://audiobud.amditis.tech/privacy.html",
     headingId: "privacy-title",
     skipLabel: "Skip to privacy policy",
+    currentFooterLabel: "Privacy",
   },
   {
     name: "terms.html",
     url: "https://audiobud.amditis.tech/terms.html",
     headingId: "terms-title",
     skipLabel: "Skip to terms of use",
+    currentFooterLabel: "Terms",
   },
+];
+const footerLinks = [
+  { label: "Roadmap", href: "./roadmap.html" },
+  { label: "Privacy", href: "./privacy.html" },
+  { label: "Terms", href: "./terms.html" },
+  {
+    label: "Changelog",
+    href: "https://github.com/jamditis/audiobud/blob/main/CHANGELOG.md",
+  },
+  { label: "GitHub", href: "https://github.com/jamditis/audiobud" },
 ];
 const socialImage = "https://audiobud.amditis.tech/assets/og-image.png";
 const socialImageAlt = "AudioBud local dictation for Windows app interface";
@@ -195,12 +208,17 @@ const findOpeningTagEnd = (html: string, start: number) => {
 
   return null;
 };
-const scanMetadataOpeningTags = (html: string) => {
-  const tags: Array<{
-    name: MetadataTagName;
-    attributes: Map<string, string>;
-    isInFirstHead: boolean;
-  }> = [];
+type RealDocumentTag = {
+  name: string;
+  attributes: Map<string, string>;
+  isClosing: boolean;
+  isInFirstHead: boolean;
+  start: number;
+  end: number;
+};
+const rawTextElementNames = new Set(["script", "style", "title", "textarea"]);
+const scanRealDocumentTags = (html: string) => {
+  const tags: RealDocumentTag[] = [];
   let cursor = 0;
   let hasSeenHead = false;
   let hasSeenBody = false;
@@ -219,9 +237,8 @@ const scanMetadataOpeningTags = (html: string) => {
     }
 
     let nameStart = tagStart + 1;
-    const isClosingTag = html[nameStart] === "/";
-    if (isClosingTag) nameStart++;
-
+    const isClosing = html[nameStart] === "/";
+    if (isClosing) nameStart++;
     if (!isAsciiLetter(html[nameStart])) {
       cursor = tagStart + 1;
       continue;
@@ -232,75 +249,170 @@ const scanMetadataOpeningTags = (html: string) => {
       nameEnd++;
 
     const name = html.slice(nameStart, nameEnd).toLowerCase();
-    const hasValidNameDelimiter = isTagNameDelimiter(html[nameEnd]);
     const tagEnd = findOpeningTagEnd(html, nameEnd);
     if (tagEnd === null) return null;
+    if (!isTagNameDelimiter(html[nameEnd])) {
+      cursor = tagEnd + 1;
+      continue;
+    }
 
-    if (isClosingTag) {
-      if (hasValidNameDelimiter && name === "template" && templateDepth > 0) {
+    const tag: RealDocumentTag = {
+      name,
+      attributes: isClosing
+        ? new Map()
+        : parseQuotedAttributes(html.slice(nameEnd, tagEnd)),
+      isClosing,
+      isInFirstHead: isInsideHead,
+      start: tagStart,
+      end: tagEnd + 1,
+    };
+
+    if (isClosing) {
+      if (name === "template" && templateDepth > 0) {
         templateDepth--;
-      } else if (
-        templateDepth === 0 &&
-        hasValidNameDelimiter &&
-        name === "head"
-      ) {
-        isInsideHead = false;
+        if (templateDepth === 0) tags.push(tag);
+      } else if (templateDepth === 0) {
+        tags.push(tag);
+        if (name === "head") isInsideHead = false;
       }
       cursor = tagEnd + 1;
-      continue;
-    }
-
-    if (hasValidNameDelimiter && name === "template") {
-      templateDepth++;
-      cursor = tagEnd + 1;
-      continue;
-    }
-
-    if (
-      hasValidNameDelimiter &&
-      ["script", "style", "title", "textarea"].includes(name)
-    ) {
-      const closingTag = new RegExp(`</${name}[ \\t\\n\\r\\f]*>`, "gi");
-      closingTag.lastIndex = tagEnd + 1;
-      const closingMatch = closingTag.exec(html);
-      if (!closingMatch) return null;
-      cursor = closingTag.lastIndex;
       continue;
     }
 
     if (templateDepth > 0) {
+      if (name === "template") templateDepth++;
       cursor = tagEnd + 1;
       continue;
     }
 
-    if (hasValidNameDelimiter && name === "head") {
-      if (!hasSeenHead && !hasSeenBody) {
-        hasSeenHead = true;
-        isInsideHead = true;
-      }
-      cursor = tagEnd + 1;
-      continue;
-    }
-
-    if (hasValidNameDelimiter && name === "body") {
+    if (name === "head" && !hasSeenHead && !hasSeenBody) {
+      hasSeenHead = true;
+      isInsideHead = true;
+      tag.isInFirstHead = true;
+    } else if (name === "body") {
       hasSeenBody = true;
       isInsideHead = false;
+      tag.isInFirstHead = false;
+    }
+
+    tags.push(tag);
+    if (name === "template") {
+      templateDepth = 1;
       cursor = tagEnd + 1;
       continue;
     }
 
-    if (hasValidNameDelimiter && (name === "link" || name === "meta")) {
+    if (rawTextElementNames.has(name)) {
+      const closingTag = new RegExp(`</${name}[ \\t\\n\\r\\f]*>`, "gi");
+      closingTag.lastIndex = tagEnd + 1;
+      const closingMatch = closingTag.exec(html);
+      if (!closingMatch) return null;
       tags.push({
         name,
-        attributes: parseQuotedAttributes(html.slice(nameEnd, tagEnd)),
+        attributes: new Map(),
+        isClosing: true,
         isInFirstHead: isInsideHead,
+        start: closingMatch.index,
+        end: closingTag.lastIndex,
       });
+      cursor = closingTag.lastIndex;
+      continue;
     }
+
     cursor = tagEnd + 1;
   }
 
   return templateDepth === 0 ? tags : null;
 };
+const extractRealElements = (html: string, elementName: string) => {
+  const tags = scanRealDocumentTags(html);
+  if (!tags) return null;
+
+  const normalizedName = elementName.toLowerCase();
+  const elements: Array<{
+    attributes: Map<string, string>;
+    innerHtml: string;
+    start: number;
+  }> = [];
+  for (let index = 0; index < tags.length; index++) {
+    const openingTag = tags[index];
+    if (openingTag.isClosing || openingTag.name !== normalizedName) continue;
+
+    let depth = 1;
+    let closingTag: RealDocumentTag | undefined;
+    for (
+      let candidateIndex = index + 1;
+      candidateIndex < tags.length;
+      candidateIndex++
+    ) {
+      const candidate = tags[candidateIndex];
+      if (candidate.name !== normalizedName) continue;
+      depth += candidate.isClosing ? -1 : 1;
+      if (depth === 0) {
+        closingTag = candidate;
+        break;
+      }
+    }
+    if (!closingTag) return null;
+
+    elements.push({
+      attributes: openingTag.attributes,
+      innerHtml: html.slice(openingTag.end, closingTag.start),
+      start: openingTag.start,
+    });
+  }
+
+  return elements;
+};
+const hasClassToken = (attributes: Map<string, string>, expected: string) =>
+  attributes
+    .get("class")
+    ?.split(/[ \t\n\r\f]+/)
+    .includes(expected) === true;
+const readElementText = (html: string) =>
+  html
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+const getFooterNavigation = (html: string) => {
+  const footers = extractRealElements(html, "footer");
+  if (!footers || footers.length !== 1) return null;
+
+  const navigations = extractRealElements(footers[0].innerHtml, "nav")?.filter(
+    ({ attributes }) => hasClassToken(attributes, "footer-links"),
+  );
+  if (!navigations || navigations.length !== 1) return null;
+
+  const anchors = extractRealElements(navigations[0].innerHtml, "a");
+  return anchors?.map(({ attributes, innerHtml }) => ({
+    label: readElementText(innerHtml),
+    href: attributes.get("href"),
+    ariaCurrent: attributes.get("aria-current"),
+  }));
+};
+const getFirstRealBodyElement = (html: string) => {
+  const bodies = extractRealElements(html, "body");
+  if (!bodies || bodies.length !== 1) return null;
+  const firstTag = scanRealDocumentTags(bodies[0].innerHtml)?.find(
+    ({ isClosing }) => !isClosing,
+  );
+  if (!firstTag) return null;
+  const element = extractRealElements(bodies[0].innerHtml, firstTag.name)?.find(
+    ({ start }) => start === firstTag.start,
+  );
+  return element ? { ...firstTag, innerHtml: element.innerHtml } : null;
+};
+const countRealIdAttributes = (html: string, id: string) =>
+  scanRealDocumentTags(html)?.filter(
+    ({ attributes, isClosing }) => !isClosing && attributes.get("id") === id,
+  ).length;
+const scanMetadataOpeningTags = (html: string) =>
+  scanRealDocumentTags(html)?.flatMap(
+    ({ attributes, isClosing, isInFirstHead, name }) =>
+      !isClosing && (name === "link" || name === "meta")
+        ? [{ name, attributes, isInFirstHead }]
+        : [],
+  );
 const hasTagWithAttributes = (
   html: string,
   tag: MetadataTagName,
@@ -336,6 +448,54 @@ const expectTagWithAttributes = (
 ) => {
   expect(hasTagWithAttributes(html, tag, attributes)).toBe(true);
 };
+
+describe("Real document tag scanner", () => {
+  it("extracts one semantic footer and ignores footer lookalikes", () => {
+    const html = `<body>
+      <div data-copy="<footer><nav class='footer-links'></nav></footer>"></div>
+      <!-- <footer><nav class="footer-links"><a href="./wrong.html">Wrong</a></nav></footer> -->
+      <footer><nav class="footer-links">
+        <a href="./roadmap.html">Roadmap</a>
+        <a href="./privacy.html">Privacy</a>
+        <a href="./terms.html">Terms</a>
+        <a href="https://github.com/jamditis/audiobud/blob/main/CHANGELOG.md">Changelog</a>
+        <a href="https://github.com/jamditis/audiobud">GitHub</a>
+      </nav></footer>
+    </body>`;
+
+    expect(
+      getFooterNavigation(html)?.map(({ label, href }) => ({ label, href })),
+    ).toEqual(footerLinks);
+  });
+
+  it("rejects documents with multiple semantic footers", () => {
+    expect(
+      getFooterNavigation(
+        '<body><footer></footer><footer><nav class="footer-links"></nav></footer></body>',
+      ),
+    ).toBeNull();
+  });
+
+  it("finds the first real body child and counts only real ID attributes", () => {
+    const html = `<body>
+      <!-- <div id="main-title"></div> -->
+      <a class="skip-link" href="#main-title">Skip to main content</a>
+      <div data-copy='<h1 id="main-title">Wrong</h1>'></div>
+      <h1 id="main-title">Main title</h1>
+    </body>`;
+    const firstElement = getFirstRealBodyElement(html);
+
+    expect(firstElement?.name).toBe("a");
+    expect(
+      firstElement && hasClassToken(firstElement.attributes, "skip-link"),
+    ).toBe(true);
+    expect(firstElement?.attributes.get("href")).toBe("#main-title");
+    expect(firstElement && readElementText(firstElement.innerHtml)).toBe(
+      "Skip to main content",
+    );
+    expect(countRealIdAttributes(html, "main-title")).toBe(1);
+  });
+});
 
 describe("Metadata tag matcher", () => {
   it("accepts reordered real attributes", () => {
@@ -684,13 +844,25 @@ describe("AudioBud public policy pages", () => {
     });
   }
 
-  it("links privacy and terms from every public page", () => {
-    for (const page of sitePages) {
-      const html = read(page.name);
-      expect(html).toContain('href="./privacy.html"');
-      expect(html).toContain('href="./terms.html"');
-    }
-  });
+  for (const page of sitePages) {
+    it(`uses the complete footer navigation in ${page.name}`, () => {
+      const navigation = getFooterNavigation(read(page.name));
+      expect(navigation?.map(({ label, href }) => ({ label, href }))).toEqual(
+        footerLinks,
+      );
+
+      const currentLinks = navigation?.filter(
+        ({ ariaCurrent }) => ariaCurrent === "page",
+      );
+      if (page.currentFooterLabel) {
+        expect(currentLinks?.map(({ label }) => label)).toEqual([
+          page.currentFooterLabel,
+        ]);
+      } else {
+        expect(currentLinks).toHaveLength(0);
+      }
+    });
+  }
 
   it("describes the local-first boundary without an encryption promise", () => {
     const privacy = read("privacy.html");
@@ -704,24 +876,29 @@ describe("AudioBud public policy pages", () => {
   });
 
   for (const page of sitePages) {
-    it(`starts ${page.name} with a focusable skip link`, () => {
+    it(`starts ${page.name} with the skip link as the first body element`, () => {
       const html = read(page.name);
-      const body = html.slice(html.indexOf("<body>") + "<body>".length);
-      const firstFocusable = body.match(
-        /<(?:a|button|input|select|textarea)\b[^>]*>/i,
-      );
+      const firstElement = getFirstRealBodyElement(html);
 
-      expect(firstFocusable?.[0]).toBe(
-        `<a class="skip-link" href="#${page.headingId}">`,
+      expect(firstElement?.name).toBe("a");
+      expect(
+        firstElement && hasClassToken(firstElement.attributes, "skip-link"),
+      ).toBe(true);
+      expect(firstElement?.attributes.get("href")).toBe(`#${page.headingId}`);
+      expect(firstElement && readElementText(firstElement.innerHtml)).toBe(
+        page.skipLabel,
       );
-      expect(body).toContain(
-        `<a class="skip-link" href="#${page.headingId}">${page.skipLabel}</a>`,
-      );
-      expect(html).toMatch(
-        new RegExp(`<h[1-6]\\b[^>]*\\bid=["']${page.headingId}["'][^>]*>`, "i"),
-      );
+      expect(countRealIdAttributes(html, page.headingId)).toBe(1);
     });
   }
+
+  it("uses one page-level roadmap heading", () => {
+    const headings = scanRealDocumentTags(read("roadmap.html"))?.filter(
+      ({ isClosing, name }) => !isClosing && name === "h1",
+    );
+    expect(headings).toHaveLength(1);
+    expect(headings?.[0].attributes.get("id")).toBe("roadmap-title");
+  });
 
   it("lists the exact public URLs in README", () => {
     const readme = readRoot("README.md");
@@ -856,7 +1033,7 @@ Run:
 bun test scripts/legal-pages.test.ts
 ```
 
-Expected at this checkpoint: FAIL with 30 helper and contract checks passing and 17 contract checks failing. The failures cover missing policy pages and content, including MIT-controlled software warranty and liability terms, website-scoped disclaimers, accurate social image alt metadata, and mode-by-mode transcript-delivery and personalization-choice disclosures; missing site-wide skip links and inline browser favicons; the old origin in `docs/index.html` and `docs/roadmap.html` metadata; the pending README URLs; and pending privacy and terms links across the public pages.
+Expected at this checkpoint: FAIL with 33 helper and contract checks passing and 21 contract checks failing. The failures cover missing policy pages and content, including MIT-controlled software warranty and liability terms, website-scoped disclaimers, accurate social image alt metadata, and mode-by-mode transcript-delivery and personalization-choice disclosures; missing site-wide skip links and inline browser favicons; incomplete semantic footer navigation; the missing roadmap `h1`; the old origin in `docs/index.html` and `docs/roadmap.html` metadata; and the pending README URLs.
 
 - [ ] **Step 3: Commit the failing contract**
 
@@ -1024,7 +1201,7 @@ Keep that lead paragraph unchanged. Then distinguish every delivery path in user
 bun test scripts/legal-pages.test.ts
 ```
 
-Expected: FAIL with 37 helper and contract checks passing and 10 contract checks failing. The failures cover the missing terms page and terms content, the old origin and missing social metadata and inline favicons in `docs/index.html` and `docs/roadmap.html`, missing site-wide skip links, the pending README URLs, and pending privacy and terms links across the existing public pages.
+Expected: FAIL with 40 helper and contract checks passing and 14 contract checks failing. The failures cover the missing terms page and terms content, the old origin and missing social metadata and inline favicons in `docs/index.html` and `docs/roadmap.html`, missing site-wide skip links, incomplete semantic footer navigation, the missing roadmap `h1`, and the pending README URLs.
 
 - [ ] **Step 4: Commit the privacy page**
 
@@ -1117,7 +1294,7 @@ jurisdiction clauses, or any new restriction on MIT-licensed software.
 bun test scripts/legal-pages.test.ts
 ```
 
-Expected: FAIL with 41 helper and contract checks passing and 6 contract checks failing. The failures cover the old origin and missing social metadata and inline favicons in `docs/index.html` and `docs/roadmap.html`, missing skip links on those pages, the pending README URLs, and pending privacy and terms links across the existing public pages.
+Expected: FAIL with 44 helper and contract checks passing and 10 contract checks failing. The failures cover the old origin and missing social metadata and inline favicons in `docs/index.html` and `docs/roadmap.html`, missing skip links on those pages, incomplete semantic footer navigation, the missing roadmap `h1`, and the pending README URLs.
 
 - [ ] **Step 4: Commit the terms page**
 
@@ -1130,82 +1307,52 @@ git commit -m "docs: publish AudioBud terms of use"
 
 **Files:**
 
-- Modify: `docs/index.html`
 - Modify: `docs/roadmap.html`
-- Modify: `README.md`
+- Modify: `docs/privacy.html`
+- Modify: `docs/terms.html`
 - Modify: `scripts/legal-pages.test.ts`
 - Modify: `superpowers/plans/2026-07-20-audiobud-privacy-terms.md`
 - Modify: `superpowers/specs/2026-07-20-audiobud-privacy-terms-design.md`
 
-- [ ] **Step 1: Extend the contract and verify the red checkpoint**
+- [ ] **Step 1: Strengthen the semantic contract and verify the red checkpoint**
 
-Require every page in `sitePages` to use its exact custom-domain canonical and Open Graph URL, the shared custom-domain Open Graph and Twitter image, one shared image-alt tag for each platform in the first real head, and the shared inline geometric frog SVG browser favicon. Require each page's first focusable body element to be its page-specific skip link and require its heading target to exist. Keep the site-wide policy-link contract. Require README to publish the exact Website, Privacy, Terms, and Support lines and reject the old GitHub Pages project URL.
+Preserve the existing exact custom-domain metadata, inline favicon, and README URL assertions. Replace the document-wide privacy and terms link check with a narrow scanner-backed assertion that extracts exactly one real semantic `footer`, ignores comments and quoted lookalikes, finds exactly one descendant `nav.footer-links`, and requires this ordered navigation on all four pages: Roadmap, Privacy, Terms, Changelog, and GitHub. Preserve `aria-current="page"` on Roadmap, Privacy, and Terms where each is the current footer destination.
 
-```powershell
-bun test scripts/legal-pages.test.ts
-```
-
-Expected: FAIL with 41 helper and contract checks passing and 6 contract checks failing. The failures cover `docs/index.html`, `docs/roadmap.html`, and `README.md` pending work.
-
-- [ ] **Step 2: Update metadata, favicons, and skip links**
-
-In `docs/index.html`, replace every `https://jamditis.github.io/audiobud/` metadata origin with `https://audiobud.amditis.tech/`.
-
-In both existing pages, use `https://audiobud.amditis.tech/assets/og-image.png` for `og:image` and `twitter:image`, retain the `1200` by `630` Open Graph dimensions, and add exactly one `og:image:alt` and one `twitter:image:alt` with `AudioBud local dictation for Windows app interface` in the first real head. Replace the browser favicon with the inline geometric frog SVG data URI used by the policy pages, while keeping `./favicon.svg` as the visible brand image.
-
-In `docs/roadmap.html`, use:
-
-```html
-<link rel="canonical" href="https://audiobud.amditis.tech/roadmap.html" />
-<meta property="og:url" content="https://audiobud.amditis.tech/roadmap.html" />
-<meta
-  property="og:image"
-  content="https://audiobud.amditis.tech/assets/og-image.png"
-/>
-<meta
-  name="twitter:image"
-  content="https://audiobud.amditis.tech/assets/og-image.png"
-/>
-```
-
-Add `<a class="skip-link" href="#hero-title">Skip to main content</a>` as the first focusable body element in `docs/index.html`. Add `<a class="skip-link" href="#roadmap-title">Skip to roadmap</a>` in the same position in `docs/roadmap.html` and add `id="roadmap-title"` to its main roadmap heading. Do not add skip-link or focus styling in this task.
-
-- [ ] **Step 3: Add footer links to both existing pages**
-
-Insert before Changelog in both footers:
-
-```html
-<a href="./privacy.html">Privacy</a> <a href="./terms.html">Terms</a>
-```
-
-- [ ] **Step 4: Add public links to README**
-
-Replace the current website line near the top with:
-
-```markdown
-- **Website:** <https://audiobud.amditis.tech/>
-- **Privacy:** <https://audiobud.amditis.tech/privacy.html>
-- **Terms:** <https://audiobud.amditis.tech/terms.html>
-- **Support:** <https://github.com/jamditis/audiobud/issues>
-```
-
-- [ ] **Step 5: Sync the approved plan and design**
-
-Keep the task 1 test block byte-for-byte aligned with `scripts/legal-pages.test.ts`. Record the site-wide metadata, inline favicon, first-focusable skip-link targets, policy links, and exact public README URLs in the approved design.
-
-- [ ] **Step 6: Run the contract test**
+Replace the partial first-focusable predicate with a scanner-backed invariant that the expected skip link is the first real element child of `body`. Ignore comments and whitespace, require the target to occur exactly once as a real `id` attribute, and do not maintain a list of focusable element names. Require `docs/roadmap.html` to contain exactly one real page-level `h1`, with `id="roadmap-title"`.
 
 ```powershell
 bun test scripts/legal-pages.test.ts
 ```
 
-Expected: PASS with all 47 helper and contract checks green.
+Expected: FAIL with 51 helper and contract checks passing and 3 contract checks failing. The privacy and terms footers each lack Roadmap, and the roadmap page-level heading is still an `h2`. All four first-element-child skip-link checks pass.
 
-- [ ] **Step 7: Commit the links and metadata**
+- [ ] **Step 2: Align the footer navigation and roadmap heading**
+
+Add `<a href="./roadmap.html">Roadmap</a>` before Privacy in the `docs/privacy.html` and `docs/terms.html` footer navigation. Preserve `aria-current="page"` on each page's current policy link.
+
+Change the roadmap page-level heading from `<h2 id="roadmap-title">` to `<h1 id="roadmap-title">` without changing its text or surrounding structure. The skip links already precede the decorative swamp on all four pages, so no body-order change is needed. Do not change CSS or redesign the layout.
+
+- [ ] **Step 3: Sync the approved plan and design**
+
+Keep the task 1 test block byte-for-byte aligned with `scripts/legal-pages.test.ts`. Record the semantic footer scope, complete ordered footer destinations, single roadmap `h1`, first-real-body-child skip-link invariant, and real-ID uniqueness requirement in the approved design.
+
+- [ ] **Step 4: Run focused and full verification**
 
 ```powershell
-git add -- README.md docs/index.html docs/roadmap.html scripts/legal-pages.test.ts superpowers/plans/2026-07-20-audiobud-privacy-terms.md superpowers/specs/2026-07-20-audiobud-privacy-terms-design.md
-git commit -m "docs: connect policies to public site"
+bun test scripts/legal-pages.test.ts -t "Real document tag scanner"
+bun test scripts/legal-pages.test.ts
+bunx tsc --noEmit
+bunx prettier --check docs/roadmap.html docs/privacy.html docs/terms.html scripts/legal-pages.test.ts superpowers/plans/2026-07-20-audiobud-privacy-terms.md superpowers/specs/2026-07-20-audiobud-privacy-terms-design.md
+git diff --check
+```
+
+Expected: PASS with all 3 focused scanner checks and all 54 helper and contract checks green.
+
+- [ ] **Step 5: Commit the semantic navigation fixes**
+
+```powershell
+git add -- docs/roadmap.html docs/privacy.html docs/terms.html scripts/legal-pages.test.ts superpowers/plans/2026-07-20-audiobud-privacy-terms.md superpowers/specs/2026-07-20-audiobud-privacy-terms-design.md
+git commit -m "docs: align public navigation semantics"
 ```
 
 ### Task 5: Add the legal-document layout

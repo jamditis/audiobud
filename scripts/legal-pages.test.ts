@@ -24,19 +24,32 @@ const sitePages = [
     url: "https://audiobud.amditis.tech/roadmap.html",
     headingId: "roadmap-title",
     skipLabel: "Skip to roadmap",
+    currentFooterLabel: "Roadmap",
   },
   {
     name: "privacy.html",
     url: "https://audiobud.amditis.tech/privacy.html",
     headingId: "privacy-title",
     skipLabel: "Skip to privacy policy",
+    currentFooterLabel: "Privacy",
   },
   {
     name: "terms.html",
     url: "https://audiobud.amditis.tech/terms.html",
     headingId: "terms-title",
     skipLabel: "Skip to terms of use",
+    currentFooterLabel: "Terms",
   },
+];
+const footerLinks = [
+  { label: "Roadmap", href: "./roadmap.html" },
+  { label: "Privacy", href: "./privacy.html" },
+  { label: "Terms", href: "./terms.html" },
+  {
+    label: "Changelog",
+    href: "https://github.com/jamditis/audiobud/blob/main/CHANGELOG.md",
+  },
+  { label: "GitHub", href: "https://github.com/jamditis/audiobud" },
 ];
 const socialImage = "https://audiobud.amditis.tech/assets/og-image.png";
 const socialImageAlt = "AudioBud local dictation for Windows app interface";
@@ -161,12 +174,17 @@ const findOpeningTagEnd = (html: string, start: number) => {
 
   return null;
 };
-const scanMetadataOpeningTags = (html: string) => {
-  const tags: Array<{
-    name: MetadataTagName;
-    attributes: Map<string, string>;
-    isInFirstHead: boolean;
-  }> = [];
+type RealDocumentTag = {
+  name: string;
+  attributes: Map<string, string>;
+  isClosing: boolean;
+  isInFirstHead: boolean;
+  start: number;
+  end: number;
+};
+const rawTextElementNames = new Set(["script", "style", "title", "textarea"]);
+const scanRealDocumentTags = (html: string) => {
+  const tags: RealDocumentTag[] = [];
   let cursor = 0;
   let hasSeenHead = false;
   let hasSeenBody = false;
@@ -185,9 +203,8 @@ const scanMetadataOpeningTags = (html: string) => {
     }
 
     let nameStart = tagStart + 1;
-    const isClosingTag = html[nameStart] === "/";
-    if (isClosingTag) nameStart++;
-
+    const isClosing = html[nameStart] === "/";
+    if (isClosing) nameStart++;
     if (!isAsciiLetter(html[nameStart])) {
       cursor = tagStart + 1;
       continue;
@@ -198,75 +215,170 @@ const scanMetadataOpeningTags = (html: string) => {
       nameEnd++;
 
     const name = html.slice(nameStart, nameEnd).toLowerCase();
-    const hasValidNameDelimiter = isTagNameDelimiter(html[nameEnd]);
     const tagEnd = findOpeningTagEnd(html, nameEnd);
     if (tagEnd === null) return null;
+    if (!isTagNameDelimiter(html[nameEnd])) {
+      cursor = tagEnd + 1;
+      continue;
+    }
 
-    if (isClosingTag) {
-      if (hasValidNameDelimiter && name === "template" && templateDepth > 0) {
+    const tag: RealDocumentTag = {
+      name,
+      attributes: isClosing
+        ? new Map()
+        : parseQuotedAttributes(html.slice(nameEnd, tagEnd)),
+      isClosing,
+      isInFirstHead: isInsideHead,
+      start: tagStart,
+      end: tagEnd + 1,
+    };
+
+    if (isClosing) {
+      if (name === "template" && templateDepth > 0) {
         templateDepth--;
-      } else if (
-        templateDepth === 0 &&
-        hasValidNameDelimiter &&
-        name === "head"
-      ) {
-        isInsideHead = false;
+        if (templateDepth === 0) tags.push(tag);
+      } else if (templateDepth === 0) {
+        tags.push(tag);
+        if (name === "head") isInsideHead = false;
       }
       cursor = tagEnd + 1;
-      continue;
-    }
-
-    if (hasValidNameDelimiter && name === "template") {
-      templateDepth++;
-      cursor = tagEnd + 1;
-      continue;
-    }
-
-    if (
-      hasValidNameDelimiter &&
-      ["script", "style", "title", "textarea"].includes(name)
-    ) {
-      const closingTag = new RegExp(`</${name}[ \\t\\n\\r\\f]*>`, "gi");
-      closingTag.lastIndex = tagEnd + 1;
-      const closingMatch = closingTag.exec(html);
-      if (!closingMatch) return null;
-      cursor = closingTag.lastIndex;
       continue;
     }
 
     if (templateDepth > 0) {
+      if (name === "template") templateDepth++;
       cursor = tagEnd + 1;
       continue;
     }
 
-    if (hasValidNameDelimiter && name === "head") {
-      if (!hasSeenHead && !hasSeenBody) {
-        hasSeenHead = true;
-        isInsideHead = true;
-      }
-      cursor = tagEnd + 1;
-      continue;
-    }
-
-    if (hasValidNameDelimiter && name === "body") {
+    if (name === "head" && !hasSeenHead && !hasSeenBody) {
+      hasSeenHead = true;
+      isInsideHead = true;
+      tag.isInFirstHead = true;
+    } else if (name === "body") {
       hasSeenBody = true;
       isInsideHead = false;
+      tag.isInFirstHead = false;
+    }
+
+    tags.push(tag);
+    if (name === "template") {
+      templateDepth = 1;
       cursor = tagEnd + 1;
       continue;
     }
 
-    if (hasValidNameDelimiter && (name === "link" || name === "meta")) {
+    if (rawTextElementNames.has(name)) {
+      const closingTag = new RegExp(`</${name}[ \\t\\n\\r\\f]*>`, "gi");
+      closingTag.lastIndex = tagEnd + 1;
+      const closingMatch = closingTag.exec(html);
+      if (!closingMatch) return null;
       tags.push({
         name,
-        attributes: parseQuotedAttributes(html.slice(nameEnd, tagEnd)),
+        attributes: new Map(),
+        isClosing: true,
         isInFirstHead: isInsideHead,
+        start: closingMatch.index,
+        end: closingTag.lastIndex,
       });
+      cursor = closingTag.lastIndex;
+      continue;
     }
+
     cursor = tagEnd + 1;
   }
 
   return templateDepth === 0 ? tags : null;
 };
+const extractRealElements = (html: string, elementName: string) => {
+  const tags = scanRealDocumentTags(html);
+  if (!tags) return null;
+
+  const normalizedName = elementName.toLowerCase();
+  const elements: Array<{
+    attributes: Map<string, string>;
+    innerHtml: string;
+    start: number;
+  }> = [];
+  for (let index = 0; index < tags.length; index++) {
+    const openingTag = tags[index];
+    if (openingTag.isClosing || openingTag.name !== normalizedName) continue;
+
+    let depth = 1;
+    let closingTag: RealDocumentTag | undefined;
+    for (
+      let candidateIndex = index + 1;
+      candidateIndex < tags.length;
+      candidateIndex++
+    ) {
+      const candidate = tags[candidateIndex];
+      if (candidate.name !== normalizedName) continue;
+      depth += candidate.isClosing ? -1 : 1;
+      if (depth === 0) {
+        closingTag = candidate;
+        break;
+      }
+    }
+    if (!closingTag) return null;
+
+    elements.push({
+      attributes: openingTag.attributes,
+      innerHtml: html.slice(openingTag.end, closingTag.start),
+      start: openingTag.start,
+    });
+  }
+
+  return elements;
+};
+const hasClassToken = (attributes: Map<string, string>, expected: string) =>
+  attributes
+    .get("class")
+    ?.split(/[ \t\n\r\f]+/)
+    .includes(expected) === true;
+const readElementText = (html: string) =>
+  html
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+const getFooterNavigation = (html: string) => {
+  const footers = extractRealElements(html, "footer");
+  if (!footers || footers.length !== 1) return null;
+
+  const navigations = extractRealElements(footers[0].innerHtml, "nav")?.filter(
+    ({ attributes }) => hasClassToken(attributes, "footer-links"),
+  );
+  if (!navigations || navigations.length !== 1) return null;
+
+  const anchors = extractRealElements(navigations[0].innerHtml, "a");
+  return anchors?.map(({ attributes, innerHtml }) => ({
+    label: readElementText(innerHtml),
+    href: attributes.get("href"),
+    ariaCurrent: attributes.get("aria-current"),
+  }));
+};
+const getFirstRealBodyElement = (html: string) => {
+  const bodies = extractRealElements(html, "body");
+  if (!bodies || bodies.length !== 1) return null;
+  const firstTag = scanRealDocumentTags(bodies[0].innerHtml)?.find(
+    ({ isClosing }) => !isClosing,
+  );
+  if (!firstTag) return null;
+  const element = extractRealElements(bodies[0].innerHtml, firstTag.name)?.find(
+    ({ start }) => start === firstTag.start,
+  );
+  return element ? { ...firstTag, innerHtml: element.innerHtml } : null;
+};
+const countRealIdAttributes = (html: string, id: string) =>
+  scanRealDocumentTags(html)?.filter(
+    ({ attributes, isClosing }) => !isClosing && attributes.get("id") === id,
+  ).length;
+const scanMetadataOpeningTags = (html: string) =>
+  scanRealDocumentTags(html)?.flatMap(
+    ({ attributes, isClosing, isInFirstHead, name }) =>
+      !isClosing && (name === "link" || name === "meta")
+        ? [{ name, attributes, isInFirstHead }]
+        : [],
+  );
 const hasTagWithAttributes = (
   html: string,
   tag: MetadataTagName,
@@ -302,6 +414,54 @@ const expectTagWithAttributes = (
 ) => {
   expect(hasTagWithAttributes(html, tag, attributes)).toBe(true);
 };
+
+describe("Real document tag scanner", () => {
+  it("extracts one semantic footer and ignores footer lookalikes", () => {
+    const html = `<body>
+      <div data-copy="<footer><nav class='footer-links'></nav></footer>"></div>
+      <!-- <footer><nav class="footer-links"><a href="./wrong.html">Wrong</a></nav></footer> -->
+      <footer><nav class="footer-links">
+        <a href="./roadmap.html">Roadmap</a>
+        <a href="./privacy.html">Privacy</a>
+        <a href="./terms.html">Terms</a>
+        <a href="https://github.com/jamditis/audiobud/blob/main/CHANGELOG.md">Changelog</a>
+        <a href="https://github.com/jamditis/audiobud">GitHub</a>
+      </nav></footer>
+    </body>`;
+
+    expect(
+      getFooterNavigation(html)?.map(({ label, href }) => ({ label, href })),
+    ).toEqual(footerLinks);
+  });
+
+  it("rejects documents with multiple semantic footers", () => {
+    expect(
+      getFooterNavigation(
+        '<body><footer></footer><footer><nav class="footer-links"></nav></footer></body>',
+      ),
+    ).toBeNull();
+  });
+
+  it("finds the first real body child and counts only real ID attributes", () => {
+    const html = `<body>
+      <!-- <div id="main-title"></div> -->
+      <a class="skip-link" href="#main-title">Skip to main content</a>
+      <div data-copy='<h1 id="main-title">Wrong</h1>'></div>
+      <h1 id="main-title">Main title</h1>
+    </body>`;
+    const firstElement = getFirstRealBodyElement(html);
+
+    expect(firstElement?.name).toBe("a");
+    expect(
+      firstElement && hasClassToken(firstElement.attributes, "skip-link"),
+    ).toBe(true);
+    expect(firstElement?.attributes.get("href")).toBe("#main-title");
+    expect(firstElement && readElementText(firstElement.innerHtml)).toBe(
+      "Skip to main content",
+    );
+    expect(countRealIdAttributes(html, "main-title")).toBe(1);
+  });
+});
 
 describe("Metadata tag matcher", () => {
   it("accepts reordered real attributes", () => {
@@ -650,13 +810,25 @@ describe("AudioBud public policy pages", () => {
     });
   }
 
-  it("links privacy and terms from every public page", () => {
-    for (const page of sitePages) {
-      const html = read(page.name);
-      expect(html).toContain('href="./privacy.html"');
-      expect(html).toContain('href="./terms.html"');
-    }
-  });
+  for (const page of sitePages) {
+    it(`uses the complete footer navigation in ${page.name}`, () => {
+      const navigation = getFooterNavigation(read(page.name));
+      expect(navigation?.map(({ label, href }) => ({ label, href }))).toEqual(
+        footerLinks,
+      );
+
+      const currentLinks = navigation?.filter(
+        ({ ariaCurrent }) => ariaCurrent === "page",
+      );
+      if (page.currentFooterLabel) {
+        expect(currentLinks?.map(({ label }) => label)).toEqual([
+          page.currentFooterLabel,
+        ]);
+      } else {
+        expect(currentLinks).toHaveLength(0);
+      }
+    });
+  }
 
   it("describes the local-first boundary without an encryption promise", () => {
     const privacy = read("privacy.html");
@@ -670,24 +842,29 @@ describe("AudioBud public policy pages", () => {
   });
 
   for (const page of sitePages) {
-    it(`starts ${page.name} with a focusable skip link`, () => {
+    it(`starts ${page.name} with the skip link as the first body element`, () => {
       const html = read(page.name);
-      const body = html.slice(html.indexOf("<body>") + "<body>".length);
-      const firstFocusable = body.match(
-        /<(?:a|button|input|select|textarea)\b[^>]*>/i,
-      );
+      const firstElement = getFirstRealBodyElement(html);
 
-      expect(firstFocusable?.[0]).toBe(
-        `<a class="skip-link" href="#${page.headingId}">`,
+      expect(firstElement?.name).toBe("a");
+      expect(
+        firstElement && hasClassToken(firstElement.attributes, "skip-link"),
+      ).toBe(true);
+      expect(firstElement?.attributes.get("href")).toBe(`#${page.headingId}`);
+      expect(firstElement && readElementText(firstElement.innerHtml)).toBe(
+        page.skipLabel,
       );
-      expect(body).toContain(
-        `<a class="skip-link" href="#${page.headingId}">${page.skipLabel}</a>`,
-      );
-      expect(html).toMatch(
-        new RegExp(`<h[1-6]\\b[^>]*\\bid=["']${page.headingId}["'][^>]*>`, "i"),
-      );
+      expect(countRealIdAttributes(html, page.headingId)).toBe(1);
     });
   }
+
+  it("uses one page-level roadmap heading", () => {
+    const headings = scanRealDocumentTags(read("roadmap.html"))?.filter(
+      ({ isClosing, name }) => !isClosing && name === "h1",
+    );
+    expect(headings).toHaveLength(1);
+    expect(headings?.[0].attributes.get("id")).toBe("roadmap-title");
+  });
 
   it("lists the exact public URLs in README", () => {
     const readme = readRoot("README.md");
