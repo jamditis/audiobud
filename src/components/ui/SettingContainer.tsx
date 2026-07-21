@@ -48,8 +48,8 @@ export const SettingContainer: React.FC<SettingContainerProps> = ({
   };
 
   const containerClasses = grouped
-    ? "px-4 p-2"
-    : "px-4 p-2 rounded-lg border border-mid-gray/20";
+    ? "setting-row setting-row-grouped px-4 p-2"
+    : "setting-row px-4 p-2 rounded-lg border border-mid-gray/20";
 
   if (layout === "stacked") {
     if (descriptionMode === "tooltip") {
@@ -121,8 +121,8 @@ export const SettingContainer: React.FC<SettingContainerProps> = ({
 
   // Horizontal layout (default)
   const horizontalContainerClasses = grouped
-    ? "flex items-center justify-between px-4 p-2"
-    : "flex items-center justify-between px-4 p-2 rounded-lg border border-mid-gray/20";
+    ? "setting-row setting-row-grouped flex items-center justify-between px-4 p-2"
+    : "setting-row flex items-center justify-between px-4 p-2 rounded-lg border border-mid-gray/20";
 
   if (descriptionMode === "tooltip") {
     return (

@@ -76,6 +76,7 @@ const RecordingOverlay: React.FC = () => {
   return (
     <div
       dir={direction}
+      data-state={state}
       className={`recording-overlay ${isVisible ? "fade-in" : ""}`}
     >
       <div className="overlay-left">
@@ -105,10 +106,24 @@ const RecordingOverlay: React.FC = () => {
           </div>
         )}
         {state === "transcribing" && (
-          <div className="transcribing-text">{t("overlay.transcribing")}</div>
+          <div className="state-label transcribing-text">
+            <span>{t("overlay.transcribing")}</span>
+            <span className="state-dots" aria-hidden="true">
+              <i />
+              <i />
+              <i />
+            </span>
+          </div>
         )}
         {state === "processing" && (
-          <div className="transcribing-text">{t("overlay.processing")}</div>
+          <div className="state-label transcribing-text">
+            <span>{t("overlay.processing")}</span>
+            <span className="state-dots" aria-hidden="true">
+              <i />
+              <i />
+              <i />
+            </span>
+          </div>
         )}
       </div>
 

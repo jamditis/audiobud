@@ -45,6 +45,14 @@
   /* Apply colors */
   color: var(--color-text);
   background-color: var(--color-background);
+  font-family: "Fredoka", ui-rounded, system-ui, sans-serif;
+
+  /* Shared surface language */
+  --surface-highlight: rgba(255, 255, 255, 0.5);
+  --surface-shadow: rgba(31, 66, 27, 0.16);
+  --sidebar-surface: rgba(235, 246, 222, 0.78);
+  --toolbar-surface: rgba(243, 247, 236, 0.7);
+  --focus-ring: color-mix(in srgb, var(--color-logo-primary) 56%, white);
 }
 
 .container {
@@ -65,7 +73,403 @@
     --color-logo-stroke: #d8f0bb;
     --color-card: rgba(28, 52, 34, 0.5); /* swamp-glass card (night) */
     --color-card-rim: rgba(140, 210, 120, 0.18);
+    --surface-highlight: rgba(216, 240, 187, 0.1);
+    --surface-shadow: rgba(0, 0, 0, 0.3);
+    --sidebar-surface: rgba(10, 25, 15, 0.76);
+    --toolbar-surface: rgba(13, 31, 18, 0.68);
+    --focus-ring: color-mix(in srgb, var(--color-logo-primary) 72%, white);
   }
+}
+
+/* ---------------------------------------------------------------------------
+   Application shell and navigation
+   --------------------------------------------------------------------------- */
+.app-shell {
+  background: transparent;
+}
+
+.sidebar-shell {
+  position: relative;
+  z-index: 10;
+  flex: 0 0 196px;
+  overflow: hidden;
+  border-inline-end: 1px solid var(--color-card-rim);
+  background:
+    linear-gradient(180deg, var(--surface-highlight), transparent 22%),
+    var(--sidebar-surface);
+  box-shadow: 14px 0 44px rgba(0, 0, 0, 0.1);
+  backdrop-filter: blur(18px) saturate(1.15);
+}
+
+.sidebar-brand {
+  position: relative;
+  min-height: 68px;
+}
+
+.sidebar-brand::after {
+  content: "";
+  position: absolute;
+  right: 14px;
+  bottom: 0;
+  left: 14px;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--color-card-rim),
+    transparent
+  );
+}
+
+.sidebar-nav {
+  position: relative;
+}
+
+.sidebar-link {
+  position: relative;
+  min-height: 42px;
+  isolation: isolate;
+  transition:
+    color 180ms ease,
+    opacity 180ms ease,
+    background-color 180ms ease,
+    transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow 180ms ease;
+}
+
+.sidebar-link::before {
+  content: "";
+  position: absolute;
+  inset: 6px auto 6px 4px;
+  z-index: -1;
+  width: 3px;
+  border-radius: 999px;
+  background: currentColor;
+  opacity: 0;
+  transform: scaleY(0.35);
+  transition: inherit;
+}
+
+.sidebar-link:hover {
+  transform: translateX(2px);
+}
+
+[dir="rtl"] .sidebar-link:hover {
+  transform: translateX(-2px);
+}
+
+.sidebar-link:active {
+  transform: translateY(1px) scale(0.985);
+}
+
+.sidebar-link:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.sidebar-link.is-active::before {
+  opacity: 0.7;
+  transform: scaleY(1);
+}
+
+.sidebar-link.is-active svg,
+.sidebar-link.is-active > div:first-child {
+  filter: drop-shadow(0 2px 4px rgba(14, 28, 12, 0.2));
+}
+
+.sidebar-pond {
+  position: relative;
+  width: 84%;
+  height: 68px;
+  margin-top: auto;
+  opacity: 0.55;
+}
+
+.sidebar-pond::before {
+  content: "";
+  position: absolute;
+  right: 8px;
+  bottom: 14px;
+  left: 8px;
+  height: 18px;
+  border: 1px solid
+    color-mix(in srgb, var(--color-logo-primary) 30%, transparent);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--color-logo-primary) 6%, transparent);
+}
+
+.sidebar-pond span {
+  position: absolute;
+  bottom: 22px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--color-frog-amber);
+  box-shadow: 0 0 8px var(--color-frog-amber);
+  animation: sidebar-glow 3.2s ease-in-out infinite;
+}
+
+.sidebar-pond span:nth-child(1) {
+  left: 28%;
+}
+
+.sidebar-pond span:nth-child(2) {
+  left: 53%;
+  bottom: 35px;
+  animation-delay: -1.1s;
+}
+
+.sidebar-pond span:nth-child(3) {
+  right: 24%;
+  animation-delay: -2.2s;
+}
+
+@keyframes sidebar-glow {
+  0%,
+  100% {
+    opacity: 0.2;
+    transform: translateY(1px);
+  }
+  50% {
+    opacity: 1;
+    transform: translateY(-3px);
+  }
+}
+
+.app-main {
+  position: relative;
+}
+
+.content-toolbar {
+  position: relative;
+  z-index: 8;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-height: 66px;
+  padding: 10px clamp(18px, 4vw, 34px);
+  overflow: hidden;
+  border-bottom: 1px solid var(--color-card-rim);
+  background: var(--toolbar-surface);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.08);
+  backdrop-filter: blur(18px) saturate(1.18);
+}
+
+.content-toolbar-icon {
+  display: grid;
+  flex: 0 0 36px;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border: 1px solid
+    color-mix(in srgb, var(--color-logo-primary) 34%, transparent);
+  border-radius: 12px 12px 8px 12px;
+  background: color-mix(in srgb, var(--color-logo-primary) 13%, transparent);
+  color: var(--color-logo-primary);
+  box-shadow:
+    inset 0 1px 0 var(--surface-highlight),
+    0 7px 18px color-mix(in srgb, var(--color-logo-primary) 12%, transparent);
+}
+
+.content-toolbar-kicker {
+  display: block;
+  color: var(--color-mid-gray);
+  font-family: "Bungee", system-ui, sans-serif;
+  font-size: 0.58rem;
+  letter-spacing: 0.12em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.content-toolbar-title {
+  overflow: hidden;
+  margin: 1px 0 0;
+  font-size: 1.08rem;
+  font-weight: 700;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.content-toolbar-pond {
+  position: absolute;
+  top: 50%;
+  right: clamp(18px, 5vw, 52px);
+  width: 86px;
+  height: 32px;
+  transform: translateY(-50%);
+  opacity: 0.38;
+}
+
+[dir="rtl"] .content-toolbar-pond {
+  right: auto;
+  left: clamp(18px, 5vw, 52px);
+}
+
+.content-toolbar-ripple {
+  position: absolute;
+  inset: 4px;
+  border: 1px solid var(--color-logo-primary);
+  border-radius: 50%;
+  animation: toolbar-ripple 3.8s ease-out infinite;
+}
+
+.content-toolbar-ripple-delay {
+  animation-delay: -1.9s;
+}
+
+@keyframes toolbar-ripple {
+  0% {
+    opacity: 0;
+    transform: scale(0.25);
+  }
+  35% {
+    opacity: 0.8;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1);
+  }
+}
+
+.app-scroll {
+  scroll-behavior: smooth;
+  scrollbar-gutter: stable;
+}
+
+.app-content {
+  width: 100%;
+  padding: 22px clamp(16px, 4vw, 34px) 34px;
+  animation: content-arrive 280ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@keyframes content-arrive {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.settings-group-heading {
+  display: flex;
+  align-items: center;
+  min-height: 22px;
+}
+
+.settings-group-heading h2::before {
+  content: "";
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  margin-inline-end: 8px;
+  border-radius: 50%;
+  background: var(--color-logo-primary);
+  box-shadow: 0 0 0 4px
+    color-mix(in srgb, var(--color-logo-primary) 10%, transparent);
+  vertical-align: 1px;
+}
+
+.setting-row {
+  min-height: 48px;
+  transition:
+    background-color 170ms ease,
+    box-shadow 170ms ease;
+}
+
+.setting-row-grouped:hover {
+  background: color-mix(in srgb, var(--color-logo-primary) 5%, transparent);
+  box-shadow: inset 3px 0 0
+    color-mix(in srgb, var(--color-logo-primary) 36%, transparent);
+}
+
+[dir="rtl"] .setting-row-grouped:hover {
+  box-shadow: inset -3px 0 0
+    color-mix(in srgb, var(--color-logo-primary) 36%, transparent);
+}
+
+.setting-row h3 {
+  letter-spacing: 0.005em;
+}
+
+.toggle-switch {
+  border-radius: 999px;
+}
+
+.toggle-switch:active .toggle-track::after {
+  width: 22px;
+}
+
+.toggle-track {
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.22);
+  transition:
+    background-color 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.peer:checked + .toggle-track {
+  box-shadow:
+    inset 0 1px 2px rgba(0, 0, 0, 0.14),
+    0 0 0 4px color-mix(in srgb, var(--color-logo-primary) 10%, transparent),
+    0 4px 14px color-mix(in srgb, var(--color-logo-primary) 24%, transparent);
+}
+
+.app-button {
+  box-shadow: inset 0 1px 0 var(--surface-highlight);
+}
+
+.app-button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow:
+    inset 0 1px 0 var(--surface-highlight),
+    0 6px 16px rgba(0, 0, 0, 0.14);
+}
+
+.app-button:active:not(:disabled) {
+  transform: translateY(1px) scale(0.985);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.model-card {
+  position: relative;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--color-card) 74%, transparent);
+  box-shadow: inset 0 1px 0 var(--surface-highlight);
+}
+
+.model-card::after {
+  content: "";
+  position: absolute;
+  top: -50%;
+  left: -25%;
+  width: 22%;
+  height: 200%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.1),
+    transparent
+  );
+  transform: rotate(18deg) translateX(-280%);
+  transition: transform 650ms ease;
+  pointer-events: none;
+}
+
+.model-card:hover::after {
+  transform: rotate(18deg) translateX(800%);
+}
+
+.app-footer {
+  position: relative;
+  z-index: 12;
+  flex: 0 0 auto;
+  border-top: 1px solid var(--color-card-rim);
+  background: var(--sidebar-surface);
+  box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.08);
+  backdrop-filter: blur(18px) saturate(1.12);
 }
 
 /* macOS - tint native overlay scrollbar thumb */
@@ -287,17 +691,43 @@
    context and trap open dropdowns behind the next card. The translucent tint
    over the swamp still reads as glass. */
 .swamp-card {
+  position: relative;
   background: var(--color-card);
   border: 1px solid var(--color-card-rim);
   box-shadow:
-    0 6px 22px rgba(0, 0, 0, 0.18),
-    inset 0 1px 0 rgba(160, 220, 140, 0.1);
+    0 10px 34px var(--surface-shadow),
+    inset 0 1px 0 var(--surface-highlight);
+  transition:
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    transform 180ms ease;
+}
+
+.swamp-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 18px auto;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--surface-highlight),
+    transparent
+  );
+  pointer-events: none;
+}
+
+.settings-group:hover .swamp-card {
+  border-color: color-mix(in srgb, var(--color-logo-primary) 30%, transparent);
+  box-shadow:
+    0 14px 40px var(--surface-shadow),
+    inset 0 1px 0 var(--surface-highlight);
 }
 
 /* active sidebar item: a lit lily pad (color + glow, not an edge sliver) */
 .nav-pad {
   box-shadow:
-    0 4px 16px rgba(78, 170, 48, 0.4),
+    0 7px 22px rgba(78, 170, 48, 0.32),
     inset 0 1px 0 rgba(255, 255, 255, 0.3);
 }
 
@@ -354,5 +784,23 @@
   .eqbar {
     animation: none;
     transform: scaleY(0.6);
+  }
+
+  .app-content,
+  .content-toolbar-ripple,
+  .sidebar-pond span {
+    animation: none;
+  }
+
+  .sidebar-link,
+  .app-button,
+  .model-card,
+  .setting-row,
+  .swamp-card {
+    transition-duration: 0.01ms;
+  }
+
+  .model-card::after {
+    display: none;
   }
 }

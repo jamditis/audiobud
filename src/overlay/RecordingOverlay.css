@@ -1,4 +1,5 @@
 .recording-overlay {
+  position: relative;
   height: 36px;
   width: 172px;
   display: grid;
@@ -19,11 +20,67 @@
   box-shadow:
     0 6px 20px rgba(0, 0, 0, 0.4),
     0 0 14px rgba(43, 178, 163, 0.18);
+  overflow: hidden;
+}
+
+.recording-overlay::before {
+  content: "";
+  position: absolute;
+  inset: 0 18px auto;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(235, 255, 220, 0.35),
+    transparent
+  );
+  pointer-events: none;
+}
+
+.recording-overlay::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 1px solid transparent;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.recording-overlay[data-state="recording"]::after {
+  animation: recording-aura 2.2s ease-in-out infinite;
+}
+
+.recording-overlay[data-state="transcribing"] {
+  border-color: rgba(85, 201, 184, 0.48);
+  box-shadow:
+    0 6px 20px rgba(0, 0, 0, 0.4),
+    0 0 18px rgba(85, 201, 184, 0.22);
+}
+
+.recording-overlay[data-state="processing"] {
+  border-color: rgba(255, 178, 62, 0.48);
+  box-shadow:
+    0 6px 20px rgba(0, 0, 0, 0.4),
+    0 0 18px rgba(255, 178, 62, 0.18);
+}
+
+@keyframes recording-aura {
+  0%,
+  100% {
+    border-color: rgba(132, 209, 80, 0.08);
+    box-shadow: inset 0 0 0 rgba(132, 209, 80, 0);
+  }
+  50% {
+    border-color: rgba(132, 209, 80, 0.42);
+    box-shadow: inset 0 0 10px rgba(132, 209, 80, 0.08);
+  }
 }
 
 .overlay-left {
   display: flex;
   align-items: center;
+  position: relative;
+  z-index: 1;
 }
 
 .overlay-middle {
@@ -105,6 +162,51 @@
   animation: transcribing-pulse 1.5s infinite ease-in-out;
 }
 
+.state-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.state-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.state-dots i {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: #55c9b8;
+  animation: state-dot 900ms ease-in-out infinite;
+}
+
+.recording-overlay[data-state="processing"] .state-dots i {
+  background: #ffb23e;
+}
+
+.state-dots i:nth-child(2) {
+  animation-delay: 120ms;
+}
+
+.state-dots i:nth-child(3) {
+  animation-delay: 240ms;
+}
+
+@keyframes state-dot {
+  0%,
+  100% {
+    opacity: 0.3;
+    transform: translateY(1px);
+  }
+  50% {
+    opacity: 1;
+    transform: translateY(-1px);
+  }
+}
+
 @keyframes transcribing-pulse {
   0%,
   100% {
@@ -149,7 +251,9 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .transcribing-text {
+  .transcribing-text,
+  .state-dots i,
+  .recording-overlay[data-state="recording"]::after {
     animation: none;
     opacity: 1;
   }
