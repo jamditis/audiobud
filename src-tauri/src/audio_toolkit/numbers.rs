@@ -539,15 +539,18 @@ fn stitch_clock_times(text: &str) -> String {
         // Guard the window first: the checks below index i+1 and i+2, and combinators
         // would evaluate those eagerly even when the window is short.
         if i + 2 < words.len() {
-            // The hour carries no punctuation of its own -- "3, 30 pm" is a list, not a
-            // time -- and bare_number rejects anything that is not pure digits.
-            let hour = bare_number(words[i], 1, 12);
+            // Opening boundary punctuation belongs outside the time and is preserved. Any
+            // trailing punctuation remains attached to the numeric core, so bare_number still
+            // rejects "3, 30 pm" as a list rather than stitching it.
+            let hour_digits = words[i].trim_start_matches(is_boundary);
+            let hour_lead = &words[i][..words[i].len() - hour_digits.len()];
+            let hour = bare_number(hour_digits, 1, 12);
             // A single spoken group always yields two digits, so the width check is what
             // keeps "three five pm" from being read as 3:05.
             let minute = bare_number(words[i + 1], 0, 59).filter(|_| words[i + 1].len() == 2);
             if let (Some(hour), Some(minute)) = (hour, minute) {
                 if is_meridiem(words[i + 2]) {
-                    out.push(format!("{hour}:{minute:02}"));
+                    out.push(format!("{hour_lead}{hour}:{minute:02}"));
                     // Both the hour and the minute went into that one token; the meridiem
                     // is left for the next turn so its own punctuation passes through.
                     i += 2;
@@ -893,6 +896,19 @@ mod tests {
     fn punctuation_between_the_parts_blocks_the_stitch() {
         // A comma makes it a list. The hour is not a bare token any more.
         assert_eq!(format_numbers("three, thirty pm"), "3, 30 pm");
+    }
+
+    #[test]
+    fn opening_punctuation_around_a_time_survives() {
+        assert_eq!(format_numbers("(three thirty pm)"), "(3:30 pm)");
+        assert_eq!(
+            format_numbers("she said \"three thirty pm\" clearly"),
+            "she said \"3:30 pm\" clearly"
+        );
+        assert_eq!(
+            format_numbers("meet at [three thirty pm]"),
+            "meet at [3:30 pm]"
+        );
     }
 
     #[test]
