@@ -1115,7 +1115,12 @@ whole_word?: boolean;
  * Match case-sensitively (default false). When false, matching ignores case and the
  * replacement adapts to the matched text's case pattern.
  */
-case_sensitive?: boolean }
+case_sensitive?: boolean;
+/**
+ * Keep the replacement's exact casing instead of adapting it to the matched text.
+ * Used by learned names, brands, and acronyms whose casing carries meaning.
+ */
+preserve_replacement_case?: boolean }
 /**
  * A mined vocabulary suggestion: a word the user frequently dictates, with its occurrence count.
  */

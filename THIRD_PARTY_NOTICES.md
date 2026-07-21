@@ -1,16 +1,136 @@
 # Third-party notices
 
-AudioBud is MIT-licensed (see [LICENSE](LICENSE)). Its Windows installers also
-redistribute a small set of runtime libraries app-locally, staged next to the
-executable so the app launches on a clean machine that lacks the Microsoft
-Visual C++ Redistributable or a driver-supplied Vulkan loader. Those libraries
-are third-party components under their own licenses, reproduced below.
+AudioBud is MIT-licensed (see [LICENSE](LICENSE)). It bundles an English word
+list used by correction capture and redistributes a small set of Windows runtime
+libraries app-locally. Those third-party components remain under their own
+licenses, reproduced below.
 
-The bundled set is defined by the packaging path, not by this document:
+The bundled Windows runtime set is defined by the packaging path, not by this document:
 `scripts/bundle-runtime-dlls.mjs` (Tauri `beforeBundleCommand`) stages the VC++
 runtime and the Vulkan loader, the WiX/MSI bundler harvests the executable's
 sibling DLLs automatically, and `src-tauri/nsis/installer.nsi` copies each one
 explicitly for parity. If that set changes, update this file to match.
+
+## SCOWL English word list
+
+Files: `src-tauri/src/audio_toolkit/english_words_en.txt` and
+`src-tauri/src/audio_toolkit/english_named_entities_en.txt`
+
+These lowercase word, contraction, and normalized named-entity lists are derived
+from the American English dictionary distributed by Debian's `wamerican`
+package version `2020.12.07-2`, which is generated from SCOWL (Spell Checker
+Oriented Word Lists): https://wordlist.aspell.net/. The pinned source dictionary
+has SHA-256
+`9f513f1ceadb6a01c5485b7dbdfd5118dc66cd70b59cae2851292112d4066a32`.
+They are modified subsets: single-character entries, entries longer than 30
+characters, and entries containing characters other than ASCII letters or
+straight apostrophes were removed. Capitalized entries were excluded from the
+general word list and lowercased into the separate named-entity veto list.
+`scripts/generate-english-wordlists.mjs` verifies the source checksum and
+generates both bundled files together.
+
+The collective work is Copyright 2000-2018 by Kevin Atkinson as well as any of
+the copyrights mentioned in the SCOWL documentation.
+
+Copyright 2000-2018 by Kevin Atkinson
+
+Permission to use, copy, modify, distribute and sell these word lists, the
+associated scripts, the output created from the scripts, and its documentation
+for any purpose is hereby granted without fee, provided that the above copyright
+notice appears in all copies and that both that copyright notice and this
+permission notice appear in supporting documentation. Kevin Atkinson makes no
+representations about the suitability of this array for any purpose. It is
+provided "as is" without express or implied warranty.
+
+The SCOWL components used by `wamerican` also incorporate material governed by
+the following WordNet, VarCon, and Ispell notices.
+
+### WordNet 1.6
+
+This software and database is being provided to you, the LICENSEE, by Princeton
+University under the following license. By obtaining, using and/or copying this
+software and database, you agree that you have read, understood, and will comply
+with these terms and conditions.
+
+Permission to use, copy, modify and distribute this software and database and
+its documentation for any purpose and without fee or royalty is hereby granted,
+provided that you agree to comply with the following copyright notice and
+statements, including the disclaimer, and that the same appear on ALL copies of
+the software, database and documentation, including modifications that you make
+for internal use or for distribution.
+
+WordNet 1.6 Copyright 1997 by Princeton University. All rights reserved.
+
+THIS SOFTWARE AND DATABASE IS PROVIDED "AS IS" AND PRINCETON UNIVERSITY MAKES
+NO REPRESENTATIONS OR WARRANTIES, EXPRESS OR IMPLIED. BY WAY OF EXAMPLE, BUT NOT
+LIMITATION, PRINCETON UNIVERSITY MAKES NO REPRESENTATIONS OR WARRANTIES OF
+MERCHANTABILITY OR FITNESS FOR ANY PARTICULAR PURPOSE OR THAT THE USE OF THE
+LICENSED SOFTWARE, DATABASE OR DOCUMENTATION WILL NOT INFRINGE ANY THIRD PARTY
+PATENTS, COPYRIGHTS, TRADEMARKS OR OTHER RIGHTS.
+
+The name of Princeton University or Princeton may not be used in advertising or
+publicity pertaining to distribution of the software and/or database. Title to
+copyright in this software, database and any associated documentation shall at
+all times remain with Princeton University and LICENSEE agrees to preserve same.
+
+### VarCon
+
+The VarCon package was used to create the American, British, Canadian, and
+Australian word lists.
+
+Copyright 2000-2016 by Kevin Atkinson
+
+Permission to use, copy, modify, distribute and sell this array, the associated
+software, and its documentation for any purpose is hereby granted without fee,
+provided that the above copyright notice appears in all copies and that both
+that copyright notice and this permission notice appear in supporting
+documentation. Kevin Atkinson makes no representations about the suitability of
+this array for any purpose. It is provided "as is" without express or implied
+warranty.
+
+Copyright 2016 by Benjamin Titze
+
+Permission to use, copy, modify, distribute and sell this array, the associated
+software, and its documentation for any purpose is hereby granted without fee,
+provided that the above copyright notice appears in all copies and that both
+that copyright notice and this permission notice appear in supporting
+documentation. Benjamin Titze makes no representations about the suitability of
+this array for any purpose. It is provided "as is" without express or implied
+warranty.
+
+### Ispell
+
+```text
+Copyright 1993, Geoff Kuenning, Granada Hills, CA. All rights reserved.
+
+Redistribution and use in source and binary forms, with or without modification,
+are permitted provided that the following conditions are met:
+
+1. Redistributions of source code must retain the above copyright notice, this
+   list of conditions and the following disclaimer.
+2. Redistributions in binary form must reproduce the above copyright notice,
+   this list of conditions and the following disclaimer in the documentation
+   and/or other materials provided with the distribution.
+3. All modifications to the source code must be clearly marked as such. Binary
+   redistributions based on modified source code must be clearly marked as
+   modified versions in the documentation and/or other materials provided with
+   the distribution.
+(Clause 4 was removed with permission from Geoff Kuenning.)
+
+5. The name of Geoff Kuenning may not be used to endorse or promote products
+   derived from this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY GEOFF KUENNING AND CONTRIBUTORS "AS IS" AND ANY
+EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL GEOFF KUENNING OR CONTRIBUTORS BE LIABLE FOR ANY
+DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
+ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+```
 
 ## Microsoft Visual C++ runtime
 
