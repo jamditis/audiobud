@@ -1110,13 +1110,26 @@ describe("AudioBud public policy pages", () => {
     });
   }
 
-  it("keeps the current unsigned-installer warning beside the download CTA", () => {
+  it("keeps the signed-installer status beside the download CTA", () => {
     const home = read("index.html");
 
     expect(home).toContain('class="install-note"');
-    expect(home).toContain("<strong>Unsigned release:</strong>");
-    expect(home).toContain("Windows SmartScreen warns on first");
-    expect(home).toContain("Choose More info, then Run anyway");
+    expect(home).toContain("<strong>Code-signed release:</strong>");
+    expect(home).toContain("signed and timestamped through Microsoft");
+    expect(home).toContain("SmartScreen can still show a reputation warning");
+    expect(home).not.toContain("<strong>Unsigned release:</strong>");
+  });
+
+  it("marks the signed 0.4.0 milestone as shipped", () => {
+    const roadmap = read("roadmap.html").replace(/\s+/g, " ");
+
+    expect(roadmap).toMatch(
+      /<h3>v0\.4\.0<\/h3> <span class="status-pill status-shipped">shipped<\/span>/,
+    );
+    expect(roadmap).toContain(
+      'href="https://github.com/jamditis/audiobud/releases/tag/v0.4.0"',
+    );
+    expect(roadmap).not.toContain("v0.4.0 &mdash; signed &amp; distributable");
   });
 
   for (const page of sitePages) {
@@ -1239,6 +1252,15 @@ describe("AudioBud public policy pages", () => {
       "- **Support:** <https://github.com/jamditis/audiobud/issues>",
     );
     expect(readme).not.toContain("https://jamditis.github.io/audiobud");
+  });
+
+  it("describes signed Windows releases accurately in README", () => {
+    const readme = readRoot("README.md");
+
+    expect(readme).toContain("Beginning with v0.4.0");
+    expect(readme).toContain("signed and timestamped through Microsoft");
+    expect(readme).toContain("SmartScreen can still show a reputation warning");
+    expect(readme).not.toContain("The build is not code-signed yet");
   });
 
   it("distinguishes transcript delivery modes and later handling", () => {

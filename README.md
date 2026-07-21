@@ -15,11 +15,11 @@ AudioBud is a detached fork of [Handy](https://github.com/cjpais/Handy) by CJ Pa
 
 ## Current status
 
-AudioBud is packaged for Windows x64; the current version is whatever the [latest release](https://github.com/jamditis/audiobud/releases/latest) says. The build is not code-signed yet, so Windows SmartScreen warns on first launch. Choose **More info -> Run anyway** if you trust the build, or [build from source](#build-from-source).
+AudioBud is packaged for Windows x64; the current version is whatever the [latest release](https://github.com/jamditis/audiobud/releases/latest) says. Beginning with v0.4.0, Windows release installers are signed and timestamped through Microsoft Artifact Signing. The signature identifies Joseph Amditis as the publisher. SmartScreen can still show a reputation warning while a new release builds reputation.
 
 Windows is the validated target for this milestone. macOS and Linux code is inherited from Handy and may work, but this fork has not validated those builds yet.
 
-Automatic update checks are disabled for now because the inherited updater still points at Handy's release feed. They should return after AudioBud has its own signed release and updater feed.
+Automatic update checks remain disabled because AudioBud does not yet publish a signed updater feed. Download releases manually until that feed is ready.
 
 ## How it works
 
