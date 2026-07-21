@@ -2,7 +2,7 @@ use crate::settings::WordReplacement;
 use once_cell::sync::Lazy;
 use regex::{Captures, Regex};
 use rphonetic::{DoubleMetaphone, Encoder, Metaphone};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use strsim::{damerau_levenshtein, jaro_winkler};
 
 /// Common English words used as a "do not overwrite a common word" veto in the matcher.
@@ -693,9 +693,474 @@ pub fn strip_to_raw_text(text: &str, force_english_i: bool) -> String {
     out.join(" ")
 }
 
+/// The word core of a token: its outer prose punctuation trimmed off, so
+/// `"clawed,"` -> `"clawed"` and `"(Claude)"` -> `"Claude"`. Only prose
+/// delimiters are stripped -- closing marks off the right, opening marks off the
+/// left -- while symbols that belong to a term are kept: `"C#"` keeps its `#`,
+/// `".env"` keeps its leading dot. Trimming those would narrow a learned pair to
+/// its letters (`C# -> F#` becoming `C -> F`), and a whole-word replacement of a
+/// bare `C` would then corrupt every later transcript -- the opposite of the
+/// precision this module promises (#67).
+fn word_core(token: &str) -> &str {
+    const OPENERS: &[char] = &['(', '[', '{', '"', '\'', '\u{2018}', '\u{201C}', '\u{00AB}'];
+    const CLOSERS: &[char] = &[
+        '.', ',', ';', ':', '!', '?', ')', ']', '}', '"', '\'', '\u{2019}', '\u{201D}', '\u{00BB}',
+        '\u{2026}',
+    ];
+    token
+        .trim_start_matches(|c: char| OPENERS.contains(&c))
+        .trim_end_matches(|c: char| CLOSERS.contains(&c))
+}
+
+/// Positions `(i, j)` of the longest common subsequence of two token lists,
+/// compared on lowercased cores so `"Claude"` and `"claude,"` count as the same
+/// anchor. The backtrack prefers the diagonal, so ties resolve deterministically.
+///
+/// The `(n + 1) * (m + 1)` DP table lives in one flat `Vec<u32>` indexed
+/// `i * stride + j`, so the search is a single allocation rather than `n + 1`
+/// nested vectors. The caller caps `n` and `m`, so the table cannot grow without
+/// bound on a large paste.
+fn lcs_anchors(a: &[String], b: &[String]) -> Vec<(usize, usize)> {
+    let n = a.len();
+    let m = b.len();
+    let stride = m + 1;
+    let mut dp = vec![0u32; (n + 1) * stride];
+    let at = |i: usize, j: usize| i * stride + j;
+    for i in (0..n).rev() {
+        for j in (0..m).rev() {
+            dp[at(i, j)] = if a[i] == b[j] {
+                dp[at(i + 1, j + 1)] + 1
+            } else {
+                dp[at(i + 1, j)].max(dp[at(i, j + 1)])
+            };
+        }
+    }
+    let mut anchors = Vec::new();
+    let (mut i, mut j) = (0, 0);
+    while i < n && j < m {
+        if a[i] == b[j] {
+            anchors.push((i, j));
+            i += 1;
+            j += 1;
+        } else if dp[at(i + 1, j)] >= dp[at(i, j + 1)] {
+            i += 1;
+        } else {
+            j += 1;
+        }
+    }
+    anchors
+}
+
+/// Whether a one-for-one `from`->`to` token core is worth learning as a literal
+/// replacement. See `extract_learned_replacements` for the rationale of each guard.
+fn is_learnable_substitution(from: &str, to: &str) -> bool {
+    let ok_shape = |w: &str| w.chars().count() >= 2 && w.chars().any(|c| c.is_alphabetic());
+    if !ok_shape(from) || !ok_shape(to) {
+        return false;
+    }
+    if from.to_lowercase() == to.to_lowercase() {
+        return false;
+    }
+    // A possessive edit -- `Claude` -> `Claude's` -- is a grammar fix, not a mishear. Learning it
+    // would rewrite every future `Claude` into `Claude's`. Strip a trailing possessive "'s" from
+    // each core; if they then match, one is just the other made possessive, so do not learn it.
+    // Only the "'s" is stripped: a bare trailing `s` is left alone so words whose canonical
+    // spelling ends in `s` (`io` -> `iOS`, `cris` -> `Chris`) stay learnable, and only a trailing
+    // suffix is touched so interior-apostrophe contractions (`were` -> `we're`) do too.
+    let possessive_core = |w: &str| -> String {
+        let lower = w.to_lowercase();
+        lower
+            .strip_suffix("'s")
+            .or_else(|| lower.strip_suffix("\u{2019}s"))
+            .unwrap_or(lower.as_str())
+            .to_string()
+    };
+    if possessive_core(from) == possessive_core(to) {
+        return false;
+    }
+    // A version bump on the same identifier (`GPT-4`->`GPT-5`, `v2`->`v3`) differs only in its
+    // digits: both sides carry a version number and share the same non-digit skeleton. Only veto
+    // when both tokens actually contain a digit, so a correction that *adds* digits to a
+    // digit-free mishear (`bb`->`B2B`, `mp`->`MP3`) is still learned rather than mistaken for a
+    // version bump. (The pure-number case `204`->`205` is already dropped by the shape guard.)
+    let has_digit = |w: &str| w.chars().any(|c| c.is_ascii_digit());
+    if has_digit(from) && has_digit(to) {
+        let without_digits = |w: &str| -> String {
+            w.to_lowercase()
+                .chars()
+                .filter(|c| !c.is_ascii_digit())
+                .collect()
+        };
+        if without_digits(from) == without_digits(to) {
+            return false;
+        }
+    }
+    // A common->common substitution (`their`->`there`, `the`->`a`) is a grammar or
+    // rephrase edit, not a mishear; learning it would rewrite every future use. A
+    // common-ish heard word mapping to a rarer meant word (`clawed`->`Claude`) is
+    // exactly the signal we want, so only veto when both sides are common.
+    if is_common_word(from) && is_common_word(to) {
+        return false;
+    }
+    true
+}
+
+/// Extract high-confidence heard->meant replacement pairs from a transcript the
+/// user edited in place (issue #67). This is the correction-capture signal:
+/// `original` is what the engine produced, `corrected` is what the user fixed it
+/// to, and the diff between them records mishears worth learning. The pairs feed
+/// `PersonalizationData.learned_replacements`, which is applied through
+/// `apply_replacements` at transcription time.
+///
+/// Precision over recall, by design -- a deterministic replacement is applied to
+/// every future transcript, so a wrong pair is worse than a missed one. Only
+/// clean one-for-one token substitutions are considered, and a candidate is
+/// dropped unless it clears every guard in `is_learnable_substitution`, plus one
+/// that spans the whole edit: if the same heard word was corrected to two
+/// different words, none of its pairs are learned. Duplicates collapse to a
+/// single pair.
+///
+/// The result is deterministic and does no I/O, so it is unit-tested in
+/// `audio_toolkit` without a running app. Capturing the correction and appending
+/// accepted pairs to the store is the caller's job (issue #67 parts 1 and 3).
+///
+/// Known limitation: the common->common veto in `is_learnable_substitution` reads only the
+/// English list, so a non-English grammar edit (French `la`->`le`) still passes every guard.
+/// The fix needs the dictation language, which this pure function does not receive; it is
+/// tracked for the parts-1/3 wiring in issue #126.
+pub fn extract_learned_replacements(original: &str, corrected: &str) -> Vec<WordReplacement> {
+    let orig: Vec<&str> = original.split_whitespace().collect();
+    let corr: Vec<&str> = corrected.split_whitespace().collect();
+
+    // The LCS table below is O(n*m). A correction comes from an ordinary
+    // dictation, so cap the token count and learn nothing past it rather than let
+    // a pathological paste allocate a quadratic table on a memory-constrained
+    // device -- precision-safe degradation, in keeping with "a missed pair beats
+    // a wrong one."
+    const MAX_TOKENS: usize = 4096;
+    if orig.len() > MAX_TOKENS || corr.len() > MAX_TOKENS {
+        return Vec::new();
+    }
+
+    let orig_keys: Vec<String> = orig.iter().map(|t| word_core(t).to_lowercase()).collect();
+    let corr_keys: Vec<String> = corr.iter().map(|t| word_core(t).to_lowercase()).collect();
+
+    let anchors = lcs_anchors(&orig_keys, &corr_keys);
+
+    // Walk the gaps between consecutive anchors (with a trailing sentinel at the
+    // end of both lists). A gap that is exactly one original token wide and one
+    // corrected token wide is a one-for-one substitution -- the only shape we learn.
+    let mut candidates: Vec<(String, String)> = Vec::new();
+    let (mut pi, mut pj) = (0usize, 0usize);
+    for (ai, aj) in anchors
+        .iter()
+        .copied()
+        .chain(std::iter::once((orig.len(), corr.len())))
+    {
+        if ai - pi == 1 && aj - pj == 1 {
+            let from = word_core(orig[pi]);
+            let to = word_core(corr[pj]);
+            if is_learnable_substitution(from, to) {
+                candidates.push((from.to_string(), to.to_string()));
+            }
+        }
+        pi = ai + 1;
+        pj = aj + 1;
+    }
+
+    // Drop any heard word that was corrected inconsistently, then dedupe on the
+    // lowercased pair while keeping the first-seen casing. Both passes preserve
+    // reading order, so the output is stable.
+    let mut targets_for: HashMap<String, HashSet<String>> = HashMap::new();
+    for (from, to) in &candidates {
+        targets_for
+            .entry(from.to_lowercase())
+            .or_default()
+            .insert(to.to_lowercase());
+    }
+
+    // Two guards keep a gap from being learned when it is not a real, one-way correction. Both
+    // compare lowercased cores.
+    //
+    // (a) The heard word survived unchanged. If `from` still appears at an anchor -- a token the
+    //     user left in place -- they did not reject it everywhere, so a global rewrite would
+    //     corrupt the kept occurrence ("ask cloud about the cloud" -> "ask Claude about the
+    //     cloud" keeps the second `cloud`, so `cloud`->`Claude` is not learned). A word that
+    //     appears only as the *target* of some other correction is not an anchor, so a genuine
+    //     mishear still learns ("cloud and crowd" -> "Claude and cloud" keeps `cloud`->`Claude`).
+    //
+    // (b) A word reorder. When the exact `from` surface is also in the output and the exact `to`
+    //     surface was already in the original, the token moved rather than changed, so the
+    //     shuffled gap ("Alice Bob Charlie Delta" -> "Bob Alice Delta Charlie") is not a
+    //     correction. A single mishear never trips this: the heard word is gone from the output
+    //     (`from` no longer appears in the correction), so the first half is false -- true even
+    //     when the meant word was already present, as in correcting one name to match another
+    //     already-right one.
+    let kept_unchanged: HashSet<&str> = anchors
+        .iter()
+        .map(|&(i, _)| orig_keys[i].as_str())
+        .collect();
+    let orig_cores: HashSet<&str> = orig_keys.iter().map(String::as_str).collect();
+    let corr_cores: HashSet<&str> = corr_keys.iter().map(String::as_str).collect();
+
+    let mut seen: HashSet<(String, String)> = HashSet::new();
+    let mut out = Vec::new();
+    for (from, to) in candidates {
+        let from_key = from.to_lowercase();
+        let to_key = to.to_lowercase();
+        if targets_for.get(&from_key).map_or(0, |s| s.len()) > 1 {
+            continue;
+        }
+        if kept_unchanged.contains(from_key.as_str()) {
+            continue;
+        }
+        if corr_cores.contains(from_key.as_str()) && orig_cores.contains(to_key.as_str()) {
+            continue;
+        }
+        if seen.insert((from_key, to_key)) {
+            out.push(WordReplacement {
+                from,
+                to,
+                whole_word: true,
+                case_sensitive: false,
+            });
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn learned_pairs(v: &[WordReplacement]) -> Vec<(String, String)> {
+        v.iter().map(|r| (r.from.clone(), r.to.clone())).collect()
+    }
+
+    #[test]
+    fn extractor_learns_a_clean_mishear() {
+        let out = extract_learned_replacements("I asked clawed to help", "I asked Claude to help");
+        assert_eq!(
+            learned_pairs(&out),
+            vec![("clawed".to_string(), "Claude".to_string())]
+        );
+        assert!(out[0].whole_word && !out[0].case_sensitive);
+    }
+
+    #[test]
+    fn extractor_ignores_unchanged_text() {
+        assert!(extract_learned_replacements("no edits here", "no edits here").is_empty());
+    }
+
+    #[test]
+    fn extractor_ignores_pure_case_change() {
+        assert!(extract_learned_replacements("hello world", "Hello world").is_empty());
+    }
+
+    #[test]
+    fn extractor_ignores_common_to_common_swap() {
+        // "their" -> "there": a homophone/grammar edit between two common words,
+        // not a mishear. Learning it would rewrite every future "their".
+        assert!(extract_learned_replacements("their cat sat", "there cat sat").is_empty());
+    }
+
+    #[test]
+    fn extractor_drops_contradicted_heard_word() {
+        // "clawed" corrected two different ways in one transcript -> learn neither.
+        let out = extract_learned_replacements(
+            "clawed here and clawed there",
+            "Claude here and Cloud there",
+        );
+        assert!(
+            out.is_empty(),
+            "contradicted pairs must be dropped, got {out:?}"
+        );
+    }
+
+    #[test]
+    fn extractor_ignores_insertion_and_deletion() {
+        assert!(extract_learned_replacements("hello world", "hello big world").is_empty());
+        assert!(extract_learned_replacements("hello big world", "hello world").is_empty());
+    }
+
+    #[test]
+    fn extractor_trims_surrounding_punctuation() {
+        let out = extract_learned_replacements("I saw clawed.", "I saw Claude.");
+        assert_eq!(
+            learned_pairs(&out),
+            vec![("clawed".to_string(), "Claude".to_string())]
+        );
+    }
+
+    #[test]
+    fn extractor_dedupes_repeated_pair() {
+        let out = extract_learned_replacements("clawed and clawed", "Claude and Claude");
+        assert_eq!(
+            learned_pairs(&out),
+            vec![("clawed".to_string(), "Claude".to_string())]
+        );
+    }
+
+    #[test]
+    fn extractor_ignores_numeric_only_change() {
+        assert!(extract_learned_replacements("section 204", "section 205").is_empty());
+    }
+
+    #[test]
+    fn extractor_ignores_single_character_change() {
+        assert!(extract_learned_replacements("grade a work", "grade b work").is_empty());
+    }
+
+    #[test]
+    fn extractor_learns_multiple_distinct_pairs_in_reading_order() {
+        let out = extract_learned_replacements("clawed wrote a sonet", "Claude wrote a sonnet");
+        assert_eq!(
+            learned_pairs(&out),
+            vec![
+                ("clawed".to_string(), "Claude".to_string()),
+                ("sonet".to_string(), "sonnet".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn extractor_keeps_symbol_bearing_term_intact() {
+        // A symbol-bearing term is learned with its symbol, not stripped to its
+        // letters. `C# -> F#` narrowed to `C -> F` would rewrite every bare `C` in
+        // later transcripts -- the `#` is part of the token, not prose punctuation.
+        let out = extract_learned_replacements("port from C# today", "port from F# today");
+        assert_eq!(
+            learned_pairs(&out),
+            vec![("C#".to_string(), "F#".to_string())]
+        );
+    }
+
+    #[test]
+    fn extractor_keeps_leading_dot_so_a_case_edit_is_not_a_new_word() {
+        // `.env -> .ENV` keeps its leading dot, so both sides share one anchor key
+        // (cores match case-insensitively) and it is never a substitution
+        // candidate -- it is never narrowed to a bare `env -> ENV`.
+        assert!(
+            extract_learned_replacements("edit the .env file", "edit the .ENV file").is_empty()
+        );
+    }
+
+    #[test]
+    fn extractor_never_learns_from_a_punctuation_only_token() {
+        // An empty or all-punctuation `from` has a sub-two-char core, so the shape
+        // guard drops it. Locks the invariant that a learned `from` is always a
+        // real word `apply_replacements` can match on.
+        assert!(extract_learned_replacements("I saw !!!", "I saw Claude").is_empty());
+        assert!(extract_learned_replacements("", "").is_empty());
+        assert!(extract_learned_replacements("...", "Claude").is_empty());
+    }
+
+    #[test]
+    fn extractor_rejects_a_possessive_inflection_edit() {
+        // `Claude` -> `Claude's` is a grammar fix, not a mishear; learning it would rewrite
+        // every future `Claude` into `Claude's`.
+        assert!(extract_learned_replacements("ask Claude team", "ask Claude's team").is_empty());
+    }
+
+    #[test]
+    fn extractor_rejects_a_possessive_edit_with_a_curly_apostrophe() {
+        // In-place edits typed on macOS/iOS use a curly apostrophe (U+2019). `possessive_core`
+        // strips that form too, so `Claude` -> `Claude\u{2019}s` is rejected like the straight-
+        // quote case rather than slipping through as a new word.
+        assert!(
+            extract_learned_replacements("ask Claude team", "ask Claude\u{2019}s team").is_empty()
+        );
+    }
+
+    #[test]
+    fn extractor_rejects_a_version_bump_on_an_identifier() {
+        // `GPT-4` -> `GPT-5` differs only in its version digit; learning it would rewrite every
+        // later mention of GPT-4. (The bare-number case `204`->`205` is already dropped by the
+        // shape guard; this is the alphanumeric sibling.)
+        assert!(extract_learned_replacements("try GPT-4 first", "try GPT-5 first").is_empty());
+    }
+
+    #[test]
+    fn extractor_rejects_a_word_kept_unchanged_elsewhere() {
+        // The user corrected the first `cloud` but kept the second, so `cloud` is not a
+        // universal mishear -- learning `cloud`->`Claude` would corrupt the kept occurrence.
+        assert!(extract_learned_replacements(
+            "ask cloud about the cloud",
+            "ask Claude about the cloud"
+        )
+        .is_empty());
+    }
+
+    #[test]
+    fn extractor_does_not_learn_from_a_word_reorder() {
+        // A pure reorder leaves every token present on both sides, so no shuffled gap is a real
+        // correction even though the LCS gaps look one-for-one.
+        assert!(
+            extract_learned_replacements("Alice Bob Charlie Delta", "Bob Alice Delta Charlie")
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn extractor_learns_correcting_one_name_to_match_another() {
+        // The heard word `jon` is gone from the output, so this is a real one-way mishear even
+        // though the meant word `John` already appeared elsewhere in the original -- the
+        // kept-unchanged guard keys on the heard word surviving, not on the target pre-existing.
+        let out =
+            extract_learned_replacements("send it to John from jon", "send it to John from John");
+        assert_eq!(
+            learned_pairs(&out),
+            vec![("jon".to_string(), "John".to_string())]
+        );
+    }
+
+    #[test]
+    fn extractor_learns_a_contraction_mishear() {
+        // `were` -> `we're` is a genuine mishear, not an inflection: the inflection guard strips
+        // only a trailing "'s"/"s", so an interior apostrophe leaves the pair learnable.
+        let out = extract_learned_replacements("i think were going", "i think we're going");
+        assert_eq!(
+            learned_pairs(&out),
+            vec![("were".to_string(), "we're".to_string())]
+        );
+    }
+
+    #[test]
+    fn extractor_learns_when_heard_word_only_appears_as_another_correction_target() {
+        // `cloud` in the output is the fix for `crowd`, not a token the user kept, so it is not
+        // an anchor and the real mishear `cloud`->`Claude` still learns. `crowd`->`cloud` is a
+        // one-way fix too, so both pairs are kept in reading order.
+        let out = extract_learned_replacements("cloud and crowd", "Claude and cloud");
+        assert_eq!(
+            learned_pairs(&out),
+            vec![
+                ("cloud".to_string(), "Claude".to_string()),
+                ("crowd".to_string(), "cloud".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn extractor_learns_a_target_word_that_naturally_ends_in_s() {
+        // Only a possessive "'s" is stripped, so a meant word whose canonical spelling ends in
+        // `s` (`io` -> `iOS`) is not mistaken for a plural inflection and is still learned.
+        let out = extract_learned_replacements("open io settings", "open iOS settings");
+        assert_eq!(
+            learned_pairs(&out),
+            vec![("io".to_string(), "iOS".to_string())]
+        );
+    }
+
+    #[test]
+    fn extractor_learns_a_correction_that_adds_digits() {
+        // The version veto fires only when both sides carry a digit, so adding digits to a
+        // digit-free mishear (`mp` -> `MP3`) is learned rather than read as a version bump.
+        let out = extract_learned_replacements("the mp format", "the MP3 format");
+        assert_eq!(
+            learned_pairs(&out),
+            vec![("mp".to_string(), "MP3".to_string())]
+        );
+    }
 
     #[test]
     fn test_apply_custom_words_exact_match() {
