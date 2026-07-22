@@ -38,6 +38,13 @@ pub struct ClipboardContent {
     pub files: Option<ClipboardFiles>,
 }
 
+/// Whether a clipboard write may enter the operating system's history.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ClipboardHistory {
+    Include,
+    Exclude,
+}
+
 impl ClipboardContent {
     /// True when the snapshot holds text and nothing else. Used on Wayland to
     /// route the restore through wl-copy, matching the transcript write path.
@@ -54,14 +61,27 @@ pub trait ClipboardBackend {
     fn read_html(&mut self) -> Option<String>;
     fn read_image(&mut self) -> Option<ClipboardImage>;
     fn read_files(&mut self) -> Option<ClipboardFiles>;
-    fn write_text(&mut self, text: &str) -> Result<(), String>;
+    fn write_text(&mut self, text: &str, history: ClipboardHistory) -> Result<(), String>;
     /// Writes HTML plus an optional plain-text alternate in one clipboard state.
-    fn write_html(&mut self, html: &str, alt_text: Option<&str>) -> Result<(), String>;
-    fn write_image(&mut self, image: &ClipboardImage) -> Result<(), String>;
+    fn write_html(
+        &mut self,
+        html: &str,
+        alt_text: Option<&str>,
+        history: ClipboardHistory,
+    ) -> Result<(), String>;
+    fn write_image(
+        &mut self,
+        image: &ClipboardImage,
+        history: ClipboardHistory,
+    ) -> Result<(), String>;
     /// Replaces the whole clipboard state with the file list (and its
     /// cut/copy marker where the platform has one), like the other write
     /// methods. Nothing written before it (e.g. the transcript) may survive.
-    fn write_files(&mut self, files: &ClipboardFiles) -> Result<(), String>;
+    fn write_files(
+        &mut self,
+        files: &ClipboardFiles,
+        history: ClipboardHistory,
+    ) -> Result<(), String>;
     fn clear(&mut self) -> Result<(), String>;
 }
 
@@ -116,9 +136,10 @@ pub fn capture(backend: &mut dyn ClipboardBackend) -> ClipboardContent {
 pub fn restore(
     backend: &mut dyn ClipboardBackend,
     content: &ClipboardContent,
+    history: ClipboardHistory,
 ) -> Result<(), String> {
     if let Some(files) = &content.files {
-        match backend.write_files(files) {
+        match backend.write_files(files, history) {
             Ok(()) => return Ok(()),
             Err(e) => {
                 // Fall through to the text/HTML formats (or clear): leaving
@@ -133,14 +154,14 @@ pub fn restore(
     }
     if content.text.is_none() {
         if let Some(image) = &content.image {
-            return backend.write_image(image);
+            return backend.write_image(image, history);
         }
     }
     if let Some(html) = &content.html {
-        return backend.write_html(html, content.text.as_deref());
+        return backend.write_html(html, content.text.as_deref(), history);
     }
     if let Some(text) = &content.text {
-        return backend.write_text(text);
+        return backend.write_text(text, history);
     }
     backend.clear()
 }
@@ -192,21 +213,62 @@ impl ClipboardBackend for ArboardBackend {
         })
     }
 
-    fn write_text(&mut self, text: &str) -> Result<(), String> {
-        self.0
-            .set()
-            .text(text)
-            .map_err(|e| format!("Failed to restore clipboard text: {}", e))
+    fn write_text(&mut self, text: &str, history: ClipboardHistory) -> Result<(), String> {
+        #[cfg(windows)]
+        let result = {
+            use arboard::SetExtWindows;
+            match history {
+                ClipboardHistory::Include => self.0.set().text(text),
+                ClipboardHistory::Exclude => self.0.set().exclude_from_history().text(text),
+            }
+        };
+
+        #[cfg(not(windows))]
+        let result = {
+            let _ = history;
+            self.0.set().text(text)
+        };
+
+        result.map_err(|e| format!("Failed to restore clipboard text: {}", e))
     }
 
-    fn write_html(&mut self, html: &str, alt_text: Option<&str>) -> Result<(), String> {
-        self.0
-            .set()
-            .html(html, alt_text)
-            .map_err(|e| format!("Failed to restore clipboard HTML: {}", e))
+    fn write_html(
+        &mut self,
+        html: &str,
+        alt_text: Option<&str>,
+        history: ClipboardHistory,
+    ) -> Result<(), String> {
+        #[cfg(windows)]
+        let result = {
+            use arboard::SetExtWindows;
+            match history {
+                ClipboardHistory::Include => self.0.set().html(html, alt_text),
+                ClipboardHistory::Exclude => {
+                    self.0.set().exclude_from_history().html(html, alt_text)
+                }
+            }
+        };
+
+        #[cfg(not(windows))]
+        let result = {
+            let _ = history;
+            self.0.set().html(html, alt_text)
+        };
+
+        result.map_err(|e| format!("Failed to restore clipboard HTML: {}", e))
     }
 
-    fn write_image(&mut self, image: &ClipboardImage) -> Result<(), String> {
+    fn write_image(
+        &mut self,
+        image: &ClipboardImage,
+        history: ClipboardHistory,
+    ) -> Result<(), String> {
+        #[cfg(windows)]
+        if history == ClipboardHistory::Exclude {
+            return windows_image::write(image);
+        }
+
+        let _ = history;
         self.0
             .set()
             .image(arboard::ImageData {
@@ -217,7 +279,11 @@ impl ClipboardBackend for ArboardBackend {
             .map_err(|e| format!("Failed to restore clipboard image: {}", e))
     }
 
-    fn write_files(&mut self, files: &ClipboardFiles) -> Result<(), String> {
+    fn write_files(
+        &mut self,
+        files: &ClipboardFiles,
+        history: ClipboardHistory,
+    ) -> Result<(), String> {
         // On Windows, CF_HDROP and the Preferred DropEffect marker must land
         // in one clipboard transaction: a clipboard listener (clipboard
         // history, third-party managers) can react to the CF_HDROP update in
@@ -228,11 +294,12 @@ impl ClipboardBackend for ArboardBackend {
         // already replace the clipboard state in one operation.
         #[cfg(windows)]
         {
-            windows_files::write(files)
+            windows_files::write(files, history)
         }
 
         #[cfg(not(windows))]
         {
+            let _ = history;
             self.0
                 .set()
                 .file_list(&files.paths)
@@ -263,6 +330,89 @@ fn strip_uri_list_cr(path: PathBuf) -> PathBuf {
     }
 }
 
+#[cfg(windows)]
+fn set_windows_clipboard_history(history: ClipboardHistory) -> Result<(), String> {
+    if history == ClipboardHistory::Include {
+        return Ok(());
+    }
+
+    let format = clipboard_win::register_format("CanIncludeInClipboardHistory")
+        .ok_or_else(|| "Failed to register the clipboard history format".to_string())?;
+    clipboard_win::raw::set_without_clear(format.get(), &0u32.to_ne_bytes())
+        .map_err(|e| format!("Failed to exclude data from clipboard history: {}", e))
+}
+
+/// Windows image writes that keep the bitmap and history marker in one
+/// clipboard transaction.
+#[cfg(windows)]
+mod windows_image {
+    use super::{set_windows_clipboard_history, ClipboardHistory, ClipboardImage};
+
+    const BITMAPV5HEADER_LEN: usize = 124;
+    const OPEN_ATTEMPTS: usize = 10;
+
+    pub(super) fn dibv5_buffer(image: &ClipboardImage) -> Result<Vec<u8>, String> {
+        let width = i32::try_from(image.width)
+            .ok()
+            .filter(|width| *width > 0)
+            .ok_or_else(|| "Clipboard image width is out of range".to_string())?;
+        let height = i32::try_from(image.height)
+            .ok()
+            .filter(|height| *height > 0)
+            .ok_or_else(|| "Clipboard image height is out of range".to_string())?;
+        let pixel_len = image
+            .width
+            .checked_mul(image.height)
+            .and_then(|pixels| pixels.checked_mul(4))
+            .ok_or_else(|| "Clipboard image dimensions overflow".to_string())?;
+        if image.bytes.len() != pixel_len {
+            return Err("Clipboard image pixel data has the wrong length".to_string());
+        }
+        let size_image = u32::try_from(pixel_len)
+            .map_err(|_| "Clipboard image pixel data is too large".to_string())?;
+        let buffer_len = BITMAPV5HEADER_LEN
+            .checked_add(pixel_len)
+            .ok_or_else(|| "Clipboard image buffer size overflowed".to_string())?;
+
+        let mut buffer = vec![0; BITMAPV5HEADER_LEN];
+        buffer[0..4].copy_from_slice(&(BITMAPV5HEADER_LEN as u32).to_le_bytes());
+        buffer[4..8].copy_from_slice(&width.to_le_bytes());
+        buffer[8..12].copy_from_slice(&height.to_le_bytes());
+        buffer[12..14].copy_from_slice(&1u16.to_le_bytes());
+        buffer[14..16].copy_from_slice(&32u16.to_le_bytes());
+        buffer[16..20].copy_from_slice(&3u32.to_le_bytes());
+        buffer[20..24].copy_from_slice(&size_image.to_le_bytes());
+        buffer[40..44].copy_from_slice(&0x00ff0000u32.to_le_bytes());
+        buffer[44..48].copy_from_slice(&0x0000ff00u32.to_le_bytes());
+        buffer[48..52].copy_from_slice(&0x000000ffu32.to_le_bytes());
+        buffer[52..56].copy_from_slice(&0xff000000u32.to_le_bytes());
+        buffer[56..60].copy_from_slice(&0x73524742u32.to_le_bytes());
+        buffer[108..112].copy_from_slice(&4u32.to_le_bytes());
+
+        buffer.reserve_exact(buffer_len - BITMAPV5HEADER_LEN);
+        let row_len = image.width * 4;
+        for row in image.bytes.chunks_exact(row_len).rev() {
+            for pixel in row.chunks_exact(4) {
+                buffer.extend_from_slice(&[pixel[2], pixel[1], pixel[0], pixel[3]]);
+            }
+        }
+        debug_assert_eq!(buffer.len(), buffer_len);
+        Ok(buffer)
+    }
+
+    pub fn write(image: &ClipboardImage) -> Result<(), String> {
+        let dibv5 = dibv5_buffer(image)?;
+        let _open = clipboard_win::Clipboard::new_attempts(OPEN_ATTEMPTS)
+            .map_err(|e| format!("Failed to open clipboard for the image: {}", e))?;
+
+        clipboard_win::raw::empty()
+            .map_err(|e| format!("Failed to clear the clipboard for the image: {}", e))?;
+        clipboard_win::raw::set_without_clear(clipboard_win::formats::CF_DIBV5, &dibv5)
+            .map_err(|e| format!("Failed to restore clipboard image: {}", e))?;
+        set_windows_clipboard_history(ClipboardHistory::Exclude)
+    }
+}
+
 /// Windows file-list clipboard access through clipboard-win (the same crate
 /// arboard uses underneath). Two things arboard cannot do:
 /// - the "Preferred DropEffect" marker Explorer uses to distinguish cut
@@ -271,7 +421,7 @@ fn strip_uri_list_cr(path: PathBuf) -> PathBuf {
 ///   which arboard prevents by closing the clipboard after `file_list`.
 #[cfg(windows)]
 mod windows_files {
-    use super::ClipboardFiles;
+    use super::{set_windows_clipboard_history, ClipboardFiles, ClipboardHistory};
 
     const FORMAT_NAME: &str = "Preferred DropEffect";
     const OPEN_ATTEMPTS: usize = 10;
@@ -318,7 +468,7 @@ mod windows_files {
 
     /// Replaces the clipboard with the file list and its drop-effect marker
     /// in a single open/empty/set transaction.
-    pub fn write(files: &ClipboardFiles) -> Result<(), String> {
+    pub fn write(files: &ClipboardFiles, history: ClipboardHistory) -> Result<(), String> {
         let hdrop = hdrop_buffer(&files.paths);
 
         let _open = clipboard_win::Clipboard::new_attempts(OPEN_ATTEMPTS)
@@ -339,7 +489,7 @@ mod windows_files {
                 .map_err(|e| format!("Failed to restore the Preferred DropEffect: {}", e))?;
         }
 
-        Ok(())
+        set_windows_clipboard_history(history)
     }
 }
 
@@ -362,6 +512,8 @@ mod tests {
         /// Makes `write_files` fail, modeling e.g. arboard's Linux
         /// canonicalization failing on a broken symlink.
         fail_file_writes: bool,
+        /// Number of writes a clipboard history service would record.
+        history_entries: usize,
     }
 
     impl FakeClipboard {
@@ -393,29 +545,46 @@ mod tests {
             self.files.clone()
         }
 
-        fn write_text(&mut self, text: &str) -> Result<(), String> {
+        fn write_text(&mut self, text: &str, history: ClipboardHistory) -> Result<(), String> {
+            self.history_entries += usize::from(history == ClipboardHistory::Include);
             self.reset_content();
             self.text = Some(text.to_string());
             Ok(())
         }
 
-        fn write_html(&mut self, html: &str, alt_text: Option<&str>) -> Result<(), String> {
+        fn write_html(
+            &mut self,
+            html: &str,
+            alt_text: Option<&str>,
+            history: ClipboardHistory,
+        ) -> Result<(), String> {
+            self.history_entries += usize::from(history == ClipboardHistory::Include);
             self.reset_content();
             self.html = Some(html.to_string());
             self.text = alt_text.map(str::to_string);
             Ok(())
         }
 
-        fn write_image(&mut self, image: &ClipboardImage) -> Result<(), String> {
+        fn write_image(
+            &mut self,
+            image: &ClipboardImage,
+            history: ClipboardHistory,
+        ) -> Result<(), String> {
+            self.history_entries += usize::from(history == ClipboardHistory::Include);
             self.reset_content();
             self.image = Some(image.clone());
             Ok(())
         }
 
-        fn write_files(&mut self, files: &ClipboardFiles) -> Result<(), String> {
+        fn write_files(
+            &mut self,
+            files: &ClipboardFiles,
+            history: ClipboardHistory,
+        ) -> Result<(), String> {
             if self.fail_file_writes {
                 return Err("file list write failed".to_string());
             }
+            self.history_entries += usize::from(history == ClipboardHistory::Include);
             // Models the trait contract: the file list replaces the whole
             // clipboard state (Windows does empty + CF_HDROP + drop effect
             // in one transaction; macOS/Linux setters replace implicitly).
@@ -438,12 +607,47 @@ mod tests {
         }
     }
 
+    #[cfg(windows)]
+    #[test]
+    fn dibv5_buffer_uses_bottom_up_bgra_pixels() {
+        let image = ClipboardImage {
+            width: 2,
+            height: 2,
+            bytes: vec![
+                255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 255, 255,
+            ],
+        };
+
+        let buffer = windows_image::dibv5_buffer(&image).unwrap();
+
+        assert_eq!(buffer.len(), 124 + image.bytes.len());
+        assert_eq!(&buffer[0..4], &124u32.to_le_bytes());
+        assert_eq!(&buffer[4..8], &2i32.to_le_bytes());
+        assert_eq!(&buffer[8..12], &2i32.to_le_bytes());
+        assert_eq!(&buffer[12..14], &1u16.to_le_bytes());
+        assert_eq!(&buffer[14..16], &32u16.to_le_bytes());
+        assert_eq!(&buffer[16..20], &3u32.to_le_bytes());
+        assert_eq!(&buffer[20..24], &16u32.to_le_bytes());
+        assert_eq!(&buffer[40..44], &0x00ff0000u32.to_le_bytes());
+        assert_eq!(&buffer[44..48], &0x0000ff00u32.to_le_bytes());
+        assert_eq!(&buffer[48..52], &0x000000ffu32.to_le_bytes());
+        assert_eq!(&buffer[52..56], &0xff000000u32.to_le_bytes());
+        assert_eq!(&buffer[56..60], &0x73524742u32.to_le_bytes());
+        assert_eq!(&buffer[108..112], &4u32.to_le_bytes());
+        assert_eq!(
+            &buffer[124..],
+            &[255, 0, 0, 255, 255, 255, 255, 255, 0, 0, 255, 255, 0, 255, 0, 255,]
+        );
+    }
+
     /// Simulates the paste round-trip: capture, overwrite with the
     /// transcript, restore.
     fn round_trip(clipboard: &mut FakeClipboard) {
         let snapshot = capture(clipboard);
-        clipboard.write_text("the transcript").unwrap();
-        restore(clipboard, &snapshot).unwrap();
+        clipboard
+            .write_text("the transcript", ClipboardHistory::Exclude)
+            .unwrap();
+        restore(clipboard, &snapshot, ClipboardHistory::Exclude).unwrap();
     }
 
     #[test]
@@ -458,6 +662,18 @@ mod tests {
         assert_eq!(clipboard.image, Some(test_image()));
         // An image-only clipboard must not gain a text entry.
         assert_eq!(clipboard.text, None);
+    }
+
+    #[test]
+    fn image_round_trip_does_not_add_clipboard_history_entries() {
+        let mut clipboard = FakeClipboard {
+            image: Some(test_image()),
+            ..Default::default()
+        };
+
+        round_trip(&mut clipboard);
+
+        assert_eq!(clipboard.history_entries, 0);
     }
 
     #[test]
