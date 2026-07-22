@@ -1,4 +1,6 @@
-use crate::clipboard_snapshot::{self, ArboardBackend, ClipboardContent};
+#[cfg(windows)]
+use crate::clipboard_snapshot::ClipboardBackend;
+use crate::clipboard_snapshot::{self, ArboardBackend, ClipboardContent, ClipboardHistory};
 use crate::input::{self, EnigoState};
 #[cfg(target_os = "linux")]
 use crate::settings::TypingTool;
@@ -58,7 +60,15 @@ fn paste_via_clipboard(
             .map_err(|e| format!("Failed to write to clipboard: {}", e))
     };
 
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(windows)]
+    let write_result = match snapshot_backend.as_mut() {
+        Some(backend) => backend.write_text(text, ClipboardHistory::Exclude),
+        None => clipboard
+            .write_text(text)
+            .map_err(|e| format!("Failed to write to clipboard: {}", e)),
+    };
+
+    #[cfg(target_os = "macos")]
     let write_result = clipboard
         .write_text(text)
         .map_err(|e| format!("Failed to write to clipboard: {}", e));
@@ -119,7 +129,9 @@ fn restore_saved_clipboard(
                 let _ = clear_clipboard_via_wl_copy();
             }
             if let Some(backend) = backend {
-                if let Err(e) = clipboard_snapshot::restore(backend, content) {
+                if let Err(e) =
+                    clipboard_snapshot::restore(backend, content, ClipboardHistory::Exclude)
+                {
                     warn!("Failed to restore clipboard contents: {}", e);
                 }
             }
@@ -129,6 +141,13 @@ fn restore_saved_clipboard(
             if is_wayland() && is_wl_copy_available() {
                 let _ = write_clipboard_via_wl_copy(text);
                 return;
+            }
+            #[cfg(windows)]
+            match ArboardBackend::new()
+                .and_then(|mut backend| backend.write_text(text, ClipboardHistory::Exclude))
+            {
+                Ok(()) => return,
+                Err(e) => warn!("Failed to restore clipboard text without history: {}", e),
             }
             let _ = app_handle.clipboard().write_text(text);
         }

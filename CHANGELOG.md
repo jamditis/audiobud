@@ -8,6 +8,47 @@ AudioBud is a detached fork of [Handy](https://github.com/cjpais/Handy) by CJ Pa
 restate Handy's own history. AudioBud versions independently of Handy, starting at
 `0.1.0`. Windows releases are code-signed beginning with `0.4.0`.
 
+## 0.4.1 - 2026-07-22
+
+A Windows clipboard and release-integrity patch. Temporary dictation writes no
+longer flood Windows clipboard history, and the release pipeline now provides
+stronger checks and verification material for signed downloads. Windows (x64)
+remains the validated target; the macOS and Linux code is inherited and
+untested.
+
+### Added
+
+- Release assets now include `SHA256SUMS.txt` and GitHub artifact attestations,
+  giving users stable checksum and provenance verification paths (#184, #188).
+- The website download button resolves the latest signed NSIS installer and the
+  verification guide documents the expected publisher, checksum, and provenance
+  checks (#138, #182).
+
+### Changed
+
+- CI now compiles and tests the real Windows transcription engine before release,
+  blocks rebrand regressions, and rejects copied English locale values, including
+  locale-only plural categories (#183, #186, #199).
+- The misleading Playwright smoke job was removed, and the public roadmap and
+  signed-release guidance now match the checks that run in production (#187).
+
+### Fixed
+
+- Clipboard-based dictation keeps both the temporary transcript and the restored
+  clipboard item out of Windows clipboard history. Repeated dictations no longer
+  stack copies of the user's retained text, HTML, image, or file list while the
+  original clipboard content is still restored after paste.
+- Portable update prompts now open AudioBud's own GitHub releases instead of the
+  upstream Handy repository (#185).
+
+### Known issues
+
+- Automatic update checks remain disabled until AudioBud has its own signed
+  updater feed. Downloads and manual installs work normally.
+- SmartScreen can still show a reputation warning for a new signed release. The
+  signature identifies the publisher and detects modified files; it does not
+  guarantee an immediate reputation score.
+
 ## 0.4.0 - 2026-07-21
 
 A distribution release. The Windows installers, application executable, and

@@ -1,6 +1,6 @@
 [package]
 name = "audiobud"
-version = "0.4.0"
+version = "0.4.1"
 description = "AudioBud - local voice dictation"
 authors = ["Joe Amditis"]
 edition = "2021"
@@ -100,6 +100,7 @@ windows = { version = "0.61.3", features = [
 ] }
 winreg = "0.55"
 clipboard-win = "5.4"
+image = { version = "0.25", default-features = false, features = ["png"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 tauri-nspanel = { git = "https://github.com/ahkohd/tauri-nspanel", branch = "v2.1" }
