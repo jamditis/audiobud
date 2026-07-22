@@ -250,4 +250,102 @@ describe("findUntranslatedKeys", () => {
       ["customWords", "import", "added_one"],
     ]);
   });
+
+  it("reports copied English in a locale-only plural category", () => {
+    const ru = {
+      customWords: {
+        import: {
+          added_one: "Добавлено {{count}} слово",
+          added_few: "Added {{count}} words",
+          added_many: "Добавлено {{count}} слов",
+          added_other: "Добавлено {{count}} слова",
+        },
+        title: "Пользовательские слова",
+      },
+    };
+
+    expect(findExtraKeys(reference, ru)).toEqual([]);
+    expect(findUntranslatedKeys(reference, ru, "ru", {})).toEqual([
+      ["customWords", "import", "added_few"],
+    ]);
+  });
+
+  it("accepts an allowlisted locale-only plural category", () => {
+    const ru = {
+      customWords: {
+        import: {
+          added_one: "Добавлено {{count}} слово",
+          added_few: "Added {{count}} words",
+          added_other: "Добавлено {{count}} слова",
+        },
+        title: "Пользовательские слова",
+      },
+    };
+    const allowlist = {
+      "customWords.import.added_few": {
+        source: "Added {{count}} words",
+        locales: ["ru"],
+      },
+    };
+
+    expect(findUntranslatedKeys(reference, ru, "ru", allowlist)).toEqual([]);
+  });
+
+  it("expires a locale-only plural exception when its English source changes", () => {
+    const changedReference = structuredClone(reference);
+    changedReference.customWords.import.added_other =
+      "Imported {{count}} words";
+    const ru = {
+      customWords: {
+        import: {
+          added_one: "Добавлено {{count}} слово",
+          added_few: "Imported {{count}} words",
+          added_other: "Добавлено {{count}} слова",
+        },
+        title: "Пользовательские слова",
+      },
+    };
+    const allowlist = {
+      "customWords.import.added_few": {
+        source: "Added {{count}} words",
+        locales: ["ru"],
+      },
+    };
+
+    expect(findUntranslatedKeys(changedReference, ru, "ru", allowlist)).toEqual(
+      [["customWords", "import", "added_few"]],
+    );
+  });
+
+  it("does not scan locale-only plurals from unrelated groups", () => {
+    const ru = {
+      customWords: {
+        import: {
+          added_one: "Добавлено {{count}} слово",
+          added_other: "Добавлено {{count}} слова",
+          removed_few: "Added {{count}} words",
+        },
+        title: "Пользовательские слова",
+      },
+    };
+
+    expect(findExtraKeys(reference, ru)).toEqual([
+      ["customWords", "import", "removed_few"],
+    ]);
+    expect(findUntranslatedKeys(reference, ru, "ru", {})).toEqual([]);
+  });
+
+  it("keeps reference plural comparisons scoped to the exact path", () => {
+    const ru = {
+      customWords: {
+        import: {
+          added_one: "Added {{count}} words",
+          added_other: "Добавлено {{count}} слова",
+        },
+        title: "Пользовательские слова",
+      },
+    };
+
+    expect(findUntranslatedKeys(reference, ru, "ru", {})).toEqual([]);
+  });
 });

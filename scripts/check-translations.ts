@@ -130,6 +130,21 @@ function isPluralVariantOfReference(
   );
 }
 
+function getReferencePluralValues(
+  referenceData: TranslationData,
+  keyPath: string[],
+): string[] {
+  const match = PLURAL_KEY.exec(keyPath[keyPath.length - 1]);
+  if (!match) return [];
+
+  const [, base] = match;
+  const parent = keyPath.slice(0, -1);
+
+  return PLURAL_CATEGORIES.map((category) =>
+    getValueAtPath(referenceData, parent.concat([`${base}_${category}`])),
+  ).filter((value): value is string => typeof value === "string");
+}
+
 export function findMissingKeys(
   referenceData: TranslationData,
   langData: TranslationData,
@@ -156,25 +171,37 @@ export function findUntranslatedKeys(
   lang: string,
   allowlist: IdenticalValueAllowlist = IDENTICAL_VALUE_ALLOWLIST,
 ): string[][] {
-  return getAllKeyPaths(referenceData).filter((keyPath) => {
-    if (!hasKeyPath(langData, keyPath)) return false;
+  const keyPaths = getAllKeyPaths(referenceData).concat(
+    getAllKeyPaths(langData).filter(
+      (keyPath) =>
+        !hasKeyPath(referenceData, keyPath) &&
+        isPluralVariantOfReference(referenceData, keyPath),
+    ),
+  );
 
-    const referenceValue = getValueAtPath(referenceData, keyPath);
-    if (typeof referenceValue !== "string") return false;
+  return keyPaths.filter((keyPath) => {
+    if (!hasKeyPath(langData, keyPath)) return false;
 
     const translatedValue = getValueAtPath(langData, keyPath);
     if (typeof translatedValue !== "string") return false;
 
-    if (
-      normalizeTranslationValue(translatedValue) !==
-      normalizeTranslationValue(referenceValue)
-    ) {
-      return false;
-    }
+    const referenceValues = hasKeyPath(referenceData, keyPath)
+      ? [getValueAtPath(referenceData, keyPath)]
+      : getReferencePluralValues(referenceData, keyPath);
+    const normalizedTranslatedValue =
+      normalizeTranslationValue(translatedValue);
+    const matchingReferenceValues = referenceValues.filter(
+      (referenceValue): referenceValue is string =>
+        typeof referenceValue === "string" &&
+        normalizeTranslationValue(referenceValue) === normalizedTranslatedValue,
+    );
+    if (matchingReferenceValues.length === 0) return false;
 
     const pathKey = serializeKeyPath(keyPath);
     const exception = allowlist[pathKey];
-    if (!exception || exception.source !== referenceValue) return true;
+    if (!exception || !matchingReferenceValues.includes(exception.source)) {
+      return true;
+    }
 
     return !(exception.locales === "*" || exception.locales.includes(lang));
   });
