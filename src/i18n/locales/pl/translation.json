@@ -7,7 +7,7 @@
     "model": "Model",
     "quit": "Zamknij",
     "cancel": "Anuluj",
-    "pushToTalk": "Push To Talk",
+    "pushToTalk": "Naciśnij i mów",
     "muteWhileRecording": "Wycisz podczas nagrywania",
     "appendTrailingSpace": "Dodaj spację na końcu",
     "autoSubmit": "Automatyczne wysyłanie",
@@ -203,14 +203,14 @@
       },
       "language": {
         "title": "Język",
-        "description": "Wybierz język rozpoznawania mowy. Opcja Auto automatycznie określi język, a wybór konkretnego języka może poprawić dokładność.",
+        "description": "Wybierz język rozpoznawania mowy. Wybór automatyczny określi język, a wybór konkretnego języka może poprawić dokładność.",
         "descriptionUnsupported": "Model Parakeet automatycznie wykrywa język. Nie jest potrzebny ręczny wybór.",
         "searchPlaceholder": "Szukaj języka...",
         "noResults": "Nie znaleziono języków",
-        "auto": "Auto"
+        "auto": "Automatycznie"
       },
       "pushToTalk": {
-        "label": "Push To Talk",
+        "label": "Naciśnij i mów",
         "description": "Przytrzymaj, aby nagrywać, puść, aby zatrzymać"
       }
     },
@@ -294,8 +294,8 @@
         },
         "gpuDevice": {
           "title": "Urządzenie GPU",
-          "description": "Wybierz GPU do inferencji Whisper. Auto wybiera dedykowany GPU.",
-          "auto": "Auto"
+          "description": "Wybierz GPU do inferencji Whisper. W trybie automatycznym wybierany jest dedykowany układ GPU.",
+          "auto": "Automatycznie"
         }
       },
       "startHidden": {
@@ -707,9 +707,9 @@
     "installing": "Instalowanie...",
     "preparing": "Przygotowywanie...",
     "checkForUpdates": "Sprawdź aktualizacje",
-    "portableUpdateTitle": "Manual update required",
-    "portableUpdateMessage": "Portable installs cannot be updated automatically. To update: download the latest NSIS installer from GitHub Releases, install it to the same folder, then copy your Data/ folder (settings, models, recordings) from the old version to the new one.",
-    "portableUpdateButton": "Open GitHub Releases"
+    "portableUpdateTitle": "Wymagana aktualizacja ręczna",
+    "portableUpdateMessage": "Instalacji przenośnych nie można aktualizować automatycznie. Aby zaktualizować: pobierz najnowszy instalator NSIS z GitHub Releases, zainstaluj go w tym samym folderze, a następnie skopiuj folder Data/ (ustawienia, modele i nagrania) ze starej wersji do nowej.",
+    "portableUpdateButton": "Otwórz GitHub Releases"
   },
   "common": {
     "loading": "Wczytywanie...",

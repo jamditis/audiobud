@@ -707,9 +707,9 @@
     "installing": "Встановлення...",
     "preparing": "Підготовка...",
     "checkForUpdates": "Перевірити оновлення",
-    "portableUpdateTitle": "Manual update required",
-    "portableUpdateMessage": "Portable installs cannot be updated automatically. To update: download the latest NSIS installer from GitHub Releases, install it to the same folder, then copy your Data/ folder (settings, models, recordings) from the old version to the new one.",
-    "portableUpdateButton": "Open GitHub Releases"
+    "portableUpdateTitle": "Потрібне оновлення вручну",
+    "portableUpdateMessage": "Портативні версії не можна оновлювати автоматично. Щоб оновити застосунок, завантажте найновіший інсталятор NSIS із GitHub Releases, установіть його в ту саму папку, а потім скопіюйте папку Data/ (налаштування, моделі й записи) зі старої версії до нової.",
+    "portableUpdateButton": "Відкрити GitHub Releases"
   },
   "common": {
     "loading": "Завантаження...",

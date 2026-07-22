@@ -203,11 +203,11 @@
       },
       "language": {
         "title": "Idioma",
-        "description": "Selecione o idioma para reconhecimento de fala. Auto detectará automaticamente o idioma, enquanto selecionar um idioma específico pode melhorar a precisão para esse idioma.",
+        "description": "Selecione o idioma para reconhecimento de fala. A seleção automática detectará o idioma, enquanto selecionar um idioma específico pode melhorar a precisão para esse idioma.",
         "descriptionUnsupported": "O modelo Parakeet detecta automaticamente o idioma. Não é necessária seleção manual.",
         "searchPlaceholder": "Buscar idiomas...",
         "noResults": "Nenhum idioma encontrado",
-        "auto": "Auto"
+        "auto": "Automático"
       },
       "pushToTalk": {
         "label": "Pressionar para Falar",
@@ -294,8 +294,8 @@
         },
         "gpuDevice": {
           "title": "Dispositivo GPU",
-          "description": "Selecione qual GPU usar para inferência do Whisper. Auto escolhe a GPU dedicada.",
-          "auto": "Auto"
+          "description": "Selecione qual GPU usar para inferência do Whisper. No modo automático, a GPU dedicada é selecionada.",
+          "auto": "Automático"
         }
       },
       "startHidden": {

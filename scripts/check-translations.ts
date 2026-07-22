@@ -1,6 +1,10 @@
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import {
+  IDENTICAL_VALUE_ALLOWLIST,
+  type IdenticalValueAllowlist,
+} from "./translation-identical-allowlist";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -14,6 +18,7 @@ interface ValidationResult {
   valid: boolean;
   missing: string[][];
   extra: string[][];
+  untranslated: string[][];
 }
 
 function getLanguages(): string[] {
@@ -76,6 +81,29 @@ function hasKeyPath(obj: TranslationData, keyPath: string[]): boolean {
   return true;
 }
 
+function getValueAtPath(obj: TranslationData, keyPath: string[]): unknown {
+  let current: unknown = obj;
+  for (const key of keyPath) {
+    if (typeof current !== "object" || current === null) return undefined;
+    current = (current as Record<string, unknown>)[key];
+  }
+  return current;
+}
+
+function normalizeTranslationValue(value: string): string {
+  return value
+    .normalize("NFKC")
+    .trim()
+    .replace(/\s+/gu, " ")
+    .toLocaleLowerCase("en-US");
+}
+
+function serializeKeyPath(keyPath: string[]): string {
+  return keyPath
+    .map((segment) => segment.replaceAll("\\", "\\\\").replaceAll(".", "\\."))
+    .join(".");
+}
+
 // i18next resolves a plural by appending a CLDR category suffix to a base key, and the
 // categories a language has are language-specific: en has one/other, ru adds few/many,
 // ar has all six. So a locale legitimately carries keys the reference language cannot --
@@ -102,6 +130,21 @@ function isPluralVariantOfReference(
   );
 }
 
+function getReferencePluralValues(
+  referenceData: TranslationData,
+  keyPath: string[],
+): string[] {
+  const match = PLURAL_KEY.exec(keyPath[keyPath.length - 1]);
+  if (!match) return [];
+
+  const [, base] = match;
+  const parent = keyPath.slice(0, -1);
+
+  return PLURAL_CATEGORIES.map((category) =>
+    getValueAtPath(referenceData, parent.concat([`${base}_${category}`])),
+  ).filter((value): value is string => typeof value === "string");
+}
+
 export function findMissingKeys(
   referenceData: TranslationData,
   langData: TranslationData,
@@ -120,6 +163,48 @@ export function findExtraKeys(
       !hasKeyPath(referenceData, keyPath) &&
       !isPluralVariantOfReference(referenceData, keyPath),
   );
+}
+
+export function findUntranslatedKeys(
+  referenceData: TranslationData,
+  langData: TranslationData,
+  lang: string,
+  allowlist: IdenticalValueAllowlist = IDENTICAL_VALUE_ALLOWLIST,
+): string[][] {
+  const keyPaths = getAllKeyPaths(referenceData).concat(
+    getAllKeyPaths(langData).filter(
+      (keyPath) =>
+        !hasKeyPath(referenceData, keyPath) &&
+        isPluralVariantOfReference(referenceData, keyPath),
+    ),
+  );
+
+  return keyPaths.filter((keyPath) => {
+    if (!hasKeyPath(langData, keyPath)) return false;
+
+    const translatedValue = getValueAtPath(langData, keyPath);
+    if (typeof translatedValue !== "string") return false;
+
+    const referenceValues = hasKeyPath(referenceData, keyPath)
+      ? [getValueAtPath(referenceData, keyPath)]
+      : getReferencePluralValues(referenceData, keyPath);
+    const normalizedTranslatedValue =
+      normalizeTranslationValue(translatedValue);
+    const matchingReferenceValues = referenceValues.filter(
+      (referenceValue): referenceValue is string =>
+        typeof referenceValue === "string" &&
+        normalizeTranslationValue(referenceValue) === normalizedTranslatedValue,
+    );
+    if (matchingReferenceValues.length === 0) return false;
+
+    const pathKey = serializeKeyPath(keyPath);
+    const exception = allowlist[pathKey];
+    if (!exception || !matchingReferenceValues.includes(exception.source)) {
+      return true;
+    }
+
+    return !(exception.locales === "*" || exception.locales.includes(lang));
+  });
 }
 
 function loadTranslationFile(lang: string): TranslationData | null {
@@ -163,20 +248,28 @@ function validateTranslations(): void {
 
     if (!langData) {
       hasErrors = true;
-      results[lang] = { valid: false, missing: [], extra: [] };
+      results[lang] = {
+        valid: false,
+        missing: [],
+        extra: [],
+        untranslated: [],
+      };
       continue;
     }
 
     const missing = findMissingKeys(referenceData, langData);
     const extra = findExtraKeys(referenceData, langData);
+    const untranslated = findUntranslatedKeys(referenceData, langData, lang);
 
     results[lang] = {
-      valid: missing.length === 0 && extra.length === 0,
+      valid:
+        missing.length === 0 && extra.length === 0 && untranslated.length === 0,
       missing,
       extra,
+      untranslated,
     };
 
-    if (missing.length > 0 || extra.length > 0) {
+    if (missing.length > 0 || extra.length > 0 || untranslated.length > 0) {
       hasErrors = true;
     }
   }
@@ -190,7 +283,7 @@ function validateTranslations(): void {
 
     if (result.valid) {
       console.log(
-        colorize(`✓ ${lang.toUpperCase()}: All keys present`, "green"),
+        colorize(`✓ ${lang.toUpperCase()}: No translation issues`, "green"),
       );
     } else {
       console.log(colorize(`✗ ${lang.toUpperCase()}: Issues found`, "red"));
@@ -229,6 +322,26 @@ function validateTranslations(): void {
         }
       }
 
+      if (result.untranslated.length > 0) {
+        console.log(
+          colorize(
+            `  Matches English after normalization (${result.untranslated.length} values):`,
+            "yellow",
+          ),
+        );
+        result.untranslated.slice(0, 10).forEach((keyPath) => {
+          console.log(`    - ${keyPath.join(".")}`);
+        });
+        if (result.untranslated.length > 10) {
+          console.log(
+            colorize(
+              `    ... and ${result.untranslated.length - 10} more`,
+              "yellow",
+            ),
+          );
+        }
+      }
+
       console.log("");
     }
   }
@@ -250,7 +363,7 @@ function validateTranslations(): void {
   } else {
     console.log(
       colorize(
-        `\n✓ All ${totalCount} languages have complete translations!`,
+        `\n✓ All ${totalCount} languages passed translation validation!`,
         "green",
       ),
     );

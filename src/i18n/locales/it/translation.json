@@ -203,11 +203,11 @@
       },
       "language": {
         "title": "Lingua",
-        "description": "Scegli la lingua per il riconoscimento vocale. Auto la determinerà automaticamente, mentre scegliere una lingua specifica può migliorare l'accuratezza per quella lingua.",
+        "description": "Scegli la lingua per il riconoscimento vocale. La selezione automatica la determinerà, mentre scegliere una lingua specifica può migliorare l'accuratezza per quella lingua.",
         "descriptionUnsupported": "Il modello Parakeet sceglie automaticamente la lingua. Non serve scegliere manualmente.",
         "searchPlaceholder": "Cerca lingue...",
         "noResults": "Nessuna lingua trovata",
-        "auto": "Auto"
+        "auto": "Automatico"
       },
       "pushToTalk": {
         "label": "Premi per Parlare",
@@ -270,7 +270,7 @@
       "title": "Avanzate",
       "groups": {
         "app": "App",
-        "output": "Output",
+        "output": "Uscita",
         "transcription": "Trascrizione",
         "history": "Cronologia",
         "experimental": "Sperimentale"
@@ -294,8 +294,8 @@
         },
         "gpuDevice": {
           "title": "Dispositivo GPU",
-          "description": "Seleziona quale GPU utilizzare per l'inferenza Whisper. Auto sceglie la GPU dedicata.",
-          "auto": "Auto"
+          "description": "Seleziona quale GPU utilizzare per l'inferenza Whisper. Con la selezione automatica viene scelta la GPU dedicata.",
+          "auto": "Automatico"
         }
       },
       "startHidden": {
@@ -505,7 +505,7 @@
       "api": {
         "title": "API (Compatibile con OpenAI)",
         "provider": {
-          "title": "Provider",
+          "title": "Fornitore",
           "description": "Seleziona un provider compatibile con OpenAI."
         },
         "appleIntelligence": {
@@ -724,8 +724,8 @@
     "default": "Predefinito",
     "enabled": "Abilitato",
     "disabled": "Disabilitato",
-    "on": "On",
-    "off": "Off",
+    "on": "Attivo",
+    "off": "Disattivo",
     "yes": "Sì",
     "no": "No",
     "noOptionsFound": "Nessuna opzione trovata"
