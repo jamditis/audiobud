@@ -331,14 +331,23 @@ fn strip_uri_list_cr(path: PathBuf) -> PathBuf {
 }
 
 #[cfg(windows)]
-fn set_windows_clipboard_history(history: ClipboardHistory) -> Result<(), String> {
+fn register_windows_clipboard_history(history: ClipboardHistory) -> Result<Option<u32>, String> {
     if history == ClipboardHistory::Include {
-        return Ok(());
+        return Ok(None);
     }
 
-    let format = clipboard_win::register_format("CanIncludeInClipboardHistory")
-        .ok_or_else(|| "Failed to register the clipboard history format".to_string())?;
-    clipboard_win::raw::set_without_clear(format.get(), &0u32.to_ne_bytes())
+    clipboard_win::register_format("CanIncludeInClipboardHistory")
+        .map(|format| Some(format.get()))
+        .ok_or_else(|| "Failed to register the clipboard history format".to_string())
+}
+
+#[cfg(windows)]
+fn set_windows_clipboard_history(format: Option<u32>) -> Result<(), String> {
+    let Some(format) = format else {
+        return Ok(());
+    };
+
+    clipboard_win::raw::set_without_clear(format, &0u32.to_ne_bytes())
         .map_err(|e| format!("Failed to exclude data from clipboard history: {}", e))
 }
 
@@ -346,12 +355,16 @@ fn set_windows_clipboard_history(history: ClipboardHistory) -> Result<(), String
 /// clipboard transaction.
 #[cfg(windows)]
 mod windows_image {
-    use super::{set_windows_clipboard_history, ClipboardHistory, ClipboardImage};
+    use super::{
+        register_windows_clipboard_history, set_windows_clipboard_history, ClipboardHistory,
+        ClipboardImage,
+    };
+    use image::{codecs::png::PngEncoder, ExtendedColorType, ImageEncoder};
 
     const BITMAPV5HEADER_LEN: usize = 124;
     const OPEN_ATTEMPTS: usize = 10;
 
-    pub(super) fn dibv5_buffer(image: &ClipboardImage) -> Result<Vec<u8>, String> {
+    fn validate_image(image: &ClipboardImage) -> Result<(i32, i32, u32), String> {
         let width = i32::try_from(image.width)
             .ok()
             .filter(|width| *width > 0)
@@ -370,6 +383,26 @@ mod windows_image {
         }
         let size_image = u32::try_from(pixel_len)
             .map_err(|_| "Clipboard image pixel data is too large".to_string())?;
+        Ok((width, height, size_image))
+    }
+
+    pub(super) fn png_buffer(image: &ClipboardImage) -> Result<Vec<u8>, String> {
+        let (width, height, _) = validate_image(image)?;
+        let mut buffer = Vec::new();
+        PngEncoder::new(&mut buffer)
+            .write_image(
+                &image.bytes,
+                width as u32,
+                height as u32,
+                ExtendedColorType::Rgba8,
+            )
+            .map_err(|e| format!("Failed to encode clipboard image as PNG: {}", e))?;
+        Ok(buffer)
+    }
+
+    pub(super) fn dibv5_buffer(image: &ClipboardImage) -> Result<Vec<u8>, String> {
+        let (width, height, size_image) = validate_image(image)?;
+        let pixel_len = image.bytes.len();
         let buffer_len = BITMAPV5HEADER_LEN
             .checked_add(pixel_len)
             .ok_or_else(|| "Clipboard image buffer size overflowed".to_string())?;
@@ -401,15 +434,21 @@ mod windows_image {
     }
 
     pub fn write(image: &ClipboardImage) -> Result<(), String> {
+        let png = png_buffer(image)?;
         let dibv5 = dibv5_buffer(image)?;
+        let png_format = clipboard_win::register_format("PNG")
+            .ok_or_else(|| "Failed to register the PNG clipboard format".to_string())?;
+        let history_format = register_windows_clipboard_history(ClipboardHistory::Exclude)?;
         let _open = clipboard_win::Clipboard::new_attempts(OPEN_ATTEMPTS)
             .map_err(|e| format!("Failed to open clipboard for the image: {}", e))?;
 
         clipboard_win::raw::empty()
             .map_err(|e| format!("Failed to clear the clipboard for the image: {}", e))?;
+        clipboard_win::raw::set_without_clear(png_format.get(), &png)
+            .map_err(|e| format!("Failed to restore clipboard PNG: {}", e))?;
         clipboard_win::raw::set_without_clear(clipboard_win::formats::CF_DIBV5, &dibv5)
             .map_err(|e| format!("Failed to restore clipboard image: {}", e))?;
-        set_windows_clipboard_history(ClipboardHistory::Exclude)
+        set_windows_clipboard_history(history_format)
     }
 }
 
@@ -421,7 +460,10 @@ mod windows_image {
 ///   which arboard prevents by closing the clipboard after `file_list`.
 #[cfg(windows)]
 mod windows_files {
-    use super::{set_windows_clipboard_history, ClipboardFiles, ClipboardHistory};
+    use super::{
+        register_windows_clipboard_history, set_windows_clipboard_history, ClipboardFiles,
+        ClipboardHistory,
+    };
 
     const FORMAT_NAME: &str = "Preferred DropEffect";
     const OPEN_ATTEMPTS: usize = 10;
@@ -470,6 +512,17 @@ mod windows_files {
     /// in a single open/empty/set transaction.
     pub fn write(files: &ClipboardFiles, history: ClipboardHistory) -> Result<(), String> {
         let hdrop = hdrop_buffer(&files.paths);
+        let drop_effect_format = match files.preferred_drop_effect {
+            Some(_) => Some(
+                clipboard_win::register_format(FORMAT_NAME)
+                    .ok_or_else(|| {
+                        "Failed to register the Preferred DropEffect format".to_string()
+                    })?
+                    .get(),
+            ),
+            None => None,
+        };
+        let history_format = register_windows_clipboard_history(history)?;
 
         let _open = clipboard_win::Clipboard::new_attempts(OPEN_ATTEMPTS)
             .map_err(|e| format!("Failed to open clipboard for the file list: {}", e))?;
@@ -483,13 +536,13 @@ mod windows_files {
             .map_err(|e| format!("Failed to restore clipboard file list: {}", e))?;
 
         if let Some(effect) = files.preferred_drop_effect {
-            let format = clipboard_win::register_format(FORMAT_NAME)
-                .ok_or_else(|| "Failed to register the Preferred DropEffect format".to_string())?;
-            clipboard_win::raw::set_without_clear(format.get(), &effect.to_le_bytes())
+            let format = drop_effect_format
+                .ok_or_else(|| "Preferred DropEffect format is unavailable".to_string())?;
+            clipboard_win::raw::set_without_clear(format, &effect.to_le_bytes())
                 .map_err(|e| format!("Failed to restore the Preferred DropEffect: {}", e))?;
         }
 
-        set_windows_clipboard_history(history)
+        set_windows_clipboard_history(history_format)
     }
 }
 
@@ -638,6 +691,16 @@ mod tests {
             &buffer[124..],
             &[255, 0, 0, 255, 255, 255, 255, 255, 0, 0, 255, 255, 0, 255, 0, 255,]
         );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn png_buffer_has_signature_and_dimensions() {
+        let png = windows_image::png_buffer(&test_image()).unwrap();
+
+        assert_eq!(&png[..8], b"\x89PNG\r\n\x1a\n");
+        assert_eq!(u32::from_be_bytes(png[16..20].try_into().unwrap()), 2);
+        assert_eq!(u32::from_be_bytes(png[20..24].try_into().unwrap()), 1);
     }
 
     /// Simulates the paste round-trip: capture, overwrite with the

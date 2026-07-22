@@ -368,6 +368,7 @@ dependencies = [
  "gtk-layer-shell",
  "handy-keys",
  "hound",
+ "image",
  "log",
  "once_cell",
  "rdev 0.5.0-2",
