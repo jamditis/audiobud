@@ -157,7 +157,7 @@ describe("Windows release signing workflow", () => {
     // The website links to SHA256SUMS.txt at a fixed URL instead of carrying
     // hashes in its markup, so a missing asset leaves that link dead.
     expect(workflow).toContain(
-      '$checksumPath = Join-Path $env:RUNNER_TEMP "SHA256SUMS.txt"',
+      '$checksumPath = Join-Path $env:CARGO_TARGET_DIR "release\\SHA256SUMS.txt"',
     );
     expect(workflow).toContain(
       "$env:NSIS_PATH $env:MSI_PATH $env:CHECKSUM_PATH --clobber",
@@ -179,6 +179,17 @@ describe("Windows release signing workflow", () => {
       '"$hash  $([System.IO.Path]::GetFileName($path))"',
     );
     expect(workflow).toContain("[System.Text.UTF8Encoding]::new($false)");
+  });
+
+  test("keeps CI artifact inputs under one filesystem tree", () => {
+    // upload-artifact calculates one root for every path. Mixing installers
+    // under CARGO_TARGET_DIR with a checksum under RUNNER_TEMP made the
+    // Windows action fall back to GITHUB_WORKSPACE and reject the installers.
+    const checksumStep = stepBlock("Write SHA256SUMS");
+    expect(checksumStep).toContain(
+      '$checksumPath = Join-Path $env:CARGO_TARGET_DIR "release\\SHA256SUMS.txt"',
+    );
+    expect(checksumStep).not.toContain("$env:RUNNER_TEMP");
   });
 
   test("attests every uploaded release artifact before publication", () => {
