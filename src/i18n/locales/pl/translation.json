@@ -770,5 +770,8 @@
     "cancel": "Anuluj nagrywanie",
     "raw": "RAW",
     "rawHint": "Tryb surowej transkrypcji"
+  },
+  "critters": {
+    "frog": "Żaba"
   }
 }

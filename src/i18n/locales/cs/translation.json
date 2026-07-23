@@ -768,5 +768,8 @@
     "cancel": "Zrušit nahrávání",
     "raw": "RAW",
     "rawHint": "Režim surového přepisu"
+  },
+  "critters": {
+    "frog": "Žába"
   }
 }

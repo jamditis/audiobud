@@ -766,5 +766,8 @@
     "cancel": "Hủy ghi âm",
     "raw": "THÔ",
     "rawHint": "Chế độ văn bản thô"
+  },
+  "critters": {
+    "frog": "Ếch"
   }
 }

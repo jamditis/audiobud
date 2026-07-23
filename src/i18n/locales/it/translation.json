@@ -766,5 +766,8 @@
     "cancel": "Annulla la registrazione",
     "raw": "RAW",
     "rawHint": "Modalità trascrizione grezza"
+  },
+  "critters": {
+    "frog": "Rana"
   }
 }

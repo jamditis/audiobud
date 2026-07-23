@@ -21,13 +21,15 @@ describe("critter registry", () => {
     // translation entry would render the raw key in the picker. Cheap to catch
     // here; invisible in a screenshot until someone reads it.
     const lookup = (key: string): unknown =>
-      key.split(".").reduce<unknown>(
-        (node, part) =>
-          typeof node === "object" && node !== null
-            ? (node as Record<string, unknown>)[part]
-            : undefined,
-        en,
-      );
+      key
+        .split(".")
+        .reduce<unknown>(
+          (node, part) =>
+            typeof node === "object" && node !== null
+              ? (node as Record<string, unknown>)[part]
+              : undefined,
+          en,
+        );
     for (const critter of CRITTERS) {
       expect(typeof lookup(critter.labelKey)).toBe("string");
     }

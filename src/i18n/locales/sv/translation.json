@@ -766,5 +766,8 @@
     "cancel": "Avbryt inspelning",
     "raw": "RÅ",
     "rawHint": "Läge för rå transkription"
+  },
+  "critters": {
+    "frog": "Groda"
   }
 }

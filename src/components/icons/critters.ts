@@ -3,7 +3,8 @@ import type { CritterEntry } from "./mascot";
 
 // The critter registry (#8). One entry per selectable character; the picker and
 // the persisted `active_critter` setting come later, so today this holds the frog
-// alone and everything that used to hardcode <FrogMascot /> resolves through it.
+// alone and every mascot-identity surface resolves through it. SwampBackground's
+// konami frog rain stays a frog because it is a swamp gag, not mascot identity.
 //
 // Adding a critter is: drop an SVG component honoring MascotProps, add an entry
 // here, answer `micLevel`. Nothing else changes.

@@ -766,5 +766,8 @@
     "cancel": "取消錄製",
     "raw": "RAW",
     "rawHint": "原始轉錄模式"
+  },
+  "critters": {
+    "frog": "青蛙"
   }
 }
