@@ -1,15 +1,19 @@
 import { useEffect, useRef, useState } from "react";
-import FrogMascot from "./FrogMascot";
+import { getCritter } from "./critters";
 import { playRibbit } from "../../lib/ribbit";
 
-// A FrogMascot that's alive: it blinks on its own, its eyes follow the cursor,
-// and it croaks when clicked. Used for the wordmark and the sidebar nav icon.
+// The "alive" layer for any critter: it blinks on its own, its eyes follow the
+// cursor, and it croaks when clicked. Used for the wordmark and the sidebar nav
+// icon. The blink cadence and cursor-follow math live here once, so a new critter
+// is an SVG plus a registry entry rather than a reimplementation of both.
 interface LiveFrogProps {
   size?: number | string;
   className?: string;
   follow?: boolean;
   idleBlink?: boolean;
   clickCroak?: boolean;
+  /** Which critter to render. Falls back to the default for an unknown id. */
+  critter?: string;
 }
 
 const LiveFrog = ({
@@ -18,7 +22,9 @@ const LiveFrog = ({
   follow = true,
   idleBlink = true,
   clickCroak = true,
+  critter,
 }: LiveFrogProps) => {
+  const { Component: Mascot } = getCritter(critter);
   const ref = useRef<HTMLSpanElement>(null);
   const [blink, setBlink] = useState(false);
   const [croak, setCroak] = useState(false);
@@ -77,7 +83,7 @@ const LiveFrog = ({
         cursor: clickCroak ? "pointer" : undefined,
       }}
     >
-      <FrogMascot
+      <Mascot
         size={size}
         className={className}
         blink={blink}

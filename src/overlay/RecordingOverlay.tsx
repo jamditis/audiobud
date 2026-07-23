@@ -2,7 +2,7 @@ import { listen } from "@tauri-apps/api/event";
 import React, { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { CancelIcon } from "../components/icons";
-import FrogMascot from "../components/icons/FrogMascot";
+import { DEFAULT_CRITTER_ID, getCritter } from "../components/icons/critters";
 import "./RecordingOverlay.css";
 import { commands } from "@/bindings";
 import i18n, { syncLanguageFromSettings } from "@/i18n";
@@ -66,8 +66,15 @@ const RecordingOverlay: React.FC = () => {
     setupEventListeners();
   }, []);
 
-  // Drive the frog's vocal sac from the loudest live mic band -- he croaks
-  // along with your voice while recording, and rests while transcribing.
+  // The overlay is its own webview, so it cannot read the menu window's state.
+  // It resolves the default critter until #8's persisted `active_critter` lands
+  // and both windows read the same setting.
+  const { Component: Mascot } = getCritter(DEFAULT_CRITTER_ID);
+
+  // Drive the critter's mic-level visual from the loudest live band -- the frog
+  // croaks along with your voice while recording, and rests while transcribing.
+  // A critter whose micLevel is "none" ignores this, and nothing else here draws
+  // the level, so adding one means deciding what the overlay shows instead.
   const amp =
     state === "recording" && levels.length
       ? Math.min(1, Math.max(0, ...levels) * 1.4)
@@ -79,7 +86,7 @@ const RecordingOverlay: React.FC = () => {
       className={`recording-overlay ${isVisible ? "fade-in" : ""}`}
     >
       <div className="overlay-left">
-        <FrogMascot size={30} sacScale={amp} />
+        <Mascot size={30} sacScale={amp} />
       </div>
 
       <div className="overlay-middle" role="status" aria-live="polite">
