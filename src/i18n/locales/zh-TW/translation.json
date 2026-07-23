@@ -9,9 +9,15 @@
     "cancel": "取消",
     "pushToTalk": "按住說話",
     "muteWhileRecording": "錄製時靜音",
-    "appendTrailingSpace": "附加尾部空格"
+    "appendTrailingSpace": "附加尾部空格",
+    "autoSubmit": "自動送出",
+    "showOverlay": "顯示懸浮窗",
+    "outputMode": "輸出模式",
+    "formatted": "已格式化",
+    "rawTranscript": "原始轉錄文字"
   },
   "sidebar": {
+    "navLabel": "設定區塊",
     "general": "一般",
     "models": "模型",
     "advanced": "進階",
@@ -103,7 +109,7 @@
     },
     "permissions": {
       "title": "需要權限",
-      "description": "Handy 需要一些權限才能正常運作",
+      "description": "AudioBud 需要一些權限才能正常運作",
       "microphone": {
         "title": "麥克風存取",
         "description": "需要聽取您的語音進行轉錄"
@@ -154,6 +160,10 @@
     }
   },
   "settings": {
+    "autosave": {
+      "saved": "已存進池塘",
+      "failed": "無法儲存這項變更"
+    },
     "modelSettings": {
       "title": "{{model}} 設定",
       "noSettingsNeeded": "此模型自動運行，無需設定"
@@ -161,7 +171,7 @@
     "general": {
       "title": "一般",
       "shortcut": {
-        "title": "Handy 快捷鍵",
+        "title": "AudioBud 快捷鍵",
         "description": "設定啟動語音轉文字錄製的鍵盤快捷鍵",
         "loading": "載入快捷鍵中...",
         "none": "未設定快捷鍵",
@@ -179,6 +189,10 @@
           "transcribe_with_post_process": {
             "name": "後處理快捷鍵",
             "description": "可選：專用快捷鍵，使用時一律對轉錄結果套用 AI 後處理"
+          },
+          "transcribe_raw": {
+            "name": "原始轉錄快捷鍵",
+            "description": "專用快捷鍵，僅在這次聽寫輸出全部小寫、不含標點的原始文字。"
           }
         },
         "errors": {
@@ -220,11 +234,16 @@
     },
     "sound": {
       "title": "聲音",
+      "previewSounds": "預覽提示音（依序播放開始與停止音效）",
       "microphone": {
         "title": "麥克風",
         "description": "選擇您偏好的麥克風裝置",
         "placeholder": "選擇麥克風...",
         "loading": "載入中..."
+      },
+      "inputLevel": {
+        "title": "輸入音量",
+        "description": "顯示所選麥克風的即時音量。說話時長條應該會跳動，代表有收到聲音。"
       },
       "audioFeedback": {
         "label": "聲音回饋",
@@ -239,6 +258,12 @@
       "volume": {
         "title": "音量",
         "description": "調整聲音回饋的音量"
+      },
+      "outputTest": {
+        "title": "輸出測試",
+        "description": "透過所選的輸出裝置播放測試音效，確認有聲音輸出。",
+        "button": "測試輸出",
+        "playing": "播放中..."
       }
     },
     "advanced": {
@@ -279,11 +304,11 @@
       },
       "autostart": {
         "label": "開機啟動",
-        "description": "登入電腦時自動啟動 Handy"
+        "description": "登入電腦時自動啟動 AudioBud"
       },
       "showTrayIcon": {
         "label": "顯示系統匣圖示",
-        "description": "在系統匣中顯示 Handy 圖示"
+        "description": "在系統匣中顯示 AudioBud 圖示"
       },
       "overlay": {
         "title": "懸浮窗位置",
@@ -292,6 +317,22 @@
           "none": "無",
           "bottom": "底部",
           "top": "頂部"
+        },
+        "fine": {
+          "title": "螢幕上的位置",
+          "description": "選擇錄製懸浮窗在目前螢幕上的位置。中間欄與預設位置相同。",
+          "reset": "重設為預設值"
+        },
+        "anchors": {
+          "topleft": "左上",
+          "topcenter": "中上",
+          "topright": "右上",
+          "middleleft": "左中",
+          "middlecenter": "中央",
+          "middleright": "右中",
+          "bottomleft": "左下",
+          "bottomcenter": "中下",
+          "bottomright": "右下"
         }
       },
       "pasteMethod": {
@@ -352,13 +393,108 @@
           "sec15": "15 秒後（偵錯）"
         }
       },
+      "dictionaryGuide": {
+        "title": "讓詞彙轉錄正確",
+        "intro": "這兩項工具會互相搭配。自訂詞彙會引導模型偏向您常用的詞，當發音相近難以判斷時優先選用。字詞取代則在轉錄完成後強制修正，適合模型一再聽錯的情況。",
+        "rule": "請先從自訂詞彙開始。如果某個名字或術語每次都以同樣的方式出錯，再新增一組字詞取代，把聽到的結果換成您想要的內容。",
+        "examplesToggle": "顯示範例",
+        "examples": {
+          "name": {
+            "title": "難辨識的名字（jamditis）",
+            "body": "將「jamditis」加入自訂詞彙。如果仍被轉成「jam dightis」，就新增一組字詞取代：jam dightis → jamditis。"
+          },
+          "domain": {
+            "title": "網域或電子郵件（jamditis.com）",
+            "body": "您會唸成「jamditis dot com」，所以請新增一組字詞取代：jamditis dot com → jamditis.com。取代會完整保留字元，因此結果會維持為單一字串，不會被重新斷詞或改成大寫。"
+          },
+          "handle": {
+            "title": "帳號代稱（@jamditis）",
+            "body": "新增一組字詞取代：at jamditis → @jamditis。"
+          }
+        },
+        "engineNote": "自訂詞彙會在 Whisper 模型解碼時直接引導；在其他模型上則是事後修正文字，因此效果會因模型而異。字詞取代在所有模型上的運作方式都相同。"
+      },
       "customWords": {
         "title": "自訂詞彙",
         "description": "新增經常被誤聽或拼寫錯誤的詞彙。系統會自動將發音相似的詞彙修正為您列表中的詞彙",
         "placeholder": "新增詞彙",
         "add": "新增",
         "remove": "刪除 {{word}}",
-        "duplicate": "「{{word}}」已存在"
+        "duplicate": "「{{word}}」已存在",
+        "capReached": "您的詞彙庫已滿（{{cap}} 個詞）。請先移除部分詞彙才能再新增。",
+        "count": "{{count}} / {{cap}} 個詞",
+        "import": {
+          "title": "匯入清單",
+          "description": "上傳 .txt 檔案或貼上清單。項目之間請以換行或逗號分隔。三個字以內的片語會保留；較長的項目會拆成單字。",
+          "upload": "上傳 .txt 檔案",
+          "formatHint": "純文字 .txt 或 .csv。每行一個字詞或片語，也可以用逗號分隔項目。三個字以內的片語會保留在一起；較長的項目會拆成單字。總共最多 500 個項目。",
+          "pastePlaceholder": "在此貼上詞彙，每行一個或以逗號分隔",
+          "add": "新增清單",
+          "none": "沒有可新增的詞彙",
+          "added_one": "已新增 {{count}} 個詞",
+          "added_other": "已新增 {{count}} 個詞",
+          "skippedDuplicates": "{{count}} 個已在您的清單中",
+          "skippedCap": "{{count}} 個超過 {{cap}} 個詞的上限",
+          "skippedInvalid": "{{count}} 個過長",
+          "readError": "無法讀取該檔案"
+        }
+      },
+      "wordReplacements": {
+        "title": "字詞取代",
+        "description": "一律取代完全相符的字詞或片語，與發音無關。在所有模型的每次轉錄中都會執行，時機在自訂詞彙比對之後。將取代內容留白即可刪除該詞。適合用在模糊比對無法安全處理的修正（例如將「clawed」改成「Claude」）。",
+        "fromPlaceholder": "聽到的",
+        "toPlaceholder": "取代為",
+        "add": "新增",
+        "wholeWord": "僅限完整字詞",
+        "caseSensitive": "區分大小寫",
+        "duplicate": "「{{word}}」已有取代規則",
+        "capReached": "您的取代清單已滿（{{cap}} 筆）。請先移除部分項目才能再新增。",
+        "tooLong": "每個欄位請控制在 {{max}} 個字元以內",
+        "count": "{{count}} / {{cap}} 筆取代",
+        "deletes": "（會刪除該詞）",
+        "partialBadge": "部分",
+        "caseBadge": "Aa",
+        "remove": "移除 {{word}} 的取代規則"
+      },
+      "personalization": {
+        "title": "從我的歷史紀錄學習",
+        "description": "選擇啟用後，AudioBud 會從您最常聽寫的名字和術語中建議自訂詞彙。所有資料都留在這台裝置上：它只讀取本機的轉錄歷史紀錄，不會上傳任何內容，您也可以隨時匯出或清除它學到的資料。預設為關閉。",
+        "error": "發生錯誤，請重試。",
+        "suggestions": {
+          "title": "建議詞彙",
+          "description": "從您的轉錄歷史紀錄中挖掘出的常見專有名詞和術語。將想要的加入自訂詞彙，其餘的可以忽略，讓它們不再出現。",
+          "refresh": "重新整理建議",
+          "loading": "正在掃描歷史紀錄...",
+          "empty": "目前沒有新的建議。多聽寫一些後再重新整理。",
+          "count": "出現 {{count}} 次",
+          "accept": "新增",
+          "dismiss": "忽略",
+          "dismissLabel": "忽略建議 {{word}}"
+        },
+        "learned": {
+          "count_one": "已學習 {{count}} 個詞",
+          "count_other": "已學習 {{count}} 個詞",
+          "remove": "移除已學習的詞 {{word}}"
+        },
+        "data": {
+          "title": "您的個人化資料",
+          "description": "匯出 AudioBud 已學習內容的副本，或將它完全清除。重設會移除所有已學習的詞和已忽略的建議；您手動新增的自訂詞彙和取代規則不受影響。",
+          "export": "匯出",
+          "reset": "重設個人化",
+          "resetTitle": "重設個人化",
+          "resetConfirm": "這會清除所有已學習的詞和已忽略的建議。您手動新增的自訂詞彙和取代規則會保留。要繼續嗎？",
+          "resetDone": "已清除個人化資料",
+          "exportDone": "已匯出個人化資料",
+          "exportError": "無法匯出個人化資料"
+        }
+      },
+      "rawOutput": {
+        "label": "原始轉錄文字",
+        "description": "輸出全部小寫的文字，移除大寫和句尾標點。縮寫（API、GPU）和英文單獨的「I」會保留。適合把文字餵給其他工具，或在模型格式化過度時使用。您也可以另外綁定一組快捷鍵，供單次原始聽寫使用。"
+      },
+      "formatNumbers": {
+        "label": "格式化數字",
+        "description": "在格式化的轉錄中，將口述的數字轉換為數字和符號，例如 $25、10% 或 3.5。無需 API 金鑰，可離線執行。不適用於原始轉錄。"
       }
     },
     "postProcessing": {
@@ -448,7 +584,7 @@
       },
       "updateChecks": {
         "label": "檢查更新",
-        "description": "自動檢查 Handy 的新版本"
+        "description": "自動檢查 AudioBud 的新版本"
       },
       "soundTheme": {
         "label": "聲音主題",
@@ -461,7 +597,8 @@
       "historyLimit": {
         "title": "歷史紀錄上限",
         "description": "歷史紀錄的最大保留筆數",
-        "entries": "筆"
+        "entries": "筆",
+        "trimNote": "調低上限不會立即刪除錄音。超出上限且未儲存的錄音，會在您下次新增錄音時移除。"
       },
       "recordingRetention": {
         "title": "自動刪除錄音",
@@ -471,7 +608,8 @@
         "days3": "3 天後",
         "weeks2": "2 週後",
         "months3": "3 個月後",
-        "placeholder": "選擇保留期限..."
+        "placeholder": "選擇保留期限...",
+        "trimNote": "變更此設定不會立即刪除錄音。舊的未儲存錄音只會在您下次新增錄音時移除。"
       },
       "alwaysOnMicrophone": {
         "label": "麥克風常開",
@@ -516,11 +654,11 @@
       "title": "關於",
       "version": {
         "title": "版本",
-        "description": "Handy 的目前版本"
+        "description": "AudioBud 的目前版本"
       },
       "appDataDirectory": {
         "title": "應用程式資料目錄",
-        "description": "Handy 儲存資料的位置"
+        "description": "AudioBud 儲存資料的位置"
       },
       "sourceCode": {
         "title": "原始碼",
@@ -528,16 +666,26 @@
         "button": "在 GitHub 上檢視"
       },
       "supportDevelopment": {
-        "title": "支持開發",
-        "description": "幫助我們繼續開發 Handy",
-        "button": "捐贈"
+        "title": "餵青蛙",
+        "description": "AudioBud 完全免費，而且全程在您的電腦上運作。如果它幫您省下一些打字時間，就丟隻蒼蠅進罐子裡吧。",
+        "button": "請我吃蒼蠅"
       },
       "acknowledgments": {
         "title": "致謝",
+        "handy": {
+          "title": "Handy",
+          "description": "AudioBud 所基於的開源聽寫應用程式",
+          "details": "AudioBud 是 cjpais 開發的 Handy（採用 MIT 授權）的分支。非常感謝 cjpais 和 Handy 的貢獻者們打下這個應用程式的基礎。詳情請見 handy.computer。"
+        },
+        "parakeet": {
+          "title": "Parakeet",
+          "description": "NVIDIA NeMo Parakeet，AudioBud 在 Windows 上的預設引擎",
+          "details": "轉錄預設透過 transcribe-rs ONNX 執行環境使用 NVIDIA 的 Parakeet 模型。感謝 NVIDIA NeMo 與 transcribe-rs 的維護者。"
+        },
         "whisper": {
           "title": "Whisper.cpp",
-          "description": "針對 OpenAI Whisper 自動語音識別模型的高效能推理引擎",
-          "details": "Handy 使用 Whisper.cpp 進行快速的本機語音轉文字處理。感謝 Georgi Gerganov 和貢獻者們的傑出工作"
+          "description": "OpenAI Whisper 模型的高效能本機推論",
+          "details": "AudioBud 也可以使用 Whisper.cpp 進行轉錄，並透過 GPU 加速。感謝 Georgi Gerganov 和貢獻者們。"
         }
       }
     }
@@ -555,9 +703,9 @@
     "installing": "安裝中...",
     "preparing": "準備中...",
     "checkForUpdates": "檢查更新",
-    "portableUpdateTitle": "Manual update required",
-    "portableUpdateMessage": "Portable installs cannot be updated automatically. To update: download the latest NSIS installer from GitHub Releases, install it to the same folder, then copy your Data/ folder (settings, models, recordings) from the old version to the new one.",
-    "portableUpdateButton": "Open GitHub Releases"
+    "portableUpdateTitle": "需要手動更新",
+    "portableUpdateMessage": "可攜式安裝版本無法自動更新。若要更新：請從 GitHub Releases 下載最新的 NSIS 安裝程式，將其安裝到相同資料夾，然後將舊版本的 Data/ 資料夾（設定、模型和錄音）複製到新版本。",
+    "portableUpdateButton": "開啟 GitHub Releases"
   },
   "common": {
     "loading": "載入中...",
@@ -572,6 +720,7 @@
     "update": "更新",
     "close": "關閉",
     "open": "開啟",
+    "moreInfo": "更多資訊",
     "default": "預設",
     "enabled": "已啟用",
     "disabled": "已停用",
@@ -583,7 +732,7 @@
   },
   "accessibility": {
     "permissionsRequired": "需要輔助使用權限",
-    "permissionsDescription": "Handy 需要輔助使用權限才能輸入轉錄的文字",
+    "permissionsDescription": "AudioBud 需要輔助使用權限才能輸入轉錄的文字",
     "openSettings": "開啟系統設定",
     "dismiss": "關閉"
   },
@@ -602,14 +751,20 @@
     "modelLoadFailed": "載入模型失敗: {{model}}",
     "modelLoadFailedUnknown": "未知模型",
     "pasteFailedTitle": "貼上文字失敗",
-    "pasteFailed": "無法將文字貼上至目前作用中的應用程式。"
+    "pasteFailed": "無法將文字貼上至目前作用中的應用程式。",
+    "transcriptionTimeoutTitle": "轉錄逾時",
+    "transcriptionTimeout": "引擎在 {{seconds}} 秒後仍未回應，可能已卡住。如果持續發生，請重新啟動 AudioBud。"
   },
   "appLanguage": {
     "title": "應用程式語言",
-    "description": "變更 Handy 介面的語言"
+    "description": "變更 AudioBud 介面的語言"
   },
   "overlay": {
     "transcribing": "正在轉錄...",
-    "processing": "處理中..."
+    "processing": "處理中...",
+    "recording": "錄製中",
+    "cancel": "取消錄製",
+    "raw": "RAW",
+    "rawHint": "原始轉錄模式"
   }
 }

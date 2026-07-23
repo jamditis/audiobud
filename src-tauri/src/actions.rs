@@ -1,12 +1,15 @@
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
 use crate::apple_intelligence;
 use crate::audio_feedback::{play_feedback_sound, play_feedback_sound_blocking, SoundType};
+use crate::audio_toolkit::constants::WHISPER_SAMPLE_RATE;
 use crate::audio_toolkit::{
-    is_microphone_access_denied, is_no_input_device_error, strip_to_raw_text,
+    apply_spoken_punctuation, format_numbers, is_microphone_access_denied,
+    is_no_input_device_error, strip_to_raw_text,
 };
 use crate::managers::audio::AudioRecordingManager;
 use crate::managers::history::HistoryManager;
 use crate::managers::transcription::TranscriptionManager;
+use crate::managers::watchdog::{transcription_watchdog_timeout, WatchdogOutcome};
 use crate::settings::{get_settings, AppSettings, APPLE_INTELLIGENCE_PROVIDER_ID};
 use crate::shortcut;
 use crate::tray::{change_tray_icon, TrayIconState};
@@ -27,6 +30,13 @@ use tauri::{AppHandle, Emitter};
 struct RecordingErrorEvent {
     error_type: String,
     detail: Option<String>,
+}
+
+/// Payload of the `transcription-timeout` event, shared with the history
+/// retry command so both paths surface the same timeout toast.
+#[derive(Clone, serde::Serialize)]
+pub(crate) struct TranscriptionTimeoutEvent {
+    pub(crate) timeout_secs: u64,
 }
 
 /// Drop guard that notifies the [`TranscriptionCoordinator`] when the
@@ -405,6 +415,23 @@ pub(crate) async fn process_transcription_output(
         let force_english_i =
             force_english_i_casing(settings.translate_to_english, &settings.selected_language);
         final_text = strip_to_raw_text(&final_text, force_english_i);
+        // Raw mode has no model to tidy the text, so spoken punctuation and numbers are the
+        // only way to dictate anything with a "?" or a "$25" in it. Both stay behind their own
+        // setting: format_raw_output turns raw formatting on at all, and format_numbers keeps
+        // meaning the same thing here as it does on the normal path.
+        //
+        // Order matters, and not in the way it first reads. Numbers must run BEFORE spoken
+        // punctuation, because format_numbers rebuilds the text with split_whitespace() and
+        // rejoins on single spaces -- so any line break already in the string is silently
+        // flattened. Punctuation is what creates those breaks ("new line", "new paragraph"),
+        // so running it first means every dictated break is destroyed by the pass after it.
+        // Swapping these two lines to the more natural-looking order reintroduces that.
+        if settings.format_raw_output {
+            if settings.format_numbers {
+                final_text = format_numbers(&final_text);
+            }
+            final_text = apply_spoken_punctuation(&final_text);
+        }
     } else if post_process {
         if let Some(processed_text) = post_process_transcription(&settings, &final_text).await {
             post_processed_text = Some(processed_text.clone());
@@ -420,8 +447,19 @@ pub(crate) async fn process_transcription_output(
                 }
             }
         }
-    } else if final_text != transcription {
-        post_processed_text = Some(final_text.clone());
+    } else {
+        // Normal path (neither raw nor LLM post-processing). Rewrite spelled-out numbers as digits
+        // and symbols ("$25", "10%", "3.5") so amounts, currencies, and decimals read naturally.
+        // Raw output is deliberately verbatim, and the LLM path handles its own formatting, so both
+        // skip this step.
+        if settings.format_numbers {
+            final_text = format_numbers(&final_text);
+        }
+        // Record the formatted variant for history whenever a deterministic transform (Chinese
+        // conversion, number formatting) changed the text from the verbatim transcript.
+        if final_text != transcription {
+            post_processed_text = Some(final_text.clone());
+        }
     }
 
     ProcessedTranscription {
@@ -598,9 +636,33 @@ impl ShortcutAction for TranscribeAction {
                         crate::audio_toolkit::save_wav_file(&wav_path, &samples_for_wav)
                     });
 
-                    // Transcribe concurrently with WAV save
+                    // Transcribe concurrently with WAV save, under a watchdog
+                    // so a wedged engine can't pin the "transcribing" UI state
+                    // forever (issue #58). On timeout the result is treated as
+                    // a normal transcription error, which reuses the existing
+                    // recovery path below (overlay hidden, tray back to idle,
+                    // empty history entry saved for retry).
                     let transcription_time = Instant::now();
-                    let transcription_result = tm.transcribe(samples);
+                    let watchdog_timeout =
+                        transcription_watchdog_timeout(sample_count, WHISPER_SAMPLE_RATE);
+                    let transcription_result =
+                        match tm.transcribe_with_watchdog(samples, watchdog_timeout) {
+                            WatchdogOutcome::Completed(result) => result,
+                            WatchdogOutcome::TimedOut => {
+                                let timeout_secs = watchdog_timeout.as_secs();
+                                let _ = ah.emit(
+                                    "transcription-timeout",
+                                    TranscriptionTimeoutEvent { timeout_secs },
+                                );
+                                Err(anyhow::anyhow!(
+                                    "Transcription timed out after {}s",
+                                    timeout_secs
+                                ))
+                            }
+                            WatchdogOutcome::Panicked => Err(anyhow::anyhow!(
+                                "Transcription worker panicked before producing a result"
+                            )),
+                        };
 
                     // Await WAV save and verify
                     let wav_saved = match wav_handle.await {

@@ -1,0 +1,97 @@
+# AudioBud transcription engine build. This is the only place outside the
+# signed release where the real TranscriptionManager compiles.
+#
+# The two Rust jobs in ci.yml overwrite src/managers/transcription.rs with a
+# 130-line mock and delete transcribe-rs from Cargo.toml so cargo test does not
+# have to build whisper, Vulkan, and ONNX on every push. That keeps the fast
+# checks fast, but it also means the 957 lines that actually do the work are
+# never compiled by CI -- release.yml was the first build that touched them,
+# and it runs no tests. A regression in the core product could reach a signed
+# installer without any automated check having seen it (issue #146).
+#
+# So this workflow builds what ships: real transcription.rs, real transcribe-rs,
+# the same whisper-vulkan + ort-directml features and the same GGML flags the
+# release uses. It is slow, so it runs only when Rust or its build inputs
+# change.
+name: Engine
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "src-tauri/**"
+      - ".github/workflows/engine.yml"
+  pull_request:
+    paths:
+      - "src-tauri/**"
+      - ".github/workflows/engine.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  real-engine:
+    name: Rust tests (real transcription engine, Windows)
+    # Windows is the platform AudioBud ships, and the only one whose feature set
+    # (whisper-vulkan + ort-directml) is exercised by a real user. Building the
+    # engine anywhere else would prove less than it appears to.
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      # Deliberately no mock swap and no `sed -i '/^transcribe-rs/d'`. The whole
+      # point of this job is that src/managers/transcription.rs reaches the
+      # compiler unmodified.
+
+      # The Windows build links whisper-vulkan. The SDK provides glslc and the
+      # Vulkan headers and libraries the native build needs. Pinned to the same
+      # commit and version as release.yml so this job cannot pass against an SDK
+      # the release build never sees.
+      - name: Install Vulkan SDK
+        uses: humbletim/install-vulkan-sdk@30ba978f977e81b72d091fc8888feb1fb26f9aff # v1.2
+        with:
+          version: 1.4.309.0
+          cache: true
+
+      - name: Download the VAD model
+        working-directory: src-tauri
+        shell: bash
+        run: |
+          # silero_vad_loads_from_unicode_directory fails when the model is
+          # absent rather than skipping, so keep this ahead of cargo test.
+          mkdir -p resources/models
+          curl --fail --retry 3 -o resources/models/silero_vad_v4.onnx https://blob.handy.computer/silero_vad_v4.onnx
+
+      # whisper-rs-sys drives cmake, which builds paths deep enough to cross
+      # MAX_PATH under the default target directory. release.yml solves this the
+      # same way; without it the native build fails with unhelpful cmake errors.
+      - name: Shorten build path
+        shell: pwsh
+        run: |
+          $drive = Split-Path -Qualifier $env:GITHUB_WORKSPACE
+          $targetDirectory = "$drive\t"
+          New-Item -ItemType Directory -Force -Path $targetDirectory | Out-Null
+          "CARGO_TARGET_DIR=$targetDirectory" |
+            Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      # No rust-cache here. It keys on a workspace-relative target directory, so
+      # pointing it at the shortened absolute path above would cache an empty
+      # directory and report a hit that saved nothing -- which is what happens
+      # in release.yml today. A cold build is honest; a cache that silently does
+      # nothing is worse than none. Speeding this up is follow-up work.
+
+      # Match the release build's SIMD posture so this job fails on the same
+      # code the release compiles, not a more permissive variant.
+      - name: Run Rust tests against the real engine
+        working-directory: src-tauri
+        shell: pwsh
+        env:
+          GGML_NATIVE: "OFF"
+          GGML_AVX: "OFF"
+          GGML_AVX2: "OFF"
+          GGML_FMA: "OFF"
+          GGML_F16C: "OFF"
+        run: cargo test

@@ -9,9 +9,15 @@
     "cancel": "Hủy",
     "pushToTalk": "Nhấn để nói",
     "muteWhileRecording": "Tắt tiếng khi ghi âm",
-    "appendTrailingSpace": "Thêm dấu cách cuối"
+    "appendTrailingSpace": "Thêm dấu cách cuối",
+    "autoSubmit": "Gửi tự động",
+    "showOverlay": "Hiện lớp phủ",
+    "outputMode": "Chế độ đầu ra",
+    "formatted": "Đã định dạng",
+    "rawTranscript": "Văn bản thô"
   },
   "sidebar": {
+    "navLabel": "Các mục cài đặt",
     "general": "Chung",
     "models": "Mô hình",
     "advanced": "Nâng cao",
@@ -103,7 +109,7 @@
     },
     "permissions": {
       "title": "Cần cấp quyền",
-      "description": "Handy cần một số quyền để hoạt động bình thường.",
+      "description": "AudioBud cần một số quyền để hoạt động bình thường.",
       "microphone": {
         "title": "Quyền truy cập Micrô",
         "description": "Cần thiết để nghe giọng nói của bạn để chuyển đổi."
@@ -142,44 +148,30 @@
     "noModelDownloadRequired": "Chưa Có Mô Hình - Cần Tải Xuống",
     "deleteModel": "Xóa {{modelName}}",
     "downloadSpeed": "{{speed}} MB/s",
+    "cancel": "Hủy",
+    "cancelDownload": "Hủy tải xuống",
     "capabilities": {
       "languageSelection": "Hỗ trợ nhiều ngôn ngữ đầu vào",
-      "multiLanguage": "Đa ngôn ngữ",
-      "translation": "Có thể dịch sang tiếng Anh",
-      "translate": "Dịch sang tiếng Anh",
       "singleLanguage": "Chỉ hỗ trợ ngôn ngữ này",
-      "languageOnly": "Chỉ {{language}}"
-    },
-    "cancel": "Hủy",
-    "cancelDownload": "Hủy tải xuống"
+      "multiLanguage": "Đa ngôn ngữ",
+      "languageOnly": "Chỉ {{language}}",
+      "translation": "Có thể dịch sang tiếng Anh",
+      "translate": "Dịch sang tiếng Anh"
+    }
   },
   "settings": {
+    "autosave": {
+      "saved": "Đã lưu vào ao",
+      "failed": "Không lưu được thay đổi đó"
+    },
     "modelSettings": {
       "title": "Cài đặt {{model}}",
       "noSettingsNeeded": "Mô hình này hoạt động tự động mà không cần cấu hình."
     },
-    "models": {
-      "title": "Mô hình chuyển đổi",
-      "description": "Chọn mô hình chuyển đổi hoặc tải thêm mô hình. Các mô hình khác nhau có mức độ chính xác và tốc độ khác nhau.",
-      "downloaded": "Đã tải xuống",
-      "available": "Có thể tải xuống",
-      "deleteConfirm": "Bạn có chắc chắn muốn xóa {{modelName}}? Bạn sẽ cần tải lại để sử dụng.",
-      "deleteActiveConfirm": "{{modelName}} là mô hình đang hoạt động của bạn. Xóa nó sẽ dừng phiên âm cho đến khi bạn chọn một mô hình mới. Bạn có chắc không?",
-      "deleteTitle": "Xóa mô hình",
-      "filters": {
-        "all": "Tất cả",
-        "multiLanguage": "Đa ngôn ngữ",
-        "translation": "Dịch thuật",
-        "allLanguages": "Tất cả ngôn ngữ"
-      },
-      "noModelsMatch": "Không có mô hình nào khớp với bộ lọc này.",
-      "yourModels": "Mô hình đã tải",
-      "availableModels": "Có sẵn để tải xuống"
-    },
     "general": {
       "title": "Chung",
       "shortcut": {
-        "title": "Phím tắt Handy",
+        "title": "Phím tắt AudioBud",
         "description": "Cấu hình phím tắt để kích hoạt ghi âm chuyển đổi giọng nói thành văn bản",
         "loading": "Đang tải phím tắt...",
         "none": "Chưa cấu hình phím tắt",
@@ -197,6 +189,10 @@
           "transcribe_with_post_process": {
             "name": "Phím tắt xử lý sau",
             "description": "Tùy chọn: Phím tắt chuyên dụng luôn áp dụng xử lý sau bằng AI cho bản chuyển đổi của bạn."
+          },
+          "transcribe_raw": {
+            "name": "Phím tắt văn bản thô",
+            "description": "Phím tắt riêng để chuyển đổi thành văn bản thô, chữ thường, không dấu câu, chỉ áp dụng cho lần đọc này."
           }
         },
         "errors": {
@@ -218,13 +214,36 @@
         "description": "Giữ để ghi âm, thả để dừng"
       }
     },
+    "models": {
+      "title": "Mô hình chuyển đổi",
+      "description": "Chọn mô hình chuyển đổi hoặc tải thêm mô hình. Các mô hình khác nhau có mức độ chính xác và tốc độ khác nhau.",
+      "yourModels": "Mô hình đã tải",
+      "availableModels": "Có sẵn để tải xuống",
+      "downloaded": "Đã tải xuống",
+      "available": "Có thể tải xuống",
+      "deleteConfirm": "Bạn có chắc chắn muốn xóa {{modelName}}? Bạn sẽ cần tải lại để sử dụng.",
+      "deleteActiveConfirm": "{{modelName}} là mô hình đang hoạt động của bạn. Xóa nó sẽ dừng phiên âm cho đến khi bạn chọn một mô hình mới. Bạn có chắc không?",
+      "deleteTitle": "Xóa mô hình",
+      "filters": {
+        "all": "Tất cả",
+        "multiLanguage": "Đa ngôn ngữ",
+        "translation": "Dịch thuật",
+        "allLanguages": "Tất cả ngôn ngữ"
+      },
+      "noModelsMatch": "Không có mô hình nào khớp với bộ lọc này."
+    },
     "sound": {
       "title": "Âm thanh",
+      "previewSounds": "Nghe thử âm thanh (phát âm bắt đầu rồi đến kết thúc)",
       "microphone": {
         "title": "Micrô",
         "description": "Chọn thiết bị micrô ưa thích của bạn",
         "placeholder": "Chọn micrô...",
         "loading": "Đang tải..."
+      },
+      "inputLevel": {
+        "title": "Mức đầu vào",
+        "description": "Mức tín hiệu trực tiếp từ micrô đã chọn. Hãy nói và các thanh sẽ chuyển động, xác nhận âm thanh đang vào."
       },
       "audioFeedback": {
         "label": "Phản hồi âm thanh",
@@ -239,6 +258,12 @@
       "volume": {
         "title": "Âm lượng",
         "description": "Điều chỉnh âm lượng của âm thanh phản hồi"
+      },
+      "outputTest": {
+        "title": "Kiểm tra đầu ra",
+        "description": "Phát âm thanh thử qua thiết bị đầu ra đã chọn để xác nhận âm thanh đang phát ra.",
+        "button": "Thử đầu ra",
+        "playing": "Đang phát..."
       }
     },
     "advanced": {
@@ -279,11 +304,11 @@
       },
       "autostart": {
         "label": "Khởi động cùng hệ thống",
-        "description": "Tự động khởi động Handy khi bạn đăng nhập vào máy tính."
+        "description": "Tự động khởi động AudioBud khi bạn đăng nhập vào máy tính."
       },
       "showTrayIcon": {
         "label": "Hiển thị biểu tượng khay",
-        "description": "Hiển thị biểu tượng Handy trong khay hệ thống."
+        "description": "Hiển thị biểu tượng AudioBud trong khay hệ thống."
       },
       "overlay": {
         "title": "Vị trí lớp phủ",
@@ -292,15 +317,31 @@
           "none": "Không có",
           "bottom": "Dưới",
           "top": "Trên"
+        },
+        "fine": {
+          "title": "Vị trí trên màn hình",
+          "description": "Chọn nơi chỉ báo ghi âm hiển thị trên màn hình bạn đang dùng. Cột giữa tương ứng với vị trí mặc định.",
+          "reset": "Đặt lại về mặc định"
+        },
+        "anchors": {
+          "topleft": "Trên bên trái",
+          "topcenter": "Trên ở giữa",
+          "topright": "Trên bên phải",
+          "middleleft": "Giữa bên trái",
+          "middlecenter": "Chính giữa",
+          "middleright": "Giữa bên phải",
+          "bottomleft": "Dưới bên trái",
+          "bottomcenter": "Dưới ở giữa",
+          "bottomright": "Dưới bên phải"
         }
       },
       "pasteMethod": {
         "title": "Phương thức dán",
         "description": "Chọn cách chèn văn bản. Trực tiếp: mô phỏng gõ phím qua đầu vào hệ thống. Không có: bỏ qua dán, chỉ cập nhật lịch sử/clipboard.",
         "options": {
-          "clipboard": "Clipboard ({{modifier}}+V)",
-          "clipboardCtrlShiftV": "Clipboard (Ctrl+Shift+V)",
-          "clipboardShiftInsert": "Clipboard (Shift+Insert)",
+          "clipboard": "Bảng tạm ({{modifier}}+V)",
+          "clipboardCtrlShiftV": "Bảng tạm (Ctrl+Shift+V)",
+          "clipboardShiftInsert": "Bảng tạm (Shift+Insert)",
           "direct": "Trực tiếp",
           "none": "Không có",
           "externalScript": "Script bên ngoài"
@@ -352,13 +393,108 @@
           "sec15": "Sau 15 giây (Gỡ lỗi)"
         }
       },
+      "dictionaryGuide": {
+        "title": "Để chép đúng từ",
+        "intro": "Hai công cụ hoạt động cùng nhau. Từ tùy chỉnh hướng mô hình đến những thuật ngữ bạn hay dùng, để nó ưu tiên chọn khi âm thanh không rõ ràng. Thay thế từ buộc sửa chính xác sau đó, dành cho những lỗi nghe nhầm mà mô hình cứ lặp lại.",
+        "rule": "Hãy bắt đầu bằng một từ tùy chỉnh. Nếu một tên hoặc thuật ngữ vẫn luôn ra sai theo cùng một kiểu, hãy thêm một thay thế từ, từ cái bạn nghe thấy sang cái bạn muốn.",
+        "examplesToggle": "Xem ví dụ",
+        "examples": {
+          "name": {
+            "title": "Một cái tên khó (jamditis)",
+            "body": "Thêm \"jamditis\" làm từ tùy chỉnh. Nếu nó vẫn được chép thành \"jam dightis\", hãy thêm một thay thế từ: jam dightis → jamditis."
+          },
+          "domain": {
+            "title": "Một tên miền hoặc email (jamditis.com)",
+            "body": "Bạn sẽ đọc \"jamditis dot com\", nên hãy thêm một thay thế từ: jamditis dot com → jamditis.com. Thay thế giữ nguyên từng ký tự, nên nó vẫn là một chuỗi liền, không bị chèn dấu cách hay viết hoa lại."
+          },
+          "handle": {
+            "title": "Một tên tài khoản (@jamditis)",
+            "body": "Thêm một thay thế từ: at jamditis → @jamditis."
+          }
+        },
+        "engineNote": "Từ tùy chỉnh dẫn hướng các mô hình Whisper ngay khi giải mã; với các mô hình khác, chúng sửa văn bản sau đó, nên kết quả khác nhau tùy mô hình. Thay thế từ chạy giống nhau trên mọi mô hình."
+      },
       "customWords": {
         "title": "Từ tùy chỉnh",
         "description": "Thêm các từ thường bị nghe nhầm hoặc viết sai trong quá trình chuyển đổi. Hệ thống sẽ tự động sửa các từ có âm thanh tương tự để khớp với danh sách của bạn.",
         "placeholder": "Thêm một từ",
         "add": "Thêm",
         "remove": "Xóa {{word}}",
-        "duplicate": "\"{{word}}\" đã tồn tại"
+        "duplicate": "\"{{word}}\" đã tồn tại",
+        "capReached": "Từ điển của bạn đã đầy ({{cap}} từ). Hãy xóa bớt để thêm từ mới.",
+        "count": "{{count}} / {{cap}} từ",
+        "import": {
+          "title": "Nhập một danh sách",
+          "description": "Tải lên tệp .txt hoặc dán một danh sách. Phân tách các mục bằng dòng mới hoặc dấu phẩy. Cụm từ tối đa ba từ được giữ nguyên; mục dài hơn sẽ được tách thành từng từ.",
+          "upload": "Tải lên tệp .txt",
+          "formatHint": "Tệp .txt hoặc .csv thuần. Mỗi dòng một từ hoặc cụm từ, hoặc phân tách các mục bằng dấu phẩy. Cụm từ tối đa ba từ được giữ nguyên; mục dài hơn sẽ được tách thành từng từ. Tối đa 500 mục.",
+          "pastePlaceholder": "Dán các từ vào đây, mỗi dòng một từ hoặc cách nhau bằng dấu phẩy",
+          "add": "Thêm danh sách",
+          "none": "Không có từ mới để thêm",
+          "added_one": "Đã thêm {{count}} từ",
+          "added_other": "Đã thêm {{count}} từ",
+          "skippedDuplicates": "{{count}} từ đã có trong danh sách",
+          "skippedCap": "{{count}} từ vượt quá giới hạn {{cap}} từ",
+          "skippedInvalid": "{{count}} từ quá dài",
+          "readError": "Không đọc được tệp đó"
+        }
+      },
+      "wordReplacements": {
+        "title": "Thay thế từ",
+        "description": "Luôn thay thế chính xác từ hoặc cụm từ, bất kể chúng nghe như thế nào. Chạy trên mọi bản chuyển đổi, với mọi mô hình, sau bộ so khớp từ tùy chỉnh. Để trống ô thay thế để xóa một từ. Dùng cách này cho những chỗ mà bộ so khớp gần đúng không thể sửa an toàn (ví dụ \"clawed\" thành \"Claude\").",
+        "fromPlaceholder": "Nghe thành",
+        "toPlaceholder": "Thay bằng",
+        "add": "Thêm",
+        "wholeWord": "Chỉ nguyên từ",
+        "caseSensitive": "Phân biệt hoa thường",
+        "duplicate": "\"{{word}}\" đã có một thay thế",
+        "capReached": "Danh sách thay thế của bạn đã đầy ({{cap}} mục). Hãy xóa bớt để thêm mục mới.",
+        "tooLong": "Mỗi ô phải dưới {{max}} ký tự",
+        "count": "{{count}} / {{cap}} thay thế",
+        "deletes": "(xóa từ này)",
+        "partialBadge": "một phần",
+        "caseBadge": "Aa",
+        "remove": "Xóa thay thế cho {{word}}"
+      },
+      "personalization": {
+        "title": "Học từ lịch sử của tôi",
+        "description": "Bật để AudioBud gợi ý từ tùy chỉnh dựa trên những tên và thuật ngữ bạn đọc nhiều nhất. Mọi thứ ở lại trên thiết bị này: nó đọc lịch sử bản chép cục bộ, không có gì được tải lên, và bạn có thể xuất hoặc xóa những gì nó học bất cứ lúc nào. Mặc định tắt.",
+        "error": "Đã xảy ra lỗi. Vui lòng thử lại.",
+        "suggestions": {
+          "title": "Từ được gợi ý",
+          "description": "Các danh từ riêng và thuật ngữ xuất hiện nhiều, được trích từ lịch sử bản chép của bạn. Chấp nhận những từ bạn muốn làm từ tùy chỉnh, hoặc bỏ qua phần còn lại để chúng không hiện nữa.",
+          "refresh": "Làm mới gợi ý",
+          "loading": "Đang quét lịch sử...",
+          "empty": "Chưa có gợi ý mới. Hãy đọc thêm rồi làm mới.",
+          "count": "đã gặp {{count}} lần",
+          "accept": "Thêm",
+          "dismiss": "Bỏ qua",
+          "dismissLabel": "Bỏ qua gợi ý {{word}}"
+        },
+        "learned": {
+          "count_one": "{{count}} từ đã học",
+          "count_other": "{{count}} từ đã học",
+          "remove": "Xóa từ đã học {{word}}"
+        },
+        "data": {
+          "title": "Dữ liệu cá nhân hóa của bạn",
+          "description": "Xuất một bản sao những gì AudioBud đã học, hoặc xóa sạch. Đặt lại sẽ xóa mọi từ đã học và gợi ý đã bỏ qua; các từ tùy chỉnh và thay thế bạn tự thêm không bị ảnh hưởng.",
+          "export": "Xuất",
+          "reset": "Đặt lại cá nhân hóa",
+          "resetTitle": "Đặt lại cá nhân hóa",
+          "resetConfirm": "Thao tác này xóa mọi từ đã học và gợi ý đã bỏ qua. Các từ tùy chỉnh và thay thế bạn tự thêm vẫn được giữ. Tiếp tục?",
+          "resetDone": "Đã xóa dữ liệu cá nhân hóa",
+          "exportDone": "Đã xuất dữ liệu cá nhân hóa",
+          "exportError": "Không thể xuất dữ liệu cá nhân hóa"
+        }
+      },
+      "rawOutput": {
+        "label": "Văn bản thô",
+        "description": "Xuất văn bản chữ thường, bỏ viết hoa và dấu câu ở cuối. Các từ viết tắt (API, GPU) và chữ \"I\" đứng riêng trong tiếng Anh được giữ nguyên. Hữu ích khi đưa văn bản sang công cụ khác hoặc khi mô hình định dạng quá tay. Bạn cũng có thể gán một phím tắt riêng cho những lần đọc thô lẻ tẻ."
+      },
+      "formatNumbers": {
+        "label": "Định dạng số",
+        "description": "Chuyển các số được nói thành chữ số và ký hiệu trong bản ghi đã định dạng, ví dụ $25, 10% hoặc 3.5. Hoạt động ngoại tuyến, không cần khóa API. Không áp dụng cho bản ghi thô."
       }
     },
     "postProcessing": {
@@ -448,7 +584,7 @@
       },
       "updateChecks": {
         "label": "Kiểm tra cập nhật",
-        "description": "Tự động kiểm tra phiên bản mới của Handy"
+        "description": "Tự động kiểm tra phiên bản mới của AudioBud"
       },
       "soundTheme": {
         "label": "Chủ đề âm thanh",
@@ -461,7 +597,8 @@
       "historyLimit": {
         "title": "Giới hạn lịch sử",
         "description": "Số lượng mục lịch sử tối đa cần giữ",
-        "entries": "mục"
+        "entries": "mục",
+        "trimNote": "Hạ giới hạn không xóa bản ghi âm ngay lập tức. Các bản ghi chưa lưu vượt quá giới hạn sẽ bị xóa khi bạn thêm bản ghi tiếp theo."
       },
       "recordingRetention": {
         "title": "Tự động xóa ghi âm",
@@ -471,7 +608,8 @@
         "days3": "Sau 3 ngày",
         "weeks2": "Sau 2 tuần",
         "months3": "Sau 3 tháng",
-        "placeholder": "Chọn thời gian lưu giữ..."
+        "placeholder": "Chọn thời gian lưu giữ...",
+        "trimNote": "Thay đổi mục này không xóa bản ghi âm ngay lập tức. Các bản ghi cũ chưa lưu chỉ bị xóa khi bạn thêm bản ghi tiếp theo."
       },
       "alwaysOnMicrophone": {
         "label": "Micrô luôn bật",
@@ -516,11 +654,11 @@
       "title": "Giới thiệu",
       "version": {
         "title": "Phiên bản",
-        "description": "Phiên bản hiện tại của Handy"
+        "description": "Phiên bản hiện tại của AudioBud"
       },
       "appDataDirectory": {
         "title": "Thư mục dữ liệu ứng dụng",
-        "description": "Vị trí Handy lưu trữ dữ liệu"
+        "description": "Vị trí AudioBud lưu trữ dữ liệu"
       },
       "sourceCode": {
         "title": "Mã nguồn",
@@ -528,16 +666,26 @@
         "button": "Xem trên GitHub"
       },
       "supportDevelopment": {
-        "title": "Hỗ trợ phát triển",
-        "description": "Giúp chúng tôi tiếp tục xây dựng Handy",
-        "button": "Quyên góp"
+        "title": "Cho ếch ăn",
+        "description": "AudioBud miễn phí và chạy hoàn toàn trên máy của bạn. Nếu nó giúp bạn đỡ phải gõ, hãy thả một con ruồi vào hũ.",
+        "button": "Mời tôi một con ruồi"
       },
       "acknowledgments": {
         "title": "Lời cảm ơn",
+        "handy": {
+          "title": "Handy",
+          "description": "Ứng dụng đọc chính tả mã nguồn mở mà AudioBud được xây dựng trên đó",
+          "details": "AudioBud là một bản fork của Handy (giấy phép MIT) do cjpais phát triển. Xin cảm ơn cjpais và những người đóng góp cho Handy vì nền tảng mà ứng dụng này dựa trên. Tìm hiểu thêm tại handy.computer."
+        },
+        "parakeet": {
+          "title": "Parakeet",
+          "description": "NVIDIA NeMo Parakeet, công cụ mặc định của AudioBud trên Windows",
+          "details": "Theo mặc định, việc chuyển đổi chạy mô hình Parakeet của NVIDIA qua ONNX runtime transcribe-rs. Cảm ơn NVIDIA NeMo và những người duy trì transcribe-rs."
+        },
         "whisper": {
           "title": "Whisper.cpp",
-          "description": "Suy luận hiệu suất cao của mô hình nhận dạng giọng nói tự động Whisper của OpenAI",
-          "details": "Handy sử dụng Whisper.cpp để xử lý chuyển đổi giọng nói thành văn bản nhanh, cục bộ. Cảm ơn công việc tuyệt vời của Georgi Gerganov và các cộng tác viên."
+          "description": "Suy luận cục bộ hiệu năng cao cho mô hình Whisper của OpenAI",
+          "details": "AudioBud cũng có thể chuyển đổi bằng Whisper.cpp, được tăng tốc trên GPU. Cảm ơn Georgi Gerganov và những người đóng góp."
         }
       }
     }
@@ -555,9 +703,9 @@
     "installing": "Đang cài đặt...",
     "preparing": "Đang chuẩn bị...",
     "checkForUpdates": "Kiểm tra cập nhật",
-    "portableUpdateTitle": "Manual update required",
-    "portableUpdateMessage": "Portable installs cannot be updated automatically. To update: download the latest NSIS installer from GitHub Releases, install it to the same folder, then copy your Data/ folder (settings, models, recordings) from the old version to the new one.",
-    "portableUpdateButton": "Open GitHub Releases"
+    "portableUpdateTitle": "Cần cập nhật thủ công",
+    "portableUpdateMessage": "Bản cài đặt di động không thể tự động cập nhật. Để cập nhật: tải trình cài đặt NSIS mới nhất từ GitHub Releases, cài đặt vào cùng thư mục, sau đó sao chép thư mục Data/ (cài đặt, mô hình và bản ghi âm) từ phiên bản cũ sang phiên bản mới.",
+    "portableUpdateButton": "Mở GitHub Releases"
   },
   "common": {
     "loading": "Đang tải...",
@@ -572,6 +720,7 @@
     "update": "Cập nhật",
     "close": "Đóng",
     "open": "Mở",
+    "moreInfo": "Thêm thông tin",
     "default": "Mặc định",
     "enabled": "Đã bật",
     "disabled": "Đã tắt",
@@ -583,7 +732,7 @@
   },
   "accessibility": {
     "permissionsRequired": "Cần quyền truy cập",
-    "permissionsDescription": "Handy cần quyền truy cập để gõ văn bản đã chuyển đổi.",
+    "permissionsDescription": "AudioBud cần quyền truy cập để gõ văn bản đã chuyển đổi.",
     "openSettings": "Mở Cài đặt Hệ thống",
     "dismiss": "Bỏ qua"
   },
@@ -602,14 +751,20 @@
     "modelLoadFailed": "Không thể tải mô hình: {{model}}",
     "modelLoadFailedUnknown": "mô hình không xác định",
     "pasteFailedTitle": "Không thể dán văn bản",
-    "pasteFailed": "Không thể dán văn bản vào ứng dụng đang hoạt động."
+    "pasteFailed": "Không thể dán văn bản vào ứng dụng đang hoạt động.",
+    "transcriptionTimeoutTitle": "Chuyển đổi đã quá thời gian chờ",
+    "transcriptionTimeout": "Công cụ không phản hồi sau {{seconds}} giây và có thể đã bị treo. Hãy khởi động lại AudioBud nếu tình trạng này tiếp diễn."
   },
   "appLanguage": {
     "title": "Ngôn ngữ ứng dụng",
-    "description": "Thay đổi ngôn ngữ giao diện của Handy"
+    "description": "Thay đổi ngôn ngữ giao diện của AudioBud"
   },
   "overlay": {
     "transcribing": "Đang chuyển đổi...",
-    "processing": "Đang xử lý..."
+    "processing": "Đang xử lý...",
+    "recording": "Đang ghi âm",
+    "cancel": "Hủy ghi âm",
+    "raw": "THÔ",
+    "rawHint": "Chế độ văn bản thô"
   }
 }

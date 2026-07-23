@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "AudioBud",
-  "version": "0.3.0",
+  "version": "0.4.1",
   "identifier": "tech.amditis.audiobud",
   "build": {
     "beforeDevCommand": "bun run dev",
@@ -28,7 +28,10 @@
     "active": true,
     "createUpdaterArtifacts": false,
     "targets": "all",
-    "resources": ["resources/**/*"],
+    "resources": {
+      "resources/": "resources/",
+      "../THIRD_PARTY_NOTICES.md": "THIRD_PARTY_NOTICES.md"
+    },
     "license": "MIT",
     "icon": [
       "icons/32x32.png",

@@ -9,16 +9,22 @@
     "cancel": "إلغاء",
     "pushToTalk": "اضغط للتحدث",
     "muteWhileRecording": "كتم الصوت أثناء التسجيل",
-    "appendTrailingSpace": "إضافة مسافة تابعة"
+    "appendTrailingSpace": "إضافة مسافة تابعة",
+    "autoSubmit": "إرسال تلقائي",
+    "showOverlay": "إظهار التراكب",
+    "outputMode": "وضع الإخراج",
+    "formatted": "منسّق",
+    "rawTranscript": "نص خام"
   },
   "sidebar": {
+    "navLabel": "أقسام الإعدادات",
     "general": "عام",
+    "models": "النماذج",
     "advanced": "متقدم",
     "postProcessing": "معالجة لاحقة",
     "history": "السجل",
     "debug": "تصحيح الأخطاء",
-    "about": "حول",
-    "models": "النماذج"
+    "about": "حول"
   },
   "onboarding": {
     "subtitle": "للبدء، اختر نموذج التفريغ الصوتي",
@@ -103,7 +109,7 @@
     },
     "permissions": {
       "title": "الأذونات المطلوبة",
-      "description": ".يحتاج Handy إلى بعض الأذونات ليعمل بشكل صحيح",
+      "description": ".يحتاج AudioBud إلى بعض الأذونات ليعمل بشكل صحيح",
       "microphone": {
         "title": "الوصول إلى الميكروفون",
         "description": ".مطلوب لسماع صوتك من أجل التفريغ الصوتي"
@@ -125,6 +131,7 @@
   "modelSelector": {
     "custom": "مخصص",
     "active": "نشط",
+    "switching": "جارٍ التبديل...",
     "noModelsAvailable": "لا توجد نماذج متاحة",
     "verifying": "جارٍ التحقق من {{modelName}}...",
     "verifyingGeneric": "جارٍ التحقق...",
@@ -140,7 +147,6 @@
     "modelUnloaded": "تم إلغاء تحميل النموذج",
     "noModelDownloadRequired": "لا يوجد نموذج - التنزيل مطلوب",
     "deleteModel": "حذف {{modelName}}",
-    "switching": "جارٍ التبديل...",
     "downloadSpeed": "{{speed}} ميجابايت/ث",
     "cancel": "إلغاء",
     "cancelDownload": "إلغاء التنزيل",
@@ -154,10 +160,18 @@
     }
   },
   "settings": {
+    "autosave": {
+      "saved": "تم الحفظ في البركة",
+      "failed": "تعذّر حفظ هذا التغيير"
+    },
+    "modelSettings": {
+      "title": "إعدادات {{model}}",
+      "noSettingsNeeded": "لا توجد إعدادات مطلوبة لهذا النموذج"
+    },
     "general": {
       "title": "عام",
       "shortcut": {
-        "title": "اختصارات Handy",
+        "title": "اختصارات AudioBud",
         "description": "إعداد اختصارات لوحة المفاتيح لبدء تسجيل التفريغ الصوتي",
         "loading": "...جاري تحميل الاختصارات",
         "none": "لا توجد اختصارات مجهزة",
@@ -175,6 +189,10 @@
           "transcribe_with_post_process": {
             "name": "مفتاح المعالجة اللاحقة",
             "description": "اختياري: مفتاح اختصار مخصص يطبق دائماً المعالجة اللاحقة بالذكاء الاصطناعي على التفريغ الصوتي."
+          },
+          "transcribe_raw": {
+            "name": "مفتاح النص الخام",
+            "description": "مفتاح اختصار مخصص يفرّغ الصوت إلى نص خام بأحرف صغيرة وبدون علامات ترقيم، لهذه الإملاءة فقط."
           }
         },
         "errors": {
@@ -196,13 +214,36 @@
         "description": "استمر في الضغط للتسجيل، واترك للتوقف"
       }
     },
+    "models": {
+      "title": "نماذج النسخ",
+      "description": "اختر نموذج نسخ أو قم بتنزيل نماذج إضافية. تقدم النماذج المختلفة مستويات متفاوتة من الدقة والسرعة.",
+      "yourModels": "النماذج المحمّلة",
+      "availableModels": "متاح للتنزيل",
+      "downloaded": "تم التنزيل",
+      "available": "متاح للتنزيل",
+      "deleteConfirm": "هل أنت متأكد أنك تريد حذف {{modelName}}؟ ستحتاج إلى تنزيله مرة أخرى لاستخدامه.",
+      "deleteActiveConfirm": "{{modelName}} هو النموذج النشط حاليًا. حذفه سيوقف النسخ حتى تختار نموذجًا جديدًا. هل أنت متأكد؟",
+      "deleteTitle": "حذف النموذج",
+      "filters": {
+        "all": "الكل",
+        "multiLanguage": "متعدد اللغات",
+        "translation": "ترجمة",
+        "allLanguages": "جميع اللغات"
+      },
+      "noModelsMatch": "لا توجد نماذج مطابقة لهذا الفلتر."
+    },
     "sound": {
       "title": "الصوت",
+      "previewSounds": "معاينة الأصوات (يشغّل صوت البدء ثم التوقف)",
       "microphone": {
         "title": "الميكروفون",
         "description": "اختر جهاز الميكروفون المفضل لديك",
         "placeholder": "...اختر الميكروفون",
         "loading": "...جاري التحميل"
+      },
+      "inputLevel": {
+        "title": "مستوى الإدخال",
+        "description": "المستوى المباشر من الميكروفون المحدد. تحدّث ويجب أن تتحرك الأشرطة، ما يؤكد وصول الصوت."
       },
       "audioFeedback": {
         "label": "تنبيهات صوتية",
@@ -217,6 +258,12 @@
       "volume": {
         "title": "مستوى الصوت",
         "description": "ضبط مستوى صوت تنبيهات الصوت"
+      },
+      "outputTest": {
+        "title": "اختبار الإخراج",
+        "description": "شغّل صوتاً تجريبياً عبر جهاز الإخراج المحدد للتأكد من خروج الصوت.",
+        "button": "اختبار الإخراج",
+        "playing": "جارٍ التشغيل..."
       }
     },
     "advanced": {
@@ -257,11 +304,11 @@
       },
       "autostart": {
         "label": "التشغيل عند بدء التشغيل",
-        "description": ".بدء تشغيل Handy تلقائياً عند تسجيل الدخول إلى جهاز الكمبيوتر الخاص بك"
+        "description": ".بدء تشغيل AudioBud تلقائياً عند تسجيل الدخول إلى جهاز الكمبيوتر الخاص بك"
       },
       "showTrayIcon": {
         "label": "إظهار أيقونة شريط النظام",
-        "description": ".عرض أيقونة Handy في شريط النظام"
+        "description": ".عرض أيقونة AudioBud في شريط النظام"
       },
       "overlay": {
         "title": "موقع التراكب",
@@ -270,6 +317,22 @@
           "none": "بلا",
           "bottom": "أسفل",
           "top": "أعلى"
+        },
+        "fine": {
+          "title": "الموضع على الشاشة",
+          "description": "اختر مكان مؤشر التسجيل على شاشتك النشطة. يطابق العمود الأوسط الموضع الافتراضي.",
+          "reset": "إعادة التعيين إلى الافتراضي"
+        },
+        "anchors": {
+          "topleft": "أعلى اليسار",
+          "topcenter": "أعلى الوسط",
+          "topright": "أعلى اليمين",
+          "middleleft": "الوسط الأيسر",
+          "middlecenter": "الوسط",
+          "middleright": "الوسط الأيمن",
+          "bottomleft": "أسفل اليسار",
+          "bottomcenter": "أسفل الوسط",
+          "bottomright": "أسفل اليمين"
         }
       },
       "pasteMethod": {
@@ -330,13 +393,116 @@
           "sec15": "بعد 15 ثوانٍ (تصحيح أخطاء)"
         }
       },
+      "dictionaryGuide": {
+        "title": "ضبط الكلمات",
+        "intro": "تعمل أداتان معاً. الكلمات المخصصة توجّه النموذج نحو المصطلحات التي تستخدمها كثيراً، فيفضّلها عندما يكون النطق غامضاً. أما استبدالات الكلمات فتفرض تصحيحاً دقيقاً بعد ذلك، للأخطاء التي يكررها النموذج.",
+        "rule": "ابدأ بكلمة مخصصة. إذا ظل اسم أو مصطلح يظهر خاطئاً بالطريقة نفسها في كل مرة، فأضف استبدال كلمة مما تسمعه إلى ما تقصده.",
+        "examplesToggle": "عرض الأمثلة",
+        "examples": {
+          "name": {
+            "title": "اسم صعب (jamditis)",
+            "body": "أضف \"jamditis\" ككلمة مخصصة. إذا استمر تفريغه على أنه \"jam dightis\"، فأضف استبدال كلمة: jam dightis → jamditis."
+          },
+          "domain": {
+            "title": "نطاق أو بريد إلكتروني (jamditis.com)",
+            "body": "ستقول \"jamditis dot com\"، لذا أضف استبدال كلمة: jamditis dot com → jamditis.com. تحافظ الاستبدالات على الأحرف كما هي تماماً، فتبقى وحدة واحدة دون إضافة مسافات أو أحرف كبيرة."
+          },
+          "handle": {
+            "title": "معرّف (@jamditis)",
+            "body": "أضف استبدال كلمة: at jamditis → @jamditis."
+          }
+        },
+        "engineNote": "توجّه الكلمات المخصصة نماذج Whisper أثناء فك الترميز، بينما تصحّح النص لاحقاً في النماذج الأخرى، لذا تختلف النتائج حسب النموذج. أما استبدالات الكلمات فتعمل بالطريقة نفسها في كل النماذج."
+      },
       "customWords": {
         "title": "كلمات مخصصة",
         "description": ".أضف الكلمات التي غالباً ما يتم فهمها بشكل خاطئ أو كتابتها بشكل خاطئ أثناء التفريغ. سيقوم النظام تلقائياً بتصحيح الكلمات ذات الصوت المماثل لتطابق قائمتك",
         "placeholder": "أضف كلمة",
         "add": "إضافة",
         "remove": "إزالة {{word}}",
-        "duplicate": "\"{{word}}\" موجود بالفعل"
+        "duplicate": "\"{{word}}\" موجود بالفعل",
+        "capReached": "قاموسك ممتلئ ({{cap}} كلمة). احذف بعضها لإضافة المزيد.",
+        "count": "{{count}} / {{cap}} كلمة",
+        "import": {
+          "title": "استيراد قائمة",
+          "description": "ارفع ملف txt أو الصق قائمة. افصل بين المدخلات بأسطر جديدة أو فواصل. تُحفظ العبارات المكوّنة من ثلاث كلمات أو أقل، أما المدخلات الأطول فتُقسَّم إلى كلمات مفردة.",
+          "upload": "رفع ملف txt",
+          "formatHint": "ملفات txt أو csv عادية. كلمة أو عبارة واحدة في كل سطر، أو افصل بين المدخلات بفواصل. تبقى العبارات المكوّنة من ثلاث كلمات أو أقل كما هي، أما المدخلات الأطول فتُقسَّم إلى كلمات مفردة. 500 مدخل كحد أقصى.",
+          "pastePlaceholder": "الصق الكلمات هنا، كلمة في كل سطر أو مفصولة بفواصل",
+          "add": "إضافة القائمة",
+          "none": "لا توجد كلمات جديدة لإضافتها",
+          "added_zero": "لم تُضف أي كلمة",
+          "added_one": "تمت إضافة {{count}} كلمة",
+          "added_two": "تمت إضافة كلمتين",
+          "added_few": "تمت إضافة {{count}} كلمات",
+          "added_many": "تمت إضافة {{count}} كلمة",
+          "added_other": "تمت إضافة {{count}} كلمة",
+          "skippedDuplicates": "{{count}} موجودة بالفعل في قائمتك",
+          "skippedCap": "{{count}} تتجاوز حد {{cap}} كلمة",
+          "skippedInvalid": "{{count}} طويلة جداً",
+          "readError": "تعذّر قراءة هذا الملف"
+        }
+      },
+      "wordReplacements": {
+        "title": "استبدالات الكلمات",
+        "description": "استبدل كلمات أو عبارات محددة دائماً، مهما كان نطقها. يعمل مع كل عملية تفريغ، ولكل النماذج، بعد مطابِق الكلمات المخصصة. اترك خانة الاستبدال فارغة لحذف كلمة. استخدم هذا للتصحيحات التي لا يستطيع المطابِق التقريبي إجراءها بأمان (مثل \"clawed\" إلى \"Claude\").",
+        "fromPlaceholder": "المسموع",
+        "toPlaceholder": "استبدل بـ",
+        "add": "إضافة",
+        "wholeWord": "الكلمة الكاملة فقط",
+        "caseSensitive": "حساس لحالة الأحرف",
+        "duplicate": "\"{{word}}\" له استبدال بالفعل",
+        "capReached": "قائمة الاستبدالات ممتلئة ({{cap}} مدخل). احذف بعضها لإضافة المزيد.",
+        "tooLong": "أبقِ كل حقل أقل من {{max}} حرفاً",
+        "count": "{{count}} / {{cap}} استبدال",
+        "deletes": "(يحذف الكلمة)",
+        "partialBadge": "جزئي",
+        "caseBadge": "Aa",
+        "remove": "إزالة استبدال {{word}}"
+      },
+      "personalization": {
+        "title": "التعلّم من سجلي",
+        "description": "فعّل هذا الخيار للسماح لـ AudioBud باقتراح كلمات مخصصة من الأسماء والمصطلحات التي تمليها أكثر من غيرها. يبقى كل شيء على هذا الجهاز: يقرأ سجل التفريغ المحلي لديك، ولا يُرفع أي شيء، ويمكنك تصدير ما يتعلمه أو مسحه في أي وقت. معطّل افتراضياً.",
+        "error": "حدث خطأ ما. يرجى المحاولة مرة أخرى.",
+        "suggestions": {
+          "title": "الكلمات المقترحة",
+          "description": "أسماء علم ومصطلحات متكررة مستخرجة من سجل التفريغ لديك. اقبل ما تريده منها ككلمات مخصصة، أو تجاهل الباقي كي يتوقف ظهوره.",
+          "refresh": "تحديث الاقتراحات",
+          "loading": "جارٍ فحص السجل...",
+          "empty": "لا توجد اقتراحات جديدة بعد. استخدم الإملاء أكثر ثم حدّث.",
+          "count": "ظهرت {{count}} مرة",
+          "accept": "إضافة",
+          "dismiss": "تجاهل",
+          "dismissLabel": "تجاهل اقتراح {{word}}"
+        },
+        "learned": {
+          "count_zero": "لا كلمات متعلَّمة",
+          "count_one": "{{count}} كلمة متعلَّمة",
+          "count_two": "كلمتان متعلَّمتان",
+          "count_few": "{{count}} كلمات متعلَّمة",
+          "count_many": "{{count}} كلمة متعلَّمة",
+          "count_other": "{{count}} كلمة متعلَّمة",
+          "remove": "إزالة الكلمة المتعلَّمة {{word}}"
+        },
+        "data": {
+          "title": "بيانات التخصيص الخاصة بك",
+          "description": "صدّر نسخة مما تعلّمه AudioBud، أو امسحه بالكامل. تؤدي إعادة التعيين إلى إزالة كل الكلمات المتعلَّمة والاقتراحات المتجاهَلة، ولا تتأثر بها كلماتك المخصصة واستبدالاتك اليدوية.",
+          "export": "تصدير",
+          "reset": "إعادة تعيين التخصيص",
+          "resetTitle": "إعادة تعيين التخصيص",
+          "resetConfirm": "سيؤدي هذا إلى مسح كل الكلمات المتعلَّمة والاقتراحات المتجاهَلة. تبقى كلماتك المخصصة واستبدالاتك اليدوية كما هي. هل تريد المتابعة؟",
+          "resetDone": "تم مسح بيانات التخصيص",
+          "exportDone": "تم تصدير بيانات التخصيص",
+          "exportError": "تعذّر تصدير بيانات التخصيص"
+        }
+      },
+      "rawOutput": {
+        "label": "نص خام",
+        "description": "إخراج نص بأحرف صغيرة مع إزالة الأحرف الكبيرة وعلامات الترقيم في نهاية الجمل. تبقى الاختصارات (API، GPU) وحرف \"I\" الإنجليزي المنفرد كما هي. مفيد لتغذية أدوات أخرى أو عندما يبالغ النموذج في التنسيق. يمكنك أيضاً تعيين اختصار منفصل للإملاءات الخام العابرة."
+      },
+      "formatNumbers": {
+        "label": "تنسيق الأرقام",
+        "description": "يحوّل الأرقام المنطوقة إلى أرقام ورموز في النص المنسّق، مثل $25 أو 10% أو 3.5. يعمل دون اتصال وبدون مفتاح API. لا ينطبق على النصوص الخام."
       }
     },
     "postProcessing": {
@@ -426,7 +592,7 @@
       },
       "updateChecks": {
         "label": "التحقق من وجود تحديثات",
-        "description": "التحقق تلقائياً من وجود إصدارات جديدة من Handy"
+        "description": "التحقق تلقائياً من وجود إصدارات جديدة من AudioBud"
       },
       "soundTheme": {
         "label": "سمة الصوت",
@@ -439,7 +605,8 @@
       "historyLimit": {
         "title": "حد السجل",
         "description": "الحد الأقصى لعدد إدخالات السجل المراد الاحتفاظ بها",
-        "entries": "إدخالات"
+        "entries": "إدخالات",
+        "trimNote": "خفض الحد لا يحذف التسجيلات فوراً. تُزال التسجيلات غير المحفوظة التي تتجاوز الحد عند إضافة تسجيلك التالي."
       },
       "recordingRetention": {
         "title": "حذف التسجيلات تلقائياً",
@@ -449,7 +616,8 @@
         "days3": "بعد 3 أيام",
         "weeks2": "بعد أسبوعين",
         "months3": "بعد 3 أشهر",
-        "placeholder": "اختر فترة الاحتفاظ..."
+        "placeholder": "اختر فترة الاحتفاظ...",
+        "trimNote": "تغيير هذا لا يحذف التسجيلات فوراً. لا تُزال التسجيلات القديمة غير المحفوظة إلا عند إضافة تسجيلك التالي."
       },
       "alwaysOnMicrophone": {
         "label": "ميكروفون يعمل دائماً",
@@ -494,11 +662,11 @@
       "title": "حول",
       "version": {
         "title": "الإصدار",
-        "description": "الإصدار الحالي من Handy"
+        "description": "الإصدار الحالي من AudioBud"
       },
       "appDataDirectory": {
         "title": "مجلد بيانات التطبيق",
-        "description": "الموقع الذي يخزن فيه Handy بياناته"
+        "description": "الموقع الذي يخزن فيه AudioBud بياناته"
       },
       "sourceCode": {
         "title": "كود المصدر",
@@ -506,40 +674,28 @@
         "button": "عرض على GitHub"
       },
       "supportDevelopment": {
-        "title": "دعم التطوير",
-        "description": "ساعدنا في مواصلة بناء Handy",
-        "button": "تبرع"
+        "title": "أطعم الضفدع",
+        "description": "AudioBud مجاني ويعمل بالكامل على جهازك. إذا وفّر عليك بعض الكتابة، فألقِ ذبابة في الجرة.",
+        "button": "اشترِ لي ذبابة"
       },
       "acknowledgments": {
         "title": "شكر وتقدير",
+        "handy": {
+          "title": "Handy",
+          "description": "تطبيق الإملاء مفتوح المصدر الذي بُني عليه AudioBud",
+          "details": "AudioBud نسخة معدّلة من Handy (برخصة MIT) من تطوير cjpais. شكراً جزيلاً لـ cjpais ولمساهمي Handy على الأساس الذي يقوم عليه هذا التطبيق. لمعرفة المزيد: handy.computer."
+        },
+        "parakeet": {
+          "title": "Parakeet",
+          "description": "NVIDIA NeMo Parakeet، المحرك الافتراضي لـ AudioBud على Windows",
+          "details": "يعمل التفريغ افتراضياً بنموذج Parakeet من NVIDIA عبر بيئة تشغيل ONNX الخاصة بـ transcribe-rs. شكراً لـ NVIDIA NeMo ولمشرفي transcribe-rs."
+        },
         "whisper": {
           "title": "Whisper.cpp",
-          "description": "استنتاج عالي الأداء لنموذج التعرف التلقائي على الكلام Whisper من OpenAI",
-          "details": ".يستخدم Handy برنامج Whisper.cpp لمعالجة سريعة ومحلية لتحويل الكلام إلى نص. شكراً للعمل الرائع الذي قام به Georgi Gerganov والمساهمون"
+          "description": "استنتاج محلي عالي الأداء لنموذج Whisper من OpenAI",
+          "details": "يمكن لـ AudioBud أيضاً التفريغ باستخدام Whisper.cpp مع التسريع على GPU. شكراً لـ Georgi Gerganov والمساهمين."
         }
       }
-    },
-    "modelSettings": {
-      "title": "إعدادات النموذج",
-      "noSettingsNeeded": "لا توجد إعدادات مطلوبة لهذا النموذج"
-    },
-    "models": {
-      "title": "نماذج النسخ",
-      "description": "اختر نموذج نسخ أو قم بتنزيل نماذج إضافية. تقدم النماذج المختلفة مستويات متفاوتة من الدقة والسرعة.",
-      "yourModels": "النماذج المحمّلة",
-      "availableModels": "متاح للتنزيل",
-      "downloaded": "تم التنزيل",
-      "available": "متاح للتنزيل",
-      "deleteConfirm": "هل أنت متأكد أنك تريد حذف {{modelName}}؟ ستحتاج إلى تنزيله مرة أخرى لاستخدامه.",
-      "deleteActiveConfirm": "{{modelName}} هو النموذج النشط حاليًا. حذفه سيوقف النسخ حتى تختار نموذجًا جديدًا. هل أنت متأكد؟",
-      "deleteTitle": "حذف النموذج",
-      "filters": {
-        "all": "الكل",
-        "multiLanguage": "متعدد اللغات",
-        "translation": "ترجمة",
-        "allLanguages": "جميع اللغات"
-      },
-      "noModelsMatch": "لا توجد نماذج مطابقة لهذا الفلتر."
     }
   },
   "footer": {
@@ -555,9 +711,9 @@
     "installing": "...جاري التثبيت",
     "preparing": "...جاري التحضير",
     "checkForUpdates": "التحقق من وجود تحديثات",
-    "portableUpdateTitle": "Manual update required",
-    "portableUpdateMessage": "Portable installs cannot be updated automatically. To update: download the latest NSIS installer from GitHub Releases, install it to the same folder, then copy your Data/ folder (settings, models, recordings) from the old version to the new one.",
-    "portableUpdateButton": "Open GitHub Releases"
+    "portableUpdateTitle": "يلزم إجراء تحديث يدوي",
+    "portableUpdateMessage": "لا يمكن تحديث النسخ المحمولة تلقائيًا. للتحديث: نزّل أحدث مُثبّت NSIS من GitHub Releases، وثبّته في المجلد نفسه، ثم انسخ مجلد Data/ (الإعدادات والنماذج والتسجيلات) من الإصدار القديم إلى الإصدار الجديد.",
+    "portableUpdateButton": "فتح GitHub Releases"
   },
   "common": {
     "loading": "...جاري التحميل",
@@ -572,6 +728,7 @@
     "update": "تحديث",
     "close": "إغلاق",
     "open": "فتح",
+    "moreInfo": "مزيد من المعلومات",
     "default": "افتراضي",
     "enabled": "ممكن",
     "disabled": "معطل",
@@ -583,7 +740,7 @@
   },
   "accessibility": {
     "permissionsRequired": "أذونات إمكانية الوصول مطلوبة",
-    "permissionsDescription": ".يحتاج Handy إلى أذونات إمكانية الوصول لكتابة النص المفرغ",
+    "permissionsDescription": ".يحتاج AudioBud إلى أذونات إمكانية الوصول لكتابة النص المفرغ",
     "openSettings": "فتح إعدادات النظام",
     "dismiss": "تجاهل"
   },
@@ -602,14 +759,20 @@
     "modelLoadFailed": "فشل في تحميل النموذج: {{model}}",
     "modelLoadFailedUnknown": "نموذج غير معروف",
     "pasteFailedTitle": "فشل لصق النص",
-    "pasteFailed": "تعذر لصق النص في التطبيق النشط."
+    "pasteFailed": "تعذر لصق النص في التطبيق النشط.",
+    "transcriptionTimeoutTitle": "انتهت مهلة التفريغ",
+    "transcriptionTimeout": "لم يستجب المحرك بعد {{seconds}} ثانية وقد يكون متوقفاً. أعد تشغيل AudioBud إذا استمر هذا."
   },
   "appLanguage": {
     "title": "لغة التطبيق",
-    "description": "تغيير لغة واجهة Handy"
+    "description": "تغيير لغة واجهة AudioBud"
   },
   "overlay": {
     "transcribing": "...جاري التفريغ",
-    "processing": "...جاري المعالجة"
+    "processing": "...جاري المعالجة",
+    "recording": "جارٍ التسجيل",
+    "cancel": "إلغاء التسجيل",
+    "raw": "خام",
+    "rawHint": "وضع النص الخام"
   }
 }

@@ -22,6 +22,7 @@ export { TranslateToEnglish } from "./TranslateToEnglish";
 export { CustomWords } from "./CustomWords";
 export { WordReplacements } from "./WordReplacements";
 export { RawOutput } from "./RawOutput";
+export { FormatNumbers } from "./FormatNumbers";
 export { PostProcessingToggle } from "./PostProcessingToggle";
 export { PostProcessingSettingsApi } from "./PostProcessingSettingsApi";
 export { PostProcessingSettingsPrompts } from "./PostProcessingSettingsPrompts";

@@ -3,6 +3,7 @@ use crate::helpers::clamshell;
 use crate::settings::{get_settings, AppSettings};
 use crate::utils;
 use log::{debug, error, info};
+use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -117,11 +118,27 @@ pub enum MicrophoneMode {
 
 /* ──────────────────────────────────────────────────────────────── */
 
+/// Returns the VAD model path to hand to the VAD engine.
+///
+/// The path stays a `Path` end to end. The previous handoff round-tripped
+/// through `&str` (`.to_str().unwrap()`), which loses paths that are not
+/// valid UTF-8 and broke model loading on Windows profiles with non-ASCII
+/// characters in the user path (issue #56).
+fn vad_engine_path(vad_path: &Path) -> Result<&Path, anyhow::Error> {
+    if !vad_path.exists() {
+        return Err(anyhow::anyhow!(
+            "VAD model not found at {}",
+            vad_path.display()
+        ));
+    }
+    Ok(vad_path)
+}
+
 fn create_audio_recorder(
-    vad_path: &str,
+    vad_path: &Path,
     app_handle: &tauri::AppHandle,
 ) -> Result<AudioRecorder, anyhow::Error> {
-    let silero = SileroVad::new(vad_path, 0.3)
+    let silero = SileroVad::new(vad_engine_path(vad_path)?, 0.3)
         .map_err(|e| anyhow::anyhow!("Failed to create SileroVad: {}", e))?;
     let smoothed_vad = SmoothedVad::new(Box::new(silero), 15, 15, 2);
 
@@ -278,10 +295,7 @@ impl AudioRecordingManager {
                     tauri::path::BaseDirectory::Resource,
                 )
                 .map_err(|e| anyhow::anyhow!("Failed to resolve VAD path: {}", e))?;
-            *recorder_opt = Some(create_audio_recorder(
-                vad_path.to_str().unwrap(),
-                &self.app_handle,
-            )?);
+            *recorder_opt = Some(create_audio_recorder(&vad_path, &self.app_handle)?);
         }
         Ok(())
     }
@@ -548,5 +562,115 @@ impl AudioRecordingManager {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::vad_engine_path;
+    use std::ffi::OsString;
+    use std::fs;
+    use std::path::PathBuf;
+
+    /// Creates a directory named `dir_name` under the OS temp dir with an
+    /// empty stand-in model file inside, mirroring a resource dir that lives
+    /// under a user-profile path. Returns (dir, model_path).
+    fn model_in_dir(dir_name: OsString) -> (PathBuf, PathBuf) {
+        let dir = std::env::temp_dir().join(dir_name);
+        fs::create_dir_all(&dir).expect("test setup: failed to create temp dir");
+        let model = dir.join("silero_vad_v4.onnx");
+        fs::File::create(&model).expect("test setup: failed to create stand-in model file");
+        (dir, model)
+    }
+
+    // Regression test for issue #56: a Windows profile path with Cyrillic,
+    // CJK, or accented Latin characters must survive the VAD path handoff.
+    #[test]
+    fn vad_engine_path_preserves_unicode_paths() {
+        let (dir, model) = model_in_dir(OsString::from(
+            "audiobud-vad-\u{041f}\u{043e}\u{043b}\u{044c}-\u{7528}\u{6237}-An\u{e7}a",
+        ));
+
+        let handed_off =
+            vad_engine_path(&model).expect("unicode path must be accepted, not rejected");
+        assert_eq!(handed_off, model.as_path());
+
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    // A path that is not valid UTF-8 (possible on Windows and Linux) must be
+    // handed to the engine untouched instead of panicking in a &str round-trip.
+    // macOS is excluded: APFS rejects non-UTF-8 file names at creation.
+    #[test]
+    #[cfg(any(windows, target_os = "linux"))]
+    fn vad_engine_path_survives_non_utf8_paths() {
+        #[cfg(windows)]
+        let dir_name = {
+            use std::os::windows::ffi::OsStringExt;
+            let mut wide: Vec<u16> = "audiobud-vad-".encode_utf16().collect();
+            wide.push(0xD800); // unpaired surrogate: valid in Windows paths, not valid UTF-8
+            OsString::from_wide(&wide)
+        };
+        #[cfg(target_os = "linux")]
+        let dir_name = {
+            use std::os::unix::ffi::OsStringExt;
+            OsString::from_vec(b"audiobud-vad-\xff".to_vec())
+        };
+
+        let (dir, model) = model_in_dir(dir_name);
+        assert!(
+            model.to_str().is_none(),
+            "test setup: path was expected to be non-UTF-8"
+        );
+
+        let handed_off =
+            vad_engine_path(&model).expect("non-UTF-8 path must be accepted, not rejected");
+        assert_eq!(handed_off, model.as_path());
+
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    // End-to-end check for issue #56's reported case: a VALID Unicode
+    // (Cyrillic + CJK + accented Latin) directory, exercised through the real
+    // ONNX load stack (vad-rs -> ort -> onnxruntime CreateSession) — the same
+    // file-open call the Parakeet engine sessions use. CI downloads the model
+    // (see .github/workflows/ci.yml) and the test fails there if it is absent —
+    // a silent skip would let the regression test pass without running. Local
+    // checkouts without the model skip with a notice (AGENTS.md model setup).
+    #[test]
+    fn silero_vad_loads_from_unicode_directory() {
+        use crate::audio_toolkit::SileroVad;
+
+        let source =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources/models/silero_vad_v4.onnx");
+        if !source.is_file() {
+            assert!(
+                std::env::var_os("CI").is_none(),
+                "silero_vad_v4.onnx is missing in CI; the workflow must download it before cargo test"
+            );
+            eprintln!(
+                "skipping silero_vad_loads_from_unicode_directory: \
+                 silero_vad_v4.onnx not downloaded (see AGENTS.md model setup)"
+            );
+            return;
+        }
+
+        let dir = std::env::temp_dir().join(
+            "audiobud-vad-\u{0410}\u{043b}\u{0435}\u{043a}\u{0441}\u{0430}\u{043d}\u{0434}\u{0440}-\u{7528}\u{6237}-Fran\u{e7}aise",
+        );
+        fs::create_dir_all(&dir).expect("test setup: failed to create unicode temp dir");
+        let model = dir.join("silero_vad_v4.onnx");
+        fs::copy(&source, &model).expect("test setup: failed to copy VAD model");
+
+        let result = SileroVad::new(&model, 0.3);
+        fs::remove_dir_all(&dir).ok();
+        result.expect("silero VAD must load from a unicode (Cyrillic/CJK) directory");
+    }
+
+    #[test]
+    fn vad_engine_path_reports_missing_model() {
+        let missing = std::env::temp_dir().join("audiobud-vad-missing/silero_vad_v4.onnx");
+        let err = vad_engine_path(&missing).expect_err("missing model file must be an error");
+        assert!(err.to_string().contains("VAD model not found"));
     }
 }

@@ -100,7 +100,7 @@ VIAddVersionKey "ProductVersion" "${VERSION}"
 
 ; Uninstaller signing command
 !if "${UNINSTALLERSIGNCOMMAND}" != ""
-  !uninstfinalize '${UNINSTALLERSIGNCOMMAND}'
+  !uninstfinalize '${UNINSTALLERSIGNCOMMAND} -TauriNsisUninstaller' = 0
 !endif
 
 ; Handle install mode, `perUser`, `perMachine` or `both`
@@ -765,9 +765,10 @@ Section Install
   File "${MAINBINARYDIR}vulkan-1.dll"
   File "${MAINBINARYDIR}DirectML.dll"
 
-  ; Ship the third-party license notices for the redistributed runtime DLLs
-  ; above (issue #45); bundle-runtime-dlls.mjs stages it next to the exe.
-  File "${MAINBINARYDIR}THIRD_PARTY_NOTICES.md"
+  ; The third-party license notices covering the runtime DLLs above (issues #45,
+  ; #70) are declared in tauri.conf.json bundle.resources, so the resources block
+  ; below installs them here and in the MSI. Do not also File them explicitly:
+  ; that would write the same file twice.
 
   ; Copy resources
   {{#each resources_dirs}}
@@ -934,7 +935,9 @@ Section Uninstall
   Delete "$INSTDIR\vcruntime140_1.dll"
   Delete "$INSTDIR\vulkan-1.dll"
   Delete "$INSTDIR\DirectML.dll"
-  Delete "$INSTDIR\THIRD_PARTY_NOTICES.md"
+
+  ; THIRD_PARTY_NOTICES.md is a bundled resource, so the resources block below
+  ; deletes it.
 
   ; Delete resources
   {{#each resources}}

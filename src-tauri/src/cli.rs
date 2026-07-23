@@ -1,7 +1,7 @@
 use clap::Parser;
 
 #[derive(Parser, Debug, Clone, Default)]
-#[command(name = "handy", about = "Handy - Speech to Text")]
+#[command(name = "audiobud", about = "AudioBud - Speech to Text")]
 pub struct CliArgs {
     /// Start with the main window hidden
     #[arg(long)]
@@ -30,4 +30,25 @@ pub struct CliArgs {
     /// Enable debug mode with verbose logging
     #[arg(long)]
     pub debug: bool,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::CliArgs;
+    use clap::CommandFactory;
+
+    #[test]
+    fn help_text_names_audiobud_not_the_upstream_fork() {
+        let cmd = CliArgs::command();
+        assert_eq!(cmd.get_name(), "audiobud");
+        let about = cmd.get_about().expect("about is set").to_string();
+        assert!(
+            !about.contains("Handy"),
+            "--help still names the upstream fork: {about:?}"
+        );
+        assert!(
+            about.contains("AudioBud"),
+            "--help omits the app name: {about:?}"
+        );
+    }
 }

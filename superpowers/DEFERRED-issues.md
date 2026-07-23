@@ -83,18 +83,17 @@ milestone-A security pass (TDD, commits noted inline); the sub-threshold ones ar
       `use super::*;` in its test module (warns on every `cargo test`/`clippy`). Trivial; remove or `#[allow]`.
       Inherited from upstream; surfaces once CI runs clippy with warnings-as-errors.
 
-- [x] **CI - `bun test` (bare) collides with the Playwright specs.** Fixed in the CI bootstrap
-      (`9c7e843`). Added a `test` script scoped to `scripts src`; Playwright stays on `test:playwright`,
-      so a bare `bun test` no longer trips on `tests/app.spec.ts`. CI runs `bun run test`.
+- [x] **CI - `bun test` (bare) collided with the Playwright specs.** Fixed in the CI bootstrap
+      (`9c7e843`) by scoping the `test` script to `scripts src`. The later issue #149 cleanup removed
+      the Playwright smoke suite because it only verified that Vite returned an HTML shell.
 
-- [ ] **Localization - 34 milestone-A keys are English-only across 19 locales.** The a11y/autosave/
-      sound-test keys added during milestone A (`sidebar.navLabel`, `settings.autosave.saved`,
-      `settings.sound.inputLevel.*`, `settings.sound.outputTest.*`, ...) exist only in
-      `src/i18n/locales/en/translation.json`. `check:translations` reports 0/19 locales complete.
-      Not a functional bug: i18next `fallbackLng: "en"` shows English for missing keys at runtime. The CI
-      translation step is `continue-on-error: true` so it annotates the gap without blocking merges.
-      Surfaced by the Codex 5.5 high review of the CI bootstrap (2026-06-21). Fix via community
-      translations (`CONTRIBUTING_TRANSLATIONS.md`) or a reviewed CLI pass, then flip continue-on-error off.
+- [x] **Localization - milestone-A keys were English-only across 19 locales.** Fixed in #88. The gap
+      had grown from 34 to 107 keys per locale (2,033 strings) by the time it was closed. All 19 locales
+      now carry the full 494-key en set, and the CI translation step no longer sets
+      `continue-on-error`, so a new en key that lands without translations fails the build.
+      Surfaced by the Codex 5.5 high review of the CI bootstrap (2026-06-21).
+      Known limit: `check:translations` compares key presence only, so a translation that goes stale
+      after its en string is reworded still passes. Tracked separately.
 
 ### Milestone B (release pipeline + native packaging CI)
 
@@ -391,18 +390,12 @@ lower-severity findings held back to avoid regressions in shared widgets mid-flo
 
 ## Test infrastructure
 
-- [ ] **Bare `bun test` collides with the Playwright e2e spec.** Bun's test globber matches
-      `*.spec.ts`, so it picks up `tests/app.spec.ts` (a `@playwright/test` spec meant for
-      `bun run test:playwright`), which then errors ("two different versions of @playwright/test" /
-      `test.describe()` in a config-imported file). Result: bare `bun test` reports 1 fail + 1 error
-      even though all 13 logic tests pass (`bun test scripts/` is clean). This makes the milestone-A
-      acceptance gate (task #18, which lists a bare `bun test`) falsely red. Decide the test layout:
-      either scope the acceptance command to `bun test scripts/`, or add a `bunfig.toml [test]` root /
-      ignore so Bun never globs `tests/*.spec.ts`. Pick one deliberately — it sets the unit-vs-e2e
-      boundary for the repo.
+- [x] **Bare `bun test` collided with the Playwright e2e spec.** The `test` package script now owns
+      the unit-test boundary and runs `bun test scripts src`. Issue #149 removed the orphaned browser
+      suite instead of adding its HTML-shell assertions to CI.
 
-- [ ] **`tests/app.spec.ts` describe block still reads `"Handy App"`.** Minor rebrand leak in a
-      test label (check-rebrand passed, so it doesn't scan `tests/`). Rename to "AudioBud App".
+- [x] **`tests/app.spec.ts` used the old `"Handy App"` label.** Issue #149 removed the test with the
+      rest of the low-value Playwright suite.
 
 ## Milestone B (out of milestone-A scope)
 

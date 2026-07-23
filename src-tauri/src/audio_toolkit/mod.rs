@@ -1,5 +1,7 @@
 pub mod audio;
 pub mod constants;
+pub mod numbers;
+pub mod spoken_punctuation;
 pub mod text;
 pub mod utils;
 pub mod vad;
@@ -8,6 +10,8 @@ pub use audio::{
     is_microphone_access_denied, is_no_input_device_error, list_input_devices, list_output_devices,
     read_wav_samples, save_wav_file, verify_wav_file, AudioRecorder, CpalDeviceInfo,
 };
+pub use numbers::format_numbers;
+pub use spoken_punctuation::apply_spoken_punctuation;
 pub use text::{
     apply_custom_words, apply_replacements, filter_transcription_output, is_common_word,
     strip_to_raw_text,

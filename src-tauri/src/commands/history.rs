@@ -1,10 +1,12 @@
-use crate::actions::process_transcription_output;
+use crate::actions::{process_transcription_output, TranscriptionTimeoutEvent};
+use crate::audio_toolkit::constants::WHISPER_SAMPLE_RATE;
 use crate::managers::{
     history::{HistoryManager, PaginatedHistory},
     transcription::TranscriptionManager,
+    watchdog::{transcription_watchdog_timeout, WatchdogOutcome},
 };
 use std::sync::Arc;
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Emitter, State};
 
 #[tauri::command]
 #[specta::specta]
@@ -87,11 +89,38 @@ pub async fn retry_history_entry_transcription(
 
     transcription_manager.initiate_model_load();
 
+    // Watchdog (issue #58): a wedged engine must fail this command instead of
+    // leaving the frontend awaiting it forever. The error string surfaces
+    // through the command's normal Result path.
     let tm = Arc::clone(&transcription_manager);
-    let transcription = tauri::async_runtime::spawn_blocking(move || tm.transcribe(samples))
-        .await
-        .map_err(|e| format!("Transcription task panicked: {}", e))?
-        .map_err(|e| e.to_string())?;
+    let watchdog_timeout = transcription_watchdog_timeout(samples.len(), WHISPER_SAMPLE_RATE);
+    let transcription = match tauri::async_runtime::spawn_blocking(move || {
+        tm.transcribe_with_watchdog(samples, watchdog_timeout)
+    })
+    .await
+    .map_err(|e| format!("Transcription task panicked: {}", e))?
+    {
+        WatchdogOutcome::Completed(result) => result.map_err(|e| e.to_string())?,
+        WatchdogOutcome::TimedOut => {
+            // Emit the same event as the live pipeline so the user sees the
+            // specific timeout toast (HistorySettings only shows a generic
+            // retry-failed message for the command error), while the Err
+            // return keeps the command contract for the frontend await.
+            let _ = app.emit(
+                "transcription-timeout",
+                TranscriptionTimeoutEvent {
+                    timeout_secs: watchdog_timeout.as_secs(),
+                },
+            );
+            return Err(format!(
+                "Transcription timed out after {}s",
+                watchdog_timeout.as_secs()
+            ));
+        }
+        WatchdogOutcome::Panicked => {
+            return Err("Transcription worker panicked before producing a result".to_string());
+        }
+    };
 
     if transcription.is_empty() {
         return Err("Recording contains no speech".to_string());
@@ -135,11 +164,10 @@ pub async fn update_history_limit(
 ) -> Result<(), String> {
     let mut settings = crate::settings::get_settings(&app);
     settings.history_limit = limit;
+    let retention_period = settings.recording_retention_period;
     crate::settings::write_settings(&app, settings);
 
-    history_manager
-        .cleanup_old_entries()
-        .map_err(|e| e.to_string())?;
+    history_manager.on_history_settings_changed(retention_period, limit);
 
     Ok(())
 }
@@ -164,11 +192,10 @@ pub async fn update_recording_retention_period(
 
     let mut settings = crate::settings::get_settings(&app);
     settings.recording_retention_period = retention_period;
+    let history_limit = settings.history_limit;
     crate::settings::write_settings(&app, settings);
 
-    history_manager
-        .cleanup_old_entries()
-        .map_err(|e| e.to_string())?;
+    history_manager.on_history_settings_changed(retention_period, history_limit);
 
     Ok(())
 }

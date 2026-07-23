@@ -67,13 +67,19 @@ fn build_headers(provider: &PostProcessProvider, api_key: &str) -> Result<Header
     headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
     headers.insert(
         REFERER,
-        HeaderValue::from_static("https://github.com/cjpais/Handy"),
+        HeaderValue::from_static("https://github.com/jamditis/audiobud"),
     );
     headers.insert(
         USER_AGENT,
-        HeaderValue::from_static("Handy/1.0 (+https://github.com/cjpais/Handy)"),
+        // concat! keeps this a &'static str for from_static while tracking the real
+        // version, rather than restating the fork's frozen "1.0".
+        HeaderValue::from_static(concat!(
+            "AudioBud/",
+            env!("CARGO_PKG_VERSION"),
+            " (+https://github.com/jamditis/audiobud)"
+        )),
     );
-    headers.insert("X-Title", HeaderValue::from_static("Handy"));
+    headers.insert("X-Title", HeaderValue::from_static("AudioBud"));
 
     // Provider-specific auth headers
     if !api_key.is_empty() {
@@ -274,4 +280,60 @@ pub async fn fetch_models(
     }
 
     Ok(models)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::build_headers;
+    use crate::settings::PostProcessProvider;
+
+    fn provider() -> PostProcessProvider {
+        PostProcessProvider {
+            id: "openrouter".to_string(),
+            label: "OpenRouter".to_string(),
+            base_url: "https://openrouter.ai/api/v1".to_string(),
+            allow_base_url_edit: false,
+            models_endpoint: None,
+            supports_structured_output: false,
+        }
+    }
+
+    #[test]
+    fn outbound_headers_identify_audiobud_not_the_upstream_fork() {
+        // These leave the machine. OpenRouter surfaces X-Title and Referer in its
+        // dashboards and rankings, so a stale value credits this app's traffic to
+        // upstream Handy -- which is why this is worth a test and not just a rename.
+        let headers = build_headers(&provider(), "").expect("headers build without a key");
+
+        for name in ["referer", "user-agent", "x-title"] {
+            let value = headers
+                .get(name)
+                .unwrap_or_else(|| panic!("{name} header is set"))
+                .to_str()
+                .expect("header is ascii");
+            assert!(
+                !value.contains("Handy"),
+                "{name} still names the upstream fork: {value:?}"
+            );
+            assert!(
+                !value.contains("cjpais"),
+                "{name} still points at the upstream repo: {value:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn user_agent_reports_the_real_version() {
+        // The fork shipped a frozen "Handy/1.0" that never matched the build.
+        let headers = build_headers(&provider(), "").expect("headers build without a key");
+        let ua = headers
+            .get("user-agent")
+            .expect("ua")
+            .to_str()
+            .expect("ascii");
+        assert!(
+            ua.contains(env!("CARGO_PKG_VERSION")),
+            "user-agent {ua:?} does not carry the crate version"
+        );
+    }
 }

@@ -8,11 +8,12 @@
       name="description"
       content="Milestones and status for AudioBud, the local-first Windows dictation app: what has shipped and what is planned next."
     />
+    <link rel="canonical" href="https://audiobud.amditis.tech/roadmap.html" />
     <link
-      rel="canonical"
-      href="https://jamditis.github.io/audiobud/roadmap.html"
+      rel="icon"
+      type="image/svg+xml"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23101b13'/%3E%3Ccircle cx='32' cy='34' r='20' fill='%2384d150'/%3E%3Ccircle cx='22' cy='22' r='8' fill='%23f3f7ee'/%3E%3Ccircle cx='42' cy='22' r='8' fill='%23f3f7ee'/%3E%3Ccircle cx='22' cy='22' r='4' fill='%23ff5147'/%3E%3Ccircle cx='42' cy='22' r='4' fill='%23ff5147'/%3E%3Cpath d='M22 39c5 5 15 5 20 0' fill='none' stroke='%23101b13' stroke-width='4' stroke-linecap='round'/%3E%3Cpath d='M17 52h30' stroke='%23ffb23e' stroke-width='5' stroke-linecap='round'/%3E%3C/svg%3E"
     />
-    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
     <meta property="og:title" content="AudioBud roadmap" />
     <meta
       property="og:description"
@@ -21,14 +22,18 @@
     <meta property="og:type" content="website" />
     <meta
       property="og:url"
-      content="https://jamditis.github.io/audiobud/roadmap.html"
+      content="https://audiobud.amditis.tech/roadmap.html"
     />
     <meta
       property="og:image"
-      content="https://jamditis.github.io/audiobud/assets/og-image.png"
+      content="https://audiobud.amditis.tech/assets/og-image.png"
     />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
+    <meta
+      property="og:image:alt"
+      content="AudioBud local dictation for Windows app interface"
+    />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="AudioBud roadmap" />
     <meta
@@ -37,14 +42,20 @@
     />
     <meta
       name="twitter:image"
-      content="https://jamditis.github.io/audiobud/assets/og-image.png"
+      content="https://audiobud.amditis.tech/assets/og-image.png"
+    />
+    <meta
+      name="twitter:image:alt"
+      content="AudioBud local dictation for Windows app interface"
     />
     <link rel="stylesheet" href="./styles.css" />
+    <script src="./site.js" defer></script>
   </head>
   <body>
+    <a class="skip-link" href="#roadmap-title">Skip to roadmap</a>
     <div class="swamp" aria-hidden="true"></div>
     <header class="site-header">
-      <nav class="nav" aria-label="Primary">
+      <nav class="nav nav-with-cta" aria-label="Primary">
         <a class="brand" href="./index.html#top" aria-label="AudioBud home">
           <img class="brand-mark" src="./favicon.svg" alt="" />
           <span>AudioBud</span>
@@ -56,63 +67,49 @@
           <a href="./index.html#install">Install</a>
           <a href="./roadmap.html" aria-current="page">Roadmap</a>
         </div>
+        <a class="nav-cta" href="./index.html#install">Get AudioBud</a>
       </nav>
     </header>
 
     <main id="top">
-      <section class="section">
+      <section class="section roadmap-hero">
         <div class="wrap">
           <p class="eyebrow">Roadmap</p>
-          <div class="section-head">
-            <h2>Where AudioBud is headed.</h2>
+          <div class="section-head" data-reveal>
+            <h1 id="roadmap-title" tabindex="-1">Where AudioBud is headed.</h1>
             <p>
-              Themes and status, not dates. Each milestone links to its issues
-              on GitHub. Near-term versions carry firm issue lists; the later
-              feature bets are directional, and v1.0.0 is a quality gate.
+              Themes and status, not dates. Every card links to a milestone
+              whose issues say what the work actually is, down to the files
+              involved. Near-term versions carry firm lists; the later ones are
+              directional, and v1.0.0 is a decision as much as a quality gate.
             </p>
           </div>
           <div class="roadmap-grid">
-            <article class="roadmap-card">
+            <article class="roadmap-card" data-reveal data-reveal-delay="1">
               <div class="roadmap-card-head">
-                <h3>v0.3.1 &mdash; critical stability patch</h3>
-                <span class="status-pill status-planned">planned</span>
+                <h3>v0.4.1 &mdash; release integrity</h3>
+                <span class="status-pill status-progress">next up</span>
               </div>
               <p>
-                Default-engine data-loss and crash fixes: history auto-delete,
-                non-ASCII profile paths, clipboard contents, and a watchdog for
-                a stuck transcription.
+                Make the build pipeline test what it actually ships, publish
+                provenance you can check for every artifact, and turn on
+                auto-update so a bad build can be fixed after it leaves.
               </p>
               <a
                 class="roadmap-link"
-                href="https://github.com/jamditis/audiobud/milestone/4"
+                href="https://github.com/jamditis/audiobud/milestone/10"
                 >View milestone &rarr;</a
               >
             </article>
-            <article class="roadmap-card">
+            <article class="roadmap-card" data-reveal>
               <div class="roadmap-card-head">
-                <h3>v0.4.0 &mdash; signed &amp; distributable</h3>
+                <h3>v0.5.0 &mdash; output routing</h3>
                 <span class="status-pill status-planned">planned</span>
               </div>
               <p>
-                A signed installer with no SmartScreen warning, the updater
-                repointed to AudioBud so automatic updates work again, and a
-                self-contained install.
-              </p>
-              <a
-                class="roadmap-link"
-                href="https://github.com/jamditis/audiobud/milestone/5"
-                >View milestone &rarr;</a
-              >
-            </article>
-            <article class="roadmap-card">
-              <div class="roadmap-card-head">
-                <h3>v0.5.0 &mdash; stability &amp; reliability</h3>
-                <span class="status-pill status-planned">planned</span>
-              </div>
-              <p>
-                The remaining inherited reliability bugs and a full
-                accessibility pass across the settings, model picker, and
-                dialogs.
+                Pin dictation to a window you chose and keep working somewhere
+                else. Underneath it, the pipeline learns to carry what you asked
+                for from the moment you start speaking through to the paste.
               </p>
               <a
                 class="roadmap-link"
@@ -120,15 +117,15 @@
                 >View milestone &rarr;</a
               >
             </article>
-            <article class="roadmap-card">
+            <article class="roadmap-card" data-reveal data-reveal-delay="1">
               <div class="roadmap-card-head">
-                <h3>v0.6.0 &mdash; on-device AI cleanup</h3>
+                <h3>v0.6.0 &mdash; transcription quality</h3>
                 <span class="status-pill status-planned">planned</span>
               </div>
               <p>
-                Optional transcript cleanup with a local LLM &mdash; never the
-                cloud &mdash; plus cheaper accuracy wins, the long-audio fix,
-                and a real-time preview.
+                One text pipeline instead of stages that disagree with each
+                other, optional cleanup with a local LLM &mdash; never the cloud
+                &mdash; the long-audio fix, and a streaming preview.
               </p>
               <a
                 class="roadmap-link"
@@ -136,7 +133,7 @@
                 >View milestone &rarr;</a
               >
             </article>
-            <article class="roadmap-card">
+            <article class="roadmap-card" data-reveal>
               <div class="roadmap-card-head">
                 <h3>v0.7.0 &mdash; interaction &amp; personality</h3>
                 <span class="status-pill status-planned">planned</span>
@@ -151,14 +148,31 @@
                 >View milestone &rarr;</a
               >
             </article>
-            <article class="roadmap-card">
+            <article class="roadmap-card" data-reveal data-reveal-delay="1">
               <div class="roadmap-card-head">
-                <h3>v1.0.0 &mdash; cross-platform &amp; stable</h3>
+                <h3>v0.8.0 &mdash; reliability &amp; accessibility</h3>
                 <span class="status-pill status-planned">planned</span>
               </div>
               <p>
-                Validate the macOS and Linux builds, finish the remaining
-                hardening, and complete the documentation.
+                The inherited robustness bugs, an error-handling pass so
+                failures surface instead of hanging, and the accessibility audit
+                across settings, the model picker, and dialogs.
+              </p>
+              <a
+                class="roadmap-link"
+                href="https://github.com/jamditis/audiobud/milestone/11"
+                >View milestone &rarr;</a
+              >
+            </article>
+            <article class="roadmap-card" data-reveal>
+              <div class="roadmap-card-head">
+                <h3>v1.0.0 &mdash; platform decision</h3>
+                <span class="status-pill status-planned">planned</span>
+              </div>
+              <p>
+                Finish the rebrand down to the plumbing, then make an explicit
+                call on macOS and Linux: validate them, or hand them back to
+                upstream. Right now nothing tests either one.
               </p>
               <a
                 class="roadmap-link"
@@ -172,7 +186,7 @@
 
       <section class="section alt">
         <div class="wrap">
-          <div class="section-head">
+          <div class="section-head" data-reveal>
             <h2>What has shipped.</h2>
             <p>
               Released builds, newest first. The full notes live in the
@@ -180,6 +194,90 @@
             </p>
           </div>
           <div class="roadmap-grid">
+            <article class="roadmap-card">
+              <div class="roadmap-card-head">
+                <h3>v0.4.0</h3>
+                <span class="status-pill status-shipped">shipped</span>
+              </div>
+              <p>
+                A distribution release with signed and timestamped Windows
+                installers, verified packaged executables, a protected release
+                pipeline, and public publisher-domain pages. Automatic updates
+                remain a separate follow-up.
+              </p>
+              <a
+                class="roadmap-link"
+                href="https://github.com/jamditis/audiobud/releases/tag/v0.4.0"
+                >Release notes &rarr;</a
+              >
+            </article>
+            <article class="roadmap-card">
+              <div class="roadmap-card-head">
+                <h3>v0.3.4</h3>
+                <span class="status-pill status-shipped">shipped</span>
+              </div>
+              <p>
+                A dictation-quality release: spoken numbers come through as
+                digits and symbols ($25, 10%, 3.5), a tray switcher flips
+                between formatted and raw output without opening settings, and
+                raw mode gained the groundwork to read spoken punctuation.
+              </p>
+              <a
+                class="roadmap-link"
+                href="https://github.com/jamditis/audiobud/releases/tag/v0.3.4"
+                >Release notes &rarr;</a
+              >
+            </article>
+            <article class="roadmap-card">
+              <div class="roadmap-card-head">
+                <h3>v0.3.3</h3>
+                <span class="status-pill status-shipped">shipped</span>
+              </div>
+              <p>
+                A naming release: the tray tooltip, the command line, and the
+                headers AudioBud sends to post-processing providers all name the
+                app rather than the project it forked from.
+              </p>
+              <a
+                class="roadmap-link"
+                href="https://github.com/jamditis/audiobud/releases/tag/v0.3.3"
+                >Release notes &rarr;</a
+              >
+            </article>
+            <article class="roadmap-card">
+              <div class="roadmap-card-head">
+                <h3>v0.3.2</h3>
+                <span class="status-pill status-shipped">shipped</span>
+              </div>
+              <p>
+                A translation release: the 19 languages AudioBud ships besides
+                English now cover the whole interface, the app calls itself
+                AudioBud in them rather than Handy, and the learned-words
+                counter agrees with its count.
+              </p>
+              <a
+                class="roadmap-link"
+                href="https://github.com/jamditis/audiobud/releases/tag/v0.3.2"
+                >Release notes &rarr;</a
+              >
+            </article>
+            <article class="roadmap-card">
+              <div class="roadmap-card-head">
+                <h3>v0.3.1</h3>
+                <span class="status-pill status-shipped">shipped</span>
+              </div>
+              <p>
+                A stability patch for the default setup: dictation now starts on
+                Windows accounts with non-English names, history settings no
+                longer delete unsaved recordings, pasting keeps what you had
+                copied, and a stuck engine can no longer hang the window.
+              </p>
+              <a
+                class="roadmap-link"
+                href="https://github.com/jamditis/audiobud/releases/tag/v0.3.1"
+                >Release notes &rarr;</a
+              >
+            </article>
             <article class="roadmap-card">
               <div class="roadmap-card-head">
                 <h3>v0.3.0</h3>
@@ -248,17 +346,28 @@
     </main>
 
     <footer class="site-footer">
-      <div class="wrap">
-        <span
-          >AudioBud is a detached fork of Handy by CJ Pais. MIT licensed.</span
-        >
+      <div class="wrap footer-grid">
+        <div>
+          <a class="brand footer-brand" href="./index.html#top">
+            <img class="brand-mark" src="./favicon.svg" alt="" />
+            <span>AudioBud</span>
+          </a>
+          <p>Local dictation for Windows. MIT licensed.</p>
+        </div>
         <nav class="footer-links" aria-label="Footer">
+          <a href="./index.html#verify">Verify a download</a>
           <a href="./roadmap.html" aria-current="page">Roadmap</a>
+          <a href="./privacy.html">Privacy</a>
+          <a href="./terms.html">Terms</a>
           <a href="https://github.com/jamditis/audiobud/blob/main/CHANGELOG.md"
             >Changelog</a
           >
           <a href="https://github.com/jamditis/audiobud">GitHub</a>
         </nav>
+      </div>
+      <div class="wrap footer-bottom">
+        <span>AudioBud is a detached fork of Handy by CJ Pais.</span>
+        <span>Made beside the pond.</span>
       </div>
     </footer>
   </body>

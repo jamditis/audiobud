@@ -4,7 +4,10 @@ AudioBud is a local-first dictation app for Windows. Hold a hotkey, speak, and A
 
 AudioBud is a detached fork of [Handy](https://github.com/cjpais/Handy) by CJ Pais. It keeps Handy's Tauri, Rust, React, and local transcription base while adding AudioBud defaults, a dark frog/swamp interface, a Windows-first release path, and local model choices tuned for this fork.
 
-- **Website:** <https://jamditis.github.io/audiobud/>
+- **Website:** <https://audiobud.amditis.tech/>
+- **Privacy:** <https://audiobud.amditis.tech/privacy.html>
+- **Terms:** <https://audiobud.amditis.tech/terms.html>
+- **Support:** <https://github.com/jamditis/audiobud/issues>
 - **Download:** [latest release](https://github.com/jamditis/audiobud/releases/latest)
 - **Changelog:** [CHANGELOG.md](CHANGELOG.md)
 
@@ -12,11 +15,11 @@ AudioBud is a detached fork of [Handy](https://github.com/cjpais/Handy) by CJ Pa
 
 ## Current status
 
-The current release is `v0.3.0`, packaged for Windows x64. The build is not code-signed yet, so Windows SmartScreen warns on first launch. Choose **More info -> Run anyway** if you trust the build, or [build from source](#build-from-source).
+AudioBud is packaged for Windows x64; the current version is whatever the [latest release](https://github.com/jamditis/audiobud/releases/latest) says. Beginning with v0.4.0, Windows release installers are signed and timestamped through Microsoft Artifact Signing. The signature identifies Joseph Amditis as the publisher. SmartScreen can still show a reputation warning while a new release builds reputation.
 
 Windows is the validated target for this milestone. macOS and Linux code is inherited from Handy and may work, but this fork has not validated those builds yet.
 
-Automatic update checks are disabled for now because the inherited updater still points at Handy's release feed. They should return after AudioBud has its own signed release and updater feed.
+Automatic update checks remain disabled because AudioBud does not yet publish a signed updater feed. Download releases manually until that feed is ready.
 
 ## How it works
 
@@ -31,7 +34,7 @@ Automatic update checks are disabled for now because the inherited updater still
 - **Recording mode:** push-to-talk or toggle recording.
 - **Audio:** microphone, output device, input meter, audio feedback, volume, and mute-while-recording.
 - **Models:** Parakeet, Whisper, Moonshine, SenseVoice, GigaAM, Canary, Cohere, and custom Whisper GGML `.bin` files.
-- **Text output:** language selection where supported, translation where supported, trailing spaces, paste method, clipboard handling, and raw lowercased output.
+- **Text output:** spoken-number formatting (digits, currency, and percentages), a tray switch between formatted and raw transcript output, language selection where supported, translation where supported, trailing spaces, paste method, clipboard handling, and raw lowercased output.
 - **Vocabulary:** custom words plus deterministic word replacements for names, jargon, and common mishears.
 - **Personalization (opt-in):** on-device learning from your own dictation history -- frequently used words offered as suggestions you accept or dismiss and then applied to later dictations, with view, export, and reset controls for everything it has learned.
 - **Post-processing:** optional cleanup through OpenAI, Anthropic, Z.AI, OpenRouter, Groq, Cerebras, AWS Bedrock via Mantle, or a custom OpenAI-compatible endpoint. API keys stay in local settings.
@@ -64,10 +67,40 @@ Parakeet V3 is the Windows default in this fork because it was the best small lo
 
 Download the Windows installer from the [latest release](https://github.com/jamditis/audiobud/releases/latest):
 
-- `AudioBud_0.3.0_x64-setup.exe`
-- `AudioBud_0.3.0_x64_en-US.msi`
+- `AudioBud_<version>_x64-setup.exe` — the setup wizard, which can install normally or in portable mode
+- `AudioBud_<version>_x64_en-US.msi` — the MSI package, for deployment tooling
 
 On first run, choose a model if one is not already installed and grant microphone permission when Windows asks.
+
+## Verify your download
+
+Edge and SmartScreen warn that a new installer "isn't commonly downloaded" until enough people have fetched that exact build. It is a popularity score rather than a security verdict, and it resets with every release regardless of who signed the file. Two checks confirm you have a genuine AudioBud installer.
+
+Check the signature. Right-click the installer, open **Properties**, then the **Digital Signatures** tab, or run:
+
+```powershell
+Get-AuthenticodeSignature .\AudioBud_<version>_x64-setup.exe | Format-List Status, SignerCertificate
+```
+
+`Status` must be `Valid` and the signer subject must read `CN=Joseph Amditis, O=Joseph Amditis, L=Bloomfield, S=nj, C=US`, issued by `Microsoft ID Verified CS AOC CA 04`. Microsoft rotates the number ending that issuer, so a different two-digit suffix is expected; the signer subject is the part that must match. Do not run an installer that reports anything else.
+
+Check the hash too, because the signature alone does not cover the whole file. Authenticode hashes the signed parts of a PE image and leaves out the `CheckSum` field, the certificate table, and anything trailing the final section. Patching an excluded byte changes the file's SHA-256 while `Get-AuthenticodeSignature` still returns `Valid` under the correct signer, so treat the two checks as complementary rather than redundant.
+
+Every release asset's SHA-256 digest is published by GitHub on the [releases page](https://github.com/jamditis/audiobud/releases/latest), on the [AudioBud site](https://audiobud.amditis.tech/#verify), and through the API:
+
+```powershell
+Get-FileHash -Algorithm SHA256 .\AudioBud_<version>_x64-setup.exe
+```
+
+A mismatch means the download was corrupted, tampered with, or replaced in transit. Delete it and download again.
+
+Security reviewers can also use the [GitHub CLI](https://cli.github.com/) to confirm that AudioBud's release workflow produced the downloaded bytes:
+
+```powershell
+gh attestation verify .\AudioBud_<version>_x64-setup.exe --repo jamditis/audiobud --signer-workflow jamditis/audiobud/.github/workflows/release.yml
+```
+
+The attestation identifies the GitHub build workflow and source commit. It does not replace the signature and hash checks above.
 
 ## Build from source
 

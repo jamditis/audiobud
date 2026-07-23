@@ -11,7 +11,10 @@
     "muteWhileRecording": "Mute while recording",
     "appendTrailingSpace": "Append trailing space",
     "autoSubmit": "Auto-submit",
-    "showOverlay": "Show overlay"
+    "showOverlay": "Show overlay",
+    "outputMode": "Output mode",
+    "formatted": "Formatted",
+    "rawTranscript": "Raw transcript"
   },
   "sidebar": {
     "navLabel": "Settings sections",
@@ -469,7 +472,8 @@
           "dismissLabel": "Dismiss suggestion {{word}}"
         },
         "learned": {
-          "count": "{{count}} learned words",
+          "count_one": "{{count}} learned word",
+          "count_other": "{{count}} learned words",
           "remove": "Remove learned word {{word}}"
         },
         "data": {
@@ -487,6 +491,10 @@
       "rawOutput": {
         "label": "Raw transcript",
         "description": "Output lowercase text with capitalization and end punctuation removed. Acronyms (API, GPU) and the standalone English \"I\" are kept. Useful for feeding other tools or when the model over-formats. You can also bind a separate shortcut for one-off raw dictations."
+      },
+      "formatNumbers": {
+        "label": "Format numbers",
+        "description": "Rewrite spoken numbers as digits and symbols on a formatted transcript — \"twenty five dollars\" becomes \"$25\", \"ten percent\" becomes \"10%\", and \"three point five\" becomes \"3.5\". Runs offline with no API key. Does not apply to raw transcripts."
       }
     },
     "postProcessing": {
@@ -589,7 +597,8 @@
       "historyLimit": {
         "title": "History limit",
         "description": "Maximum number of history entries to keep",
-        "entries": "entries"
+        "entries": "entries",
+        "trimNote": "Lowering the limit does not delete recordings right away. Unsaved recordings beyond the limit are removed when your next recording is added."
       },
       "recordingRetention": {
         "title": "Auto-delete recordings",
@@ -599,7 +608,8 @@
         "days3": "After 3 days",
         "weeks2": "After 2 weeks",
         "months3": "After 3 months",
-        "placeholder": "Select retention period..."
+        "placeholder": "Select retention period...",
+        "trimNote": "Changing this does not delete recordings right away. Old unsaved recordings are only removed when your next recording is added."
       },
       "alwaysOnMicrophone": {
         "label": "Always-on microphone",
@@ -741,7 +751,9 @@
     "modelLoadFailed": "Failed to load model: {{model}}",
     "modelLoadFailedUnknown": "unknown model",
     "pasteFailedTitle": "Failed to paste text",
-    "pasteFailed": "Text could not be pasted into the active application."
+    "pasteFailed": "Text could not be pasted into the active application.",
+    "transcriptionTimeoutTitle": "Transcription timed out",
+    "transcriptionTimeout": "The engine did not respond after {{seconds}} seconds and may be stuck. Restart AudioBud if this keeps happening."
   },
   "appLanguage": {
     "title": "Application language",

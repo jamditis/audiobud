@@ -9,9 +9,15 @@
     "cancel": "キャンセル",
     "pushToTalk": "プッシュトゥトーク",
     "muteWhileRecording": "録音中にミュート",
-    "appendTrailingSpace": "末尾にスペースを追加"
+    "appendTrailingSpace": "末尾にスペースを追加",
+    "autoSubmit": "自動送信",
+    "showOverlay": "オーバーレイを表示",
+    "outputMode": "出力モード",
+    "formatted": "整形あり",
+    "rawTranscript": "未加工の文字起こし"
   },
   "sidebar": {
+    "navLabel": "設定セクション",
     "general": "一般",
     "models": "モデル",
     "advanced": "詳細設定",
@@ -103,7 +109,7 @@
     },
     "permissions": {
       "title": "権限が必要です",
-      "description": "Handyが正常に動作するにはいくつかの権限が必要です。",
+      "description": "AudioBudが正常に動作するにはいくつかの権限が必要です。",
       "microphone": {
         "title": "マイクへのアクセス",
         "description": "文字起こしのためにあなたの声を聞くために必要です。"
@@ -142,44 +148,30 @@
     "noModelDownloadRequired": "モデルなし - ダウンロードが必要",
     "deleteModel": "{{modelName}}を削除",
     "downloadSpeed": "{{speed}} MB/s",
+    "cancel": "キャンセル",
+    "cancelDownload": "ダウンロードをキャンセル",
     "capabilities": {
       "languageSelection": "複数の入力言語をサポート",
-      "multiLanguage": "多言語",
-      "translation": "英語への翻訳が可能",
-      "translate": "英語に翻訳",
       "singleLanguage": "この言語のみ対応",
-      "languageOnly": "{{language}}のみ"
-    },
-    "cancel": "キャンセル",
-    "cancelDownload": "ダウンロードをキャンセル"
+      "multiLanguage": "多言語",
+      "languageOnly": "{{language}}のみ",
+      "translation": "英語への翻訳が可能",
+      "translate": "英語に翻訳"
+    }
   },
   "settings": {
+    "autosave": {
+      "saved": "池に保存しました",
+      "failed": "変更を保存できませんでした"
+    },
     "modelSettings": {
       "title": "{{model}} 設定",
       "noSettingsNeeded": "このモデルは設定不要で自動的に動作します。"
     },
-    "models": {
-      "title": "転写モデル",
-      "description": "転写モデルを選択するか、追加のモデルをダウンロードします。異なるモデルは精度と速度のレベルが異なります。",
-      "downloaded": "ダウンロード済み",
-      "available": "ダウンロード可能",
-      "deleteConfirm": "{{modelName}}を削除してもよろしいですか？再度使用するにはダウンロードが必要です。",
-      "deleteActiveConfirm": "{{modelName}}は現在使用中のモデルです。削除すると、新しいモデルを選択するまで文字起こしが停止します。本当に削除しますか？",
-      "deleteTitle": "モデルを削除",
-      "filters": {
-        "all": "すべて",
-        "multiLanguage": "多言語",
-        "translation": "翻訳",
-        "allLanguages": "すべての言語"
-      },
-      "noModelsMatch": "このフィルターに一致するモデルがありません。",
-      "yourModels": "ダウンロード済みモデル",
-      "availableModels": "ダウンロード可能"
-    },
     "general": {
       "title": "一般",
       "shortcut": {
-        "title": "Handyショートカット",
+        "title": "AudioBudショートカット",
         "description": "音声録音を開始するキーボードショートカットを設定",
         "loading": "ショートカットを読み込み中...",
         "none": "ショートカットが設定されていません",
@@ -197,6 +189,10 @@
           "transcribe_with_post_process": {
             "name": "後処理ホットキー",
             "description": "オプション：文字起こしに常にAI後処理を適用する専用ホットキー。"
+          },
+          "transcribe_raw": {
+            "name": "未加工文字起こしホットキー",
+            "description": "この入力に限り、小文字で句読点なしの未加工テキストに文字起こしする専用ホットキー。"
           }
         },
         "errors": {
@@ -218,13 +214,36 @@
         "description": "押し続けて録音、離して停止"
       }
     },
+    "models": {
+      "title": "転写モデル",
+      "description": "転写モデルを選択するか、追加のモデルをダウンロードします。異なるモデルは精度と速度のレベルが異なります。",
+      "yourModels": "ダウンロード済みモデル",
+      "availableModels": "ダウンロード可能",
+      "downloaded": "ダウンロード済み",
+      "available": "ダウンロード可能",
+      "deleteConfirm": "{{modelName}}を削除してもよろしいですか？再度使用するにはダウンロードが必要です。",
+      "deleteActiveConfirm": "{{modelName}}は現在使用中のモデルです。削除すると、新しいモデルを選択するまで文字起こしが停止します。本当に削除しますか？",
+      "deleteTitle": "モデルを削除",
+      "filters": {
+        "all": "すべて",
+        "multiLanguage": "多言語",
+        "translation": "翻訳",
+        "allLanguages": "すべての言語"
+      },
+      "noModelsMatch": "このフィルターに一致するモデルがありません。"
+    },
     "sound": {
       "title": "サウンド",
+      "previewSounds": "サウンドをプレビュー（開始音の後に停止音を再生）",
       "microphone": {
         "title": "マイク",
         "description": "使用するマイクデバイスを選択",
         "placeholder": "マイクを選択...",
         "loading": "読み込み中..."
+      },
+      "inputLevel": {
+        "title": "入力レベル",
+        "description": "選択したマイクのリアルタイムレベル。話すとバーが動き、音声が入力されていることを確認できます。"
       },
       "audioFeedback": {
         "label": "音声フィードバック",
@@ -239,6 +258,12 @@
       "volume": {
         "title": "音量",
         "description": "音声フィードバックの音量を調整"
+      },
+      "outputTest": {
+        "title": "出力テスト",
+        "description": "選択した出力デバイスでテスト音を再生し、音が出力されていることを確認します。",
+        "button": "出力をテスト",
+        "playing": "再生中..."
       }
     },
     "advanced": {
@@ -279,11 +304,11 @@
       },
       "autostart": {
         "label": "起動時に実行",
-        "description": "コンピューターにログインしたときにHandyを自動的に起動。"
+        "description": "コンピューターにログインしたときにAudioBudを自動的に起動。"
       },
       "showTrayIcon": {
         "label": "トレイアイコンを表示",
-        "description": "システムトレイにHandyのアイコンを表示します。"
+        "description": "システムトレイにAudioBudのアイコンを表示します。"
       },
       "overlay": {
         "title": "オーバーレイ位置",
@@ -292,6 +317,22 @@
           "none": "なし",
           "bottom": "下",
           "top": "上"
+        },
+        "fine": {
+          "title": "画面上の位置",
+          "description": "録音インジケーターを表示する位置を、使用中の画面上から選びます。中央の列がデフォルトの配置です。",
+          "reset": "デフォルトに戻す"
+        },
+        "anchors": {
+          "topleft": "左上",
+          "topcenter": "上中央",
+          "topright": "右上",
+          "middleleft": "左中央",
+          "middlecenter": "中央",
+          "middleright": "右中央",
+          "bottomleft": "左下",
+          "bottomcenter": "下中央",
+          "bottomright": "右下"
         }
       },
       "pasteMethod": {
@@ -352,13 +393,108 @@
           "sec15": "15秒後（デバッグ）"
         }
       },
+      "dictionaryGuide": {
+        "title": "単語を正しく認識させる",
+        "intro": "2つの機能が連携します。カスタム単語はよく使う語をモデルに優先させ、音があいまいなときにその語を選ばせます。単語置換は文字起こしの後で確実に修正するもので、モデルが何度も聞き間違える語に使います。",
+        "rule": "まずカスタム単語を追加してください。それでも名前や用語が毎回同じように間違って出る場合は、実際に出てくる表記から正しい表記への単語置換を追加します。",
+        "examplesToggle": "例を表示",
+        "examples": {
+          "name": {
+            "title": "難しい名前（jamditis）",
+            "body": "「jamditis」をカスタム単語として追加します。それでも「jam dightis」と文字起こしされる場合は、単語置換 jam dightis → jamditis を追加します。"
+          },
+          "domain": {
+            "title": "ドメインやメールアドレス（jamditis.com）",
+            "body": "「jamditis dot com」と発話することになるので、単語置換 jamditis dot com → jamditis.com を追加します。置換は文字をそのまま保つため、スペースが入ったり大文字化されたりせず、1つのまとまりとして残ります。"
+          },
+          "handle": {
+            "title": "ハンドル名（@jamditis）",
+            "body": "単語置換 at jamditis → @jamditis を追加します。"
+          }
+        },
+        "engineNote": "カスタム単語は、Whisperモデルではデコード中に認識を誘導し、それ以外のモデルでは文字起こし後にテキストを修正するため、結果はモデルによって異なります。単語置換はどのモデルでも同じように動作します。"
+      },
       "customWords": {
         "title": "カスタム単語",
         "description": "よく誤認識または誤入力される単語を追加します。システムは自動的に類似した発音の単語をリストに合わせて修正します。",
         "placeholder": "単語を追加",
         "add": "追加",
         "remove": "{{word}}を削除",
-        "duplicate": "「{{word}}」は既に存在します"
+        "duplicate": "「{{word}}」は既に存在します",
+        "capReached": "辞書が上限に達しています（{{cap}}語）。追加するには一部を削除してください。",
+        "count": "{{count}} / {{cap}} 語",
+        "import": {
+          "title": "リストをインポート",
+          "description": ".txtファイルをアップロードするか、リストを貼り付けてください。項目は改行またはカンマで区切ります。3語までのフレーズはそのまま保持され、それより長い項目は単語ごとに分割されます。",
+          "upload": ".txtファイルをアップロード",
+          "formatHint": "プレーンな.txtまたは.csv。1行に1語または1フレーズ、もしくはカンマ区切りで入力します。3語までのフレーズはそのまま保持され、それより長い項目は単語ごとに分割されます。合計500項目まで。",
+          "pastePlaceholder": "ここに単語を貼り付けてください（1行に1語、またはカンマ区切り）",
+          "add": "リストを追加",
+          "none": "追加する新しい単語はありません",
+          "added_one": "{{count}}語を追加しました",
+          "added_other": "{{count}}語を追加しました",
+          "skippedDuplicates": "{{count}}語はすでにリストにあります",
+          "skippedCap": "{{count}}語は{{cap}}語の上限を超えています",
+          "skippedInvalid": "{{count}}語は長すぎます",
+          "readError": "そのファイルを読み込めませんでした"
+        }
+      },
+      "wordReplacements": {
+        "title": "単語置換",
+        "description": "発音に関係なく、指定した単語やフレーズを必ず置き換えます。すべてのモデルで、カスタム単語の照合後に毎回実行されます。置換後を空欄にすると、その単語は削除されます。あいまい一致では安全に直せない修正（例：「clawed」を「Claude」に）に使ってください。",
+        "fromPlaceholder": "認識された語",
+        "toPlaceholder": "置換後",
+        "add": "追加",
+        "wholeWord": "単語全体のみ",
+        "caseSensitive": "大文字と小文字を区別",
+        "duplicate": "「{{word}}」には既に置換が設定されています",
+        "capReached": "置換リストが上限に達しています（{{cap}}件）。追加するには一部を削除してください。",
+        "tooLong": "各項目は{{max}}文字以内にしてください",
+        "count": "{{count}} / {{cap}} 件",
+        "deletes": "（単語を削除します）",
+        "partialBadge": "部分一致",
+        "caseBadge": "Aa",
+        "remove": "{{word}}の置換を削除"
+      },
+      "personalization": {
+        "title": "履歴から学習する",
+        "description": "有効にすると、AudioBudがよく話す名前や用語からカスタム単語を提案します。処理はすべてこのデバイス内で完結します。ローカルの文字起こし履歴を読み取るだけで、アップロードは一切行わず、学習した内容はいつでもエクスポートまたは削除できます。デフォルトはオフです。",
+        "error": "問題が発生しました。もう一度お試しください。",
+        "suggestions": {
+          "title": "提案された単語",
+          "description": "文字起こし履歴から抽出した、頻出する固有名詞や用語です。必要なものをカスタム単語として追加し、不要なものは非表示にすると以降表示されなくなります。",
+          "refresh": "提案を更新",
+          "loading": "履歴をスキャン中...",
+          "empty": "まだ新しい提案はありません。もう少し使ってから更新してください。",
+          "count": "{{count}}回検出",
+          "accept": "追加",
+          "dismiss": "非表示",
+          "dismissLabel": "提案「{{word}}」を非表示にする"
+        },
+        "learned": {
+          "count_one": "学習済み{{count}}語",
+          "count_other": "学習済み{{count}}語",
+          "remove": "学習済みの単語「{{word}}」を削除"
+        },
+        "data": {
+          "title": "パーソナライズデータ",
+          "description": "AudioBudが学習した内容をエクスポートするか、すべて削除できます。リセットすると学習済みの単語と非表示にした提案がすべて削除されます。手動で追加したカスタム単語と単語置換には影響しません。",
+          "export": "エクスポート",
+          "reset": "パーソナライズをリセット",
+          "resetTitle": "パーソナライズをリセット",
+          "resetConfirm": "学習済みの単語と非表示にした提案がすべて削除されます。手動で追加したカスタム単語と単語置換は残ります。続行しますか？",
+          "resetDone": "パーソナライズデータを削除しました",
+          "exportDone": "パーソナライズデータをエクスポートしました",
+          "exportError": "パーソナライズデータをエクスポートできませんでした"
+        }
+      },
+      "rawOutput": {
+        "label": "未加工の文字起こし",
+        "description": "大文字化と文末の句読点を取り除いた小文字のテキストを出力します。頭字語（API、GPU）と単独の英語の「I」はそのまま残ります。他のツールに渡すときや、モデルの整形が過剰なときに便利です。一回限りの未加工入力用に、別のショートカットを割り当てることもできます。"
+      },
+      "formatNumbers": {
+        "label": "数字を整形",
+        "description": "整形済みの文字起こしで、話した数字を数字や記号に変換します（例: $25、10%、3.5）。APIキー不要でオフラインで動作します。生の文字起こしには適用されません。"
       }
     },
     "postProcessing": {
@@ -448,7 +584,7 @@
       },
       "updateChecks": {
         "label": "アップデートを確認",
-        "description": "Handyの新しいバージョンを自動的にチェック"
+        "description": "AudioBudの新しいバージョンを自動的にチェック"
       },
       "soundTheme": {
         "label": "サウンドテーマ",
@@ -461,7 +597,8 @@
       "historyLimit": {
         "title": "履歴上限",
         "description": "保持する履歴エントリーの最大数",
-        "entries": "件"
+        "entries": "件",
+        "trimNote": "上限を下げてもすぐに録音は削除されません。上限を超えた未保存の録音は、次の録音が追加されたときに削除されます。"
       },
       "recordingRetention": {
         "title": "録音の自動削除",
@@ -471,7 +608,8 @@
         "days3": "3日後",
         "weeks2": "2週間後",
         "months3": "3ヶ月後",
-        "placeholder": "保持期間を選択..."
+        "placeholder": "保持期間を選択...",
+        "trimNote": "この設定を変更してもすぐに録音は削除されません。古い未保存の録音は、次の録音が追加されたときにのみ削除されます。"
       },
       "alwaysOnMicrophone": {
         "label": "マイク常時オン",
@@ -516,11 +654,11 @@
       "title": "概要",
       "version": {
         "title": "バージョン",
-        "description": "Handyの現在のバージョン"
+        "description": "AudioBudの現在のバージョン"
       },
       "appDataDirectory": {
         "title": "アプリデータディレクトリ",
-        "description": "Handyがデータを保存する場所"
+        "description": "AudioBudがデータを保存する場所"
       },
       "sourceCode": {
         "title": "ソースコード",
@@ -528,16 +666,26 @@
         "button": "GitHubで見る"
       },
       "supportDevelopment": {
-        "title": "開発を支援",
-        "description": "Handyの開発を支援してください",
-        "button": "寄付する"
+        "title": "カエルにごはんを",
+        "description": "AudioBudは無料で、すべてお使いのマシン上で動作します。タイピングの手間が省けたら、カエルにハエを一匹どうぞ。",
+        "button": "ハエをおごる"
       },
       "acknowledgments": {
         "title": "謝辞",
+        "handy": {
+          "title": "Handy",
+          "description": "AudioBudのベースになっているオープンソースの音声入力アプリ",
+          "details": "AudioBudは、cjpais氏によるHandy（MITライセンス）のフォークです。このアプリの土台を築いてくれたcjpais氏とHandyの貢献者の皆様に深く感謝します。詳しくはhandy.computerをご覧ください。"
+        },
+        "parakeet": {
+          "title": "Parakeet",
+          "description": "NVIDIA NeMo Parakeet、WindowsにおけるAudioBudのデフォルトエンジン",
+          "details": "文字起こしはデフォルトで、transcribe-rsのONNXランタイムを通じてNVIDIAのParakeetモデルを実行します。NVIDIA NeMoとtranscribe-rsのメンテナーの皆様に感謝します。"
+        },
         "whisper": {
           "title": "Whisper.cpp",
-          "description": "OpenAIのWhisper自動音声認識モデルの高性能推論",
-          "details": "Handyは高速でローカルな音声からテキストへの変換にWhisper.cppを使用しています。Georgi Gerganov氏と貢献者の皆様の素晴らしい仕事に感謝します。"
+          "description": "OpenAIのWhisperモデルをローカルで高速に推論",
+          "details": "AudioBudはWhisper.cppでも文字起こしでき、GPUで高速化されます。Georgi Gerganov氏と貢献者の皆様に感謝します。"
         }
       }
     }
@@ -555,9 +703,9 @@
     "installing": "インストール中...",
     "preparing": "準備中...",
     "checkForUpdates": "アップデートを確認",
-    "portableUpdateTitle": "Manual update required",
-    "portableUpdateMessage": "Portable installs cannot be updated automatically. To update: download the latest NSIS installer from GitHub Releases, install it to the same folder, then copy your Data/ folder (settings, models, recordings) from the old version to the new one.",
-    "portableUpdateButton": "Open GitHub Releases"
+    "portableUpdateTitle": "手動更新が必要です",
+    "portableUpdateMessage": "ポータブル版は自動更新できません。更新するには、GitHub Releases から最新の NSIS インストーラーをダウンロードし、同じフォルダーにインストールしてから、旧バージョンの Data/ フォルダー（設定、モデル、録音）を新しいバージョンにコピーしてください。",
+    "portableUpdateButton": "GitHub Releases を開く"
   },
   "common": {
     "loading": "読み込み中...",
@@ -572,6 +720,7 @@
     "update": "更新",
     "close": "閉じる",
     "open": "開く",
+    "moreInfo": "詳細情報",
     "default": "デフォルト",
     "enabled": "有効",
     "disabled": "無効",
@@ -583,7 +732,7 @@
   },
   "accessibility": {
     "permissionsRequired": "アクセシビリティ権限が必要です",
-    "permissionsDescription": "Handyが文字起こしテキストを入力するには、アクセシビリティ権限が必要です。",
+    "permissionsDescription": "AudioBudが文字起こしテキストを入力するには、アクセシビリティ権限が必要です。",
     "openSettings": "システム設定を開く",
     "dismiss": "閉じる"
   },
@@ -602,14 +751,20 @@
     "modelLoadFailed": "モデルの読み込みに失敗しました: {{model}}",
     "modelLoadFailedUnknown": "不明なモデル",
     "pasteFailedTitle": "テキストの貼り付けに失敗しました",
-    "pasteFailed": "アクティブなアプリケーションにテキストを貼り付けられませんでした。"
+    "pasteFailed": "アクティブなアプリケーションにテキストを貼り付けられませんでした。",
+    "transcriptionTimeoutTitle": "文字起こしがタイムアウトしました",
+    "transcriptionTimeout": "エンジンが{{seconds}}秒応答せず、停止している可能性があります。この状態が続く場合はAudioBudを再起動してください。"
   },
   "appLanguage": {
     "title": "アプリケーション言語",
-    "description": "Handyインターフェースの言語を変更"
+    "description": "AudioBudインターフェースの言語を変更"
   },
   "overlay": {
     "transcribing": "文字起こし中...",
-    "processing": "処理中..."
+    "processing": "処理中...",
+    "recording": "録音中",
+    "cancel": "録音をキャンセル",
+    "raw": "RAW",
+    "rawHint": "未加工文字起こしモード"
   }
 }

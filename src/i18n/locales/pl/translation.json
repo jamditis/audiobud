@@ -7,11 +7,17 @@
     "model": "Model",
     "quit": "Zamknij",
     "cancel": "Anuluj",
-    "pushToTalk": "Push To Talk",
+    "pushToTalk": "Naciśnij i mów",
     "muteWhileRecording": "Wycisz podczas nagrywania",
-    "appendTrailingSpace": "Dodaj spację na końcu"
+    "appendTrailingSpace": "Dodaj spację na końcu",
+    "autoSubmit": "Automatyczne wysyłanie",
+    "showOverlay": "Pokaż nakładkę",
+    "outputMode": "Tryb wyjścia",
+    "formatted": "Sformatowany",
+    "rawTranscript": "Surowa transkrypcja"
   },
   "sidebar": {
+    "navLabel": "Sekcje ustawień",
     "general": "Ogólne",
     "models": "Modele",
     "advanced": "Zaawansowane",
@@ -103,7 +109,7 @@
     },
     "permissions": {
       "title": "Wymagane uprawnienia",
-      "description": "Handy potrzebuje kilku uprawnień, aby działać poprawnie.",
+      "description": "AudioBud potrzebuje kilku uprawnień, aby działać poprawnie.",
       "microphone": {
         "title": "Dostęp do mikrofonu",
         "description": "Wymagany do słyszenia Twojego głosu w celu transkrypcji."
@@ -142,44 +148,30 @@
     "noModelDownloadRequired": "Brak modelu – wymagane pobranie",
     "deleteModel": "Usuń {{modelName}}",
     "downloadSpeed": "{{speed}} MB/s",
+    "cancel": "Anuluj",
+    "cancelDownload": "Anuluj pobieranie",
     "capabilities": {
       "languageSelection": "Obsługuje wiele języków wejściowych",
-      "multiLanguage": "Wielojęzyczny",
-      "translation": "Może tłumaczyć na angielski",
-      "translate": "Tłumacz na angielski",
       "singleLanguage": "Obsługuje tylko ten język",
-      "languageOnly": "Tylko {{language}}"
-    },
-    "cancel": "Anuluj",
-    "cancelDownload": "Anuluj pobieranie"
+      "multiLanguage": "Wielojęzyczny",
+      "languageOnly": "Tylko {{language}}",
+      "translation": "Może tłumaczyć na angielski",
+      "translate": "Tłumacz na angielski"
+    }
   },
   "settings": {
+    "autosave": {
+      "saved": "Zapisano w stawie",
+      "failed": "Nie udało się zapisać tej zmiany"
+    },
     "modelSettings": {
       "title": "Ustawienia {{model}}",
       "noSettingsNeeded": "Ten model działa automatycznie bez konieczności konfiguracji."
     },
-    "models": {
-      "title": "Modele transkrypcji",
-      "description": "Wybierz model transkrypcji lub pobierz dodatkowe modele. Różne modele oferują różne poziomy dokładności i szybkości.",
-      "downloaded": "Pobrane",
-      "available": "Dostępne do pobrania",
-      "deleteConfirm": "Czy na pewno chcesz usunąć {{modelName}}? Będziesz musiał pobrać go ponownie, aby go użyć.",
-      "deleteActiveConfirm": "{{modelName}} jest Twoim aktywnym modelem. Usunięcie go zatrzyma transkrypcje, dopóki nie wybierzesz nowego modelu. Czy na pewno chcesz kontynuować?",
-      "deleteTitle": "Usuń model",
-      "filters": {
-        "all": "Wszystkie",
-        "multiLanguage": "Wielojęzyczne",
-        "translation": "Tłumaczenie",
-        "allLanguages": "Wszystkie języki"
-      },
-      "noModelsMatch": "Żadne modele nie pasują do tego filtra.",
-      "yourModels": "Pobrane modele",
-      "availableModels": "Dostępne do pobrania"
-    },
     "general": {
       "title": "Ogólne",
       "shortcut": {
-        "title": "Skróty Handy",
+        "title": "Skróty AudioBud",
         "description": "Skonfiguruj skróty klawiaturowe do uruchamiania nagrywania mowy",
         "loading": "Wczytywanie skrótów...",
         "none": "Brak skonfigurowanych skrótów",
@@ -197,6 +189,10 @@
           "transcribe_with_post_process": {
             "name": "Skrót postprocessingu",
             "description": "Opcjonalnie: Dedykowany skrót klawiszowy, który zawsze stosuje postprocessing AI do transkrypcji."
+          },
+          "transcribe_raw": {
+            "name": "Skrót surowej transkrypcji",
+            "description": "Dedykowany skrót klawiszowy, który tylko dla tego dyktowania zapisuje transkrypcję jako surowy tekst, małymi literami i bez interpunkcji."
           }
         },
         "errors": {
@@ -207,24 +203,47 @@
       },
       "language": {
         "title": "Język",
-        "description": "Wybierz język rozpoznawania mowy. Opcja Auto automatycznie określi język, a wybór konkretnego języka może poprawić dokładność.",
+        "description": "Wybierz język rozpoznawania mowy. Wybór automatyczny określi język, a wybór konkretnego języka może poprawić dokładność.",
         "descriptionUnsupported": "Model Parakeet automatycznie wykrywa język. Nie jest potrzebny ręczny wybór.",
         "searchPlaceholder": "Szukaj języka...",
         "noResults": "Nie znaleziono języków",
-        "auto": "Auto"
+        "auto": "Automatycznie"
       },
       "pushToTalk": {
-        "label": "Push To Talk",
+        "label": "Naciśnij i mów",
         "description": "Przytrzymaj, aby nagrywać, puść, aby zatrzymać"
       }
     },
+    "models": {
+      "title": "Modele transkrypcji",
+      "description": "Wybierz model transkrypcji lub pobierz dodatkowe modele. Różne modele oferują różne poziomy dokładności i szybkości.",
+      "yourModels": "Pobrane modele",
+      "availableModels": "Dostępne do pobrania",
+      "downloaded": "Pobrane",
+      "available": "Dostępne do pobrania",
+      "deleteConfirm": "Czy na pewno chcesz usunąć {{modelName}}? Będziesz musiał pobrać go ponownie, aby go użyć.",
+      "deleteActiveConfirm": "{{modelName}} jest Twoim aktywnym modelem. Usunięcie go zatrzyma transkrypcje, dopóki nie wybierzesz nowego modelu. Czy na pewno chcesz kontynuować?",
+      "deleteTitle": "Usuń model",
+      "filters": {
+        "all": "Wszystkie",
+        "multiLanguage": "Wielojęzyczne",
+        "translation": "Tłumaczenie",
+        "allLanguages": "Wszystkie języki"
+      },
+      "noModelsMatch": "Żadne modele nie pasują do tego filtra."
+    },
     "sound": {
       "title": "Dźwięk",
+      "previewSounds": "Odsłuchaj dźwięki (odtworzy start, potem stop)",
       "microphone": {
         "title": "Mikrofon",
         "description": "Wybierz preferowane urządzenie mikrofonowe",
         "placeholder": "Wybierz mikrofon...",
         "loading": "Wczytywanie..."
+      },
+      "inputLevel": {
+        "title": "Poziom wejścia",
+        "description": "Poziom na żywo z wybranego mikrofonu. Mów, a słupki powinny się poruszać, potwierdzając, że dźwięk dociera."
       },
       "audioFeedback": {
         "label": "Informacja dźwiękowa",
@@ -239,6 +258,12 @@
       "volume": {
         "title": "Głośność",
         "description": "Dostosuj głośność dźwięków informacyjnych"
+      },
+      "outputTest": {
+        "title": "Test wyjścia",
+        "description": "Odtwórz dźwięk testowy przez wybrane urządzenie wyjściowe, aby potwierdzić, że dźwięk wychodzi.",
+        "button": "Testuj wyjście",
+        "playing": "Odtwarzanie..."
       }
     },
     "advanced": {
@@ -269,8 +294,8 @@
         },
         "gpuDevice": {
           "title": "Urządzenie GPU",
-          "description": "Wybierz GPU do inferencji Whisper. Auto wybiera dedykowany GPU.",
-          "auto": "Auto"
+          "description": "Wybierz GPU do inferencji Whisper. W trybie automatycznym wybierany jest dedykowany układ GPU.",
+          "auto": "Automatycznie"
         }
       },
       "startHidden": {
@@ -279,11 +304,11 @@
       },
       "autostart": {
         "label": "Uruchamiaj przy starcie",
-        "description": "Automatycznie uruchamiaj Handy po zalogowaniu."
+        "description": "Automatycznie uruchamiaj AudioBud po zalogowaniu."
       },
       "showTrayIcon": {
         "label": "Pokaż ikonę w zasobniku",
-        "description": "Wyświetlaj ikonę Handy w zasobniku systemowym."
+        "description": "Wyświetlaj ikonę AudioBud w zasobniku systemowym."
       },
       "overlay": {
         "title": "Pozycja nakładki",
@@ -292,6 +317,22 @@
           "none": "Brak",
           "bottom": "Dół",
           "top": "Góra"
+        },
+        "fine": {
+          "title": "Pozycja na ekranie",
+          "description": "Wybierz, gdzie na aktywnym ekranie ma się znajdować wskaźnik nagrywania. Środkowa kolumna odpowiada domyślnemu położeniu.",
+          "reset": "Przywróć domyślne"
+        },
+        "anchors": {
+          "topleft": "Lewy górny",
+          "topcenter": "Górny środek",
+          "topright": "Prawy górny",
+          "middleleft": "Środkowy lewy",
+          "middlecenter": "Środek",
+          "middleright": "Środkowy prawy",
+          "bottomleft": "Lewy dolny",
+          "bottomcenter": "Dolny środek",
+          "bottomright": "Prawy dolny"
         }
       },
       "pasteMethod": {
@@ -352,13 +393,112 @@
           "sec15": "Po 15 sekundach (Debug)"
         }
       },
+      "dictionaryGuide": {
+        "title": "Poprawne rozpoznawanie słów",
+        "intro": "Dwa narzędzia działają razem. Własne słowa naprowadzają model na terminy, których używasz często, więc wybiera je, gdy dźwięk jest niejednoznaczny. Zamiany słów wymuszają dokładną poprawkę już po transkrypcji, dla pomyłek, które model powtarza.",
+        "rule": "Zacznij od własnego słowa. Jeśli nazwa lub termin nadal wychodzi źle za każdym razem tak samo, dodaj zamianę słowa z tego, co słyszysz, na to, co masz na myśli.",
+        "examplesToggle": "Pokaż przykłady",
+        "examples": {
+          "name": {
+            "title": "Trudna nazwa (jamditis)",
+            "body": "Dodaj \"jamditis\" jako własne słowo. Jeśli nadal transkrybuje się jako \"jam dightis\", dodaj zamianę słowa: jam dightis → jamditis."
+          },
+          "domain": {
+            "title": "Domena lub e-mail (jamditis.com)",
+            "body": "Powiesz \"jamditis kropka com\", więc dodaj zamianę słowa: jamditis kropka com → jamditis.com. Zamiany zachowują dokładne znaki, więc pozostaje to jednym ciągiem, bez dodatkowych spacji i wielkich liter."
+          },
+          "handle": {
+            "title": "Nazwa użytkownika (@jamditis)",
+            "body": "Dodaj zamianę słowa: małpa jamditis → @jamditis."
+          }
+        },
+        "engineNote": "Własne słowa naprowadzają modele Whisper już podczas dekodowania; w innych modelach poprawiają tekst po transkrypcji, więc wyniki zależą od modelu. Zamiany słów działają tak samo w każdym modelu."
+      },
       "customWords": {
         "title": "Własne słowa",
         "description": "Dodaj słowa, które często są źle rozpoznawane lub zapisywane podczas transkrypcji. System automatycznie poprawi podobnie brzmiące słowa, aby pasowały do Twojej listy.",
         "placeholder": "Dodaj słowo",
         "add": "Dodaj",
         "remove": "Usuń {{word}}",
-        "duplicate": "\"{{word}}\" już istnieje"
+        "duplicate": "\"{{word}}\" już istnieje",
+        "capReached": "Twój słownik jest pełny ({{cap}} słów). Usuń kilka, aby dodać nowe.",
+        "count": "{{count}} / {{cap}} słów",
+        "import": {
+          "title": "Importuj listę",
+          "description": "Wgraj plik .txt lub wklej listę. Oddzielaj wpisy nowymi wierszami lub przecinkami. Frazy do trzech słów są zachowywane; dłuższe wpisy są dzielone na pojedyncze słowa.",
+          "upload": "Wgraj plik .txt",
+          "formatHint": "Zwykły plik .txt lub .csv. Jedno słowo lub fraza w wierszu albo wpisy oddzielone przecinkami. Frazy do trzech słów pozostają razem; dłuższe wpisy są dzielone na pojedyncze słowa. Łącznie do 500 wpisów.",
+          "pastePlaceholder": "Wklej słowa tutaj, po jednym w wierszu lub oddzielone przecinkami",
+          "add": "Dodaj listę",
+          "none": "Brak nowych słów do dodania",
+          "added_one": "Dodano {{count}} słowo",
+          "added_few": "Dodano {{count}} słowa",
+          "added_many": "Dodano {{count}} słów",
+          "added_other": "Dodano {{count}} słów",
+          "skippedDuplicates": "{{count}} już na Twojej liście",
+          "skippedCap": "{{count}} ponad limit {{cap}} słów",
+          "skippedInvalid": "{{count}} za długich",
+          "readError": "Nie udało się odczytać tego pliku"
+        }
+      },
+      "wordReplacements": {
+        "title": "Zamiany słów",
+        "description": "Zawsze zamieniaj dokładne słowa lub frazy, niezależnie od tego, jak brzmią. Działa przy każdej transkrypcji, we wszystkich modelach, po dopasowaniu własnych słów. Zostaw pole zamiany puste, aby usunąć słowo. Używaj tego do poprawek, których dopasowanie rozmyte nie wykona bezpiecznie (na przykład \"clawed\" na \"Claude\").",
+        "fromPlaceholder": "Usłyszane",
+        "toPlaceholder": "Zamień na",
+        "add": "Dodaj",
+        "wholeWord": "Tylko całe słowo",
+        "caseSensitive": "Rozróżniaj wielkość liter",
+        "duplicate": "\"{{word}}\" ma już zamianę",
+        "capReached": "Twoja lista zamian jest pełna ({{cap}} wpisów). Usuń kilka, aby dodać nowe.",
+        "tooLong": "Każde pole musi mieć mniej niż {{max}} znaków",
+        "count": "{{count}} / {{cap}} zamian",
+        "deletes": "(usuwa słowo)",
+        "partialBadge": "częściowe",
+        "caseBadge": "Aa",
+        "remove": "Usuń zamianę dla {{word}}"
+      },
+      "personalization": {
+        "title": "Ucz się z mojej historii",
+        "description": "Włącz, aby AudioBud proponował własne słowa na podstawie nazw i terminów, które dyktujesz najczęściej. Wszystko zostaje na tym urządzeniu: odczytywana jest lokalna historia transkrypcji, nic nie jest wysyłane, a wyuczone dane możesz w każdej chwili wyeksportować lub wyczyścić. Domyślnie wyłączone.",
+        "error": "Coś poszło nie tak. Spróbuj ponownie.",
+        "suggestions": {
+          "title": "Proponowane słowa",
+          "description": "Częste nazwy własne i terminy wydobyte z historii transkrypcji. Dodaj te, które chcesz mieć jako własne słowa, albo odrzuć resztę, żeby przestały się pojawiać.",
+          "refresh": "Odśwież propozycje",
+          "loading": "Skanowanie historii...",
+          "empty": "Brak nowych propozycji. Podyktuj więcej i odśwież.",
+          "count": "widziane {{count}} razy",
+          "accept": "Dodaj",
+          "dismiss": "Odrzuć",
+          "dismissLabel": "Odrzuć propozycję {{word}}"
+        },
+        "learned": {
+          "count_one": "{{count}} wyuczone słowo",
+          "count_few": "{{count}} wyuczone słowa",
+          "count_many": "{{count}} wyuczonych słów",
+          "count_other": "{{count}} wyuczonych słów",
+          "remove": "Usuń wyuczone słowo {{word}}"
+        },
+        "data": {
+          "title": "Twoje dane personalizacji",
+          "description": "Wyeksportuj kopię tego, czego nauczył się AudioBud, albo wyczyść wszystko. Reset usuwa wszystkie wyuczone słowa i odrzucone propozycje; Twoje ręcznie dodane własne słowa i zamiany pozostają bez zmian.",
+          "export": "Eksportuj",
+          "reset": "Zresetuj personalizację",
+          "resetTitle": "Zresetuj personalizację",
+          "resetConfirm": "Spowoduje to wyczyszczenie wszystkich wyuczonych słów i odrzuconych propozycji. Twoje ręcznie dodane własne słowa i zamiany pozostaną. Kontynuować?",
+          "resetDone": "Dane personalizacji wyczyszczone",
+          "exportDone": "Dane personalizacji wyeksportowane",
+          "exportError": "Nie udało się wyeksportować danych personalizacji"
+        }
+      },
+      "rawOutput": {
+        "label": "Surowa transkrypcja",
+        "description": "Zwraca tekst małymi literami, bez wielkich liter i końcowej interpunkcji. Skrótowce (API, GPU) i angielskie samodzielne \"I\" są zachowywane. Przydatne przy przekazywaniu tekstu do innych narzędzi lub gdy model zbyt mocno formatuje. Możesz też przypisać osobny skrót do pojedynczych surowych dyktowań."
+      },
+      "formatNumbers": {
+        "label": "Formatuj liczby",
+        "description": "Zamienia wypowiedziane liczby na cyfry i symbole w sformatowanej transkrypcji, na przykład $25, 10% lub 3.5. Działa offline, bez klucza API. Nie dotyczy surowych transkrypcji."
       }
     },
     "postProcessing": {
@@ -448,7 +588,7 @@
       },
       "updateChecks": {
         "label": "Sprawdzaj aktualizacje",
-        "description": "Automatycznie sprawdzaj nowe wersje Handy"
+        "description": "Automatycznie sprawdzaj nowe wersje AudioBud"
       },
       "soundTheme": {
         "label": "Motyw dźwiękowy",
@@ -461,7 +601,8 @@
       "historyLimit": {
         "title": "Limit historii",
         "description": "Maksymalna liczba wpisów w historii",
-        "entries": "wpisy"
+        "entries": "wpisy",
+        "trimNote": "Obniżenie limitu nie usuwa nagrań od razu. Niezapisane nagrania powyżej limitu są usuwane przy dodaniu kolejnego nagrania."
       },
       "recordingRetention": {
         "title": "Automatyczne usuwanie nagrań",
@@ -471,7 +612,8 @@
         "days3": "Po 3 dniach",
         "weeks2": "Po 2 tygodniach",
         "months3": "Po 3 miesiącach",
-        "placeholder": "Wybierz okres retencji..."
+        "placeholder": "Wybierz okres retencji...",
+        "trimNote": "Zmiana tego ustawienia nie usuwa nagrań od razu. Stare niezapisane nagrania są usuwane dopiero przy dodaniu kolejnego nagrania."
       },
       "alwaysOnMicrophone": {
         "label": "Mikrofon zawsze aktywny",
@@ -516,11 +658,11 @@
       "title": "O programie",
       "version": {
         "title": "Wersja",
-        "description": "Aktualna wersja Handy"
+        "description": "Aktualna wersja AudioBud"
       },
       "appDataDirectory": {
         "title": "Katalog danych aplikacji",
-        "description": "Miejsce, gdzie Handy przechowuje swoje dane"
+        "description": "Miejsce, gdzie AudioBud przechowuje swoje dane"
       },
       "sourceCode": {
         "title": "Kod źródłowy",
@@ -528,16 +670,26 @@
         "button": "Zobacz na GitHub"
       },
       "supportDevelopment": {
-        "title": "Wspieraj rozwój",
-        "description": "Pomóż nam dalej rozwijać Handy",
-        "button": "Wesprzyj"
+        "title": "Nakarm żabę",
+        "description": "AudioBud jest darmowy i działa w całości na Twoim komputerze. Jeśli oszczędza Ci pisania, wrzuć muchę do słoika.",
+        "button": "Postaw mi muchę"
       },
       "acknowledgments": {
         "title": "Podziękowania",
+        "handy": {
+          "title": "Handy",
+          "description": "Otwartoźródłowa aplikacja do dyktowania, na której zbudowany jest AudioBud",
+          "details": "AudioBud to fork projektu Handy (licencja MIT) autorstwa cjpais. Wielkie podziękowania dla cjpais i współtwórców Handy za fundament, na którym stoi ta aplikacja. Więcej informacji na handy.computer."
+        },
+        "parakeet": {
+          "title": "Parakeet",
+          "description": "NVIDIA NeMo Parakeet, domyślny silnik AudioBud w systemie Windows",
+          "details": "Transkrypcja domyślnie korzysta z modelu Parakeet od NVIDIA poprzez środowisko ONNX transcribe-rs. Podziękowania dla NVIDIA NeMo i opiekunów transcribe-rs."
+        },
         "whisper": {
           "title": "Whisper.cpp",
-          "description": "Wydajne wykonywanie modelu rozpoznawania mowy Whisper od OpenAI",
-          "details": "Handy używa Whisper.cpp do szybkiego, lokalnego przetwarzania mowy na tekst. Dzięki niesamowitej pracy Georgi Gerganova i współtwórców."
+          "description": "Wydajne lokalne wykonywanie modelu Whisper od OpenAI",
+          "details": "AudioBud może też transkrybować za pomocą Whisper.cpp, z akceleracją na GPU. Podziękowania dla Georgi Gerganova i współtwórców."
         }
       }
     }
@@ -555,9 +707,9 @@
     "installing": "Instalowanie...",
     "preparing": "Przygotowywanie...",
     "checkForUpdates": "Sprawdź aktualizacje",
-    "portableUpdateTitle": "Manual update required",
-    "portableUpdateMessage": "Portable installs cannot be updated automatically. To update: download the latest NSIS installer from GitHub Releases, install it to the same folder, then copy your Data/ folder (settings, models, recordings) from the old version to the new one.",
-    "portableUpdateButton": "Open GitHub Releases"
+    "portableUpdateTitle": "Wymagana aktualizacja ręczna",
+    "portableUpdateMessage": "Instalacji przenośnych nie można aktualizować automatycznie. Aby zaktualizować: pobierz najnowszy instalator NSIS z GitHub Releases, zainstaluj go w tym samym folderze, a następnie skopiuj folder Data/ (ustawienia, modele i nagrania) ze starej wersji do nowej.",
+    "portableUpdateButton": "Otwórz GitHub Releases"
   },
   "common": {
     "loading": "Wczytywanie...",
@@ -572,6 +724,7 @@
     "update": "Aktualizuj",
     "close": "Zamknij",
     "open": "Otwórz",
+    "moreInfo": "Więcej informacji",
     "default": "Domyślne",
     "enabled": "Włączone",
     "disabled": "Wyłączone",
@@ -583,7 +736,7 @@
   },
   "accessibility": {
     "permissionsRequired": "Wymagane uprawnienia dostępności",
-    "permissionsDescription": "Handy potrzebuje uprawnień dostępności, aby wpisywać transkrybowany tekst.",
+    "permissionsDescription": "AudioBud potrzebuje uprawnień dostępności, aby wpisywać transkrybowany tekst.",
     "openSettings": "Otwórz ustawienia systemowe",
     "dismiss": "Zamknij"
   },
@@ -602,14 +755,20 @@
     "modelLoadFailed": "Nie udało się załadować modelu: {{model}}",
     "modelLoadFailedUnknown": "nieznany model",
     "pasteFailedTitle": "Nie udało się wkleić tekstu",
-    "pasteFailed": "Nie można było wkleić tekstu do aktywnej aplikacji."
+    "pasteFailed": "Nie można było wkleić tekstu do aktywnej aplikacji.",
+    "transcriptionTimeoutTitle": "Przekroczono czas transkrypcji",
+    "transcriptionTimeout": "Silnik nie odpowiedział przez {{seconds}} sekund i mógł się zawiesić. Uruchom AudioBud ponownie, jeśli to się powtarza."
   },
   "appLanguage": {
     "title": "Język aplikacji",
-    "description": "Zmień język interfejsu Handy"
+    "description": "Zmień język interfejsu AudioBud"
   },
   "overlay": {
     "transcribing": "Transkrypcja...",
-    "processing": "Przetwarzanie..."
+    "processing": "Przetwarzanie...",
+    "recording": "Nagrywanie",
+    "cancel": "Anuluj nagrywanie",
+    "raw": "RAW",
+    "rawHint": "Tryb surowej transkrypcji"
   }
 }

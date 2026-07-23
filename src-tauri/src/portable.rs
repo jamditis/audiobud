@@ -1,12 +1,12 @@
+//! Portable mode support for AudioBud.
+//!
+//! When a file named `portable` exists next to the executable, all user data
+//! (settings, models, recordings, database, logs) is stored in a `Data/`
+//! directory alongside the executable instead of `%APPDATA%`.
+
 use std::path::PathBuf;
 use std::sync::OnceLock;
 use tauri::Manager;
-
-/// Portable mode support for AudioBud.
-///
-/// When a file named `portable` exists next to the executable, all user data
-/// (settings, models, recordings, database, logs) is stored in a `Data/`
-/// directory alongside the executable instead of `%APPDATA%`.
 
 /// Magic string the `portable` marker file must contain. This is a
 /// cross-language contract: the NSIS installer writes it

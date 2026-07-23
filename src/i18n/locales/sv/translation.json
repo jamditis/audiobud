@@ -9,9 +9,15 @@
     "cancel": "Avbryt",
     "pushToTalk": "Tryck för att tala",
     "muteWhileRecording": "Ljudlös under inspelning",
-    "appendTrailingSpace": "Lägg till avslutande mellanslag"
+    "appendTrailingSpace": "Lägg till avslutande mellanslag",
+    "autoSubmit": "Skicka automatiskt",
+    "showOverlay": "Visa överlagring",
+    "outputMode": "Utdataläge",
+    "formatted": "Formaterad",
+    "rawTranscript": "Rå transkription"
   },
   "sidebar": {
+    "navLabel": "Inställningsavsnitt",
     "general": "Allmänt",
     "models": "Modeller",
     "advanced": "Avancerat",
@@ -103,7 +109,7 @@
     },
     "permissions": {
       "title": "Behörigheter krävs",
-      "description": "Handy behöver ett par behörigheter för att fungera korrekt.",
+      "description": "AudioBud behöver ett par behörigheter för att fungera korrekt.",
       "microphone": {
         "title": "Mikrofonåtkomst",
         "description": "Krävs för att höra din röst för transkription."
@@ -154,6 +160,10 @@
     }
   },
   "settings": {
+    "autosave": {
+      "saved": "Sparat i dammen",
+      "failed": "Kunde inte spara ändringen"
+    },
     "modelSettings": {
       "title": "{{model}}-inställningar",
       "noSettingsNeeded": "Denna modell fungerar automatiskt utan att någon konfiguration krävs."
@@ -161,7 +171,7 @@
     "general": {
       "title": "Allmänt",
       "shortcut": {
-        "title": "Handy-kortkommandon",
+        "title": "AudioBud-kortkommandon",
         "description": "Konfigurera kortkommandon för att starta tal-till-text-inspelning",
         "loading": "Laddar kortkommandon...",
         "none": "Inga kortkommandon konfigurerade",
@@ -179,6 +189,10 @@
           "transcribe_with_post_process": {
             "name": "Snabbkommando för efterbearbetning",
             "description": "Valfritt: En dedikerad snabbknapp som alltid tillämpar AI-efterbearbetning på din transkription."
+          },
+          "transcribe_raw": {
+            "name": "Snabbkommando för rå transkription",
+            "description": "Ett dedikerat snabbkommando som transkriberar till rå text med gemener och utan skiljetecken, endast för den här dikteringen."
           }
         },
         "errors": {
@@ -189,11 +203,11 @@
       },
       "language": {
         "title": "Språk",
-        "description": "Välj språk för taligenkänning. Auto kommer automatiskt att bestämma språket, medan val av ett specifikt språk kan förbättra noggrannheten för det språket.",
+        "description": "Välj språk för taligenkänning. Alternativet Automatiskt avgör språket, medan val av ett specifikt språk kan förbättra noggrannheten för det språket.",
         "descriptionUnsupported": "Parakeet-modellen upptäcker automatiskt språket. Inget manuellt val behövs.",
         "searchPlaceholder": "Sök språk...",
         "noResults": "Inga språk hittades",
-        "auto": "Auto"
+        "auto": "Automatiskt"
       },
       "pushToTalk": {
         "label": "Tryck för att tala",
@@ -220,11 +234,16 @@
     },
     "sound": {
       "title": "Ljud",
+      "previewSounds": "Förhandslyssna på ljud (spelar upp start och sedan stopp)",
       "microphone": {
         "title": "Mikrofon",
         "description": "Välj din föredragna mikrofonenhet",
         "placeholder": "Välj mikrofon...",
         "loading": "Laddar..."
+      },
+      "inputLevel": {
+        "title": "Ingångsnivå",
+        "description": "Realtidsnivå från den valda mikrofonen. Prata så ska staplarna röra sig, vilket bekräftar att ljud kommer in."
       },
       "audioFeedback": {
         "label": "Ljudåterkoppling",
@@ -239,6 +258,12 @@
       "volume": {
         "title": "Volym",
         "description": "Justera volymen för ljudåterkopplingsljud"
+      },
+      "outputTest": {
+        "title": "Utmatningstest",
+        "description": "Spela upp ett testljud genom den valda utmatningsenheten för att bekräfta att ljud kommer ut.",
+        "button": "Testa utmatning",
+        "playing": "Spelar upp..."
       }
     },
     "advanced": {
@@ -269,8 +294,8 @@
         },
         "gpuDevice": {
           "title": "GPU-enhet",
-          "description": "Välj vilken GPU som ska användas för Whisper-inferens. Auto väljer den dedikerade GPU:n.",
-          "auto": "Auto"
+          "description": "Välj vilken GPU som ska användas för Whisper-inferens. Vid automatiskt val används den dedikerade GPU:n.",
+          "auto": "Automatiskt"
         }
       },
       "startHidden": {
@@ -279,11 +304,11 @@
       },
       "autostart": {
         "label": "Starta vid uppstart",
-        "description": "Starta Handy automatiskt när du loggar in på din dator."
+        "description": "Starta AudioBud automatiskt när du loggar in på din dator."
       },
       "showTrayIcon": {
         "label": "Visa ikon i systemfältet",
-        "description": "Visa Handy-ikonen i systemfältet."
+        "description": "Visa AudioBud-ikonen i systemfältet."
       },
       "overlay": {
         "title": "Överlagringsposition",
@@ -292,6 +317,22 @@
           "none": "Ingen",
           "bottom": "Nederst",
           "top": "Överst"
+        },
+        "fine": {
+          "title": "Position på skärmen",
+          "description": "Välj var inspelningsindikatorn ska sitta på din aktiva skärm. Mittenkolumnen motsvarar standardplaceringen.",
+          "reset": "Återställ till standard"
+        },
+        "anchors": {
+          "topleft": "Uppe till vänster",
+          "topcenter": "Uppe i mitten",
+          "topright": "Uppe till höger",
+          "middleleft": "Mitten till vänster",
+          "middlecenter": "Mitten",
+          "middleright": "Mitten till höger",
+          "bottomleft": "Nere till vänster",
+          "bottomcenter": "Nere i mitten",
+          "bottomright": "Nere till höger"
         }
       },
       "pasteMethod": {
@@ -352,13 +393,108 @@
           "sec15": "Efter 15 sekunder (Felsökning)"
         }
       },
+      "dictionaryGuide": {
+        "title": "Få orden rätt",
+        "intro": "Två verktyg samverkar. Anpassade ord styr modellen mot termer du använder ofta, så att den föredrar dem när ett ljud är tvetydigt. Ordersättningar tvingar fram en exakt rättning efteråt, för sådant som modellen ständigt hör fel.",
+        "rule": "Börja med ett anpassat ord. Om ett namn eller en term ändå blir fel på samma sätt varje gång, lägg till en ordersättning från det du hör till det du menar.",
+        "examplesToggle": "Visa exempel",
+        "examples": {
+          "name": {
+            "title": "Ett svårt namn (jamditis)",
+            "body": "Lägg till \"jamditis\" som ett anpassat ord. Om det ändå transkriberas som \"jam dightis\", lägg till en ordersättning: jam dightis → jamditis."
+          },
+          "domain": {
+            "title": "En domän eller e-postadress (jamditis.com)",
+            "body": "Du kommer att säga \"jamditis punkt com\", så lägg till en ordersättning: jamditis punkt com → jamditis.com. Ersättningar behåller exakt de tecken du anger, så det förblir ett sammanhängande uttryck istället för att delas upp med mellanslag eller få stor bokstav."
+          },
+          "handle": {
+            "title": "Ett användarnamn (@jamditis)",
+            "body": "Lägg till en ordersättning: snabel-a jamditis → @jamditis."
+          }
+        },
+        "engineNote": "Anpassade ord styr Whisper-modeller medan de avkodar; på andra modeller rättas texten efteråt, så resultatet varierar mellan modeller. Ordersättningar fungerar likadant på alla modeller."
+      },
       "customWords": {
         "title": "Anpassade ord",
         "description": "Lägg till ord som ofta hörs fel eller stavas fel under transkription. Systemet kommer automatiskt att korrigera liknande ord för att matcha din lista.",
         "placeholder": "Lägg till ett ord",
         "add": "Lägg till",
         "remove": "Ta bort {{word}}",
-        "duplicate": "\"{{word}}\" finns redan"
+        "duplicate": "\"{{word}}\" finns redan",
+        "capReached": "Din ordlista är full ({{cap}} ord). Ta bort några för att lägga till fler.",
+        "count": "{{count}} / {{cap}} ord",
+        "import": {
+          "title": "Importera en lista",
+          "description": "Ladda upp en .txt-fil eller klistra in en lista. Separera posterna med nya rader eller kommatecken. Fraser på upp till tre ord behålls; längre poster delas upp i enskilda ord.",
+          "upload": "Ladda upp .txt-fil",
+          "formatHint": "Vanlig .txt eller .csv. Ett ord eller en fras per rad, eller separera posterna med kommatecken. Fraser på upp till tre ord hålls ihop; längre poster delas upp i enskilda ord. Högst 500 poster totalt.",
+          "pastePlaceholder": "Klistra in ord här, ett per rad eller kommaseparerade",
+          "add": "Lägg till lista",
+          "none": "Inga nya ord att lägga till",
+          "added_one": "Lade till {{count}} ord",
+          "added_other": "Lade till {{count}} ord",
+          "skippedDuplicates": "{{count}} finns redan i din lista",
+          "skippedCap": "{{count}} över gränsen på {{cap}} ord",
+          "skippedInvalid": "{{count}} för långa",
+          "readError": "Kunde inte läsa filen"
+        }
+      },
+      "wordReplacements": {
+        "title": "Ordersättningar",
+        "description": "Ersätt alltid exakta ord eller fraser, oavsett hur de låter. Körs vid varje transkription, för alla modeller, efter matchningen av anpassade ord. Lämna ersättningen tom för att ta bort ett ord. Använd detta för rättningar som den ungefärliga matchningen inte kan göra säkert (till exempel \"clawed\" till \"Claude\").",
+        "fromPlaceholder": "Hört",
+        "toPlaceholder": "Ersätt med",
+        "add": "Lägg till",
+        "wholeWord": "Endast hela ord",
+        "caseSensitive": "Skiftlägeskänslig",
+        "duplicate": "\"{{word}}\" har redan en ersättning",
+        "capReached": "Din ersättningslista är full ({{cap}} poster). Ta bort några för att lägga till fler.",
+        "tooLong": "Håll varje fält under {{max}} tecken",
+        "count": "{{count}} / {{cap}} ersättningar",
+        "deletes": "(tar bort ordet)",
+        "partialBadge": "delvis",
+        "caseBadge": "Aa",
+        "remove": "Ta bort ersättning för {{word}}"
+      },
+      "personalization": {
+        "title": "Lär av min historik",
+        "description": "Välj att låta AudioBud föreslå anpassade ord utifrån de namn och termer du dikterar mest. Allt stannar på den här enheten: den läser din lokala transkriptionshistorik, inget laddas upp, och du kan när som helst exportera eller rensa det som lärts in. Av som standard.",
+        "error": "Något gick fel. Försök igen.",
+        "suggestions": {
+          "title": "Föreslagna ord",
+          "description": "Vanligt förekommande egennamn och termer hämtade ur din transkriptionshistorik. Lägg till de du vill ha som anpassade ord, eller avfärda resten så att de slutar visas.",
+          "refresh": "Uppdatera förslag",
+          "loading": "Söker igenom historiken...",
+          "empty": "Inga nya förslag än. Diktera mer och uppdatera sedan.",
+          "count": "förekommer {{count}} gånger",
+          "accept": "Lägg till",
+          "dismiss": "Avfärda",
+          "dismissLabel": "Avfärda förslaget {{word}}"
+        },
+        "learned": {
+          "count_one": "{{count}} inlärt ord",
+          "count_other": "{{count}} inlärda ord",
+          "remove": "Ta bort inlärt ord {{word}}"
+        },
+        "data": {
+          "title": "Dina personaliseringsdata",
+          "description": "Exportera en kopia av det AudioBud har lärt sig, eller rensa allt. Återställning tar bort alla inlärda ord och avfärdade förslag; dina manuella anpassade ord och ersättningar påverkas inte.",
+          "export": "Exportera",
+          "reset": "Återställ personalisering",
+          "resetTitle": "Återställ personalisering",
+          "resetConfirm": "Detta rensar alla inlärda ord och avfärdade förslag. Dina manuella anpassade ord och ersättningar behålls. Vill du fortsätta?",
+          "resetDone": "Personaliseringsdata rensade",
+          "exportDone": "Personaliseringsdata exporterade",
+          "exportError": "Kunde inte exportera personaliseringsdata"
+        }
+      },
+      "rawOutput": {
+        "label": "Rå transkription",
+        "description": "Ger text med gemener där stor bokstav och avslutande skiljetecken tagits bort. Förkortningar (API, GPU) och det fristående engelska \"I\" behålls. Användbart för att mata andra verktyg eller när modellen formaterar för mycket. Du kan också koppla ett separat kortkommando för enstaka rådikteringar."
+      },
+      "formatNumbers": {
+        "label": "Formatera tal",
+        "description": "Omvandlar talade tal till siffror och symboler i en formaterad transkription, till exempel $25, 10 % eller 3.5. Fungerar offline utan API-nyckel. Gäller inte råa transkriptioner."
       }
     },
     "postProcessing": {
@@ -448,7 +584,7 @@
       },
       "updateChecks": {
         "label": "Sök efter uppdateringar",
-        "description": "Sök automatiskt efter nya versioner av Handy"
+        "description": "Sök automatiskt efter nya versioner av AudioBud"
       },
       "soundTheme": {
         "label": "Ljudtema",
@@ -461,7 +597,8 @@
       "historyLimit": {
         "title": "Historikgräns",
         "description": "Maximalt antal historikposter som ska sparas",
-        "entries": "poster"
+        "entries": "poster",
+        "trimNote": "Att sänka gränsen raderar inte inspelningar direkt. Osparade inspelningar utöver gränsen tas bort när din nästa inspelning läggs till."
       },
       "recordingRetention": {
         "title": "Radera inspelningar automatiskt",
@@ -471,7 +608,8 @@
         "days3": "Efter 3 dagar",
         "weeks2": "Efter 2 veckor",
         "months3": "Efter 3 månader",
-        "placeholder": "Välj lagringsperiod..."
+        "placeholder": "Välj lagringsperiod...",
+        "trimNote": "Att ändra detta raderar inte inspelningar direkt. Gamla osparade inspelningar tas bort först när din nästa inspelning läggs till."
       },
       "alwaysOnMicrophone": {
         "label": "Alltid påslagen mikrofon",
@@ -516,11 +654,11 @@
       "title": "Om",
       "version": {
         "title": "Version",
-        "description": "Nuvarande version av Handy"
+        "description": "Nuvarande version av AudioBud"
       },
       "appDataDirectory": {
         "title": "Mapp för appdata",
-        "description": "Plats där Handy lagrar sina data"
+        "description": "Plats där AudioBud lagrar sina data"
       },
       "sourceCode": {
         "title": "Källkod",
@@ -528,16 +666,26 @@
         "button": "Visa på GitHub"
       },
       "supportDevelopment": {
-        "title": "Stöd utvecklingen",
-        "description": "Hjälp oss att fortsätta bygga Handy",
-        "button": "Donera"
+        "title": "Mata grodan",
+        "description": "AudioBud är gratis och körs helt på din dator. Om den sparar dig lite skrivande får du gärna slänga i en fluga i burken.",
+        "button": "Bjud på en fluga"
       },
       "acknowledgments": {
         "title": "Tack till",
+        "handy": {
+          "title": "Handy",
+          "description": "Dikteringsappen med öppen källkod som AudioBud bygger på",
+          "details": "AudioBud är en fork av Handy (MIT-licensierad) av cjpais. Stort tack till cjpais och Handys bidragsgivare för grunden som den här appen vilar på. Läs mer på handy.computer."
+        },
+        "parakeet": {
+          "title": "Parakeet",
+          "description": "NVIDIA NeMo Parakeet, AudioBuds standardmotor på Windows",
+          "details": "Transkriptionen kör som standard NVIDIA:s Parakeet-modell via ONNX-körtiden transcribe-rs. Tack till NVIDIA NeMo och de som underhåller transcribe-rs."
+        },
         "whisper": {
           "title": "Whisper.cpp",
-          "description": "Högpresterande inferens av OpenAI:s Whisper-modell för automatisk taligenkänning",
-          "details": "Handy använder Whisper.cpp för snabb, lokal tal-till-text-behandling. Tack till det fantastiska arbete som utförts av Georgi Gerganov med medarbetare."
+          "description": "Högpresterande lokal inferens av OpenAI:s Whisper-modell",
+          "details": "AudioBud kan även transkribera med Whisper.cpp, accelererat på GPU. Tack till Georgi Gerganov och bidragsgivarna."
         }
       }
     }
@@ -555,9 +703,9 @@
     "installing": "Installerar...",
     "preparing": "Förbereder...",
     "checkForUpdates": "Sök efter uppdateringar",
-    "portableUpdateTitle": "Manual update required",
-    "portableUpdateMessage": "Portable installs cannot be updated automatically. To update: download the latest NSIS installer from GitHub Releases, install it to the same folder, then copy your Data/ folder (settings, models, recordings) from the old version to the new one.",
-    "portableUpdateButton": "Open GitHub Releases"
+    "portableUpdateTitle": "Manuell uppdatering krävs",
+    "portableUpdateMessage": "Portabla installationer kan inte uppdateras automatiskt. Så här uppdaterar du: ladda ned det senaste NSIS-installationsprogrammet från GitHub Releases, installera det i samma mapp och kopiera sedan mappen Data/ (inställningar, modeller och inspelningar) från den gamla versionen till den nya.",
+    "portableUpdateButton": "Öppna GitHub Releases"
   },
   "common": {
     "loading": "Laddar...",
@@ -572,6 +720,7 @@
     "update": "Uppdatera",
     "close": "Stäng",
     "open": "Öppna",
+    "moreInfo": "Mer information",
     "default": "Standard",
     "enabled": "Aktiverad",
     "disabled": "Inaktiverad",
@@ -583,7 +732,7 @@
   },
   "accessibility": {
     "permissionsRequired": "Behörigheter för hjälpmedel krävs",
-    "permissionsDescription": "Handy behöver behörighet för hjälpmedel för att kunna skriva transkriberad text.",
+    "permissionsDescription": "AudioBud behöver behörighet för hjälpmedel för att kunna skriva transkriberad text.",
     "openSettings": "Öppna systeminställningar",
     "dismiss": "Avvisa"
   },
@@ -596,20 +745,26 @@
       "macos": "Bevilja mikrofonåtkomst i Systeminställningar → Integritet och säkerhet → Mikrofon.",
       "linux": "Bevilja mikrofonåtkomst i systemets ljud- eller integritetsinställningar."
     },
+    "noInputDeviceTitle": "Ingen mikrofon hittades",
+    "noInputDevice": "Ingen ljudenhet hittades. Anslut en mikrofon eller ett headset och försök igen.",
     "recordingFailed": "Misslyckades med att starta inspelning: {{error}}",
     "modelLoadFailed": "Misslyckades med att ladda modell: {{model}}",
     "modelLoadFailedUnknown": "okänd modell",
-    "noInputDeviceTitle": "Ingen mikrofon hittades",
-    "noInputDevice": "Ingen ljudenhet hittades. Anslut en mikrofon eller ett headset och försök igen.",
     "pasteFailedTitle": "Det gick inte att klistra in texten",
-    "pasteFailed": "Texten kunde inte klistras in i det aktiva programmet."
+    "pasteFailed": "Texten kunde inte klistras in i det aktiva programmet.",
+    "transcriptionTimeoutTitle": "Transkriptionen tog för lång tid",
+    "transcriptionTimeout": "Motorn svarade inte efter {{seconds}} sekunder och kan ha hängt sig. Starta om AudioBud om det fortsätter hända."
   },
   "appLanguage": {
     "title": "Applikationsspråk",
-    "description": "Ändra språket i Handy-gränssnittet"
+    "description": "Ändra språket i AudioBud-gränssnittet"
   },
   "overlay": {
     "transcribing": "Transkriberar...",
-    "processing": "Bearbetar..."
+    "processing": "Bearbetar...",
+    "recording": "Spelar in",
+    "cancel": "Avbryt inspelning",
+    "raw": "RÅ",
+    "rawHint": "Läge för rå transkription"
   }
 }

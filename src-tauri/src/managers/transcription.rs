@@ -1,6 +1,7 @@
 use crate::audio_toolkit::{apply_custom_words, apply_replacements, filter_transcription_output};
 use crate::managers::audio::AudioRecordingManager;
 use crate::managers::model::{EngineType, ModelManager};
+use crate::managers::watchdog::{run_with_watchdog, GenerationGate, WatchdogOutcome};
 use crate::settings::{
     get_settings, ModelUnloadTimeout, OrtAcceleratorSetting, WhisperAcceleratorSetting,
 };
@@ -9,8 +10,8 @@ use log::{debug, error, info, warn};
 use serde::Serialize;
 use specta::Type;
 use std::panic::{catch_unwind, AssertUnwindSafe};
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Arc, Condvar, Mutex, MutexGuard, OnceLock};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
+use std::sync::{Arc, Condvar, Mutex, OnceLock};
 use std::thread;
 use std::time::{Duration, SystemTime};
 use tauri::{AppHandle, Emitter, Manager};
@@ -62,9 +63,17 @@ impl Drop for LoadingGuard {
     }
 }
 
+/// Error used when a transcription or model load is refused because an
+/// earlier transcription timed out and its worker still holds an engine.
+/// Kept consistent with the `errors.transcriptionTimeout` toast copy: both
+/// point at restarting AudioBud, since retrying or switching models is
+/// refused while the engine is stuck.
+const WEDGED_ENGINE_ERROR: &str =
+    "The transcription engine is stuck from an earlier timeout. Restart AudioBud to recover.";
+
 #[derive(Clone)]
 pub struct TranscriptionManager {
-    engine: Arc<Mutex<Option<LoadedEngine>>>,
+    engine: Arc<GenerationGate<LoadedEngine>>,
     model_manager: Arc<ModelManager>,
     app_handle: AppHandle,
     current_model_id: Arc<Mutex<Option<String>>>,
@@ -73,12 +82,17 @@ pub struct TranscriptionManager {
     watcher_handle: Arc<Mutex<Option<thread::JoinHandle<()>>>>,
     is_loading: Arc<Mutex<bool>>,
     loading_condvar: Arc<Condvar>,
+    /// Number of transcribe calls whose watchdog fired and whose worker has
+    /// not resolved yet (issue #58). While nonzero, new transcriptions and
+    /// model loads are refused so retries cannot stack additional engines on
+    /// top of the one the wedged worker still holds.
+    wedged_workers: Arc<AtomicUsize>,
 }
 
 impl TranscriptionManager {
     pub fn new(app_handle: &AppHandle, model_manager: Arc<ModelManager>) -> Result<Self> {
         let manager = Self {
-            engine: Arc::new(Mutex::new(None)),
+            engine: Arc::new(GenerationGate::new()),
             model_manager,
             app_handle: app_handle.clone(),
             current_model_id: Arc::new(Mutex::new(None)),
@@ -87,6 +101,7 @@ impl TranscriptionManager {
             watcher_handle: Arc::new(Mutex::new(None)),
             is_loading: Arc::new(Mutex::new(false)),
             loading_condvar: Arc::new(Condvar::new()),
+            wedged_workers: Arc::new(AtomicUsize::new(0)),
         };
 
         // Start the idle watcher
@@ -163,17 +178,14 @@ impl TranscriptionManager {
         Ok(manager)
     }
 
-    /// Lock the engine mutex, recovering from poison if a previous transcription panicked.
-    fn lock_engine(&self) -> MutexGuard<'_, Option<LoadedEngine>> {
-        self.engine.lock().unwrap_or_else(|poisoned| {
-            warn!("Engine mutex was poisoned by a previous panic, recovering");
-            poisoned.into_inner()
-        })
+    pub fn is_model_loaded(&self) -> bool {
+        self.engine.is_occupied()
     }
 
-    pub fn is_model_loaded(&self) -> bool {
-        let engine = self.lock_engine();
-        engine.is_some()
+    /// Whether an earlier transcription timed out and its worker is still
+    /// running (holding an engine). See `wedged_workers`.
+    pub fn is_wedged(&self) -> bool {
+        self.wedged_workers.load(Ordering::SeqCst) > 0
     }
 
     /// Atomically check whether a model load is in progress and, if not, mark
@@ -196,11 +208,10 @@ impl TranscriptionManager {
         let unload_start = std::time::Instant::now();
         debug!("Starting to unload model");
 
-        {
-            let mut engine = self.lock_engine();
-            // Dropping the engine frees all resources
-            *engine = None;
-        }
+        // Dropping the engine frees all resources. clear() also bumps the
+        // slot generation, so a transcription currently holding the engine
+        // cannot restore it after this unload.
+        self.engine.clear();
         {
             let mut current_model = self.current_model_id.lock().unwrap();
             *current_model = None;
@@ -253,6 +264,23 @@ impl TranscriptionManager {
     pub fn load_model(&self, model_id: &str) -> Result<()> {
         let load_start = std::time::Instant::now();
         debug!("Starting to load model: {}", model_id);
+
+        // Refuse to stack another engine while a wedged transcription still
+        // holds one (issue #58) — repeated retries would otherwise pile up
+        // engines and exhaust VRAM/RAM. The loading_failed event surfaces the
+        // refusal as the usual model-load toast.
+        if self.is_wedged() {
+            let _ = self.app_handle.emit(
+                "model-state-changed",
+                ModelStateEvent {
+                    event_type: "loading_failed".to_string(),
+                    model_id: Some(model_id.to_string()),
+                    model_name: None,
+                    error: Some(WEDGED_ENGINE_ERROR.to_string()),
+                },
+            );
+            return Err(anyhow::anyhow!(WEDGED_ENGINE_ERROR));
+        }
 
         // Emit loading started event
         let _ = self.app_handle.emit(
@@ -380,10 +408,7 @@ impl TranscriptionManager {
         };
 
         // Update the current engine and model ID
-        {
-            let mut engine = self.lock_engine();
-            *engine = Some(loaded_engine);
-        }
+        self.engine.install(loaded_engine);
         {
             let mut current_model = self.current_model_id.lock().unwrap();
             *current_model = Some(model_id.to_string());
@@ -445,6 +470,16 @@ impl TranscriptionManager {
             ));
         }
 
+        // Manual repro hook for the issue #58 watchdog: simulate a wedged
+        // engine so the timeout/recovery path can be exercised in a dev build.
+        #[cfg(debug_assertions)]
+        if std::env::var("HANDY_FORCE_TRANSCRIPTION_HANG").is_ok() {
+            warn!("Simulating wedged engine (HANDY_FORCE_TRANSCRIPTION_HANG); blocking forever");
+            loop {
+                thread::sleep(Duration::from_secs(60));
+            }
+        }
+
         // Update last activity timestamp
         self.touch_activity();
 
@@ -466,8 +501,7 @@ impl TranscriptionManager {
                 is_loading = self.loading_condvar.wait(is_loading).unwrap();
             }
 
-            let engine_guard = self.lock_engine();
-            if engine_guard.is_none() {
+            if !self.engine.is_occupied() {
                 return Err(anyhow::anyhow!("Model is not loaded for transcription."));
             }
         }
@@ -533,13 +567,12 @@ impl TranscriptionManager {
         // We use catch_unwind to prevent engine panics from poisoning the mutex,
         // which would make the app hang indefinitely on subsequent operations.
         let result = {
-            let mut engine_guard = self.lock_engine();
-
-            // Take the engine out so we own it during transcription.
+            // Take the engine out so we own it during transcription, together
+            // with the slot generation observed at take time.
             // If the engine panics, we simply don't put it back (effectively unloading it)
             // instead of poisoning the mutex.
-            let mut engine = match engine_guard.take() {
-                Some(e) => e,
+            let (mut engine, taken_generation) = match self.engine.take() {
+                Some(taken) => taken,
                 None => {
                     return Err(anyhow::anyhow!(
                         "Model failed to load after auto-load attempt. Please check your model settings."
@@ -547,8 +580,7 @@ impl TranscriptionManager {
                 }
             };
 
-            // Release the lock before transcribing — no mutex held during the engine call
-            drop(engine_guard);
+            // take() released the slot lock — no mutex held during the engine call
 
             let transcribe_result = catch_unwind(AssertUnwindSafe(
                 || -> Result<transcribe_rs::TranscriptionResult> {
@@ -662,9 +694,18 @@ impl TranscriptionManager {
 
             match transcribe_result {
                 Ok(inner_result) => {
-                    // Success or normal error — put the engine back
-                    let mut engine_guard = self.lock_engine();
-                    *engine_guard = Some(engine);
+                    // Success or normal error — put the engine back, unless
+                    // the slot changed while we were out (model unloaded or a
+                    // different one loaded, e.g. after this call wedged and
+                    // its watchdog fired). Restoring then would clobber the
+                    // current engine or resurrect an unloaded one, so the
+                    // stale engine is dropped instead (issue #58).
+                    if !self.engine.try_restore(engine, taken_generation) {
+                        warn!(
+                            "Engine slot changed while a transcription was running; \
+                             dropping the stale engine instead of restoring it"
+                        );
+                    }
                     inner_result?
                 }
                 Err(panic_payload) => {
@@ -766,6 +807,32 @@ impl TranscriptionManager {
         self.maybe_unload_immediately("transcription");
 
         Ok(final_result)
+    }
+
+    /// Watchdog-guarded transcription (issue #58).
+    ///
+    /// While an earlier timed-out call is still running (wedged) this refuses
+    /// immediately instead of starting another engine call: the wedged worker
+    /// still holds the engine it took out of the slot, and stacking more
+    /// engines on retries would exhaust VRAM/RAM. Model loads are refused for
+    /// the same reason (see [`Self::load_model`]). If the wedged worker ever
+    /// resolves, the count clears and — when the slot generation is unchanged
+    /// — its engine is restored, so the manager recovers without a restart.
+    pub fn transcribe_with_watchdog(
+        &self,
+        audio: Vec<f32>,
+        timeout: Duration,
+    ) -> WatchdogOutcome<Result<String>> {
+        if self.is_wedged() {
+            return WatchdogOutcome::Completed(Err(anyhow::anyhow!(WEDGED_ENGINE_ERROR)));
+        }
+        let manager = self.clone();
+        run_with_watchdog(
+            "transcription",
+            timeout,
+            Arc::clone(&self.wedged_workers),
+            move || manager.transcribe(audio),
+        )
     }
 }
 
