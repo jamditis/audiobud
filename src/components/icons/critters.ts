@@ -10,7 +10,7 @@ import type { CritterEntry } from "./mascot";
 export const CRITTERS: readonly CritterEntry[] = [
   {
     id: "frog",
-    label: "Frog",
+    labelKey: "critters.frog",
     Component: FrogMascot,
     micLevel: "vocal-sac",
   },

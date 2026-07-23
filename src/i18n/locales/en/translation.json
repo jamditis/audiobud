@@ -754,5 +754,8 @@
     "cancel": "Cancel recording",
     "raw": "RAW",
     "rawHint": "Raw transcript mode"
+  },
+  "critters": {
+    "frog": "Frog"
   }
 }

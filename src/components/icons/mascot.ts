@@ -38,8 +38,13 @@ export type MicLevelVisual = "vocal-sac" | "none";
 export interface CritterEntry {
   /** Stable id. Persisted as a settings value once the picker lands (#8 slice 3). */
   id: string;
-  /** Human-facing name for the picker. */
-  label: string;
+  /**
+   * i18next key for the picker's display name, not the name itself. The picker
+   * (#8 slice 3) resolves it with `t()`; storing the English string here would
+   * ship one untranslated label to every non-English user, in a registry whose
+   * whole job is to be read by a UI it does not own.
+   */
+  labelKey: string;
   Component: ComponentType<MascotProps>;
   micLevel: MicLevelVisual;
 }
