@@ -1,6 +1,6 @@
 # AudioBud
 
-AudioBud is a local-first dictation app for Windows. Hold a hotkey, speak, and AudioBud types the transcript into the focused text field. Audio stays on your machine unless you explicitly enable optional LLM post-processing.
+AudioBud is a local-first dictation app for Windows. Press a hotkey, speak, and AudioBud types the transcript into the focused text field. Audio stays on your machine unless you explicitly enable optional LLM post-processing.
 
 AudioBud is a detached fork of [Handy](https://github.com/cjpais/Handy) by CJ Pais. It keeps Handy's Tauri, Rust, React, and local transcription base while adding AudioBud defaults, a dark frog/swamp interface, a Windows-first release path, and local model choices tuned for this fork.
 
@@ -9,13 +9,16 @@ AudioBud is a detached fork of [Handy](https://github.com/cjpais/Handy) by CJ Pa
 - **Terms:** <https://audiobud.amditis.tech/terms.html>
 - **Support:** <https://github.com/jamditis/audiobud/issues>
 - **Download:** [latest release](https://github.com/jamditis/audiobud/releases/latest)
+- **Microsoft Store:** submitted for review on July 24, 2026
 - **Changelog:** [CHANGELOG.md](CHANGELOG.md)
 
 ![AudioBud general settings in dark mode with shortcut, microphone, input level, and audio feedback controls.](screenshots/app-general.png)
 
 ## Current status
 
-AudioBud is packaged for Windows x64; the current version is whatever the [latest release](https://github.com/jamditis/audiobud/releases/latest) says. Beginning with v0.4.0, Windows release installers are signed and timestamped through Microsoft Artifact Signing. The signature identifies Joseph Amditis as the publisher. SmartScreen can still show a reputation warning while a new release builds reputation.
+AudioBud is packaged for Windows x64, and the first Microsoft Store submission is in review as of July 24, 2026. If the app is approved, the Store install path will become the recommended install path for U.S. Windows users and should avoid the direct-download reputation warning flow that new GitHub release installers can trigger.
+
+Direct GitHub release installers remain available. Beginning with v0.4.0, Windows release installers are signed and timestamped through Microsoft Artifact Signing. The signature identifies Joseph Amditis as the publisher. SmartScreen can still show a reputation warning for direct downloads while a new release builds reputation.
 
 Windows is the validated target for this milestone. macOS and Linux code is inherited from Handy and may work, but this fork has not validated those builds yet.
 
@@ -23,7 +26,7 @@ Automatic update checks remain disabled because AudioBud does not yet publish a 
 
 ## How it works
 
-1. Hold the default Windows shortcut, `Ctrl+Alt+Space`, to record. You can switch from push-to-talk to toggle mode in settings.
+1. Press the Windows shortcut, `Ctrl+Alt+Space`, to record. In toggle mode, press it again to stop and send the transcript; in hold-to-talk mode, release it to stop.
 2. AudioBud records from your selected microphone and trims silence with Silero VAD.
 3. The selected local model transcribes the audio.
 4. AudioBud inserts the result into the focused app by clipboard paste or direct typing.
@@ -31,7 +34,7 @@ Automatic update checks remain disabled because AudioBud does not yet publish a 
 ## What you can configure
 
 - **Shortcuts:** transcribe, transcribe with post-processing, raw transcript, and cancel bindings.
-- **Recording mode:** push-to-talk or toggle recording.
+- **Recording mode:** press-to-toggle recording or hold-to-talk.
 - **Audio:** microphone, output device, input meter, audio feedback, volume, and mute-while-recording.
 - **Models:** Parakeet, Whisper, Moonshine, SenseVoice, GigaAM, Canary, Cohere, and custom Whisper GGML `.bin` files.
 - **Text output:** spoken-number formatting (digits, currency, and percentages), a tray switch between formatted and raw transcript output, language selection where supported, translation where supported, trailing spaces, paste method, clipboard handling, and raw lowercased output.
@@ -65,7 +68,9 @@ Parakeet V3 is the Windows default in this fork because it was the best small lo
 
 ## Install
 
-Download the Windows installer from the [latest release](https://github.com/jamditis/audiobud/releases/latest):
+AudioBud has been submitted to the Microsoft Store and is waiting for review. If approved, Store installation will become the recommended path for U.S. Windows users.
+
+Until then, download the Windows installer from the [latest release](https://github.com/jamditis/audiobud/releases/latest):
 
 - `AudioBud_<version>_x64-setup.exe` — the setup wizard, which can install normally or in portable mode
 - `AudioBud_<version>_x64_en-US.msi` — the MSI package, for deployment tooling

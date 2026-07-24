@@ -7,6 +7,6 @@
       "default_binding": "Platform-specific: ctrl+space (Windows/Linux), alt+space (macOS)"
     }
   },
-  "push_to_talk": true,
+  "push_to_talk": false,
   "selected_language": "auto"
 }
