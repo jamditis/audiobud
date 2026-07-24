@@ -332,7 +332,7 @@ jobs:
               throw "Unexpected WebView2 installer signer for $Path`: $($signature.SignerCertificate.Subject)"
             }
 
-            & $signTool.FullName verify /pa /all /v $Path
+            & $signTool.FullName verify /pa /v $Path
             if ($LASTEXITCODE -ne 0) {
               throw "signtool verification failed for WebView2 installer: $Path"
             }

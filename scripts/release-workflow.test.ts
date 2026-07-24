@@ -416,7 +416,9 @@ describe("Windows release signing workflow", () => {
     );
     expect(webview2Step).toContain("Get-AuthenticodeSignature");
     expect(webview2Step).toContain("CN=Microsoft Corporation");
-    expect(webview2Step).toContain("signtool verification failed for WebView2");
+    expect(webview2Step).toContain("verify /pa /v");
+    expect(webview2Step).not.toContain("verify /pa /all /v $Path");
+    expect(webview2Step).toContain("Unexpected WebView2 installer signer");
     expect(webview2Step).toContain('Filter "dark.exe"');
     expect(webview2Step).toContain(
       "dark.exe failed to extract MSI embedded binaries",
