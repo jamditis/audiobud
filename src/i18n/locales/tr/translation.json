@@ -766,5 +766,8 @@
     "cancel": "Kaydı iptal et",
     "raw": "HAM",
     "rawHint": "Ham transkript modu"
+  },
+  "critters": {
+    "frog": "Kurbağa"
   }
 }

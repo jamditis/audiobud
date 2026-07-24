@@ -766,5 +766,8 @@
     "cancel": "Cancelar gravação",
     "raw": "BRUTO",
     "rawHint": "Modo de transcrição bruta"
+  },
+  "critters": {
+    "frog": "Sapo"
   }
 }

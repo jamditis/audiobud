@@ -1,25 +1,13 @@
 import { useId } from "react";
 import "./FrogMascot.css";
+import type { MascotProps } from "./mascot";
 
-// AudioBud's red-eyed tree frog mascot. Single source of truth for the wordmark,
-// the sidebar nav icon, the recording overlay, and the konami easter egg.
+// AudioBud's red-eyed tree frog mascot, and the first entry in the critter
+// registry (critters.ts). Single source of truth for the wordmark, the sidebar
+// nav icon, the recording overlay, and the konami easter egg.
 //
-// Animatable parts are exposed through props so callers drive state:
-//  - blink/wink/croak/lick toggle facial expressions (CSS classes in App.css)
-//  - sacScale (0..1) inflates the vocal sac directly, e.g. from live mic level
-//  - irisDX/irisDY translate the pupils to follow the cursor
-export interface FrogMascotProps {
-  size?: number | string;
-  className?: string;
-  blink?: boolean;
-  wink?: boolean;
-  croak?: boolean;
-  lick?: boolean;
-  /** 0 = deflated/hidden, 1 = fully inflated. Overrides the croak class when set. */
-  sacScale?: number;
-  irisDX?: number;
-  irisDY?: number;
-}
+// The animatable props live in MascotProps, the contract every critter honors.
+// The frog's answer to the mic-level half of that contract is its vocal sac.
 
 const FrogMascot = ({
   size,
@@ -31,7 +19,7 @@ const FrogMascot = ({
   sacScale,
   irisDX = 0,
   irisDY = 0,
-}: FrogMascotProps) => {
+}: MascotProps) => {
   const uid = useId().replace(/:/g, "");
   const fb = `fb-${uid}`;
   const sg = `sg-${uid}`;

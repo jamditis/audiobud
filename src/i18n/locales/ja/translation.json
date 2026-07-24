@@ -766,5 +766,8 @@
     "cancel": "録音をキャンセル",
     "raw": "RAW",
     "rawHint": "未加工文字起こしモード"
+  },
+  "critters": {
+    "frog": "カエル"
   }
 }

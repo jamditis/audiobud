@@ -766,5 +766,8 @@
     "cancel": "Annuler l'enregistrement",
     "raw": "BRUT",
     "rawHint": "Mode transcription brute"
+  },
+  "critters": {
+    "frog": "Grenouille"
   }
 }

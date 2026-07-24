@@ -766,5 +766,8 @@
     "cancel": "Aufnahme abbrechen",
     "raw": "RAW",
     "rawHint": "Rohtranskript-Modus"
+  },
+  "critters": {
+    "frog": "Frosch"
   }
 }

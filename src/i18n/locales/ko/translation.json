@@ -766,5 +766,8 @@
     "cancel": "녹음 취소",
     "raw": "RAW",
     "rawHint": "원본 전사 모드"
+  },
+  "critters": {
+    "frog": "개구리"
   }
 }
