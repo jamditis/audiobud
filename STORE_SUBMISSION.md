@@ -1,15 +1,16 @@
 # Microsoft Store submission
 
-This checklist records the current Partner Center draft and the package rules
-for the first AudioBud Store submission. Do not submit for certification until
-the package URL points to the exact MSI we tested, every packaged PE file passes
-signature verification, silent install/uninstall has been tested, and the update
-path is recorded.
+This checklist records the first AudioBud Microsoft Store submission and the
+package rules for future submissions.
 
-## Current draft state
+Status: submitted for Microsoft Store review on July 24, 2026. Partner Center
+shows the app as `In review` with a three-business-day review SLA.
+
+## Submitted app setup
 
 - Product type: `EXE or MSI app`.
 - Product name: `AudioBud`.
+- Partner Center ID: `f8dadf8b-6512-4707-a4d8-14eea2530bdf`.
 - Availability: `United States` only.
 - New-region distribution: unchecked.
 - Discoverability: available and discoverable in the Microsoft Store.
@@ -41,10 +42,19 @@ Use this text unless the implementation changes:
 
 ## Package values
 
-The package page is the current checkpoint. Use an MSI package for the first
-submission because Partner Center uses the default MSI silent switch, `/qn`.
+Use an MSI package for the first submission because Partner Center supports MSI
+silent install parameters directly.
 
-- Package URL: use a versioned, immutable HTTPS URL for the tested MSI.
+- Submitted package ID: `55846694`.
+- Submitted package URL:
+  `https://share.amditis.tech/audiobud/downloads/0.4.1/AudioBud_0.4.1_x64_en-US.msi`.
+- Submitted MSI SHA-256:
+  `9ee9d66d75abf7522bd5986c0c3bb0bb629d6274c80dafe35826aea29ccca3c3`.
+- Package validation: completed.
+- Malware check: clean.
+- Code sign check: signed.
+- Silent install status: unknown in Partner Center, with install error code `0`.
+- Package URL rule: use a versioned, immutable HTTPS URL for the tested MSI.
 - Do not use a GitHub Actions artifact URL. Actions artifacts require
   authentication and expire.
 - Host the exact tested MSI at a durable public HTTPS URL before entering it in
@@ -52,17 +62,13 @@ submission because Partner Center uses the default MSI silent switch, `/qn`.
 - Do not use a `/latest` URL.
 - App type: `MSI`.
 - Architecture: `x64`.
-- Installer parameters: leave blank for MSI unless Partner Center starts
-  requiring a value.
-- Language: `English`.
+- Installer parameters: `/qn /norestart`.
+- Language: `English (United States)`.
 
-The current public v0.4.1 MSI is signed and versioned, but it was not built
-with the Store-only offline WebView2 config. Prefer submitting a new Store
-candidate MSI built with `src-tauri/tauri.microsoftstore.conf.json`.
-
-Record the servicing decision before submission. Microsoft Store MSI/EXE
-distribution uses our hosted installer URL and the app or installer remains
-responsible for updates; MSIX is the Store path with built-in update delivery.
+For future submissions, record the servicing decision before submitting.
+Microsoft Store MSI/EXE distribution uses our hosted installer URL and the app
+or installer remains responsible for updates; MSIX is the Store path with
+built-in update delivery.
 
 ## Store candidate build
 
@@ -122,10 +128,13 @@ Short description:
 
 Description:
 
-> AudioBud is a local-first dictation app for Windows. Hold a hotkey, speak,
+> AudioBud is a local-first dictation app for Windows. Press a hotkey, speak,
 > and AudioBud types the transcript into the focused text field. Speech-to-text
 > runs on your device with local models. Optional post-processing stays off
 > until you enable it and configure a provider.
+>
+> AudioBud can start and stop recording with a hotkey press, or use
+> hold-to-talk if you prefer to keep the shortcut held while speaking.
 >
 > AudioBud includes configurable shortcuts, microphone selection, model
 > management, transcript formatting, custom words, word replacements, and

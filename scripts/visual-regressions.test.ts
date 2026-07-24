@@ -10,12 +10,16 @@ describe("visual polish regression contracts", () => {
   it("routes the prominent website downloads through the installer status", () => {
     const home = compact(read("docs/index.html"));
     const roadmap = compact(read("docs/roadmap.html"));
+    const css = compact(read("docs/styles.css"));
 
     expect(home).toMatch(/class="nav-cta" href="#install"/);
     expect(home).toMatch(/class="button primary" href="#install"/);
     expect(roadmap).toMatch(/class="nav-cta" href="\.\/index\.html#install"/);
     expect(home).toMatch(
-      /id="install"[\s\S]*class="install-note"[\s\S]*Code-signed release:[\s\S]*github\.com\/jamditis\/audiobud\/releases\/latest/,
+      /id="install"[\s\S]*class="install-note"[\s\S]*Current direct download:[\s\S]*Microsoft Store review pending[\s\S]*github\.com\/jamditis\/audiobud\/releases\/latest/,
+    );
+    expect(css).toMatch(
+      /@media \(max-width: 1040px\) \{[\s\S]*?\.cta-actions \{[^}]*flex-wrap: wrap;/,
     );
   });
 

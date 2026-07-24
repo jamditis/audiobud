@@ -472,7 +472,20 @@ describe("Windows release signing workflow", () => {
     );
     expect(storeSubmission).toContain("App type: `MSI`.");
     expect(storeSubmission).toContain("Architecture: `x64`.");
-    expect(storeSubmission).toContain("Language: `English`.");
+    expect(storeSubmission).toContain(
+      "Status: submitted for Microsoft Store review on July 24, 2026.",
+    );
+    expect(storeSubmission).toContain("Submitted package ID: `55846694`.");
+    expect(storeSubmission).toContain(
+      "Submitted package URL:\n  `https://share.amditis.tech/audiobud/downloads/0.4.1/AudioBud_0.4.1_x64_en-US.msi`.",
+    );
+    expect(storeSubmission).toContain(
+      "Submitted MSI SHA-256:\n  `9ee9d66d75abf7522bd5986c0c3bb0bb629d6274c80dafe35826aea29ccca3c3`.",
+    );
+    expect(storeSubmission).toContain(
+      "Installer parameters: `/qn /norestart`.",
+    );
+    expect(storeSubmission).toContain("Language: `English (United States)`.");
     expect(storeSubmission).toContain("Do not use a `/latest` URL.");
     expect(storeSubmission).toContain("bun run bundle:store");
     expect(storeSubmission).toContain("src-tauri/tauri.signing.conf.json");

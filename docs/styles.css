@@ -1264,6 +1264,19 @@ kbd {
   color: var(--green);
 }
 
+.store-pending {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 7px 12px;
+  border: 1px solid rgba(255, 185, 79, 0.3);
+  border-radius: 999px;
+  background: rgba(255, 185, 79, 0.09);
+  color: var(--amber);
+  font-size: 13px;
+  font-weight: 800;
+}
+
 .site-footer {
   margin-top: 20px;
   padding: 72px 0 28px;
@@ -2017,6 +2030,8 @@ body::before {
   .cta-actions {
     grid-column: 2;
     flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: flex-start;
     justify-self: start;
   }
 }

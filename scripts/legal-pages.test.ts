@@ -1112,13 +1112,24 @@ describe("AudioBud public policy pages", () => {
     });
   }
 
-  it("keeps the signed-installer status beside the download CTA", () => {
+  it("keeps the Store review status beside the download CTA", () => {
     const home = read("index.html");
+    const homeText = readText("index.html");
 
     expect(home).toContain('class="install-note"');
-    expect(home).toContain("<strong>Code-signed release:</strong>");
-    expect(home).toContain("signed and timestamped through Microsoft");
-    expect(home).toContain("SmartScreen can still show a reputation warning");
+    expect(homeText).toContain("Microsoft Store review in progress");
+    expect(homeText).toContain("Microsoft Store review pending");
+    expect(home).toContain("<strong>Current direct download:</strong>");
+    expect(homeText).toContain("signed, and timestamped through Microsoft");
+    expect(homeText).toContain(
+      "SmartScreen can still show a reputation warning for direct downloads",
+    );
+    expect(homeText).toContain(
+      "For users who can access the Store listing, that path should avoid the downloaded-installer warning flow once Microsoft approves the app",
+    );
+    expect(homeText).toContain(
+      "Direct downloads can still trigger SmartScreen",
+    );
     expect(home).not.toContain("<strong>Unsigned release:</strong>");
   });
 
@@ -1148,6 +1159,8 @@ describe("AudioBud public policy pages", () => {
     }
 
     expect(roadmap).toContain("v0.4.1 &mdash; release integrity");
+    expect(roadmap).toContain("turn on auto-update");
+    expect(roadmap).toContain("Store submission through review");
     expect(roadmap).toContain("v0.5.0 &mdash; output routing");
     expect(roadmap).toContain("v0.8.0 &mdash; reliability &amp; accessibility");
     expect(roadmap).not.toContain("v0.5.0 &mdash; stability");
@@ -1278,9 +1291,24 @@ describe("AudioBud public policy pages", () => {
   it("describes signed Windows releases accurately in README", () => {
     const readme = readRoot("README.md");
 
+    expect(readme).toContain(
+      "the first Microsoft Store submission is in review as of July 24, 2026",
+    );
+    expect(readme).toContain(
+      "Store install path will become the recommended install path for U.S. Windows users",
+    );
     expect(readme).toContain("Beginning with v0.4.0");
     expect(readme).toContain("signed and timestamped through Microsoft");
-    expect(readme).toContain("SmartScreen can still show a reputation warning");
+    expect(readme).toContain(
+      "SmartScreen can still show a reputation warning for direct downloads",
+    );
+    expect(readme).toContain(
+      "Press the Windows shortcut, `Ctrl+Alt+Space`, to record. In toggle mode, press it again to stop and send the transcript; in hold-to-talk mode, release it to stop.",
+    );
+    expect(readme).toContain(
+      "- **Recording mode:** press-to-toggle recording or hold-to-talk.",
+    );
+    expect(readme).not.toContain("Press and hold the default Windows shortcut");
     expect(readme).not.toContain("The build is not code-signed yet");
   });
 
