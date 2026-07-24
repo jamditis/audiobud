@@ -8,6 +8,7 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
+    "bundle:store": "tauri bundle --verbose --bundles nsis,msi --config src-tauri/tauri.signing.conf.json --config src-tauri/tauri.microsoftstore.conf.json --ci",
     "lint": "eslint src",
     "lint:fix": "eslint src --fix",
     "format": "prettier --write . && cd src-tauri && cargo fmt",

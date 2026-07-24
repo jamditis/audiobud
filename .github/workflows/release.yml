@@ -4,8 +4,11 @@
 # packaged files before uploading any artifact.
 #
 #   - workflow_dispatch (make_release: false) builds and signs a CI artifact.
-#   - workflow_dispatch (make_release: true) or a pushed v* tag also creates or
-#     reuses a draft GitHub release and attaches the signed installers.
+#   - workflow_dispatch (store_candidate: true) builds and signs a CI artifact
+#     with Store-specific offline WebView2 packaging.
+#   - workflow_dispatch (make_release: true, store_candidate: false) or a
+#     pushed v* tag also creates or reuses a draft GitHub release and attaches
+#     the release artifacts.
 #
 # The job can run only from main or a v* tag and uses the protected
 # artifact-signing environment for passwordless Azure authentication.
@@ -15,7 +18,11 @@ on:
   workflow_dispatch:
     inputs:
       make_release:
-        description: "Create a draft GitHub release and attach the signed installers"
+        description: "Create a draft GitHub release and attach the release artifacts"
+        type: boolean
+        default: false
+      store_candidate:
+        description: "Build a Microsoft Store candidate CI artifact with offline WebView2 packaging"
         type: boolean
         default: false
   push:
@@ -45,6 +52,7 @@ jobs:
       ARTIFACT_SIGNING_CERTIFICATE_PROFILE_NAME: ${{ vars.ARTIFACT_SIGNING_CERTIFICATE_PROFILE_NAME }}
       SILERO_VAD_SHA256: a35ebf52fd3ce5f1469b2a36158dba761bc47b973ea3382b3186ca15b1f5af28
       SILERO_VAD_BYTES: 1807522
+      STORE_CANDIDATE: ${{ github.event_name == 'workflow_dispatch' && inputs.store_candidate }}
       VULKAN_RUNTIME_ARCHIVE_SHA256: 7d969f4d7b44e387667d3148f61559497c22d50cbe3d50adc9e5409afbce2df1
       VULKAN_RUNTIME_ARCHIVE_BYTES: 15738272
     steps:
@@ -82,6 +90,30 @@ jobs:
           echo "Application version: $VERSION (release tag: $TAG)"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Validate release mode
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        shell: pwsh
+        env:
+          MAKE_RELEASE: ${{ inputs.make_release }}
+          REF_TYPE: ${{ github.ref_type }}
+        run: |
+          if ($env:MAKE_RELEASE -eq "true" -and $env:STORE_CANDIDATE -eq "true") {
+            throw "Store candidate artifacts cannot be published as a GitHub release"
+          }
+          if ($env:REF_TYPE -eq "tag" -and $env:STORE_CANDIDATE -eq "true") {
+            throw "Store candidate artifacts must be built from main, not tag refs"
+          }
+
+      - name: Resolve package flavor
+        id: package-flavor
+        shell: pwsh
+        run: |
+          if ($env:STORE_CANDIDATE -eq "true") {
+            "artifact_suffix=-store" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          } else {
+            "artifact_suffix=" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          }
 
       # Keep this an exact semver. An unpinned setup-bun resolves its version
       # through an authenticated api.github.com request before compilation.
@@ -226,9 +258,27 @@ jobs:
           Import-Module ArtifactSigning -RequiredVersion 0.1.8 -Force
           Get-Command Invoke-ArtifactSigning -ErrorAction Stop | Out-Null
 
+      - name: Clear Store WebView2 installer cache
+        if: ${{ env.STORE_CANDIDATE == 'true' }}
+        shell: pwsh
+        run: |
+          $tauriCache = Join-Path $env:LOCALAPPDATA "tauri"
+          if (-not (Test-Path -LiteralPath $tauriCache)) {
+            return
+          }
+
+          Get-ChildItem -LiteralPath $tauriCache -File -Recurse |
+            Where-Object { $_.Name -match "WebView2|MicrosoftEdge" } |
+            Remove-Item -Force
+
       - name: Bundle installers
         shell: pwsh
-        run: bun run tauri bundle --verbose --bundles nsis,msi --config src-tauri/tauri.signing.conf.json --ci
+        run: |
+          if ($env:STORE_CANDIDATE -eq "true") {
+            bun run bundle:store
+          } else {
+            bun run tauri bundle --verbose --bundles nsis,msi --config src-tauri/tauri.signing.conf.json --ci
+          }
 
       - name: Resolve installer paths
         shell: pwsh
@@ -253,6 +303,94 @@ jobs:
           if ($msiFiles[0].FullName -ne $env:MSI_PATH) {
             throw "Unexpected MSI installer path: $($msiFiles[0].FullName)"
           }
+
+      - name: Verify Store WebView2 offline installers
+        if: ${{ env.STORE_CANDIDATE == 'true' }}
+        id: store-webview2
+        shell: pwsh
+        env:
+          MSI_PATH: ${{ steps.signing-paths.outputs.msi }}
+        run: |
+          $signTool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" `
+            -Filter "signtool.exe" -File -Recurse |
+            Where-Object { $_.FullName -match "\\x64\\signtool\.exe$" } |
+            Sort-Object FullName |
+            Select-Object -Last 1
+          if (-not $signTool) { throw "signtool.exe was not found" }
+
+          function Assert-MicrosoftWebView2Signature {
+            param([Parameter(Mandatory = $true)][string] $Path)
+
+            if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+              throw "WebView2 installer not found: $Path"
+            }
+            $signature = Get-AuthenticodeSignature -LiteralPath $Path
+            if ($signature.Status -ne [System.Management.Automation.SignatureStatus]::Valid) {
+              throw "Invalid WebView2 installer signature for $Path`: $($signature.StatusMessage)"
+            }
+            if ($signature.SignerCertificate.Subject -notlike "*CN=Microsoft Corporation*") {
+              throw "Unexpected WebView2 installer signer for $Path`: $($signature.SignerCertificate.Subject)"
+            }
+
+            & $signTool.FullName verify /pa /all /v $Path
+            if ($LASTEXITCODE -ne 0) {
+              throw "signtool verification failed for WebView2 installer: $Path"
+            }
+          }
+
+          $tauriCache = Join-Path $env:LOCALAPPDATA "tauri"
+          $cacheInstallers = @(
+            Get-ChildItem -LiteralPath $tauriCache -File -Recurse |
+              Where-Object { $_.Name -match "WebView2|MicrosoftEdge" -and $_.Extension -eq ".exe" }
+          )
+          if ($cacheInstallers.Count -lt 1) {
+            throw "Expected at least one Store WebView2 offline installer in the Tauri cache"
+          }
+          foreach ($cacheInstaller in $cacheInstallers) {
+            Assert-MicrosoftWebView2Signature -Path $cacheInstaller.FullName
+          }
+
+          $dark = Get-ChildItem -LiteralPath $tauriCache -Filter "dark.exe" -File -Recurse |
+            Sort-Object FullName |
+            Select-Object -Last 1
+          if (-not $dark) { throw "dark.exe was not found in the Tauri WiX tools cache" }
+
+          $msiBinaryDirectory = Join-Path $env:RUNNER_TEMP `
+            "audiobud-msi-binary-verification-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
+          if (Test-Path -LiteralPath $msiBinaryDirectory) {
+            throw "MSI binary verification directory already exists: $msiBinaryDirectory"
+          }
+          New-Item -ItemType Directory -Path $msiBinaryDirectory | Out-Null
+          $wxsPath = Join-Path $msiBinaryDirectory "package.wxs"
+          & $dark.FullName -nologo -x $msiBinaryDirectory -out $wxsPath $env:MSI_PATH
+          if ($LASTEXITCODE -ne 0) {
+            throw "dark.exe failed to extract MSI embedded binaries"
+          }
+
+          $embeddedInstallers = @(
+            Get-ChildItem -LiteralPath $msiBinaryDirectory -File -Recurse |
+              Where-Object { $_.Name -match "WebView2|MicrosoftEdge" -and $_.Extension -eq ".exe" }
+          )
+          if ($embeddedInstallers.Count -lt 1) {
+            throw "Expected at least one MSI-embedded WebView2 offline installer"
+          }
+
+          $webView2PayloadDirectory = Join-Path $env:CARGO_TARGET_DIR "release\webview2-payload"
+          if (Test-Path -LiteralPath $webView2PayloadDirectory) {
+            Remove-Item -LiteralPath $webView2PayloadDirectory -Recurse -Force
+          }
+          New-Item -ItemType Directory -Path $webView2PayloadDirectory | Out-Null
+          for ($index = 0; $index -lt $embeddedInstallers.Count; $index += 1) {
+            $embeddedInstaller = $embeddedInstallers[$index]
+            Assert-MicrosoftWebView2Signature -Path $embeddedInstaller.FullName
+            $destination = Join-Path $webView2PayloadDirectory `
+              "msi-$index-$($embeddedInstaller.Name)"
+            Copy-Item -LiteralPath $embeddedInstaller.FullName -Destination $destination
+          }
+
+          "path=$webView2PayloadDirectory" |
+            Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          Write-Output "Verified Store WebView2 offline installers"
 
       # The standalone executable is restored to its pre-bundle state after
       # Tauri finishes. Sign it alongside both outer installer packages.
@@ -314,10 +452,12 @@ jobs:
       # runner. Verify the packaged app copies and the generated uninstaller,
       # then confirm Tauri did not alter the bundled third-party DLLs.
       - name: Verify packaged application signatures
+        id: packaged-payload
         shell: pwsh
         env:
           NSIS_PATH: ${{ steps.signing-paths.outputs.nsis }}
           MSI_PATH: ${{ steps.signing-paths.outputs.msi }}
+          WEBVIEW2_PAYLOAD_PATH: ${{ steps.store-webview2.outputs.path }}
         run: |
           $signTool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" `
             -Filter "signtool.exe" -File -Recurse |
@@ -349,6 +489,39 @@ jobs:
             }
           }
 
+          function Assert-TrustedPeSignature {
+            param([Parameter(Mandatory = $true)][string] $Path)
+
+            if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+              throw "Packaged PE file not found: $Path"
+            }
+            $signature = Get-AuthenticodeSignature -LiteralPath $Path
+            if ($signature.Status -ne [System.Management.Automation.SignatureStatus]::Valid) {
+              throw "Invalid packaged PE signature for $Path`: $($signature.StatusMessage)"
+            }
+
+            & $signTool.FullName verify /pa /all /v $Path
+            if ($LASTEXITCODE -ne 0) {
+              throw "signtool verification failed for packaged PE file $Path"
+            }
+          }
+
+          function Assert-PackagedPeSignatures {
+            param([Parameter(Mandatory = $true)][string] $Root)
+
+            $peFiles = @(
+              Get-ChildItem -LiteralPath $Root -File -Recurse |
+                Where-Object { $_.Extension -in @(".exe", ".dll") }
+            )
+            if ($peFiles.Count -eq 0) {
+              throw "No packaged PE files found in $Root"
+            }
+
+            foreach ($peFile in $peFiles) {
+              Assert-TrustedPeSignature -Path $peFile.FullName
+            }
+          }
+
           $verificationRoot = Join-Path $env:RUNNER_TEMP `
             "audiobud-signature-verification-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
           if (Test-Path -LiteralPath $verificationRoot) {
@@ -374,6 +547,38 @@ jobs:
             throw "MSI administrative extraction failed with exit code $($msiProcess.ExitCode)"
           }
 
+          $msiInstallLog = Join-Path $verificationRoot "msi-install.log"
+          $msiInstallArguments = @(
+            "/i",
+            "`"$env:MSI_PATH`"",
+            "/qn",
+            "/norestart",
+            "/l*v",
+            "`"$msiInstallLog`""
+          )
+          $msiInstallProcess = Start-Process -FilePath "$env:SystemRoot\System32\msiexec.exe" `
+            -ArgumentList $msiInstallArguments -Wait -PassThru -NoNewWindow
+          if ($msiInstallProcess.ExitCode -notin @(0, 3010)) {
+            Get-Content -LiteralPath $msiInstallLog -Tail 100 -ErrorAction SilentlyContinue
+            throw "MSI silent install failed with exit code $($msiInstallProcess.ExitCode)"
+          }
+
+          $msiUninstallLog = Join-Path $verificationRoot "msi-uninstall.log"
+          $msiUninstallArguments = @(
+            "/x",
+            "`"$env:MSI_PATH`"",
+            "/qn",
+            "/norestart",
+            "/l*v",
+            "`"$msiUninstallLog`""
+          )
+          $msiUninstallProcess = Start-Process -FilePath "$env:SystemRoot\System32\msiexec.exe" `
+            -ArgumentList $msiUninstallArguments -Wait -PassThru -NoNewWindow
+          if ($msiUninstallProcess.ExitCode -notin @(0, 3010)) {
+            Get-Content -LiteralPath $msiUninstallLog -Tail 100 -ErrorAction SilentlyContinue
+            throw "MSI silent uninstall failed with exit code $($msiUninstallProcess.ExitCode)"
+          }
+
           $nsisProcess = Start-Process -FilePath $env:NSIS_PATH `
             -ArgumentList @("/S", "/D=$nsisDirectory") `
             -Wait -PassThru
@@ -393,6 +598,8 @@ jobs:
           Assert-AudioBudSignature -Path $msiApplications[0].FullName
           Assert-AudioBudSignature -Path $nsisApplication
           Assert-AudioBudSignature -Path $nsisUninstaller
+          Assert-PackagedPeSignatures -Root $msiDirectory
+          Assert-PackagedPeSignatures -Root $nsisDirectory
 
           $runtimeFiles = @(
             "msvcp140.dll",
@@ -423,18 +630,55 @@ jobs:
             }
           }
 
+          $sbomPayloadDirectory = Join-Path $env:CARGO_TARGET_DIR "release\sbom-payload"
+          if (Test-Path -LiteralPath $sbomPayloadDirectory) {
+            Remove-Item -LiteralPath $sbomPayloadDirectory -Recurse -Force
+          }
+          New-Item -ItemType Directory -Path $sbomPayloadDirectory | Out-Null
+          Copy-Item -LiteralPath $msiDirectory -Destination (Join-Path $sbomPayloadDirectory "msi") -Recurse
+          Copy-Item -LiteralPath $nsisDirectory -Destination (Join-Path $sbomPayloadDirectory "nsis") -Recurse
+          if ($env:STORE_CANDIDATE -eq "true") {
+            if (-not (Test-Path -LiteralPath $env:WEBVIEW2_PAYLOAD_PATH -PathType Container)) {
+              throw "Verified WebView2 payload path not found: $env:WEBVIEW2_PAYLOAD_PATH"
+            }
+            Copy-Item -LiteralPath $env:WEBVIEW2_PAYLOAD_PATH `
+              -Destination (Join-Path $sbomPayloadDirectory "webview2") -Recurse
+          }
+          "path=$sbomPayloadDirectory" |
+            Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
           $uninstallProcess = Start-Process -FilePath $nsisUninstaller `
             -ArgumentList "/S" -Wait -PassThru
           if ($uninstallProcess.ExitCode -ne 0) {
             throw "NSIS uninstaller failed with exit code $($uninstallProcess.ExitCode)"
           }
 
-      # Publish the digests as a release asset so the website can link to one
+      - name: Resolve SBOM path
+        id: sbom-path
+        shell: pwsh
+        env:
+          APP_VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          $directory = Join-Path $env:CARGO_TARGET_DIR "release"
+          New-Item -ItemType Directory -Force -Path $directory | Out-Null
+          $path = Join-Path $directory "AudioBud_$($env:APP_VERSION)_sbom.spdx.json"
+          "path=$path" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      - name: Generate release SBOM
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        with:
+          path: ${{ steps.packaged-payload.outputs.path }}
+          format: spdx-json
+          output-file: ${{ steps.sbom-path.outputs.path }}
+          syft-version: v1.49.0
+          upload-artifact: false
+          upload-release-assets: false
+
+      # Publish installer digests as a release asset so the website can link to one
       # stable URL instead of carrying hashes in its markup, which go stale the
       # moment the next release ships and then tell a user with a good file
       # that it is bad. Computed from the signed installers after every
-      # signature check has passed, so the file describes exactly the bytes a
-      # user downloads -- signature block included.
+      # signature check has passed, so it describes the files users verify.
       - name: Write SHA256SUMS
         id: checksums
         shell: pwsh
@@ -467,18 +711,27 @@ jobs:
       # with `gh attestation verify <file> --repo jamditis/audiobud
       # --signer-workflow jamditis/audiobud/.github/workflows/release.yml`.
       # A failed attestation blocks both upload paths below.
-      - name: Attest release artifacts
+      - name: Attest release provenance
         uses: actions/attest@f7c74d28b9d84cb8768d0b8ca14a4bac6ef463e6 # v4.2.0
         with:
           subject-path: |
             ${{ steps.signing-paths.outputs.nsis }}
             ${{ steps.signing-paths.outputs.msi }}
+            ${{ steps.sbom-path.outputs.path }}
             ${{ steps.checksums.outputs.path }}
+
+      - name: Attest release SBOM
+        uses: actions/attest@f7c74d28b9d84cb8768d0b8ca14a4bac6ef463e6 # v4.2.0
+        with:
+          subject-path: |
+            ${{ steps.signing-paths.outputs.nsis }}
+            ${{ steps.signing-paths.outputs.msi }}
+          sbom-path: ${{ steps.sbom-path.outputs.path }}
 
       # A draft is created only after all signatures pass. Reruns reuse the
       # draft, but they refuse to replace assets on a published release.
       - name: Find or create draft release
-        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.make_release) || github.ref_type == 'tag' }}
+        if: ${{ env.STORE_CANDIDATE != 'true' && ((github.event_name == 'workflow_dispatch' && inputs.make_release) || github.ref_type == 'tag') }}
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
@@ -512,29 +765,31 @@ jobs:
             }
           }
 
-      - name: Upload signed installers to GitHub release
-        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.make_release) || github.ref_type == 'tag' }}
+      - name: Upload release artifacts to GitHub release
+        if: ${{ env.STORE_CANDIDATE != 'true' && ((github.event_name == 'workflow_dispatch' && inputs.make_release) || github.ref_type == 'tag') }}
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ steps.meta.outputs.tag }}
           NSIS_PATH: ${{ steps.signing-paths.outputs.nsis }}
           MSI_PATH: ${{ steps.signing-paths.outputs.msi }}
+          SBOM_PATH: ${{ steps.sbom-path.outputs.path }}
           CHECKSUM_PATH: ${{ steps.checksums.outputs.path }}
         run: |
           gh release upload $env:RELEASE_TAG `
-            $env:NSIS_PATH $env:MSI_PATH $env:CHECKSUM_PATH --clobber
+            $env:NSIS_PATH $env:MSI_PATH $env:SBOM_PATH $env:CHECKSUM_PATH --clobber
           if ($LASTEXITCODE -ne 0) {
-            throw "Failed to upload signed installers to $env:RELEASE_TAG"
+            throw "Failed to upload release artifacts to $env:RELEASE_TAG"
           }
 
-      - name: Upload signed installers as CI artifact
+      - name: Upload release artifacts as CI artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: audiobud-windows-x86_64-v${{ steps.meta.outputs.version }}-${{ github.run_attempt }}
+          name: audiobud-windows-x86_64${{ steps.package-flavor.outputs.artifact_suffix }}-v${{ steps.meta.outputs.version }}-${{ github.run_attempt }}
           path: |
             ${{ steps.signing-paths.outputs.nsis }}
             ${{ steps.signing-paths.outputs.msi }}
+            ${{ steps.sbom-path.outputs.path }}
             ${{ steps.checksums.outputs.path }}
           retention-days: 30
           if-no-files-found: error

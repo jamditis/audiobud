@@ -3,8 +3,13 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
 const workflow = readFileSync(".github/workflows/release.yml", "utf8");
+const packageJson = JSON.parse(readFileSync("package.json", "utf8"));
+const storeSubmission = readFileSync("STORE_SUBMISSION.md", "utf8");
 const signingConfig = JSON.parse(
   readFileSync("src-tauri/tauri.signing.conf.json", "utf8"),
+);
+const microsoftStoreConfig = JSON.parse(
+  readFileSync("src-tauri/tauri.microsoftstore.conf.json", "utf8"),
 );
 const signingScript = readFileSync("scripts/sign-windows.ps1", "utf8");
 const nsisTemplate = readFileSync("src-tauri/nsis/installer.nsi", "utf8");
@@ -78,6 +83,7 @@ describe("Windows release signing workflow", () => {
     expect(workflow).toContain(
       "bun run tauri bundle --verbose --bundles nsis,msi --config src-tauri/tauri.signing.conf.json --ci",
     );
+    expect(stepBlock("Bundle installers")).toContain("bun run bundle:store");
 
     const signingUses = workflow.match(
       /uses: azure\/artifact-signing-action@c7ab2a863ab5f9a846ddb8265964877ef296ee82 # v2/g,
@@ -92,15 +98,21 @@ describe("Windows release signing workflow", () => {
       "Build application without bundling",
       "Authenticate to Azure",
       "Install Artifact Signing module",
+      "Clear Store WebView2 installer cache",
       "Bundle installers",
       "Resolve installer paths",
+      "Verify Store WebView2 offline installers",
       "Sign release outputs",
       "Verify Authenticode signatures",
       "Verify packaged application signatures",
+      "Resolve SBOM path",
+      "Generate release SBOM",
       "Write SHA256SUMS",
+      "Attest release provenance",
+      "Attest release SBOM",
       "Find or create draft release",
-      "Upload signed installers to GitHub release",
-      "Upload signed installers as CI artifact",
+      "Upload release artifacts to GitHub release",
+      "Upload release artifacts as CI artifact",
     ].map(stepPosition);
 
     for (let index = 1; index < steps.length; index += 1) {
@@ -160,11 +172,20 @@ describe("Windows release signing workflow", () => {
       '$checksumPath = Join-Path $env:CARGO_TARGET_DIR "release\\SHA256SUMS.txt"',
     );
     expect(workflow).toContain(
-      "$env:NSIS_PATH $env:MSI_PATH $env:CHECKSUM_PATH --clobber",
+      "$env:NSIS_PATH $env:MSI_PATH $env:SBOM_PATH $env:CHECKSUM_PATH --clobber",
     );
     expect(workflow).toContain(
       "CHECKSUM_PATH: ${{ steps.checksums.outputs.path }}",
     );
+    expect(workflow).toContain(
+      "SBOM_PATH: ${{ steps.sbom-path.outputs.path }}",
+    );
+
+    const checksumStep = stepBlock("Write SHA256SUMS");
+    expect(checksumStep).toContain(
+      "$lines = foreach ($path in @($env:NSIS_PATH, $env:MSI_PATH))",
+    );
+    expect(checksumStep).not.toContain("steps.sbom-path.outputs.path");
 
     // Hashing a path that does not exist would otherwise publish a file
     // listing one installer and silently omit the other.
@@ -185,6 +206,12 @@ describe("Windows release signing workflow", () => {
     // upload-artifact calculates one root for every path. Mixing installers
     // under CARGO_TARGET_DIR with a checksum under RUNNER_TEMP made the
     // Windows action fall back to GITHUB_WORKSPACE and reject the installers.
+    const sbomPathStep = stepBlock("Resolve SBOM path");
+    expect(sbomPathStep).toContain(
+      '$directory = Join-Path $env:CARGO_TARGET_DIR "release"',
+    );
+    expect(sbomPathStep).not.toContain("$env:RUNNER_TEMP");
+
     const checksumStep = stepBlock("Write SHA256SUMS");
     expect(checksumStep).toContain(
       '$checksumPath = Join-Path $env:CARGO_TARGET_DIR "release\\SHA256SUMS.txt"',
@@ -192,41 +219,89 @@ describe("Windows release signing workflow", () => {
     expect(checksumStep).not.toContain("$env:RUNNER_TEMP");
   });
 
-  test("attests every uploaded release artifact before publication", () => {
-    expect(workflow).toContain("attestations: write");
-
-    const attestationStep = stepBlock("Attest release artifacts");
-    expect(attestationStep).toContain(
-      "uses: actions/attest@f7c74d28b9d84cb8768d0b8ca14a4bac6ef463e6 # v4.2.0",
+  test("generates a pinned release SBOM before checksums and attestations", () => {
+    const sbomStep = stepBlock("Generate release SBOM");
+    expect(sbomStep).toContain(
+      "uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0",
     );
-    expect(attestationStep).not.toContain("\n        if:");
-
-    const uploadedPaths = [
-      "${{ steps.signing-paths.outputs.nsis }}",
-      "${{ steps.signing-paths.outputs.msi }}",
-      "${{ steps.checksums.outputs.path }}",
-    ];
-    expect(multilineInput(attestationStep, "subject-path")).toEqual(
-      uploadedPaths,
+    expect(sbomStep).toContain(
+      "path: ${{ steps.packaged-payload.outputs.path }}",
     );
-    expect(
-      multilineInput(
-        stepBlock("Upload signed installers as CI artifact"),
-        "path",
-      ),
-    ).toEqual(uploadedPaths);
+    expect(sbomStep).not.toContain("path: .");
+    expect(sbomStep).toContain("format: spdx-json");
+    expect(sbomStep).toContain("syft-version: v1.49.0");
+    expect(sbomStep).toContain(
+      "output-file: ${{ steps.sbom-path.outputs.path }}",
+    );
+    expect(sbomStep).toContain("upload-artifact: false");
+    expect(sbomStep).toContain("upload-release-assets: false");
 
     const steps = [
+      "Resolve SBOM path",
+      "Generate release SBOM",
       "Write SHA256SUMS",
-      "Attest release artifacts",
-      "Find or create draft release",
-      "Upload signed installers to GitHub release",
-      "Upload signed installers as CI artifact",
+      "Attest release provenance",
+      "Attest release SBOM",
     ].map(stepPosition);
 
     for (let index = 1; index < steps.length; index += 1) {
       expect(steps[index]).toBeGreaterThan(steps[index - 1]);
     }
+  });
+
+  test("attests provenance for every uploaded release artifact before publication", () => {
+    expect(workflow).toContain("attestations: write");
+
+    const provenanceStep = stepBlock("Attest release provenance");
+    expect(provenanceStep).toContain(
+      "uses: actions/attest@f7c74d28b9d84cb8768d0b8ca14a4bac6ef463e6 # v4.2.0",
+    );
+    expect(provenanceStep).not.toContain("\n        if:");
+
+    const uploadedPaths = [
+      "${{ steps.signing-paths.outputs.nsis }}",
+      "${{ steps.signing-paths.outputs.msi }}",
+      "${{ steps.sbom-path.outputs.path }}",
+      "${{ steps.checksums.outputs.path }}",
+    ];
+    expect(multilineInput(provenanceStep, "subject-path")).toEqual(
+      uploadedPaths,
+    );
+    expect(
+      multilineInput(
+        stepBlock("Upload release artifacts as CI artifact"),
+        "path",
+      ),
+    ).toEqual(uploadedPaths);
+
+    const steps = [
+      "Generate release SBOM",
+      "Write SHA256SUMS",
+      "Attest release provenance",
+      "Attest release SBOM",
+      "Find or create draft release",
+      "Upload release artifacts to GitHub release",
+      "Upload release artifacts as CI artifact",
+    ].map(stepPosition);
+
+    for (let index = 1; index < steps.length; index += 1) {
+      expect(steps[index]).toBeGreaterThan(steps[index - 1]);
+    }
+  });
+
+  test("attests the SBOM as package metadata for the signed installers", () => {
+    const sbomAttestationStep = stepBlock("Attest release SBOM");
+    expect(sbomAttestationStep).toContain(
+      "uses: actions/attest@f7c74d28b9d84cb8768d0b8ca14a4bac6ef463e6 # v4.2.0",
+    );
+    expect(sbomAttestationStep).not.toContain("\n        if:");
+    expect(multilineInput(sbomAttestationStep, "subject-path")).toEqual([
+      "${{ steps.signing-paths.outputs.nsis }}",
+      "${{ steps.signing-paths.outputs.msi }}",
+    ]);
+    expect(sbomAttestationStep).toContain(
+      "sbom-path: ${{ steps.sbom-path.outputs.path }}",
+    );
   });
 
   test("binds release assets to one commit and keeps reruns separate", () => {
@@ -279,6 +354,185 @@ describe("Windows release signing workflow", () => {
 
     expect(nsisTemplate).toContain(
       "!uninstfinalize '${UNINSTALLERSIGNCOMMAND} -TauriNsisUninstaller' = 0",
+    );
+  });
+
+  test("keeps Microsoft Store packaging config opt-in", () => {
+    const storeBundleScript = packageJson.scripts["bundle:store"];
+
+    expect(storeBundleScript).toBe(
+      "tauri bundle --verbose --bundles nsis,msi --config src-tauri/tauri.signing.conf.json --config src-tauri/tauri.microsoftstore.conf.json --ci",
+    );
+    expect(storeBundleScript.indexOf("tauri.signing.conf.json")).toBeLessThan(
+      storeBundleScript.indexOf("tauri.microsoftstore.conf.json"),
+    );
+    expect(microsoftStoreConfig).toEqual({
+      $schema: "https://schema.tauri.app/config/2",
+      bundle: {
+        windows: {
+          webviewInstallMode: {
+            type: "offlineInstaller",
+          },
+        },
+      },
+    });
+
+    // The normal GitHub release continues to ship the current signed NSIS/MSI
+    // artifacts. Store candidates opt into the offline WebView2 config when
+    // we build a package for Partner Center.
+    const bundleStep = stepBlock("Bundle installers");
+    expect(bundleStep).toContain("bun run bundle:store");
+    expect(bundleStep).toContain(
+      "bun run tauri bundle --verbose --bundles nsis,msi --config src-tauri/tauri.signing.conf.json --ci",
+    );
+  });
+
+  test("verifies the mutable Store WebView2 offline installers before upload", () => {
+    const clearCacheStep = stepBlock("Clear Store WebView2 installer cache");
+    expect(clearCacheStep).toContain(
+      "if: ${{ env.STORE_CANDIDATE == 'true' }}",
+    );
+    expect(clearCacheStep).toContain('Join-Path $env:LOCALAPPDATA "tauri"');
+    expect(clearCacheStep).toContain(
+      'Where-Object { $_.Name -match "WebView2|MicrosoftEdge" }',
+    );
+
+    const webview2Step = stepBlock("Verify Store WebView2 offline installers");
+    expect(webview2Step).toContain("if: ${{ env.STORE_CANDIDATE == 'true' }}");
+    expect(webview2Step).toContain(
+      "MSI_PATH: ${{ steps.signing-paths.outputs.msi }}",
+    );
+    expect(webview2Step).toContain(
+      "function Assert-MicrosoftWebView2Signature",
+    );
+    expect(webview2Step).toContain(
+      'Where-Object { $_.Name -match "WebView2|MicrosoftEdge" -and $_.Extension -eq ".exe" }',
+    );
+    expect(webview2Step).toContain(
+      "Expected at least one Store WebView2 offline installer in the Tauri cache",
+    );
+    expect(webview2Step).toContain(
+      "Expected at least one MSI-embedded WebView2 offline installer",
+    );
+    expect(webview2Step).toContain("Get-AuthenticodeSignature");
+    expect(webview2Step).toContain("CN=Microsoft Corporation");
+    expect(webview2Step).toContain("signtool verification failed for WebView2");
+    expect(webview2Step).toContain('Filter "dark.exe"');
+    expect(webview2Step).toContain(
+      "dark.exe failed to extract MSI embedded binaries",
+    );
+    expect(webview2Step).toContain(
+      '$webView2PayloadDirectory = Join-Path $env:CARGO_TARGET_DIR "release\\webview2-payload"',
+    );
+    expect(webview2Step).toContain(
+      "Copy-Item -LiteralPath $embeddedInstaller.FullName",
+    );
+    expect(webview2Step).toContain(
+      '"path=$webView2PayloadDirectory" |\n            Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8',
+    );
+  });
+
+  test("keeps Store candidate artifacts out of GitHub releases", () => {
+    expect(workflow).toContain("store_candidate:");
+    expect(workflow).toContain(
+      "Build a Microsoft Store candidate CI artifact with offline WebView2 packaging",
+    );
+    expect(workflow).toContain(
+      "STORE_CANDIDATE: ${{ github.event_name == 'workflow_dispatch' && inputs.store_candidate }}",
+    );
+    expect(stepBlock("Validate release mode")).toContain(
+      "Store candidate artifacts cannot be published as a GitHub release",
+    );
+    expect(stepBlock("Validate release mode")).toContain(
+      "Store candidate artifacts must be built from main, not tag refs",
+    );
+    expect(stepBlock("Find or create draft release")).toContain(
+      "env.STORE_CANDIDATE != 'true'",
+    );
+    expect(stepBlock("Upload release artifacts to GitHub release")).toContain(
+      "env.STORE_CANDIDATE != 'true'",
+    );
+    expect(stepBlock("Resolve package flavor")).toContain(
+      '"artifact_suffix=-store"',
+    );
+    expect(workflow).toContain(
+      "name: audiobud-windows-x86_64${{ steps.package-flavor.outputs.artifact_suffix }}-v${{ steps.meta.outputs.version }}-${{ github.run_attempt }}",
+    );
+  });
+
+  test("documents the Microsoft Store package checkpoint", () => {
+    expect(storeSubmission).toContain("Product type: `EXE or MSI app`.");
+    expect(storeSubmission).toContain("Availability: `United States` only.");
+    expect(storeSubmission).toContain("Pricing: `Free: no payment necessary`.");
+    expect(storeSubmission).toContain("Category: `Productivity`.");
+    expect(storeSubmission).toContain(
+      "Privacy policy URL: `https://audiobud.amditis.tech/privacy.html`.",
+    );
+    expect(storeSubmission).toContain("App type: `MSI`.");
+    expect(storeSubmission).toContain("Architecture: `x64`.");
+    expect(storeSubmission).toContain("Language: `English`.");
+    expect(storeSubmission).toContain("Do not use a `/latest` URL.");
+    expect(storeSubmission).toContain("bun run bundle:store");
+    expect(storeSubmission).toContain("src-tauri/tauri.signing.conf.json");
+    expect(storeSubmission).toContain(
+      "src-tauri/tauri.microsoftstore.conf.json",
+    );
+  });
+
+  test("documents the Store silent-install candidate behavior", () => {
+    expect(workflow).toContain(
+      'Start-Process -FilePath "$env:SystemRoot\\System32\\msiexec.exe"',
+    );
+    expect(workflow).toContain('"/i"');
+    expect(workflow).toContain('"/qn"');
+    expect(workflow).toContain('"/norestart"');
+    expect(workflow).toContain("MSI silent install failed");
+    expect(workflow).toContain('"/x"');
+    expect(workflow).toContain("MSI silent uninstall failed");
+    expect(workflow).toContain('-ArgumentList @("/S", "/D=$nsisDirectory")');
+    expect(workflow).toContain('-ArgumentList "/S" -Wait -PassThru');
+    expect(nsisTemplate).toContain("${OrIf} ${Silent}");
+    expect(nsisTemplate).toContain("CreateOrUpdateStartMenuShortcut");
+    expect(nsisTemplate).toContain(
+      'WriteRegStr SHCTX "${UNINSTKEY}" "UninstallString" "$\\"$INSTDIR\\uninstall.exe$\\""',
+    );
+  });
+
+  test("verifies all packaged PE files for Store compatibility", () => {
+    const packagedVerificationStep = stepBlock(
+      "Verify packaged application signatures",
+    );
+
+    expect(packagedVerificationStep).toContain(
+      "function Assert-PackagedPeSignatures",
+    );
+    expect(packagedVerificationStep).toContain(
+      'Where-Object { $_.Extension -in @(".exe", ".dll") }',
+    );
+    expect(packagedVerificationStep).toContain("Invalid packaged PE signature");
+    expect(packagedVerificationStep).toContain(
+      "signtool verification failed for packaged PE file",
+    );
+    expect(packagedVerificationStep).toContain(
+      "Assert-PackagedPeSignatures -Root $msiDirectory",
+    );
+    expect(packagedVerificationStep).toContain(
+      "Assert-PackagedPeSignatures -Root $nsisDirectory",
+    );
+    expect(packagedVerificationStep).toContain(
+      '$sbomPayloadDirectory = Join-Path $env:CARGO_TARGET_DIR "release\\sbom-payload"',
+    );
+    expect(packagedVerificationStep).toContain(
+      "Copy-Item -LiteralPath $msiDirectory",
+    );
+    expect(packagedVerificationStep).toContain(
+      "Copy-Item -LiteralPath $nsisDirectory",
+    );
+    expect(packagedVerificationStep).toContain(
+      "Copy-Item -LiteralPath $env:WEBVIEW2_PAYLOAD_PATH",
+    );
+    expect(packagedVerificationStep).toContain(
+      '"path=$sbomPayloadDirectory" |\n            Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8',
     );
   });
 
