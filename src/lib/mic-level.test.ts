@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { bandsToAmplitude, smoothAmplitude } from "./mic-level";
+import { bandsToAmplitude, settleToRest, smoothAmplitude } from "./mic-level";
 
 describe("bandsToAmplitude", () => {
   it("is silent for a missing or empty frame", () => {
@@ -82,5 +82,45 @@ describe("smoothAmplitude", () => {
       expect(result).toBeGreaterThanOrEqual(0);
       expect(result).toBeLessThanOrEqual(1);
     }
+  });
+});
+
+describe("settleToRest", () => {
+  it("returns exactly 0 for a visually-closed amplitude", () => {
+    // Exactly 0, not merely small: LiveFrog tests `amp > 0`, so 0.0001 and 0 are
+    // different states to it even though they render identically.
+    expect(settleToRest(0.009)).toBe(0);
+    expect(settleToRest(0.0001)).toBe(0);
+    expect(settleToRest(0)).toBe(0);
+  });
+
+  it("leaves a visible amplitude alone", () => {
+    expect(settleToRest(0.5)).toBe(0.5);
+    expect(settleToRest(1)).toBe(1);
+    // The threshold is exclusive, so the boundary value itself still animates.
+    expect(settleToRest(0.01)).toBe(0.01);
+  });
+
+  it("reaches exact rest on a stream of silent frames, not just when frames stop", () => {
+    // The bug this guards: a mic monitor left open keeps delivering zero-valued
+    // frames, so the release path that used to own the snap never fires (its
+    // silence check keeps being reset) and smoothing alone only approaches 0.
+    // This is the event path, driven the way the listener drives it.
+    let value = 1;
+    for (let tick = 0; tick < 100; tick += 1) {
+      value = settleToRest(smoothAmplitude(value, bandsToAmplitude([0])));
+      if (value === 0) break;
+    }
+    expect(value).toBe(0);
+  });
+
+  it("clamps garbage to rest rather than propagating it", () => {
+    // Same reasoning as the other two: the frame crosses a process boundary, and
+    // a NaN reaching `amp > 0` would read as false while a NaN scale would blank
+    // the critter's transform.
+    expect(settleToRest(Number.NaN)).toBe(0);
+    expect(settleToRest(-1)).toBe(0);
+    expect(settleToRest(Number.POSITIVE_INFINITY)).toBe(0);
+    expect(settleToRest(2)).toBe(1);
   });
 });

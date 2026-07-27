@@ -21,6 +21,9 @@ const ATTACK_WEIGHT = 0.4;
 /** Smoothing weight applied to the previous value when the level is falling. */
 const RELEASE_WEIGHT = 0.75;
 
+/** Below this the critter is visually closed, so it counts as rest. */
+const REST_EPSILON = 0.01;
+
 function clamp01(value: number): number {
   if (!Number.isFinite(value)) return 0;
   return Math.min(1, Math.max(0, value));
@@ -57,4 +60,24 @@ export function smoothAmplitude(previous: number, target: number): number {
   const from = clamp01(previous);
   const weight = to > from ? ATTACK_WEIGHT : RELEASE_WEIGHT;
   return from * weight + to * (1 - weight);
+}
+
+/**
+ * Collapse a visually-closed amplitude to exactly 0.
+ *
+ * Every writer of a live amplitude has to go through this, because "exactly 0 at
+ * rest" is what tells a caller the critter is idle: LiveFrog reads `amp > 0` to
+ * decide whether to hand FrogMascot a `sacScale`, and a defined sacScale
+ * suppresses the click-croak. Smoothing alone never gets there — it approaches 0
+ * asymptotically — so a frame stream of silence (the settings mic monitor left
+ * open) would otherwise hold the value a hair above 0 indefinitely and leave the
+ * frog unable to croak until the stream closed.
+ *
+ * It lives here with the rest of the amplitude math for the reason this module
+ * exists: the snap used to be inline in one of useMicLevel's two writers, and the
+ * other one silently did without it.
+ */
+export function settleToRest(amplitude: number): number {
+  const value = clamp01(amplitude);
+  return value < REST_EPSILON ? 0 : value;
 }

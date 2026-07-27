@@ -3,6 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 import {
   MIC_LEVEL_EVENT,
   bandsToAmplitude,
+  settleToRest,
   smoothAmplitude,
 } from "@/lib/mic-level";
 
@@ -11,9 +12,6 @@ const SILENCE_AFTER_MS = 120;
 
 /** How often to apply the release once frames stop arriving. */
 const RELEASE_TICK_MS = 80;
-
-/** Below this the critter is visually closed, so snap to exact rest and stop. */
-const REST_EPSILON = 0.01;
 
 const REDUCE_MOTION_QUERY = "(prefers-reduced-motion: reduce)";
 
@@ -90,9 +88,16 @@ export function useMicLevel(enabled = true): number {
     let unlisten: (() => void) | undefined;
     let cancelled = false;
 
+    // The rest snap lives here so both writers get it rather than one remembering.
+    // "Exactly 0 at rest" is load-bearing: LiveFrog reads `amp > 0` to decide the
+    // frog may croak again, and exponential smoothing approaches 0 without ever
+    // arriving. A stream of zero-valued frames (the settings mic monitor left
+    // open) also keeps refreshing lastFrameAtRef, so the release tick's silence
+    // check never fires and cannot do the snapping on the event path's behalf.
     const apply = (next: number) => {
-      smoothedRef.current = next;
-      setAmplitude(next);
+      const settled = settleToRest(next);
+      smoothedRef.current = settled;
+      setAmplitude(settled);
     };
 
     // Release to rest when frames stop. Without this the critter keeps the last
@@ -101,8 +106,7 @@ export function useMicLevel(enabled = true): number {
       if (smoothedRef.current === 0) return;
       if (Date.now() - lastFrameAtRef.current < SILENCE_AFTER_MS) return;
 
-      const next = smoothAmplitude(smoothedRef.current, 0);
-      apply(next < REST_EPSILON ? 0 : next);
+      apply(smoothAmplitude(smoothedRef.current, 0));
     }, RELEASE_TICK_MS);
 
     const start = async () => {
