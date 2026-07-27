@@ -5,6 +5,7 @@ import { CancelIcon } from "../components/icons";
 import { DEFAULT_CRITTER_ID, getCritter } from "../components/icons/critters";
 import "./RecordingOverlay.css";
 import { commands } from "@/bindings";
+import { usePrefersReducedMotion } from "@/hooks/useMicLevel";
 import i18n, { syncLanguageFromSettings } from "@/i18n";
 import { MIC_LEVEL_EVENT, bandsToAmplitude } from "@/lib/mic-level";
 import { getLanguageDirection } from "@/lib/utils/rtl";
@@ -22,6 +23,7 @@ const RecordingOverlay: React.FC = () => {
   const [isRaw, setIsRaw] = useState(false);
   const [levels, setLevels] = useState<number[]>(Array(16).fill(0));
   const smoothedLevelsRef = useRef<number[]>(Array(16).fill(0));
+  const reduceMotion = usePrefersReducedMotion();
   const direction = getLanguageDirection(i18n.language);
 
   useEffect(() => {
@@ -95,7 +97,13 @@ const RecordingOverlay: React.FC = () => {
   // the level, so adding one means deciding what the overlay shows instead.
   // bandsToAmplitude is shared with the menu wordmark's critter (useMicLevel) so
   // the same voice moves both the same way.
-  const amp = state === "recording" ? bandsToAmplitude(levels) : 0;
+  //
+  // Reduce-motion is checked here rather than left to RecordingOverlay.css,
+  // because the amplitude reaches the critter as an inline style and would win
+  // over any stylesheet rule. This window subscribes to `mic-level` directly for
+  // its per-band bars, so it does not inherit useMicLevel's own gating.
+  const amp =
+    state === "recording" && !reduceMotion ? bandsToAmplitude(levels) : 0;
 
   return (
     <div

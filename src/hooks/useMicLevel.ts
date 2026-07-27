@@ -31,8 +31,14 @@ function reduceMotionQuery(): MediaQueryList | null {
  * The OS reduce-motion preference, kept current if it changes mid-session. Read
  * once it would go stale for the life of the window, which for the wordmark is
  * the life of the app.
+ *
+ * Exported because a caller that drives a critter from its own `mic-level`
+ * subscription rather than from useMicLevel (the recording overlay does, since
+ * it needs the per-band values for its bars) has to honor the preference itself.
+ * A CSS `prefers-reduced-motion` rule cannot cover that case: the amplitude
+ * reaches the critter as inline style, which beats a stylesheet rule.
  */
-function usePrefersReducedMotion(): boolean {
+export function usePrefersReducedMotion(): boolean {
   const [reduced, setReduced] = useState(
     () => reduceMotionQuery()?.matches ?? false,
   );
