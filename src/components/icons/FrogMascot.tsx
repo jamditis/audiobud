@@ -7,7 +7,9 @@ import type { MascotProps } from "./mascot";
 // nav icon, the recording overlay, and the konami easter egg.
 //
 // The animatable props live in MascotProps, the contract every critter honors.
-// The frog's answer to the mic-level half of that contract is its vocal sac.
+// The frog's answer to the mic-level half of that contract is its vocal sac and
+// its mouth: both ride sacScale, so it opens up as it inflates the way a calling
+// frog does.
 
 const FrogMascot = ({
   size,
@@ -42,6 +44,25 @@ const FrogMascot = ({
       : {
           transform: `scale(${0.2 + sacScale * 0.8})`,
           opacity: sacScale > 0.02 ? 1 : 0,
+        };
+
+  // The mouth rides the same signal as the sac. A calling frog opens up as it
+  // inflates, and the CSS croak class that normally swaps the two mouth shapes is
+  // suppressed while sacScale drives (see stateClass), so without this the mouth
+  // would sit in its closed smile through an entire dictation while only the
+  // throat moved.
+  const mouthOpenness = sacScale === undefined ? undefined : sacScale;
+  const mouthClosedStyle =
+    mouthOpenness === undefined ? undefined : { opacity: 1 - mouthOpenness };
+  const mouthOpenStyle =
+    mouthOpenness === undefined
+      ? undefined
+      : {
+          opacity: mouthOpenness,
+          // Scale the jaw rather than only crossfading, so it reads as opening
+          // rather than as one shape dissolving into another.
+          transform: `scaleY(${0.35 + mouthOpenness * 0.65})`,
+          transformOrigin: "100px 119px",
         };
 
   const irisStyle = { transform: `translate(${irisDX}px, ${irisDY}px)` };
@@ -137,9 +158,10 @@ const FrogMascot = ({
       <circle cx="92" cy="100" r="2.8" fill="#2b5121" />
       <circle cx="108" cy="100" r="2.8" fill="#2b5121" />
 
-      {/* mouth: closed smile / open croak */}
+      {/* mouth: closed smile / open croak, or crossfaded live by mic level */}
       <path
         className="mouthClosed"
+        style={mouthClosedStyle}
         d="M60 122 Q100 156 140 122"
         fill="none"
         stroke="#2b5121"
@@ -148,6 +170,7 @@ const FrogMascot = ({
       />
       <ellipse
         className="mouthOpen"
+        style={mouthOpenStyle}
         cx="100"
         cy="130"
         rx="19"

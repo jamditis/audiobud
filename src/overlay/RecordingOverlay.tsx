@@ -6,6 +6,7 @@ import { DEFAULT_CRITTER_ID, getCritter } from "../components/icons/critters";
 import "./RecordingOverlay.css";
 import { commands } from "@/bindings";
 import i18n, { syncLanguageFromSettings } from "@/i18n";
+import { MIC_LEVEL_EVENT, bandsToAmplitude } from "@/lib/mic-level";
 import { getLanguageDirection } from "@/lib/utils/rtl";
 
 type OverlayState = "recording" | "transcribing" | "processing";
@@ -24,6 +25,9 @@ const RecordingOverlay: React.FC = () => {
   const direction = getLanguageDirection(i18n.language);
 
   useEffect(() => {
+    let cleanup: (() => void) | undefined;
+    let cancelled = false;
+
     const setupEventListeners = async () => {
       // Listen for show-overlay event from Rust
       const unlistenShow = await listen("show-overlay", async (event) => {
@@ -42,7 +46,7 @@ const RecordingOverlay: React.FC = () => {
       });
 
       // Listen for mic-level updates
-      const unlistenLevel = await listen<number[]>("mic-level", (event) => {
+      const unlistenLevel = await listen<number[]>(MIC_LEVEL_EVENT, (event) => {
         const newLevels = event.payload as number[];
 
         // Apply smoothing to reduce jitter
@@ -55,15 +59,29 @@ const RecordingOverlay: React.FC = () => {
         setLevels(smoothed.slice(0, 9));
       });
 
-      // Cleanup function
-      return () => {
+      const unlistenAll = () => {
         unlistenShow();
         unlistenHide();
         unlistenLevel();
       };
+
+      // Unmounted while the subscriptions were still being awaited: drop them
+      // now. Returning a cleanup from this async function is not enough on its
+      // own -- useEffect receives the promise, not the function, so the
+      // subscriptions have to be handed back through `cleanup`.
+      if (cancelled) {
+        unlistenAll();
+        return;
+      }
+      cleanup = unlistenAll;
     };
 
     setupEventListeners();
+
+    return () => {
+      cancelled = true;
+      cleanup?.();
+    };
   }, []);
 
   // The overlay is its own webview, so it cannot read the menu window's state.
@@ -75,10 +93,9 @@ const RecordingOverlay: React.FC = () => {
   // croaks along with your voice while recording, and rests while transcribing.
   // A critter whose micLevel is "none" ignores this, and nothing else here draws
   // the level, so adding one means deciding what the overlay shows instead.
-  const amp =
-    state === "recording" && levels.length
-      ? Math.min(1, Math.max(0, ...levels) * 1.4)
-      : 0;
+  // bandsToAmplitude is shared with the menu wordmark's critter (useMicLevel) so
+  // the same voice moves both the same way.
+  const amp = state === "recording" ? bandsToAmplitude(levels) : 0;
 
   return (
     <div
