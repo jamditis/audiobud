@@ -26,6 +26,33 @@ function reduceMotionQuery(): MediaQueryList | null {
 }
 
 /**
+ * Subscribe to a media query across both listener APIs, returning the
+ * unsubscribe.
+ *
+ * `tauri.conf.json` still sets `minimumSystemVersion: "10.15"`, and Catalina's
+ * WKWebView predates `MediaQueryList.addEventListener` (Safari 14) while still
+ * implementing `matchMedia`. So the object exists, passes the null check, and
+ * throws when subscribed to. This hook mounts inside both LiveFrog and
+ * RecordingOverlay, so that throw would take the window's UI with it — a blank
+ * app because of an animation preference.
+ *
+ * Exported for the test: the fallback branch cannot run in a modern engine, so
+ * the only way to prove it works is to call it with a query object shaped like
+ * the old one.
+ */
+export function onMediaQueryChange(
+  query: MediaQueryList,
+  handler: (event: MediaQueryListEvent) => void,
+): () => void {
+  if (typeof query.addEventListener === "function") {
+    query.addEventListener("change", handler);
+    return () => query.removeEventListener("change", handler);
+  }
+  query.addListener(handler);
+  return () => query.removeListener(handler);
+}
+
+/**
  * The OS reduce-motion preference, kept current if it changes mid-session. Read
  * once it would go stale for the life of the window, which for the wordmark is
  * the life of the app.
@@ -46,11 +73,11 @@ export function usePrefersReducedMotion(): boolean {
     if (!query) return;
 
     const onChange = (event: MediaQueryListEvent) => setReduced(event.matches);
-    query.addEventListener("change", onChange);
+    const unsubscribe = onMediaQueryChange(query, onChange);
     // Re-read on mount in case it changed between the initial state and here.
     setReduced(query.matches);
 
-    return () => query.removeEventListener("change", onChange);
+    return unsubscribe;
   }, []);
 
   return reduced;
