@@ -4,7 +4,7 @@ use crate::settings::{get_settings, AppSettings};
 use crate::utils;
 use log::{debug, error, info};
 use std::path::Path;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tauri::Manager;
@@ -116,6 +116,10 @@ pub enum MicrophoneMode {
     OnDemand,
 }
 
+fn should_emit_mic_level(is_recording: bool, monitoring_requested: bool) -> bool {
+    is_recording || monitoring_requested
+}
+
 /* ──────────────────────────────────────────────────────────────── */
 
 /// Returns the VAD model path to hand to the VAD engine.
@@ -137,6 +141,8 @@ fn vad_engine_path(vad_path: &Path) -> Result<&Path, anyhow::Error> {
 fn create_audio_recorder(
     vad_path: &Path,
     app_handle: &tauri::AppHandle,
+    is_recording: Arc<Mutex<bool>>,
+    monitoring_requested: Arc<AtomicBool>,
 ) -> Result<AudioRecorder, anyhow::Error> {
     let silero = SileroVad::new(vad_engine_path(vad_path)?, 0.3)
         .map_err(|e| anyhow::anyhow!("Failed to create SileroVad: {}", e))?;
@@ -150,7 +156,11 @@ fn create_audio_recorder(
         .with_level_callback({
             let app_handle = app_handle.clone();
             move |levels| {
-                utils::emit_levels(&app_handle, &levels);
+                let is_recording = *is_recording.lock().unwrap();
+                let monitoring_requested = monitoring_requested.load(Ordering::Relaxed);
+                if should_emit_mic_level(is_recording, monitoring_requested) {
+                    utils::emit_levels(&app_handle, &levels);
+                }
             }
         });
 
@@ -171,6 +181,9 @@ pub struct AudioRecordingManager {
     // True when the live settings-screen level meter opened the stream itself
     // (so it knows it owns the close on the way out).
     monitoring: Arc<Mutex<bool>>,
+    // True whenever the settings meter requested live levels, including when an
+    // always-on stream was already open and the meter does not own that stream.
+    monitoring_requested: Arc<AtomicBool>,
     did_mute: Arc<Mutex<bool>>,
     close_generation: Arc<AtomicU64>,
 }
@@ -195,6 +208,7 @@ impl AudioRecordingManager {
             is_open: Arc::new(Mutex::new(false)),
             is_recording: Arc::new(Mutex::new(false)),
             monitoring: Arc::new(Mutex::new(false)),
+            monitoring_requested: Arc::new(AtomicBool::new(false)),
             did_mute: Arc::new(Mutex::new(false)),
             close_generation: Arc::new(AtomicU64::new(0)),
         };
@@ -295,7 +309,12 @@ impl AudioRecordingManager {
                     tauri::path::BaseDirectory::Resource,
                 )
                 .map_err(|e| anyhow::anyhow!("Failed to resolve VAD path: {}", e))?;
-            *recorder_opt = Some(create_audio_recorder(&vad_path, &self.app_handle)?);
+            *recorder_opt = Some(create_audio_recorder(
+                &vad_path,
+                &self.app_handle,
+                Arc::clone(&self.is_recording),
+                Arc::clone(&self.monitoring_requested),
+            )?);
         }
         Ok(())
     }
@@ -384,6 +403,7 @@ impl AudioRecordingManager {
     /// nothing else still needs it (no active recording, not always-on mode).
     pub fn set_monitoring(&self, enable: bool) -> Result<(), anyhow::Error> {
         if enable {
+            self.monitoring_requested.store(true, Ordering::Relaxed);
             // Cancel any pending lazy close from a just-finished recording so our
             // fresh monitor stream is not torn down underneath us.
             self.close_generation.fetch_add(1, Ordering::SeqCst);
@@ -392,9 +412,14 @@ impl AudioRecordingManager {
             let already_open = *self.is_open.lock().unwrap();
             *self.monitoring.lock().unwrap() = !already_open;
             if !already_open {
-                self.start_microphone_stream()?;
+                if let Err(error) = self.start_microphone_stream() {
+                    *self.monitoring.lock().unwrap() = false;
+                    self.monitoring_requested.store(false, Ordering::Relaxed);
+                    return Err(error);
+                }
             }
         } else {
+            self.monitoring_requested.store(false, Ordering::Relaxed);
             let we_opened = *self.monitoring.lock().unwrap();
             *self.monitoring.lock().unwrap() = false;
             let recording = *self.is_recording.lock().unwrap();
@@ -567,7 +592,7 @@ impl AudioRecordingManager {
 
 #[cfg(test)]
 mod tests {
-    use super::vad_engine_path;
+    use super::{should_emit_mic_level, vad_engine_path};
     use std::ffi::OsString;
     use std::fs;
     use std::path::PathBuf;
@@ -581,6 +606,14 @@ mod tests {
         let model = dir.join("silero_vad_v4.onnx");
         fs::File::create(&model).expect("test setup: failed to create stand-in model file");
         (dir, model)
+    }
+
+    #[test]
+    fn mic_level_emission_requires_recording_or_monitor_session() {
+        assert!(!should_emit_mic_level(false, false));
+        assert!(should_emit_mic_level(true, false));
+        assert!(should_emit_mic_level(false, true));
+        assert!(should_emit_mic_level(true, true));
     }
 
     // Regression test for issue #56: a Windows profile path with Cyrillic,

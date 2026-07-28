@@ -1,17 +1,25 @@
 import { useEffect, useRef, useState } from "react";
 import { getCritter } from "./critters";
 import { playRibbit } from "../../lib/ribbit";
+import { useMicLevel } from "@/hooks/useMicLevel";
 
 // The "alive" layer for any critter: it blinks on its own, its eyes follow the
-// cursor, and it croaks when clicked. Used for the wordmark and the sidebar nav
-// icon. The blink cadence and cursor-follow math live here once, so a new critter
-// is an SVG plus a registry entry rather than a reimplementation of both.
+// cursor, it croaks when clicked, and it answers your voice while you dictate.
+// Used for the wordmark and the sidebar nav icon. The blink cadence, cursor-follow
+// math, and mic wiring live here once, so a new critter is an SVG plus a registry
+// entry rather than a reimplementation of all three.
 interface LiveFrogProps {
   size?: number | string;
   className?: string;
   follow?: boolean;
   idleBlink?: boolean;
   clickCroak?: boolean;
+  /**
+   * Animate the critter's mic-level visual from live input while dictating (and
+   * while the settings mic monitor is open). Rests when no level is flowing, and
+   * stays at rest under prefers-reduced-motion.
+   */
+  micLevel?: boolean;
   /** Which critter to render. Falls back to the default for an unknown id. */
   critter?: string;
 }
@@ -22,9 +30,11 @@ const LiveFrog = ({
   follow = true,
   idleBlink = true,
   clickCroak = true,
+  micLevel = true,
   critter,
 }: LiveFrogProps) => {
   const { Component: Mascot } = getCritter(critter);
+  const amp = useMicLevel(micLevel);
   const ref = useRef<HTMLSpanElement>(null);
   const [blink, setBlink] = useState(false);
   const [croak, setCroak] = useState(false);
@@ -88,6 +98,11 @@ const LiveFrog = ({
         className={className}
         blink={blink}
         croak={croak}
+        // Only hand over the sac while a live level is actually driving it. A
+        // defined sacScale suppresses the croak class (FrogMascot), so passing a
+        // resting 0 would silently kill the click-croak the rest of this
+        // component exists to produce.
+        sacScale={amp > 0 ? amp : undefined}
         irisDX={iris.x}
         irisDY={iris.y}
       />
