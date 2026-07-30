@@ -691,6 +691,50 @@
           "description": "Wydajne lokalne wykonywanie modelu Whisper od OpenAI",
           "details": "AudioBud może też transkrybować za pomocą Whisper.cpp, z akceleracją na GPU. Podziękowania dla Georgi Gerganova i współtwórców."
         }
+      },
+      "guide": {
+        "title": "Pierwsze kroki",
+        "description": "Krótkie przypomnienie, jak działa AudioBud. Otwiera się tylko wtedy, gdy o to poprosisz.",
+        "showButton": "Pokaż przewodnik",
+        "hideButton": "Ukryj przewodnik",
+        "cards": {
+          "basics": {
+            "title": "Podstawowy schemat",
+            "bodyHold": "Ustaw kursor tam, gdzie ma trafić tekst, przytrzymaj skrót, mów, a potem go puść. AudioBud wpisze to, co powiedziałeś, w aktywne pole.",
+            "bodyToggle": "Ustaw kursor tam, gdzie ma trafić tekst, naciśnij skrót, mów, a następnie naciśnij go ponownie, aby zakończyć. AudioBud wpisze to, co powiedziałeś, w aktywne pole."
+          },
+          "shortcut": {
+            "title": "Twój skrót to {{shortcut}}",
+            "bodyHold": "Trzymaj go podczas mówienia i puść, gdy skończysz. Możesz przełączyć się na tryb przełącznika, w którym jedno naciśnięcie rozpoczyna nagrywanie, a kolejne je kończy. Możesz też przypisać dowolną inną kombinację.",
+            "bodyToggle": "Naciśnij raz, aby rozpocząć nagrywanie, i ponownie, aby je zakończyć. Możesz przełączyć się na tryb przytrzymania, w którym nagrywanie trwa tylko wtedy, gdy trzymasz klawisz. Możesz też przypisać dowolną inną kombinację.",
+            "jump": "Zmień skrót",
+            "unset": "jeszcze nieustawiony"
+          },
+          "overlay": {
+            "title": "Jak czytać nakładkę",
+            "body": "Nakładka pokazuje bieżący etap: ruchome słupki podczas nagrywania, etykietę transkrypcji, gdy Twoja mowa zamienia się w tekst, oraz etykietę przetwarzania, jeśli włączone jest przetwarzanie końcowe. Odznaka {{rawLabel}} oznacza, że to dyktowanie działa w trybie surowego wyniku, więc czyszczenie jest pomijane.",
+            "jump": "Pokaż lub ukryj nakładkę"
+          },
+          "models": {
+            "title": "Przełączanie modeli",
+            "body": "Większe modele są dokładniejsze, ale wolniejsze. Mniejsze działają szybciej i lżej. Model możesz zmienić z ikony w zasobniku bez otwierania ustawień albo pobrać go i zarządzać nim tutaj.",
+            "jump": "Zarządzaj modelami"
+          },
+          "customWords": {
+            "title": "Słowa, które myli",
+            "body": "Nazwiska, terminy techniczne i nietypowa pisownia to najczęstsze potknięcia ogólnego modelu. Dodaj pisownię, na której Ci zależy, a zostanie użyta.",
+            "jump": "Dodaj własne słowa"
+          },
+          "limits": {
+            "title": "Gdzie nie może pisać",
+            "body": "Niektóre okna odrzucają symulowane naciśnięcia klawiszy: programy uruchomione jako administrator, większość pól haseł i część sesji pulpitu zdalnego. Jeśli zachowujesz historię, transkrypcja trafia do niej, więc możesz ją skopiować i wkleić ręcznie.",
+            "jump": "Otwórz historię"
+          },
+          "privacy": {
+            "title": "Twój dźwięk zostaje na Twoim komputerze",
+            "body": "Transkrypcja działa lokalnie na Twoim komputerze, a dźwięk nigdy nie jest wysyłany. Jeśli włączysz przetwarzanie końcowe w chmurze, do wybranego dostawcy trafiają zapisany tekst oraz wybrana przez Ciebie instrukcja."
+          }
+        }
       }
     }
   },

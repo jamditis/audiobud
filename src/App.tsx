@@ -26,10 +26,15 @@ import { getLanguageDirection, initializeRTL } from "@/lib/utils/rtl";
 type OnboardingStep = "accessibility" | "model" | "done";
 const PRODUCT_NAME = "AudioBud";
 
-const renderSettingsContent = (section: SidebarSection) => {
+const renderSettingsContent = (
+  section: SidebarSection,
+  onNavigate: (section: SidebarSection) => void,
+) => {
   const ActiveComponent =
     SECTIONS_CONFIG[section]?.component || SECTIONS_CONFIG.general.component;
-  return <ActiveComponent />;
+  // Sections that ignore onNavigate are unaffected; only About's guide uses it
+  // to send the reader to the section that owns a given control.
+  return <ActiveComponent onNavigate={onNavigate} />;
 };
 
 function App() {
@@ -346,7 +351,7 @@ function App() {
               className="app-content flex flex-col items-center gap-4"
             >
               <AccessibilityPermissions />
-              {renderSettingsContent(currentSection)}
+              {renderSettingsContent(currentSection, setCurrentSection)}
             </div>
           </div>
         </main>

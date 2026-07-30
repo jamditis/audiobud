@@ -689,6 +689,50 @@
           "description": "Vysoce výkonná lokální inference modelu Whisper od OpenAI",
           "details": "AudioBud umí přepisovat i pomocí Whisper.cpp s akcelerací na GPU. Díky Georgimu Gerganovovi a přispěvatelům."
         }
+      },
+      "guide": {
+        "title": "Začínáme",
+        "description": "Krátké připomenutí, jak AudioBud funguje. Otevře se jen tehdy, když o to požádáte.",
+        "showButton": "Zobrazit průvodce",
+        "hideButton": "Skrýt průvodce",
+        "cards": {
+          "basics": {
+            "title": "Základní postup",
+            "bodyHold": "Umístěte kurzor tam, kam chcete text, podržte zkratku, mluvte a pak ji pusťte. AudioBud napíše, co jste řekli, do pole, které je právě aktivní.",
+            "bodyToggle": "Umístěte kurzor tam, kam chcete text, stiskněte zkratku, mluvte a dalším stisknutím nahrávání ukončete. AudioBud napíše, co jste řekli, do pole, které je právě aktivní."
+          },
+          "shortcut": {
+            "title": "Vaše zkratka je {{shortcut}}",
+            "bodyHold": "Držte ji, dokud mluvíte, a pusťte ji, až budete hotovi. Můžete přepnout na přepínací režim, kdy jedno stisknutí nahrávání spustí a další je zastaví. Zkratku si také můžete přemapovat na libovolnou kombinaci.",
+            "bodyToggle": "Jedním stisknutím nahrávání spustíte a dalším je zastavíte. Můžete přepnout na režim držení, kdy nahrávání běží jen po dobu, co klávesu držíte. Zkratku si také můžete přemapovat na libovolnou kombinaci.",
+            "jump": "Změnit zkratku",
+            "unset": "zatím nenastaveno"
+          },
+          "overlay": {
+            "title": "Jak číst překryv",
+            "body": "Překryv ukazuje aktuální fázi: pohyblivé pruhy během nahrávání, popisek přepisu, když se vaše řeč mění v text, a popisek zpracování, pokud je zapnuté následné zpracování. Odznak {{rawLabel}} znamená, že tato diktace je v režimu surového výstupu, takže se čištění přeskočí.",
+            "jump": "Zobrazit nebo skrýt překryv"
+          },
+          "models": {
+            "title": "Přepínání modelů",
+            "body": "Větší modely jsou přesnější, ale pomalejší. Menší jsou rychlejší a nenáročnější. Modely můžete přepínat z ikony na liště bez otevírání nastavení, nebo je stahovat a spravovat zde.",
+            "jump": "Spravovat modely"
+          },
+          "customWords": {
+            "title": "Slova, která plete",
+            "body": "Jména, odborné termíny a neobvyklý pravopis jsou to, co obecný model obvykle nezachytí. Přidejte pravopis, který chcete, a model jej použije.",
+            "jump": "Přidat vlastní slova"
+          },
+          "limits": {
+            "title": "Kam psát nemůže",
+            "body": "Některá okna odmítají simulované stisky kláves: programy běžící jako správce, většina polí pro hesla a některé relace vzdálené plochy. Pokud si necháváte historii, přepis se do ní uloží, takže jej můžete zkopírovat a vložit ručně.",
+            "jump": "Otevřít historii"
+          },
+          "privacy": {
+            "title": "Váš zvuk zůstává ve vašem počítači",
+            "body": "Přepis běží lokálně na vašem počítači a váš zvuk se nikdy neodesílá. Pokud zapnete cloudové následné zpracování, odešle se poskytovateli, kterého si nastavíte, přepsaný text a pokyn, který jste vybrali."
+          }
+        }
       }
     }
   },

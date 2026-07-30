@@ -687,6 +687,50 @@
           "description": "Inferenza locale ad alte prestazioni del modello Whisper di OpenAI",
           "details": "AudioBud può trascrivere anche con Whisper.cpp, con accelerazione sulla GPU. Grazie a Georgi Gerganov e ai collaboratori."
         }
+      },
+      "guide": {
+        "title": "Per iniziare",
+        "description": "Un breve ripasso di come funziona AudioBud. Si apre solo quando lo richiedi.",
+        "showButton": "Mostra la guida",
+        "hideButton": "Nascondi la guida",
+        "cards": {
+          "basics": {
+            "title": "Il ciclo di base",
+            "bodyHold": "Posiziona il cursore dove vuoi il testo, tieni premuta la scorciatoia, parla e poi rilasciala. AudioBud scrive ciò che hai detto nel campo attivo.",
+            "bodyToggle": "Posiziona il cursore dove vuoi il testo, premi la scorciatoia, parla e premila di nuovo per fermarti. AudioBud scrive ciò che hai detto nel campo attivo."
+          },
+          "shortcut": {
+            "title": "La tua scorciatoia è {{shortcut}}",
+            "bodyHold": "Tienila premuta mentre parli e rilasciala quando hai finito. Puoi passare alla modalità interruttore: una pressione avvia la registrazione, quella successiva la ferma. Puoi anche riassegnarla alla combinazione che preferisci.",
+            "bodyToggle": "Premila una volta per iniziare a registrare e un'altra per fermarti. Puoi passare alla modalità a pressione continua, in cui la registrazione dura solo finché tieni premuto il tasto. Puoi anche riassegnarla alla combinazione che preferisci.",
+            "jump": "Cambia la scorciatoia",
+            "unset": "non ancora impostata"
+          },
+          "overlay": {
+            "title": "Leggere la sovrimpressione",
+            "body": "La sovrimpressione mostra la fase corrente: barre in movimento durante la registrazione, un'etichetta di trascrizione mentre la tua voce diventa testo, e un'etichetta di elaborazione se la post-elaborazione è attiva. Un badge {{rawLabel}} indica che questa dettatura è in modalità output grezzo, quindi la pulizia viene saltata.",
+            "jump": "Mostrare o nascondere la sovrimpressione"
+          },
+          "models": {
+            "title": "Cambiare modello",
+            "body": "I modelli più grandi sono più precisi ma più lenti. Quelli più piccoli sono più rapidi e leggeri. Puoi cambiare modello dall'icona nella barra senza aprire le impostazioni, oppure scaricarli e gestirli qui.",
+            "jump": "Gestisci i modelli"
+          },
+          "customWords": {
+            "title": "Parole che sbaglia",
+            "body": "Nomi, termini tecnici e grafie insolite sono ciò che un modello generico tende a sbagliare. Aggiungi la grafia che vuoi e verrà usata.",
+            "jump": "Aggiungi parole personalizzate"
+          },
+          "limits": {
+            "title": "Dove non può scrivere",
+            "body": "Alcune finestre rifiutano le pressioni di tasti simulate: i programmi eseguiti come amministratore, la maggior parte dei campi password e alcune sessioni di desktop remoto. Se conservi la cronologia, la trascrizione viene salvata lì, così puoi copiarla e incollarla a mano.",
+            "jump": "Apri la cronologia"
+          },
+          "privacy": {
+            "title": "Il tuo audio resta sul tuo computer",
+            "body": "La trascrizione viene eseguita localmente sul tuo computer e il tuo audio non viene mai caricato. Se attivi la post-elaborazione nel cloud, al fornitore che configuri vengono inviati la trascrizione e l'istruzione che hai scelto."
+          }
+        }
       }
     }
   },

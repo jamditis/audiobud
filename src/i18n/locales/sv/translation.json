@@ -687,6 +687,50 @@
           "description": "Högpresterande lokal inferens av OpenAI:s Whisper-modell",
           "details": "AudioBud kan även transkribera med Whisper.cpp, accelererat på GPU. Tack till Georgi Gerganov och bidragsgivarna."
         }
+      },
+      "guide": {
+        "title": "Kom igång",
+        "description": "En kort påminnelse om hur AudioBud fungerar. Öppnas bara när du ber om det.",
+        "showButton": "Visa guiden",
+        "hideButton": "Dölj guiden",
+        "cards": {
+          "basics": {
+            "title": "Grundflödet",
+            "bodyHold": "Placera markören där du vill ha texten, håll ned ditt kortkommando, tala och släpp sedan. AudioBud skriver in det du sa i det fält som har fokus.",
+            "bodyToggle": "Placera markören där du vill ha texten, tryck på ditt kortkommando, tala och tryck igen för att stoppa. AudioBud skriver in det du sa i det fält som har fokus."
+          },
+          "shortcut": {
+            "title": "Ditt kortkommando är {{shortcut}}",
+            "bodyHold": "Håll ned det medan du talar och släpp när du är klar. Du kan i stället växla till ett växlingsläge där en tryckning startar inspelningen och nästa stoppar den. Du kan också byta till vilken kombination du vill.",
+            "bodyToggle": "Tryck en gång för att starta inspelningen och en gång till för att stoppa den. Du kan i stället växla till håll-in-läget, där inspelningen pågår bara så länge du håller ned tangenten. Du kan också byta till vilken kombination du vill.",
+            "jump": "Ändra kortkommandot",
+            "unset": "inte inställt ännu"
+          },
+          "overlay": {
+            "title": "Läsa överlägget",
+            "body": "Överlägget visar aktuellt steg: rörliga staplar medan det spelar in, en transkriberingsetikett medan ditt tal blir text, och en bearbetningsetikett om efterbearbetning är på. En {{rawLabel}}-markering betyder att den här dikteringen körs i råläge, så städningen hoppas över.",
+            "jump": "Visa eller dölj överlägget"
+          },
+          "models": {
+            "title": "Byta modell",
+            "body": "Större modeller är mer träffsäkra men långsammare. Mindre är snabbare och lättare. Du kan byta modell från ikonen i aktivitetsfältet utan att öppna inställningarna, eller hämta och hantera dem här.",
+            "jump": "Hantera modeller"
+          },
+          "customWords": {
+            "title": "Ord som blir fel",
+            "body": "Namn, fackuttryck och ovanliga stavningar är det som en allmän modell oftast missar. Lägg till den stavning du vill ha så används den.",
+            "jump": "Lägg till egna ord"
+          },
+          "limits": {
+            "title": "Där den inte kan skriva",
+            "body": "Vissa fönster avvisar simulerade tangenttryckningar: program som körs som administratör, de flesta lösenordsfält och en del fjärrskrivbordssessioner. Om du sparar historik hamnar transkriptionen där, så du kan kopiera den och klistra in den för hand.",
+            "jump": "Öppna historiken"
+          },
+          "privacy": {
+            "title": "Ditt ljud stannar på din dator",
+            "body": "Transkriberingen körs lokalt på din dator och ditt ljud laddas aldrig upp. Om du slår på efterbearbetning i molnet skickas den transkriberade texten och den instruktion du valt till den leverantör du ställt in."
+          }
+        }
       }
     }
   },

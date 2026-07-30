@@ -687,6 +687,50 @@
           "description": "High-performance local inference of OpenAI's Whisper model",
           "details": "AudioBud can also transcribe with Whisper.cpp, accelerated on the GPU. Thanks to Georgi Gerganov and contributors."
         }
+      },
+      "guide": {
+        "title": "Getting started",
+        "description": "A short refresher on how AudioBud works. It opens only when you ask for it.",
+        "showButton": "Show guide",
+        "hideButton": "Hide guide",
+        "cards": {
+          "basics": {
+            "title": "The basic loop",
+            "bodyHold": "Put your cursor where you want the text, hold your shortcut, speak, then let go. AudioBud types what you said into whichever field has focus.",
+            "bodyToggle": "Put your cursor where you want the text, press your shortcut, speak, then press it again to stop. AudioBud types what you said into whichever field has focus."
+          },
+          "shortcut": {
+            "title": "Your shortcut is {{shortcut}}",
+            "bodyHold": "Hold it while you speak and release when you are done. You can switch to a toggle instead, so one press starts recording and the next press stops it. You can also rebind it to any combination you prefer.",
+            "bodyToggle": "Press it once to start recording and again to stop. You can switch to push-to-talk instead, so recording lasts only while you hold the key. You can also rebind it to any combination you prefer.",
+            "jump": "Change the shortcut",
+            "unset": "not set yet"
+          },
+          "overlay": {
+            "title": "Reading the overlay",
+            "body": "The overlay shows the current stage: moving bars while it records, a transcribing label while your speech is turned into text, and a processing label if post-processing is on. A {{rawLabel}} badge means this dictation is in raw output mode, so cleanup is skipped.",
+            "jump": "Show or hide the overlay"
+          },
+          "models": {
+            "title": "Switching models",
+            "body": "Larger models are more accurate but slower. Smaller ones are faster and lighter. You can switch models from the tray icon without opening settings, or download and manage them here.",
+            "jump": "Manage models"
+          },
+          "customWords": {
+            "title": "Words it gets wrong",
+            "body": "Names, technical terms, and unusual spellings are what a general model tends to miss. Add the spellings you want and it will use them.",
+            "jump": "Add custom words"
+          },
+          "limits": {
+            "title": "Where it cannot type",
+            "body": "Some windows reject simulated keystrokes: programs running as administrator, most password fields, and some remote desktop sessions. If you keep history, the transcript is saved there, so you can copy it and paste it by hand.",
+            "jump": "Open history"
+          },
+          "privacy": {
+            "title": "Your audio stays on your machine",
+            "body": "Transcription runs locally on your computer and your audio is never uploaded. If you turn on cloud post-processing, your transcript and the prompt you selected are sent to the provider you configure."
+          }
+        }
       }
     }
   },
