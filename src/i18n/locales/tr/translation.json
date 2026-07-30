@@ -687,6 +687,50 @@
           "description": "OpenAI'nin Whisper modelinin yüksek performanslı yerel çıkarımı",
           "details": "AudioBud, GPU üzerinde hızlandırılan Whisper.cpp ile de transkripsiyon yapabilir. Georgi Gerganov'a ve katkıda bulunanlara teşekkürler."
         }
+      },
+      "guide": {
+        "title": "Başlarken",
+        "description": "AudioBud'ın nasıl çalıştığına dair kısa bir hatırlatma. Yalnızca siz istediğinizde açılır.",
+        "showButton": "Kılavuzu göster",
+        "hideButton": "Kılavuzu gizle",
+        "cards": {
+          "basics": {
+            "title": "Temel akış",
+            "bodyHold": "İmleci metnin gitmesini istediğiniz yere koyun, kısayolu basılı tutun, konuşun ve bırakın. AudioBud söylediklerinizi odaktaki alana yazar.",
+            "bodyToggle": "İmleci metnin gitmesini istediğiniz yere koyun, kısayola basın, konuşun ve durdurmak için tekrar basın. AudioBud söylediklerinizi odaktaki alana yazar."
+          },
+          "shortcut": {
+            "title": "Kısayolunuz {{shortcut}}",
+            "bodyHold": "Konuşurken basılı tutun, bitince bırakın. Bunun yerine bir kez basmanın kaydı başlattığı, tekrar basmanın durdurduğu geçiş moduna da geçebilirsiniz. Kısayolu istediğiniz tuş birleşimine de atayabilirsiniz.",
+            "bodyToggle": "Kaydı başlatmak için bir kez, durdurmak için tekrar basın. Bunun yerine yalnızca tuşu basılı tuttuğunuz sürece kayıt yapan bas-konuş moduna geçebilirsiniz. Kısayolu istediğiniz tuş birleşimine de atayabilirsiniz.",
+            "jump": "Kısayolu değiştir",
+            "unset": "henüz ayarlanmadı"
+          },
+          "overlay": {
+            "title": "Yer paylaşımını okumak",
+            "body": "Yer paylaşımı bulunulan aşamayı gösterir: kayıt sırasında hareketli çubuklar, konuşmanız metne dönüşürken bir yazıya dökme etiketi ve son işlem açıksa bir işleme etiketi. {{rawLabel}} rozeti, bu yazdırmanın ham çıktı modunda olduğunu ve temizlemenin atlandığını gösterir.",
+            "jump": "Yer paylaşımını göster veya gizle"
+          },
+          "models": {
+            "title": "Model değiştirme",
+            "body": "Büyük modeller daha isabetlidir ama daha yavaştır. Küçükler daha hızlı ve hafiftir. Ayarları açmadan tepsi simgesinden model değiştirebilir ya da buradan indirip yönetebilirsiniz.",
+            "jump": "Modelleri yönet"
+          },
+          "customWords": {
+            "title": "Yanlış anladığı kelimeler",
+            "body": "Genel bir modelin en çok kaçırdığı şeyler isimler, teknik terimler ve alışılmadık yazımlardır. İstediğiniz yazımı ekleyin, onu kullanacaktır.",
+            "jump": "Özel kelime ekle"
+          },
+          "limits": {
+            "title": "Yazamadığı yerler",
+            "body": "Bazı pencereler benzetilmiş tuş vuruşlarını kabul etmez: yönetici olarak çalışan programlar, çoğu parola alanı ve bazı uzak masaüstü oturumları. Geçmişi saklıyorsanız döküm oraya kaydedilir, böylece kopyalayıp elle yapıştırabilirsiniz.",
+            "jump": "Geçmişi aç"
+          },
+          "privacy": {
+            "title": "Sesiniz cihazınızda kalır",
+            "body": "Yazıya dökme işlemi bilgisayarınızda yerel olarak çalışır ve sesiniz hiçbir zaman yüklenmez. Bulut tabanlı son işlemi açarsanız, yazıya dökülmüş metin ve seçtiğiniz istem, ayarladığınız sağlayıcıya gönderilir."
+          }
+        }
       }
     }
   },

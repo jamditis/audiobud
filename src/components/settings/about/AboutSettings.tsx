@@ -8,8 +8,16 @@ import { Button } from "../../ui/Button";
 import { AppDataDirectory } from "../AppDataDirectory";
 import { AppLanguageSelector } from "../AppLanguageSelector";
 import { LogDirectory } from "../debug";
+import { GettingStartedGuide } from "./GettingStartedGuide";
+import type { SidebarSection } from "../../Sidebar";
 
-export const AboutSettings: React.FC = () => {
+interface AboutSettingsProps {
+  /** Lets the guide jump to the settings section that owns a control.
+   * Optional so About still renders anywhere a navigator is absent. */
+  onNavigate?: (section: SidebarSection) => void;
+}
+
+export const AboutSettings: React.FC<AboutSettingsProps> = ({ onNavigate }) => {
   const { t } = useTranslation();
   const [version, setVersion] = useState("");
 
@@ -39,6 +47,7 @@ export const AboutSettings: React.FC = () => {
     <div className="max-w-3xl w-full mx-auto space-y-6">
       <SettingsGroup title={t("settings.about.title")}>
         <AppLanguageSelector descriptionMode="tooltip" grouped={true} />
+        <GettingStartedGuide onNavigate={onNavigate} />
         <SettingContainer
           title={t("settings.about.version.title")}
           description={t("settings.about.version.description")}

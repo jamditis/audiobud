@@ -687,6 +687,50 @@
           "description": "Inferência local de alto desempenho do modelo Whisper da OpenAI",
           "details": "O AudioBud também pode transcrever com Whisper.cpp, acelerado na GPU. Obrigado a Georgi Gerganov e aos colaboradores."
         }
+      },
+      "guide": {
+        "title": "Primeiros passos",
+        "description": "Uma revisão rápida de como o AudioBud funciona. Só abre quando você pede.",
+        "showButton": "Mostrar o guia",
+        "hideButton": "Ocultar o guia",
+        "cards": {
+          "basics": {
+            "title": "O ciclo básico",
+            "bodyHold": "Coloque o cursor onde quiser o texto, segure o atalho, fale e depois solte. O AudioBud digita o que você disse no campo que estiver em foco.",
+            "bodyToggle": "Coloque o cursor onde quiser o texto, pressione o atalho, fale e pressione de novo para parar. O AudioBud digita o que você disse no campo que estiver em foco."
+          },
+          "shortcut": {
+            "title": "Seu atalho é {{shortcut}}",
+            "bodyHold": "Segure enquanto fala e solte quando terminar. Você pode mudar para o modo de alternância, em que um toque inicia a gravação e o seguinte a encerra. Também dá para remapeá-lo para qualquer combinação que preferir.",
+            "bodyToggle": "Pressione uma vez para começar a gravar e outra para parar. Você pode mudar para o modo de manter pressionado, em que a gravação dura só enquanto a tecla estiver segurada. Também dá para remapeá-lo para qualquer combinação que preferir.",
+            "jump": "Alterar o atalho",
+            "unset": "ainda não definido"
+          },
+          "overlay": {
+            "title": "Como ler a sobreposição",
+            "body": "A sobreposição mostra a etapa atual: barras em movimento enquanto grava, um rótulo de transcrição enquanto sua fala vira texto, e um rótulo de processamento se o pós-processamento estiver ligado. Um selo {{rawLabel}} significa que este ditado está em modo de saída bruta, então a limpeza é pulada.",
+            "jump": "Mostrar ou ocultar a sobreposição"
+          },
+          "models": {
+            "title": "Trocar de modelo",
+            "body": "Modelos maiores são mais precisos, porém mais lentos. Os menores são mais rápidos e leves. Você pode trocar pelo ícone da bandeja sem abrir as configurações, ou baixá-los e gerenciá-los aqui.",
+            "jump": "Gerenciar modelos"
+          },
+          "customWords": {
+            "title": "Palavras que ele erra",
+            "body": "Nomes, termos técnicos e grafias incomuns são o que um modelo geral costuma errar. Adicione a grafia que você quer e ela será usada.",
+            "jump": "Adicionar palavras personalizadas"
+          },
+          "limits": {
+            "title": "Onde ele não consegue digitar",
+            "body": "Algumas janelas recusam teclas simuladas: programas executados como administrador, a maioria dos campos de senha e algumas sessões de área de trabalho remota. Se você mantiver o histórico, a transcrição fica salva lá, então dá para copiar e colar à mão.",
+            "jump": "Abrir o histórico"
+          },
+          "privacy": {
+            "title": "Seu áudio fica na sua máquina",
+            "body": "A transcrição roda localmente no seu computador e seu áudio nunca é enviado. Se você ativar o pós-processamento na nuvem, o texto transcrito e o prompt que você escolheu são enviados ao provedor que configurar."
+          }
+        }
       }
     }
   },

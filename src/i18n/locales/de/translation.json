@@ -687,6 +687,50 @@
           "description": "Leistungsstarke lokale Inferenz des Whisper-Modells von OpenAI",
           "details": "AudioBud kann auch mit Whisper.cpp transkribieren, beschleunigt auf der GPU. Dank an Georgi Gerganov und die Mitwirkenden."
         }
+      },
+      "guide": {
+        "title": "Erste Schritte",
+        "description": "Eine kurze Auffrischung, wie AudioBud funktioniert. Öffnet sich nur, wenn Sie es aufrufen.",
+        "showButton": "Anleitung anzeigen",
+        "hideButton": "Anleitung ausblenden",
+        "cards": {
+          "basics": {
+            "title": "Der Grundablauf",
+            "bodyHold": "Setzen Sie den Cursor dorthin, wo der Text erscheinen soll, halten Sie Ihr Tastenkürzel gedrückt, sprechen Sie und lassen Sie es dann los. AudioBud tippt das Gesagte in das gerade aktive Feld.",
+            "bodyToggle": "Setzen Sie den Cursor dorthin, wo der Text erscheinen soll, drücken Sie Ihr Tastenkürzel, sprechen Sie und drücken Sie es erneut zum Beenden. AudioBud tippt das Gesagte in das gerade aktive Feld."
+          },
+          "shortcut": {
+            "title": "Ihr Tastenkürzel ist {{shortcut}}",
+            "bodyHold": "Halten Sie es beim Sprechen gedrückt und lassen Sie es los, wenn Sie fertig sind. Sie können stattdessen auf einen Umschaltmodus wechseln: Ein Druck startet die Aufnahme, der nächste beendet sie. Sie können es auch auf jede beliebige Kombination neu belegen.",
+            "bodyToggle": "Ein Druck startet die Aufnahme, der nächste beendet sie. Sie können stattdessen auf Push-to-Talk wechseln, dann läuft die Aufnahme nur, solange Sie die Taste halten. Sie können es auch auf jede beliebige Kombination neu belegen.",
+            "jump": "Tastenkürzel ändern",
+            "unset": "noch nicht festgelegt"
+          },
+          "overlay": {
+            "title": "Die Einblendung lesen",
+            "body": "Die Einblendung zeigt die aktuelle Phase: bewegte Balken während der Aufnahme, ein Transkriptions-Label während Ihre Sprache in Text umgewandelt wird, und ein Verarbeitungs-Label wenn die Nachbearbeitung aktiv ist. Ein {{rawLabel}}-Abzeichen bedeutet, dass dieses Diktat im Rohausgabemodus läuft und die Bereinigung übersprungen wird.",
+            "jump": "Einblendung anzeigen oder ausblenden"
+          },
+          "models": {
+            "title": "Modelle wechseln",
+            "body": "Größere Modelle sind genauer, aber langsamer. Kleinere sind schneller und sparsamer. Sie können Modelle über das Symbol in der Taskleiste wechseln, ohne die Einstellungen zu öffnen, oder sie hier herunterladen und verwalten.",
+            "jump": "Modelle verwalten"
+          },
+          "customWords": {
+            "title": "Wörter, die falsch erkannt werden",
+            "body": "Namen, Fachbegriffe und ungewöhnliche Schreibweisen übersieht ein allgemeines Modell am ehesten. Tragen Sie die gewünschte Schreibweise ein, dann wird sie verwendet.",
+            "jump": "Eigene Wörter hinzufügen"
+          },
+          "limits": {
+            "title": "Wo nicht getippt werden kann",
+            "body": "Manche Fenster lehnen simulierte Tastenanschläge ab: Programme mit Administratorrechten, die meisten Passwortfelder und manche Remotedesktop-Sitzungen. Wenn Sie einen Verlauf behalten, wird das Transkript dort gespeichert, sodass Sie es kopieren und von Hand einfügen können.",
+            "jump": "Verlauf öffnen"
+          },
+          "privacy": {
+            "title": "Ihre Audiodaten bleiben auf Ihrem Rechner",
+            "body": "Die Transkription läuft lokal auf Ihrem Computer und Ihre Audiodaten werden nie hochgeladen. Wenn Sie die Nachbearbeitung in der Cloud aktivieren, werden das Transkript und die von Ihnen gewählte Anweisung an den konfigurierten Anbieter gesendet."
+          }
+        }
       }
     }
   },

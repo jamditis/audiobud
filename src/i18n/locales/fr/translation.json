@@ -687,6 +687,50 @@
           "description": "Inférence locale haute performance du modèle Whisper d'OpenAI",
           "details": "AudioBud peut aussi transcrire avec Whisper.cpp, accéléré sur le GPU. Merci à Georgi Gerganov et aux contributeurs."
         }
+      },
+      "guide": {
+        "title": "Premiers pas",
+        "description": "Un rappel rapide du fonctionnement d'AudioBud. Ne s'ouvre que si vous le demandez.",
+        "showButton": "Afficher le guide",
+        "hideButton": "Masquer le guide",
+        "cards": {
+          "basics": {
+            "title": "Le principe de base",
+            "bodyHold": "Placez le curseur là où vous voulez le texte, maintenez votre raccourci, parlez, puis relâchez. AudioBud écrit ce que vous avez dit dans le champ actif.",
+            "bodyToggle": "Placez le curseur là où vous voulez le texte, appuyez sur votre raccourci, parlez, puis appuyez de nouveau pour arrêter. AudioBud écrit ce que vous avez dit dans le champ actif."
+          },
+          "shortcut": {
+            "title": "Votre raccourci est {{shortcut}}",
+            "bodyHold": "Maintenez-le pendant que vous parlez et relâchez-le quand vous avez fini. Vous pouvez passer en mode bascule : une pression démarre l'enregistrement, la suivante l'arrête. Vous pouvez aussi le réassigner à la combinaison de votre choix.",
+            "bodyToggle": "Appuyez une fois pour démarrer l'enregistrement et une seconde fois pour l'arrêter. Vous pouvez passer en mode maintien : l'enregistrement ne dure que tant que vous gardez la touche enfoncée. Vous pouvez aussi le réassigner à la combinaison de votre choix.",
+            "jump": "Modifier le raccourci",
+            "unset": "pas encore défini"
+          },
+          "overlay": {
+            "title": "Lire la surimpression",
+            "body": "La surimpression indique l'étape en cours : des barres animées pendant l'enregistrement, une mention de transcription pendant que votre voix devient du texte, et une mention de traitement si le post-traitement est activé. Un badge {{rawLabel}} signifie que cette dictée est en mode de sortie brute, donc le nettoyage est ignoré.",
+            "jump": "Afficher ou masquer la surimpression"
+          },
+          "models": {
+            "title": "Changer de modèle",
+            "body": "Les grands modèles sont plus précis mais plus lents. Les petits sont plus rapides et plus légers. Vous pouvez changer de modèle depuis l'icône de la zone de notification sans ouvrir les réglages, ou les télécharger et les gérer ici.",
+            "jump": "Gérer les modèles"
+          },
+          "customWords": {
+            "title": "Les mots qu'il se trompe",
+            "body": "Les noms propres, les termes techniques et les orthographes inhabituelles sont ce qu'un modèle généraliste rate le plus souvent. Ajoutez l'orthographe voulue et il l'utilisera.",
+            "jump": "Ajouter des mots personnalisés"
+          },
+          "limits": {
+            "title": "Là où il ne peut pas écrire",
+            "body": "Certaines fenêtres refusent les frappes simulées : les programmes lancés en tant qu'administrateur, la plupart des champs de mot de passe et certaines sessions de bureau à distance. Si vous conservez un historique, la transcription y est enregistrée, vous pouvez donc la copier et la coller à la main.",
+            "jump": "Ouvrir l'historique"
+          },
+          "privacy": {
+            "title": "Votre audio reste sur votre machine",
+            "body": "La transcription s'exécute localement sur votre ordinateur et votre audio n'est jamais envoyé ailleurs. Si vous activez le post-traitement dans le cloud, la transcription et l'instruction que vous avez choisie sont transmises au fournisseur que vous configurez."
+          }
+        }
       }
     }
   },

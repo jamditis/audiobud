@@ -687,6 +687,50 @@
           "description": "Suy luận cục bộ hiệu năng cao cho mô hình Whisper của OpenAI",
           "details": "AudioBud cũng có thể chuyển đổi bằng Whisper.cpp, được tăng tốc trên GPU. Cảm ơn Georgi Gerganov và những người đóng góp."
         }
+      },
+      "guide": {
+        "title": "Bắt đầu",
+        "description": "Phần nhắc lại ngắn gọn về cách AudioBud hoạt động. Chỉ mở khi bạn yêu cầu.",
+        "showButton": "Hiện hướng dẫn",
+        "hideButton": "Ẩn hướng dẫn",
+        "cards": {
+          "basics": {
+            "title": "Quy trình cơ bản",
+            "bodyHold": "Đặt con trỏ vào nơi bạn muốn có chữ, giữ phím tắt, nói, rồi thả ra. AudioBud sẽ gõ những gì bạn vừa nói vào ô đang được chọn.",
+            "bodyToggle": "Đặt con trỏ vào nơi bạn muốn có chữ, nhấn phím tắt, nói, rồi nhấn lần nữa để dừng. AudioBud sẽ gõ những gì bạn vừa nói vào ô đang được chọn."
+          },
+          "shortcut": {
+            "title": "Phím tắt của bạn là {{shortcut}}",
+            "bodyHold": "Giữ phím trong lúc nói và thả ra khi xong. Bạn có thể chuyển sang chế độ bật tắt, nhấn một lần để bắt đầu ghi và nhấn lần nữa để dừng. Bạn cũng có thể đổi sang tổ hợp phím bất kỳ mà mình thích.",
+            "bodyToggle": "Nhấn một lần để bắt đầu ghi và nhấn lần nữa để dừng. Bạn có thể chuyển sang chế độ giữ để nói, khi đó chỉ ghi âm trong lúc bạn giữ phím. Bạn cũng có thể đổi sang tổ hợp phím bất kỳ mà mình thích.",
+            "jump": "Đổi phím tắt",
+            "unset": "chưa thiết lập"
+          },
+          "overlay": {
+            "title": "Cách đọc lớp phủ",
+            "body": "Lớp phủ cho biết giai đoạn hiện tại: các thanh chuyển động khi đang ghi, nhãn chuyển đổi khi lời nói của bạn thành chữ, và nhãn xử lý nếu bật hậu xử lý. Huy hiệu {{rawLabel}} nghĩa là lần đọc này đang ở chế độ xuất thô, nên bước dọn dẹp được bỏ qua.",
+            "jump": "Hiện hoặc ẩn lớp phủ"
+          },
+          "models": {
+            "title": "Chuyển đổi mô hình",
+            "body": "Mô hình lớn chính xác hơn nhưng chậm hơn. Mô hình nhỏ nhanh và nhẹ hơn. Bạn có thể đổi mô hình từ biểu tượng khay hệ thống mà không cần mở cài đặt, hoặc tải xuống và quản lý tại đây.",
+            "jump": "Quản lý mô hình"
+          },
+          "customWords": {
+            "title": "Những từ hay bị nhận sai",
+            "body": "Tên riêng, thuật ngữ chuyên ngành và cách viết ít gặp là những thứ mô hình chung thường bỏ sót. Hãy thêm cách viết bạn muốn và nó sẽ được dùng.",
+            "jump": "Thêm từ tùy chỉnh"
+          },
+          "limits": {
+            "title": "Nơi không thể gõ được",
+            "body": "Một số cửa sổ từ chối thao tác gõ phím mô phỏng: chương trình chạy với quyền quản trị, hầu hết ô mật khẩu và một số phiên máy tính từ xa. Nếu bạn giữ lịch sử, bản chuyển đổi được lưu ở đó, nên bạn có thể sao chép và dán thủ công.",
+            "jump": "Mở lịch sử"
+          },
+          "privacy": {
+            "title": "Âm thanh của bạn ở lại máy bạn",
+            "body": "Việc chuyển giọng nói thành chữ chạy cục bộ trên máy tính của bạn và âm thanh không bao giờ được tải lên. Nếu bạn bật hậu xử lý trên đám mây, bản chuyển đổi và câu lệnh bạn đã chọn sẽ được gửi tới nhà cung cấp mà bạn thiết lập."
+          }
+        }
       }
     }
   },

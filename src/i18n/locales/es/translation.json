@@ -687,6 +687,50 @@
           "description": "Inferencia local de alto rendimiento del modelo Whisper de OpenAI",
           "details": "AudioBud también puede transcribir con Whisper.cpp, acelerado en la GPU. Gracias a Georgi Gerganov y a los colaboradores."
         }
+      },
+      "guide": {
+        "title": "Primeros pasos",
+        "description": "Un repaso breve de cómo funciona AudioBud. Solo se abre cuando lo pides.",
+        "showButton": "Mostrar la guía",
+        "hideButton": "Ocultar la guía",
+        "cards": {
+          "basics": {
+            "title": "El ciclo básico",
+            "bodyHold": "Coloca el cursor donde quieras el texto, mantén pulsado tu atajo, habla y suéltalo. AudioBud escribe lo que dijiste en el campo que tenga el foco.",
+            "bodyToggle": "Coloca el cursor donde quieras el texto, pulsa tu atajo, habla y vuelve a pulsarlo para detener. AudioBud escribe lo que dijiste en el campo que tenga el foco."
+          },
+          "shortcut": {
+            "title": "Tu atajo es {{shortcut}}",
+            "bodyHold": "Mantenlo pulsado mientras hablas y suéltalo al terminar. Puedes cambiar a un modo de alternancia, en el que una pulsación inicia la grabación y la siguiente la detiene. También puedes reasignarlo a la combinación que prefieras.",
+            "bodyToggle": "Púlsalo una vez para empezar a grabar y otra para detener. Puedes cambiar al modo de mantener pulsado, en el que la grabación dura solo mientras sostienes la tecla. También puedes reasignarlo a la combinación que prefieras.",
+            "jump": "Cambiar el atajo",
+            "unset": "aún sin asignar"
+          },
+          "overlay": {
+            "title": "Cómo leer la superposición",
+            "body": "La superposición muestra la fase actual: barras en movimiento mientras graba, una etiqueta de transcripción mientras tu voz se convierte en texto, y una etiqueta de procesado si el posprocesado está activo. Una insignia {{rawLabel}} significa que este dictado está en modo de salida en bruto, así que se omite la limpieza.",
+            "jump": "Mostrar u ocultar la superposición"
+          },
+          "models": {
+            "title": "Cambiar de modelo",
+            "body": "Los modelos grandes son más precisos pero más lentos. Los pequeños son más rápidos y ligeros. Puedes cambiar de modelo desde el icono de la bandeja sin abrir los ajustes, o descargarlos y gestionarlos aquí.",
+            "jump": "Gestionar modelos"
+          },
+          "customWords": {
+            "title": "Palabras que falla",
+            "body": "Los nombres, los términos técnicos y las grafías poco comunes son lo que un modelo general suele fallar. Añade la grafía que quieras y la usará.",
+            "jump": "Añadir palabras personalizadas"
+          },
+          "limits": {
+            "title": "Dónde no puede escribir",
+            "body": "Algunas ventanas rechazan las pulsaciones simuladas: programas que se ejecutan como administrador, la mayoría de los campos de contraseña y algunas sesiones de escritorio remoto. Si conservas el historial, la transcripción se guarda ahí, así que puedes copiarla y pegarla a mano.",
+            "jump": "Abrir el historial"
+          },
+          "privacy": {
+            "title": "Tu audio se queda en tu equipo",
+            "body": "La transcripción se ejecuta localmente en tu ordenador y tu audio nunca se sube. Si activas el posprocesado en la nube, se envían al proveedor que configures la transcripción y la instrucción que hayas elegido."
+          }
+        }
       }
     }
   },
