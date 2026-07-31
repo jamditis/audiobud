@@ -55,4 +55,22 @@ describe("published update feed workflow", () => {
       );
     }
   });
+
+  test("applies an update from a real prior install on clean Windows", () => {
+    expect(workflow).toContain("verify_update:");
+    expect(workflow).toContain("needs: publish");
+    expect(workflow).toContain("runs-on: windows-2025");
+    expect(stepPosition("Resolve prior updater-capable release")).toBeLessThan(
+      stepPosition("Install prior release"),
+    );
+    expect(stepPosition("Install prior release")).toBeLessThan(
+      stepPosition("Apply signed update"),
+    );
+    expect(stepPosition("Apply signed update")).toBeLessThan(
+      stepPosition("Assert installed version and signature"),
+    );
+    expect(workflow).toContain('"--install-update"');
+    expect(workflow).toContain("Get-AuthenticodeSignature");
+    expect(workflow).toContain("VersionInfo.ProductVersion");
+  });
 });

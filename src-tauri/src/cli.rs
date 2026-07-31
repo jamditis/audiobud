@@ -30,12 +30,16 @@ pub struct CliArgs {
     /// Enable debug mode with verbose logging
     #[arg(long)]
     pub debug: bool,
+
+    /// Download and apply an available signed update, then exit
+    #[arg(long)]
+    pub install_update: bool,
 }
 
 #[cfg(test)]
 mod tests {
     use super::CliArgs;
-    use clap::CommandFactory;
+    use clap::{CommandFactory, Parser};
 
     #[test]
     fn help_text_names_audiobud_not_the_upstream_fork() {
@@ -50,5 +54,12 @@ mod tests {
             about.contains("AudioBud"),
             "--help omits the app name: {about:?}"
         );
+    }
+
+    #[test]
+    fn install_update_flag_is_available_for_release_verification() {
+        let args = CliArgs::try_parse_from(["audiobud", "--install-update"])
+            .expect("--install-update is accepted");
+        assert!(args.install_update);
     }
 }

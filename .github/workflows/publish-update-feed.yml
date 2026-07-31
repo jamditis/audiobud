@@ -9,6 +9,10 @@ on:
         description: "Published stable release tag to validate and republish"
         required: true
         type: string
+      prior_tag:
+        description: "Optional prior updater-capable release for the Windows E2E"
+        required: false
+        type: string
 
 permissions:
   contents: write
@@ -22,6 +26,8 @@ jobs:
     name: Publish signed latest.json
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    outputs:
+      tag: ${{ steps.release.outputs.tag }}
     steps:
       - name: Check out repository
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -115,3 +121,186 @@ jobs:
           gh release upload "$TAG" "$MANIFEST" --clobber --repo "$GITHUB_REPOSITORY"
           gh release view "$TAG" --repo "$GITHUB_REPOSITORY" \
             --json assets --jq '.assets[].name' | grep -Fx latest.json
+
+  verify_update:
+    name: Apply update from prior Windows release
+    needs: publish
+    runs-on: windows-2025
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Resolve prior updater-capable release
+        id: prior
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INPUT_PRIOR_TAG: ${{ inputs.prior_tag }}
+          TARGET_TAG: ${{ needs.publish.outputs.tag }}
+        run: |
+          $targetMatch = [regex]::Match($env:TARGET_TAG, '^v?(\d+\.\d+\.\d+)$')
+          if (-not $targetMatch.Success) {
+            throw "Target release tag is not stable semver: $env:TARGET_TAG"
+          }
+          $targetVersionText = $targetMatch.Groups[1].Value
+          $targetVersion = [version]$targetVersionText
+          $minimumPriorVersion = [version]'0.4.2'
+          $requestedPriorTag = $env:INPUT_PRIOR_TAG.Trim()
+
+          $releases = gh api "repos/$env:GITHUB_REPOSITORY/releases?per_page=100" |
+            ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to list releases"
+          }
+
+          $candidates = foreach ($release in $releases) {
+            if ($release.draft -or $release.prerelease -or -not $release.published_at) {
+              continue
+            }
+            $match = [regex]::Match($release.tag_name, '^v?(\d+\.\d+\.\d+)$')
+            if (-not $match.Success) { continue }
+            $versionText = $match.Groups[1].Value
+            $version = [version]$versionText
+            if ($version -ge $targetVersion -or $version -lt $minimumPriorVersion) {
+              continue
+            }
+            if ($requestedPriorTag -and $release.tag_name -ne $requestedPriorTag) {
+              continue
+            }
+            $installerName = "AudioBud_$($versionText)_x64-setup.exe"
+            if ($release.assets.name -notcontains $installerName) { continue }
+
+            [PSCustomObject]@{
+              Tag = $release.tag_name
+              Version = $version
+              VersionText = $versionText
+              InstallerName = $installerName
+            }
+          }
+
+          $prior = $candidates | Sort-Object Version -Descending | Select-Object -First 1
+          if (-not $prior) {
+            if ($requestedPriorTag) {
+              throw "Requested prior release is not an eligible updater build: $requestedPriorTag"
+            }
+            "eligible=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+            "### Windows updater E2E`n`nNo earlier updater-capable release exists yet. The next stable release will exercise this path." |
+              Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+            exit 0
+          }
+
+          "eligible=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "tag=$($prior.Tag)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "version=$($prior.VersionText)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "installer_name=$($prior.InstallerName)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "target_version=$targetVersionText" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      - name: Install prior release
+        if: steps.prior.outputs.eligible == 'true'
+        id: install
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INSTALLER_NAME: ${{ steps.prior.outputs.installer_name }}
+          PRIOR_TAG: ${{ steps.prior.outputs.tag }}
+          PRIOR_VERSION: ${{ steps.prior.outputs.version }}
+        run: |
+          $downloadDirectory = Join-Path $env:RUNNER_TEMP 'prior-release'
+          New-Item -ItemType Directory -Path $downloadDirectory | Out-Null
+          gh release download $env:PRIOR_TAG `
+            --repo $env:GITHUB_REPOSITORY `
+            --dir $downloadDirectory `
+            --pattern $env:INSTALLER_NAME
+          if ($LASTEXITCODE -ne 0) { throw "Failed to download $env:INSTALLER_NAME" }
+
+          $installer = Join-Path $downloadDirectory $env:INSTALLER_NAME
+          $installerSignature = Get-AuthenticodeSignature -LiteralPath $installer
+          if ($installerSignature.Status -ne [System.Management.Automation.SignatureStatus]::Valid) {
+            throw "Prior installer signature is invalid: $($installerSignature.StatusMessage)"
+          }
+          if ($installerSignature.SignerCertificate.Subject -notlike '*CN=Joseph Amditis*') {
+            throw "Prior installer has an unexpected signer: $($installerSignature.SignerCertificate.Subject)"
+          }
+
+          $installDirectory = "C:\au$env:GITHUB_RUN_ID"
+          if (Test-Path -LiteralPath $installDirectory) {
+            throw "Clean install directory already exists: $installDirectory"
+          }
+          $installProcess = Start-Process -FilePath $installer `
+            -ArgumentList @('/S', "/D=$installDirectory") -Wait -PassThru
+          if ($installProcess.ExitCode -ne 0) {
+            throw "Prior release installation failed with exit code $($installProcess.ExitCode)"
+          }
+
+          $executable = Join-Path $installDirectory 'AudioBud.exe'
+          if (-not (Test-Path -LiteralPath $executable -PathType Leaf)) {
+            throw "Installed executable was not found: $executable"
+          }
+          $installedVersion = (Get-Item -LiteralPath $executable).VersionInfo.ProductVersion
+          if ($installedVersion -notmatch "^$([regex]::Escape($env:PRIOR_VERSION))(\.0)?$") {
+            throw "Expected installed version $env:PRIOR_VERSION, found $installedVersion"
+          }
+          "executable=$executable" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      - name: Apply signed update
+        if: steps.prior.outputs.eligible == 'true'
+        id: apply
+        shell: pwsh
+        env:
+          EXECUTABLE: ${{ steps.install.outputs.executable }}
+          TARGET_TAG: ${{ needs.publish.outputs.tag }}
+          TARGET_VERSION: ${{ steps.prior.outputs.target_version }}
+        run: |
+          $manifestUrl = "https://github.com/$env:GITHUB_REPOSITORY/releases/latest/download/latest.json"
+          $manifest = Invoke-RestMethod -Uri $manifestUrl
+          if ($manifest.version -ne $env:TARGET_VERSION) {
+            throw "Published feed describes $($manifest.version), expected $env:TARGET_VERSION"
+          }
+          $expectedArchive = "https://github.com/$env:GITHUB_REPOSITORY/releases/download/$env:TARGET_TAG/AudioBud_$($env:TARGET_VERSION)_x64-setup.nsis.zip"
+          if ($manifest.platforms.'windows-x86_64'.url -ne $expectedArchive) {
+            throw "Published feed has an unexpected Windows updater URL"
+          }
+
+          $process = Start-Process -FilePath $env:EXECUTABLE `
+            -ArgumentList @("--install-update", '--start-hidden', '--no-tray') -PassThru
+          "process_id=$($process.Id)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      - name: Assert installed version and signature
+        if: steps.prior.outputs.eligible == 'true'
+        shell: pwsh
+        env:
+          EXECUTABLE: ${{ steps.install.outputs.executable }}
+          PROCESS_ID: ${{ steps.apply.outputs.process_id }}
+          TARGET_VERSION: ${{ steps.prior.outputs.target_version }}
+        run: |
+          $deadline = (Get-Date).AddMinutes(8)
+          $installedVersion = ''
+          while ((Get-Date) -lt $deadline) {
+            if (Test-Path -LiteralPath $env:EXECUTABLE -PathType Leaf) {
+              $installedVersion = (Get-Item -LiteralPath $env:EXECUTABLE).VersionInfo.ProductVersion
+              if ($installedVersion -match "^$([regex]::Escape($env:TARGET_VERSION))(\.0)?$") {
+                break
+              }
+            }
+
+            $initialProcess = Get-Process -Id $env:PROCESS_ID -ErrorAction SilentlyContinue
+            if ($initialProcess -and $initialProcess.HasExited -and $initialProcess.ExitCode -ne 0) {
+              throw "Updater process failed with exit code $($initialProcess.ExitCode)"
+            }
+            Start-Sleep -Seconds 5
+          }
+
+          if ($installedVersion -notmatch "^$([regex]::Escape($env:TARGET_VERSION))(\.0)?$") {
+            throw "Updater did not install $env:TARGET_VERSION; found $installedVersion"
+          }
+          $signature = Get-AuthenticodeSignature -LiteralPath $env:EXECUTABLE
+          if ($signature.Status -ne [System.Management.Automation.SignatureStatus]::Valid) {
+            throw "Updated executable signature is invalid: $($signature.StatusMessage)"
+          }
+          if ($signature.SignerCertificate.Subject -notlike '*CN=Joseph Amditis*') {
+            throw "Updated executable has an unexpected signer: $($signature.SignerCertificate.Subject)"
+          }
+
+          Get-Process -Name AudioBud -ErrorAction SilentlyContinue | Stop-Process -Force
+          "### Windows updater E2E`n`nInstalled, detected, downloaded, verified, and applied $env:TARGET_VERSION from a real prior release on a clean runner." |
+            Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
