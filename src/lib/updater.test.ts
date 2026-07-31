@@ -62,4 +62,20 @@ describe("updateChecksActive", () => {
     expect(decodedPublicKey).toContain("A6C4E33D84B3A55F");
     expect(decodedPublicKey).not.toContain("PRIVATE KEY");
   });
+
+  it("exposes the Windows update opt-out in normal Advanced settings", () => {
+    const advancedSettings = readFileSync(
+      "src/components/settings/advanced/AdvancedSettings.tsx",
+      "utf8",
+    );
+    expect(advancedSettings).toContain(
+      'import { UpdateChecksToggle } from "../UpdateChecksToggle";',
+    );
+    expect(advancedSettings).toContain(
+      '<UpdateChecksToggle descriptionMode="tooltip" grouped={true} />',
+    );
+
+    const readme = readFileSync("README.md", "utf8");
+    expect(readme).not.toContain("Automatic update checks remain disabled");
+  });
 });

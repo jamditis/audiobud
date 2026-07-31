@@ -27,6 +27,9 @@ describe("published update feed workflow", () => {
       stepPosition("Download signed updater assets"),
     );
     expect(stepPosition("Download signed updater assets")).toBeLessThan(
+      stepPosition("Verify updater signature"),
+    );
+    expect(stepPosition("Verify updater signature")).toBeLessThan(
       stepPosition("Generate latest.json"),
     );
     expect(stepPosition("Generate latest.json")).toBeLessThan(
@@ -38,6 +41,9 @@ describe("published update feed workflow", () => {
     expect(workflow).toContain('gh release download "$TAG"');
     expect(workflow).toContain('--pattern "*.nsis.zip"');
     expect(workflow).toContain('--pattern "*.nsis.zip.sig"');
+    expect(workflow).toContain("scripts/verify-updater-signature/Cargo.toml");
+    expect(workflow).toContain("cargo run --locked --release");
+    expect(workflow).toContain("steps.updater.outputs.archive");
     expect(workflow).toContain("scripts/generate-update-manifest.ts");
     expect(workflow).toContain(
       'gh release upload "$TAG" "$MANIFEST" --clobber',

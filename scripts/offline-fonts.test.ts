@@ -42,5 +42,17 @@ describe("offline app fonts", () => {
         "SIL OPEN FONT LICENSE Version 1.1",
       );
     }
+
+    const bundledNotices = read("THIRD_PARTY_NOTICES.md");
+    expect(bundledNotices).toContain(
+      "Copyright 2023 The Bungee Project Authors",
+    );
+    expect(bundledNotices).toContain(
+      "Copyright 2016 The Fredoka Project Authors",
+    );
+    expect(bundledNotices).toContain("SIL OPEN FONT LICENSE Version 1.1");
+    expect(read("src-tauri/tauri.conf.json")).toContain(
+      '"../THIRD_PARTY_NOTICES.md": "THIRD_PARTY_NOTICES.md"',
+    );
   });
 });

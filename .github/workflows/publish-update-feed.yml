@@ -39,6 +39,11 @@ jobs:
         with:
           bun-version: 1.3.14
 
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+        with:
+          toolchain: stable
+
       - name: Resolve published release
         id: release
         shell: bash
@@ -91,7 +96,38 @@ jobs:
             exit 1
           fi
 
+          echo "archive=${ARCHIVES[0]}" >> "$GITHUB_OUTPUT"
           echo "signature=${SIGNATURES[0]}" >> "$GITHUB_OUTPUT"
+
+      - name: Verify updater signature
+        shell: bash
+        env:
+          ARCHIVE: ${{ steps.updater.outputs.archive }}
+          SIGNATURE: ${{ steps.updater.outputs.signature }}
+        run: |
+          set -euo pipefail
+          PUBLIC_KEY_VALUE=$(jq -er \
+            '.plugins.updater.pubkey | select(type == "string" and length > 0)' \
+            src-tauri/tauri.conf.json)
+          SIGNATURE_VALUE=$(<"$SIGNATURE")
+          if [[ ! "$PUBLIC_KEY_VALUE" =~ ^[A-Za-z0-9+/=]+$ ]]; then
+            echo "::error::Updater public key is not a single base64 value"
+            exit 1
+          fi
+          if [[ ! "$SIGNATURE_VALUE" =~ ^[A-Za-z0-9+/=]+$ ]]; then
+            echo "::error::Updater signature is not a single base64 value"
+            exit 1
+          fi
+
+          PUBLIC_KEY_PATH="$RUNNER_TEMP/updater-public-key.pub"
+          DECODED_SIGNATURE_PATH="$RUNNER_TEMP/updater-signature.sig"
+          printf '%s' "$PUBLIC_KEY_VALUE" | base64 --decode > "$PUBLIC_KEY_PATH"
+          printf '%s' "$SIGNATURE_VALUE" | base64 --decode > "$DECODED_SIGNATURE_PATH"
+
+          CARGO_TARGET_DIR="$RUNNER_TEMP/updater-signature-target" \
+            cargo run --locked --release \
+              --manifest-path scripts/verify-updater-signature/Cargo.toml -- \
+              "$PUBLIC_KEY_PATH" "$DECODED_SIGNATURE_PATH" "$ARCHIVE"
 
       - name: Generate latest.json
         id: manifest
