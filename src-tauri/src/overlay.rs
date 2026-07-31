@@ -255,12 +255,7 @@ fn resolve_overlay_anchor_position(
         OverlayAnchor::BottomRight => (right, bottom),
     };
 
-    clamp_overlay_to_monitor(
-        base_x + dx,
-        base_y + dy,
-        monitor,
-        overlay_size,
-    )
+    clamp_overlay_to_monitor(base_x + dx, base_y + dy, monitor, overlay_size)
 }
 
 /// We must use LogicalPosition (not PhysicalPosition) because Tauri/tao
