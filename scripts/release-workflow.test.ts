@@ -190,8 +190,12 @@ describe("Windows release signing workflow", () => {
       '$checksumPath = Join-Path $env:CARGO_TARGET_DIR "release\\SHA256SUMS.txt"',
     );
     expect(workflow).toContain(
-      "$env:NSIS_PATH $env:MSI_PATH $env:SBOM_PATH $env:CHECKSUM_PATH --clobber",
+      "$env:NSIS_PATH $env:MSI_PATH $env:UPDATER_ARCHIVE",
     );
+    expect(workflow).toContain(
+      "$env:UPDATER_SIGNATURE $env:PORTABLE_PATH $env:SBOM_PATH",
+    );
+    expect(workflow).toContain("$env:CHECKSUM_PATH --clobber");
     expect(workflow).toContain(
       "CHECKSUM_PATH: ${{ steps.checksums.outputs.path }}",
     );
@@ -201,13 +205,17 @@ describe("Windows release signing workflow", () => {
 
     const checksumStep = stepBlock("Write SHA256SUMS");
     expect(checksumStep).toContain(
-      "$lines = foreach ($path in @($env:NSIS_PATH, $env:MSI_PATH))",
+      "$artifactPaths = @($env:NSIS_PATH, $env:MSI_PATH)",
+    );
+    expect(checksumStep).toContain("$artifactPaths += $env:PORTABLE_PATH");
+    expect(checksumStep).toContain(
+      "$lines = foreach ($path in $artifactPaths)",
     );
     expect(checksumStep).not.toContain("steps.sbom-path.outputs.path");
 
     // Hashing a path that does not exist would otherwise publish a file
     // listing one installer and silently omit the other.
-    expect(workflow).toContain("Cannot checksum a missing installer");
+    expect(workflow).toContain("Cannot checksum a missing release artifact");
 
     // sha256sum -c wants lowercase hex, two spaces, a bare file name, LF, and
     // no BOM. Get-FileHash returns uppercase and Out-File writes CRLF+BOM.
@@ -290,6 +298,9 @@ describe("Windows release signing workflow", () => {
     const uploadedPaths = [
       "${{ steps.signing-paths.outputs.nsis }}",
       "${{ steps.signing-paths.outputs.msi }}",
+      "${{ steps.updater-paths.outputs.archive }}",
+      "${{ steps.updater-paths.outputs.signature }}",
+      "${{ steps.portable-webview-path.outputs.path }}",
       "${{ steps.sbom-path.outputs.path }}",
       "${{ steps.checksums.outputs.path }}",
     ];
@@ -327,6 +338,8 @@ describe("Windows release signing workflow", () => {
     expect(multilineInput(sbomAttestationStep, "subject-path")).toEqual([
       "${{ steps.signing-paths.outputs.nsis }}",
       "${{ steps.signing-paths.outputs.msi }}",
+      "${{ steps.updater-paths.outputs.archive }}",
+      "${{ steps.portable-webview-path.outputs.path }}",
     ]);
     expect(sbomAttestationStep).toContain(
       "sbom-path: ${{ steps.sbom-path.outputs.path }}",
@@ -398,6 +411,7 @@ describe("Windows release signing workflow", () => {
     expect(microsoftStoreConfig).toEqual({
       $schema: "https://schema.tauri.app/config/2",
       bundle: {
+        createUpdaterArtifacts: false,
         windows: {
           webviewInstallMode: {
             type: "offlineInstaller",
@@ -596,12 +610,15 @@ describe("Windows release signing workflow", () => {
     expect(existsSync(resolve(tauriDirectory, scriptPath))).toBe(true);
   });
 
-  test("limits the Tauri signer to patched app copies and the NSIS uninstaller", () => {
+  test("limits the Tauri signer to patched app copies, final installers, and the NSIS uninstaller", () => {
     expect(signingScript).toContain("[switch] $TauriNsisUninstaller");
     expect(signingScript).toContain('-ieq "audiobud.exe"');
-    expect(signingScript).toContain(
-      "if (-not $isApplication -and -not $TauriNsisUninstaller)",
-    );
+    expect(signingScript).toContain("$isFinalNsis");
+    expect(signingScript).toContain("$isFinalMsi");
+    expect(signingScript).toContain("^AudioBud_");
+    expect(signingScript).toContain("_x64-setup\\.exe$");
+    expect(signingScript).toContain("_x64_en-US\\.msi$");
+    expect(signingScript).toContain("if (-not $isApprovedInput)");
     expect(signingScript).toContain(
       "Import-Module ArtifactSigning -RequiredVersion 0.1.8",
     );

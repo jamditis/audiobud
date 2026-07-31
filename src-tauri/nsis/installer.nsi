@@ -62,6 +62,10 @@ ${StrLoc}
 !define WEBVIEW2BOOTSTRAPPERPATH "{{webview2_bootstrapper_path}}"
 !define WEBVIEW2INSTALLERPATH "{{webview2_installer_path}}"
 !define MINIMUMWEBVIEW2VERSION "{{minimum_webview2_version}}"
+; Keep this version synchronized with tauri.portable-webview.conf.json and the
+; pinned download in release.yml. WebView2 fixed runtime 120+ needs explicit
+; AppContainer read/execute ACLs on Windows 10.
+!define FIXEDWEBVIEW2DIRECTORY "Microsoft.WebView2.FixedVersionRuntime.150.0.4078.105.x64"
 !define UNINSTKEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCTNAME}"
 !define MANUKEY "Software\${MANUFACTURER}"
 !define MANUPRODUCTKEY "${MANUKEY}\${PRODUCTNAME}"
@@ -777,6 +781,16 @@ Section Install
   {{#each resources}}
     File /a "/oname={{this.[1]}}" "{{no-escape @key}}"
   {{/each}}
+
+  !if "${INSTALLWEBVIEW2MODE}" == "fixedRuntime"
+    ; Microsoft requires both AppContainer groups to read fixed runtime 120+
+    ; when an unpackaged app runs on Windows 10. Use SIDs so this works on
+    ; localized Windows installations as well.
+    ExecWait '"$SYSDIR\icacls.exe" "$INSTDIR\${FIXEDWEBVIEW2DIRECTORY}" /grant "*S-1-15-2-2:(OI)(CI)(RX)" "*S-1-15-2-1:(OI)(CI)(RX)" /T /C' $1
+    ${If} $1 <> 0
+      Abort "Could not apply the required WebView2 fixed-runtime permissions."
+    ${EndIf}
+  !endif
 
   ; Copy external binaries
   {{#each binaries}}
