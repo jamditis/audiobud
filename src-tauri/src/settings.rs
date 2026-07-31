@@ -516,15 +516,9 @@ pub struct AppSettings {
     /// `format_numbers` if that is also on, so raw mode is usable for dictation with no model in
     /// the loop (issue #66).
     ///
-    /// Defaults to false: turning it on rewrites text that raw mode has always passed through
-    /// verbatim, and there is no settings toggle yet (issue #115), so a true default would change
-    /// every existing raw-mode install on upgrade with no supported way back.
-    ///
-    /// Until #115 lands there is no in-app writer for this either -- every other setting is
-    /// changed through its own `change_*_setting` command and this one has none, so switching it
-    /// on means editing the persisted settings store by hand. `get_settings` is read per
-    /// transcription, so an edit takes effect on the next dictation. The default is worth
-    /// revisiting once the toggle ships.
+    /// Defaults to false because turning it on rewrites text that raw mode historically passed
+    /// through verbatim. The advanced settings toggle lets each user opt in without changing
+    /// existing raw-mode installs on upgrade.
     ///
     /// Turning it off is also how you type the command words themselves, since there is no
     /// escape word. See [`crate::audio_toolkit::apply_spoken_punctuation`].

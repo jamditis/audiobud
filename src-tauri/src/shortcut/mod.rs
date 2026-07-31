@@ -1301,6 +1301,19 @@ pub fn change_format_numbers_setting(app: AppHandle, enabled: bool) -> Result<()
 
 #[tauri::command]
 #[specta::specta]
+pub fn change_format_raw_output_setting(app: AppHandle, enabled: bool) -> Result<(), String> {
+    let mut settings = settings::get_settings(&app);
+    settings.format_raw_output = enabled;
+    settings::write_settings(&app, settings);
+    let _ = app.emit(
+        "settings-changed",
+        serde_json::json!({ "setting": "format_raw_output", "value": enabled }),
+    );
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
 pub fn update_word_replacements(
     app: AppHandle,
     replacements: Vec<crate::settings::WordReplacement>,

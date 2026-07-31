@@ -494,7 +494,11 @@
       },
       "formatNumbers": {
         "label": "Formatar números",
-        "description": "Converte números falados em dígitos e símbolos numa transcrição formatada, por exemplo $25, 10% ou 3.5. Funciona offline, sem chave de API. Não se aplica a transcrições em bruto."
+        "description": "Converte números falados em dígitos e símbolos nas transcrições formatadas. Também se aplica quando a formatação do texto em bruto está ativa. Funciona offline, sem chave de API."
+      },
+      "formatRawOutput": {
+        "label": "Formatar transcrição em bruto",
+        "description": "Interpreta palavras de pontuação no modo em bruto. «Ponto de interrogação» torna-se «?». Os números seguem a definição acima. Desative para ditar comandos literalmente."
       }
     },
     "postProcessing": {

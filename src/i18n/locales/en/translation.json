@@ -494,7 +494,11 @@
       },
       "formatNumbers": {
         "label": "Format numbers",
-        "description": "Rewrite spoken numbers as digits and symbols on a formatted transcript — \"twenty five dollars\" becomes \"$25\", \"ten percent\" becomes \"10%\", and \"three point five\" becomes \"3.5\". Runs offline with no API key. Does not apply to raw transcripts."
+        "description": "Rewrite spoken numbers as digits and symbols on formatted transcripts. It also applies when raw formatting is on. Runs offline with no API key."
+      },
+      "formatRawOutput": {
+        "label": "Format raw transcript",
+        "description": "Interpret punctuation words in raw mode. \"Question mark\" becomes \"?\". Number formatting follows the setting above. Turn this off to dictate commands literally."
       }
     },
     "postProcessing": {

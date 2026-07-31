@@ -494,7 +494,11 @@
       },
       "formatNumbers": {
         "label": "Zahlen formatieren",
-        "description": "Wandelt gesprochene Zahlen in einem formatierten Transkript in Ziffern und Symbole um – zum Beispiel $25, 10 % oder 3,5. Läuft offline ohne API-Schlüssel. Gilt nicht für Rohtranskripte."
+        "description": "Wandelt gesprochene Zahlen in formatierten Transkripten in Ziffern und Symbole um. Gilt auch, wenn die Rohformatierung aktiviert ist. Läuft offline ohne API-Schlüssel."
+      },
+      "formatRawOutput": {
+        "label": "Rohtranskript formatieren",
+        "description": "Deutet gesprochene Satzzeichen im Rohmodus. „Fragezeichen“ wird zu „?“. Die Zahlenformatierung folgt der Einstellung oben. Ausschalten, um Befehle wörtlich zu diktieren."
       }
     },
     "postProcessing": {

@@ -494,7 +494,11 @@
       },
       "formatNumbers": {
         "label": "Định dạng số",
-        "description": "Chuyển các số được nói thành chữ số và ký hiệu trong bản ghi đã định dạng, ví dụ $25, 10% hoặc 3.5. Hoạt động ngoại tuyến, không cần khóa API. Không áp dụng cho bản ghi thô."
+        "description": "Chuyển các số được nói thành chữ số và ký hiệu trong bản ghi đã định dạng. Cũng áp dụng khi bật định dạng bản ghi thô. Hoạt động ngoại tuyến, không cần khóa API."
+      },
+      "formatRawOutput": {
+        "label": "Định dạng bản ghi thô",
+        "description": "Hiểu các từ chỉ dấu câu trong chế độ thô. “Dấu hỏi” trở thành “?”. Định dạng số theo cài đặt phía trên. Tắt để đọc lệnh theo nghĩa đen."
       }
     },
     "postProcessing": {

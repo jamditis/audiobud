@@ -458,6 +458,7 @@ pub fn run(cli_args: CliArgs) {
             shortcut::change_append_trailing_space_setting,
             shortcut::change_raw_output_setting,
             shortcut::change_format_numbers_setting,
+            shortcut::change_format_raw_output_setting,
             shortcut::update_word_replacements,
             shortcut::change_lazy_stream_close_setting,
             shortcut::change_app_language_setting,
