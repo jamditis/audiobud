@@ -47,7 +47,7 @@ describe("self-contained portable WebView2 artifact", () => {
     expect(workflow).toContain("WEBVIEW2_FIXED_CAB_BYTES: 297904860");
     const fetch = stepBlock("Fetch fixed WebView2 runtime");
     expect(fetch).toContain(
-      "Microsoft.WebView2.FixedVersionRuntime.150.0.4078.105.x64.cab",
+      "b401c036-cfb8-4dc4-a58e-8766441df4ac/Microsoft.WebView2.FixedVersionRuntime.150.0.4078.105.x64.cab",
     );
     expect(fetch).toContain("Get-FileHash");
     expect(fetch).toContain("Get-AuthenticodeSignature");

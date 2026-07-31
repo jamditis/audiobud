@@ -498,7 +498,7 @@
       },
       "formatRawOutput": {
         "label": "Formatta la trascrizione grezza",
-        "description": "Interpreta le parole di punteggiatura in modalità grezza. «Punto interrogativo» diventa «?». I numeri seguono l’impostazione sopra. Disattiva per dettare letteralmente i comandi."
+        "description": "Interpreta i comandi di punteggiatura in inglese in modalità grezza. La frase inglese «question mark» diventa «?». I numeri seguono l’impostazione sopra. Disattiva per dettare letteralmente i comandi."
       }
     },
     "postProcessing": {

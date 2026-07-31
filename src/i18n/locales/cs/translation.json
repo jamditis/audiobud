@@ -500,7 +500,7 @@
       },
       "formatRawOutput": {
         "label": "Formátovat neupravený přepis",
-        "description": "Rozpozná vyslovenou interpunkci v neupraveném režimu. „Otazník“ se změní na „?“. Formátování čísel se řídí nastavením výše. Vypnutím můžete diktovat příkazy doslova."
+        "description": "Rozpozná anglické interpunkční příkazy v neupraveném režimu. Anglická fráze „question mark“ se změní na „?“. Formátování čísel se řídí nastavením výše. Vypnutím můžete diktovat příkazy doslova."
       }
     },
     "postProcessing": {

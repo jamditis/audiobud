@@ -498,7 +498,7 @@
       },
       "formatRawOutput": {
         "label": "格式化原始转录",
-        "description": "在原始模式中识别标点词语。“问号”会变成“?”。数字格式遵循上方设置。关闭后可逐字输入命令。"
+        "description": "在原始模式中识别英文标点指令。英文短语“question mark”会变成“?”。数字格式遵循上方设置。关闭后可逐字输入命令。"
       }
     },
     "postProcessing": {

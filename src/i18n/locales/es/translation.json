@@ -498,7 +498,7 @@
       },
       "formatRawOutput": {
         "label": "Formatear transcripción sin procesar",
-        "description": "Interpreta las palabras de puntuación en modo sin procesar. «Signo de interrogación» se convierte en «?». Los números siguen el ajuste anterior. Desactívalo para dictar comandos literalmente."
+        "description": "Interpreta comandos de puntuación en inglés en modo sin procesar. La frase inglesa «question mark» se convierte en «?». Los números siguen el ajuste anterior. Desactívalo para dictar comandos literalmente."
       }
     },
     "postProcessing": {

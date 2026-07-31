@@ -498,7 +498,7 @@
       },
       "formatRawOutput": {
         "label": "Format raw transcript",
-        "description": "Interpret punctuation words in raw mode. \"Question mark\" becomes \"?\". Number formatting follows the setting above. Turn this off to dictate commands literally."
+        "description": "Interpret English punctuation commands in raw mode. \"Question mark\" becomes \"?\". Number formatting follows the setting above. Turn this off to dictate commands literally."
       }
     },
     "postProcessing": {

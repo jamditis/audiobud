@@ -498,7 +498,7 @@
       },
       "formatRawOutput": {
         "label": "Định dạng bản ghi thô",
-        "description": "Hiểu các từ chỉ dấu câu trong chế độ thô. “Dấu hỏi” trở thành “?”. Định dạng số theo cài đặt phía trên. Tắt để đọc lệnh theo nghĩa đen."
+        "description": "Hiểu các lệnh dấu câu bằng tiếng Anh trong chế độ thô. Cụm từ tiếng Anh “question mark” trở thành “?”. Định dạng số theo cài đặt phía trên. Tắt để đọc lệnh theo nghĩa đen."
       }
     },
     "postProcessing": {

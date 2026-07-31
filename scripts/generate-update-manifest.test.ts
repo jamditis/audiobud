@@ -67,6 +67,7 @@ describe("update feed manifest", () => {
       publishedRelease({ prerelease: true }),
       publishedRelease({ published_at: null }),
       publishedRelease({ tag_name: "nightly" }),
+      publishedRelease({ tag_name: "v0.4.3-rc.1" }),
     ]) {
       expect(() =>
         buildUpdateManifest(release, repository, "signed-payload"),

@@ -498,7 +498,7 @@
       },
       "formatRawOutput": {
         "label": "Formater la transcription brute",
-        "description": "Interprète les mots de ponctuation en mode brut. « Point d’interrogation » devient « ? ». Les nombres suivent le réglage ci-dessus. Désactivez ceci pour dicter les commandes littéralement."
+        "description": "Interprète les commandes de ponctuation anglaises en mode brut. L’expression anglaise « question mark » devient « ? ». Les nombres suivent le réglage ci-dessus. Désactivez ceci pour dicter les commandes littéralement."
       }
     },
     "postProcessing": {

@@ -28,7 +28,7 @@ export interface UpdateManifest {
   };
 }
 
-const RELEASE_TAG = /^v?(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)$/;
+const RELEASE_TAG = /^v?(\d+\.\d+\.\d+)$/;
 
 function expectedAssetUrl(
   repository: string,

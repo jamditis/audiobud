@@ -498,7 +498,7 @@
       },
       "formatRawOutput": {
         "label": "Rohtranskript formatieren",
-        "description": "Deutet gesprochene Satzzeichen im Rohmodus. „Fragezeichen“ wird zu „?“. Die Zahlenformatierung folgt der Einstellung oben. Ausschalten, um Befehle wörtlich zu diktieren."
+        "description": "Deutet englische Satzzeichenbefehle im Rohmodus. Die englische Wendung „question mark“ wird zu „?“. Die Zahlenformatierung folgt der Einstellung oben. Ausschalten, um Befehle wörtlich zu diktieren."
       }
     },
     "postProcessing": {

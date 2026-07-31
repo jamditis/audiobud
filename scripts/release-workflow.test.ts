@@ -99,7 +99,7 @@ describe("Windows release signing workflow", () => {
       "bun run tauri build --no-bundle --ci -- --locked",
     );
     expect(workflow).toContain(
-      "bun run tauri bundle --verbose --bundles nsis,msi --config src-tauri/tauri.signing.conf.json --ci",
+      "bun run tauri bundle --verbose --bundles nsis,msi `\n              --config src-tauri/tauri.signing.conf.json `\n              --config src-tauri/tauri.updater.conf.json --ci",
     );
     expect(stepBlock("Bundle installers")).toContain("bun run bundle:store");
 
@@ -430,7 +430,7 @@ describe("Windows release signing workflow", () => {
     const bundleStep = stepBlock("Bundle installers");
     expect(bundleStep).toContain("bun run bundle:store");
     expect(bundleStep).toContain(
-      "bun run tauri bundle --verbose --bundles nsis,msi --config src-tauri/tauri.signing.conf.json --ci",
+      "bun run tauri bundle --verbose --bundles nsis,msi `\n              --config src-tauri/tauri.signing.conf.json `\n              --config src-tauri/tauri.updater.conf.json --ci",
     );
   });
 
@@ -600,7 +600,7 @@ describe("Windows release signing workflow", () => {
 
   test("keeps custom signer failures visible in the bundle log", () => {
     expect(workflow).toContain(
-      "bun run tauri bundle --verbose --bundles nsis,msi --config src-tauri/tauri.signing.conf.json --ci",
+      "bun run tauri bundle --verbose --bundles nsis,msi `\n              --config src-tauri/tauri.signing.conf.json `\n              --config src-tauri/tauri.updater.conf.json --ci",
     );
   });
 

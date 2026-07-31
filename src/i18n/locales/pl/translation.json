@@ -502,7 +502,7 @@
       },
       "formatRawOutput": {
         "label": "Formatuj surową transkrypcję",
-        "description": "Rozpoznaje wypowiedziane znaki interpunkcyjne w trybie surowym. „Znak zapytania” zmienia się w „?”. Format liczb zależy od ustawienia powyżej. Wyłącz, aby dyktować polecenia dosłownie."
+        "description": "Rozpoznaje angielskie polecenia interpunkcyjne w trybie surowym. Angielska fraza „question mark” zmienia się w „?”. Format liczb zależy od ustawienia powyżej. Wyłącz, aby dyktować polecenia dosłownie."
       }
     },
     "postProcessing": {

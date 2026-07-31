@@ -209,7 +209,7 @@ jobs:
         run: |
           $runtimeName = "Microsoft.WebView2.FixedVersionRuntime.$env:WEBVIEW2_FIXED_VERSION.x64"
           $archive = Join-Path $env:RUNNER_TEMP "Microsoft.WebView2.FixedVersionRuntime.150.0.4078.105.x64.cab"
-          $url = "https://msedge.sf.dl.delivery.mp.microsoft.com/filestreamingservice/files/b401c036-cfb8-4dc4-a58e-8766441df4ac"
+          $url = "https://msedge.sf.dl.delivery.mp.microsoft.com/filestreamingservice/files/b401c036-cfb8-4dc4-a58e-8766441df4ac/Microsoft.WebView2.FixedVersionRuntime.150.0.4078.105.x64.cab"
           Invoke-WebRequest -Uri $url -OutFile $archive -MaximumRetryCount 3 -RetryIntervalSec 5
 
           $archiveBytes = (Get-Item -LiteralPath $archive).Length
@@ -360,7 +360,9 @@ jobs:
           if ($env:STORE_CANDIDATE -eq "true") {
             bun run bundle:store
           } else {
-            bun run tauri bundle --verbose --bundles nsis,msi --config src-tauri/tauri.signing.conf.json --ci
+            bun run tauri bundle --verbose --bundles nsis,msi `
+              --config src-tauri/tauri.signing.conf.json `
+              --config src-tauri/tauri.updater.conf.json --ci
           }
 
       - name: Resolve installer paths

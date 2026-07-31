@@ -498,7 +498,7 @@
       },
       "formatRawOutput": {
         "label": "格式化原始轉錄",
-        "description": "在原始模式中解讀標點詞語。「問號」會變成「?」。數字格式遵循上方設定。關閉後可逐字輸入指令。"
+        "description": "在原始模式中解讀英文標點指令。英文片語「question mark」會變成「?」。數字格式遵循上方設定。關閉後可逐字輸入指令。"
       }
     },
     "postProcessing": {

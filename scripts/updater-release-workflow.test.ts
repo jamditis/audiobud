@@ -3,6 +3,9 @@ import { readFileSync } from "node:fs";
 
 const workflow = readFileSync(".github/workflows/release.yml", "utf8");
 const config = JSON.parse(readFileSync("src-tauri/tauri.conf.json", "utf8"));
+const updaterConfig = JSON.parse(
+  readFileSync("src-tauri/tauri.updater.conf.json", "utf8"),
+);
 const storeConfig = JSON.parse(
   readFileSync("src-tauri/tauri.microsoftstore.conf.json", "utf8"),
 );
@@ -16,8 +19,12 @@ function stepBlock(name: string): string {
 
 describe("signed updater release artifacts", () => {
   test("creates updater artifacts only for the normal GitHub package", () => {
-    expect(config.bundle.createUpdaterArtifacts).toBe(true);
+    expect(config.bundle.createUpdaterArtifacts).toBe(false);
+    expect(updaterConfig.bundle.createUpdaterArtifacts).toBe(true);
     expect(storeConfig.bundle.createUpdaterArtifacts).toBe(false);
+    expect(stepBlock("Bundle installers")).toContain(
+      "--config src-tauri/tauri.updater.conf.json",
+    );
     expect(workflow).toContain(
       "TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}",
     );

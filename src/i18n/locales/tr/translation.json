@@ -498,7 +498,7 @@
       },
       "formatRawOutput": {
         "label": "Ham dökümü biçimlendir",
-        "description": "Ham modda noktalama sözcüklerini yorumlar. “Soru işareti”, “?” olur. Sayı biçimi yukarıdaki ayarı izler. Komutları olduğu gibi yazdırmak için kapatın."
+        "description": "Ham modda İngilizce noktalama komutlarını yorumlar. İngilizce “question mark” ifadesi “?” olur. Sayı biçimi yukarıdaki ayarı izler. Komutları olduğu gibi yazdırmak için kapatın."
       }
     },
     "postProcessing": {
