@@ -177,6 +177,11 @@ Var InstallTypeRadioPortable
 Page custom PageInstallType PageLeaveInstallType
 
 Function PageInstallType
+  !if "${INSTALLWEBVIEW2MODE}" == "fixedRuntime"
+    StrCpy $PortableMode 1
+    Abort
+  !endif
+
   ; Skip for passive/silent/update modes — portable flag is handled via /PORTABLE
   ${If} $PassiveMode = 1
   ${OrIf} ${Silent}
@@ -551,11 +556,16 @@ Function .onInit
     StrCpy $UpdateMode 1
   ${EndIf}
 
-  ; --- PORTABLE MODE --- Parse /PORTABLE flag for silent/passive installs
-  ${GetOptions} $CMDLINE "/PORTABLE" $PortableMode
-  ${IfNot} ${Errors}
+  ; --- PORTABLE MODE --- Fixed-runtime builds are always portable. Other
+  ; builds keep the explicit /PORTABLE opt-in for silent/passive installs.
+  !if "${INSTALLWEBVIEW2MODE}" == "fixedRuntime"
     StrCpy $PortableMode 1
-  ${EndIf}
+  !else
+    ${GetOptions} $CMDLINE "/PORTABLE" $PortableMode
+    ${IfNot} ${Errors}
+      StrCpy $PortableMode 1
+    ${EndIf}
+  !endif
 
   !if "${DISPLAYLANGUAGESELECTOR}" == "true"
     !insertmacro MUI_LANGDLL_DISPLAY

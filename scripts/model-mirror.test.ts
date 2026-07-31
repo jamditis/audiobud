@@ -25,18 +25,21 @@ function releaseFixture() {
         name: asset.name,
         size: asset.bytes,
         state: "uploaded",
+        digest: `sha256:${asset.sha256}`,
         browser_download_url: `${manifest.base_url}/${asset.name}`,
       })),
       {
         name: "model-assets.json",
         size: 100,
         state: "uploaded",
+        digest: "sha256:metadata",
         browser_download_url: `${manifest.base_url}/model-assets.json`,
       },
       {
         name: "SHA256SUMS-models.txt",
         size: 100,
         state: "uploaded",
+        digest: "sha256:metadata",
         browser_download_url: `${manifest.base_url}/SHA256SUMS-models.txt`,
       },
     ],
@@ -89,6 +92,12 @@ describe("AudioBud model mirror", () => {
     wrongSize.assets[0].size += 1;
     expect(() => validateModelAssetRelease(manifest, wrongSize)).toThrow(
       "unexpected state or size",
+    );
+
+    const wrongDigest = releaseFixture();
+    wrongDigest.assets[0].digest = "sha256:wrong";
+    expect(() => validateModelAssetRelease(manifest, wrongDigest)).toThrow(
+      "unexpected digest",
     );
 
     const draft = releaseFixture();

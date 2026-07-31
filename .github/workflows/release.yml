@@ -455,6 +455,41 @@ jobs:
             throw "signtool verification failed for updater installer"
           }
 
+          $config = Get-Content -LiteralPath "src-tauri/tauri.conf.json" -Raw | ConvertFrom-Json
+          $publicKeyValue = $config.plugins.updater.pubkey
+          if ($publicKeyValue -isnot [string] -or [string]::IsNullOrWhiteSpace($publicKeyValue)) {
+            throw "Updater public key is missing from src-tauri/tauri.conf.json"
+          }
+          try {
+            $publicKeyBytes = [Convert]::FromBase64String($publicKeyValue)
+            $signatureBytes = [Convert]::FromBase64String($signatureValue)
+          } catch {
+            throw "Updater public key or signature has invalid outer base64 encoding"
+          }
+
+          $publicKeyPath = Join-Path $verificationDirectory "updater-public-key.pub"
+          $decodedSignaturePath = Join-Path $verificationDirectory "updater-signature.sig"
+          [System.IO.File]::WriteAllBytes($publicKeyPath, $publicKeyBytes)
+          [System.IO.File]::WriteAllBytes($decodedSignaturePath, $signatureBytes)
+
+          $verifierTargetDirectory = Join-Path $env:RUNNER_TEMP `
+            "audiobud-updater-verifier-target-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
+          if (Test-Path -LiteralPath $verifierTargetDirectory) {
+            throw "Updater verifier target directory already exists: $verifierTargetDirectory"
+          }
+          $releaseTargetDirectory = $env:CARGO_TARGET_DIR
+          try {
+            $env:CARGO_TARGET_DIR = $verifierTargetDirectory
+            cargo run --locked --release `
+              --manifest-path scripts/verify-updater-signature/Cargo.toml -- `
+              $publicKeyPath $decodedSignaturePath $archive
+            if ($LASTEXITCODE -ne 0) {
+              throw "Updater minisign verification failed"
+            }
+          } finally {
+            $env:CARGO_TARGET_DIR = $releaseTargetDirectory
+          }
+
           "archive=$archive" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           "signature=$signature" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
 

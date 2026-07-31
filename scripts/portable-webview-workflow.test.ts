@@ -20,6 +20,14 @@ function stepBlock(name: string): string {
   return workflow.slice(position, next === -1 ? undefined : next);
 }
 
+function nsisFunctionBlock(name: string): string {
+  const position = nsisTemplate.indexOf(`Function ${name}`);
+  expect(position, `Missing NSIS function: ${name}`).toBeGreaterThan(-1);
+  const end = nsisTemplate.indexOf("FunctionEnd", position);
+  expect(end, `Missing FunctionEnd for: ${name}`).toBeGreaterThan(position);
+  return nsisTemplate.slice(position, end);
+}
+
 describe("self-contained portable WebView2 artifact", () => {
   test("keeps the fixed runtime in an opt-in config overlay", () => {
     expect(config).toEqual({
@@ -98,6 +106,18 @@ describe("self-contained portable WebView2 artifact", () => {
     );
     expect(verification).toContain("S-1-15-2-2");
     expect(verification).toContain("S-1-15-2-1");
+  });
+
+  test("forces every fixed-runtime install into portable mode", () => {
+    const installTypePage = nsisFunctionBlock("PageInstallType");
+    expect(installTypePage).toMatch(
+      /!if "\$\{INSTALLWEBVIEW2MODE\}" == "fixedRuntime"\s+StrCpy \$PortableMode 1\s+Abort\s+!endif/,
+    );
+
+    const onInit = nsisFunctionBlock(".onInit");
+    expect(onInit).toMatch(
+      /!if "\$\{INSTALLWEBVIEW2MODE\}" == "fixedRuntime"\s+StrCpy \$PortableMode 1\s+!else[\s\S]*\$CMDLINE "\/PORTABLE" \$PortableMode[\s\S]*!endif/,
+    );
   });
 
   test("checksums, attests, and uploads the separate artifact", () => {

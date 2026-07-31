@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 
 const workflow = readFileSync(".github/workflows/release.yml", "utf8");
 const config = JSON.parse(readFileSync("src-tauri/tauri.conf.json", "utf8"));
@@ -45,6 +45,21 @@ describe("signed updater release artifacts", () => {
     expect(paths).toContain("Get-AuthenticodeSignature");
     expect(paths).toContain("CN=Joseph Amditis");
     expect(paths).toContain("Expand-Archive");
+  });
+
+  test("verifies the updater signature against the client public key", () => {
+    const verifierPath = "scripts/verify-updater-signature/src/main.rs";
+    expect(existsSync(verifierPath)).toBe(true);
+    const verifier = readFileSync(verifierPath, "utf8");
+    expect(verifier).toContain("minisign_verify");
+    expect(verifier).toContain("verify_stream");
+    expect(verifier).toContain("finalize()");
+
+    const paths = stepBlock("Resolve updater artifact paths");
+    expect(paths).toContain("src-tauri/tauri.conf.json");
+    expect(paths).toContain("[Convert]::FromBase64String");
+    expect(paths).toContain("scripts/verify-updater-signature/Cargo.toml");
+    expect(paths).toContain("cargo run --locked --release");
   });
 
   test("publishes and attests updater files but never latest.json", () => {

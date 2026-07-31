@@ -16,6 +16,7 @@ interface GitHubAsset {
   name: string;
   size: number;
   state: string;
+  digest: string | null;
   browser_download_url: string;
 }
 
@@ -54,6 +55,11 @@ export function validateModelAssetRelease(
     if (actual.state !== "uploaded" || actual.size !== expected.bytes) {
       throw new Error(
         `Published model asset has unexpected state or size: ${expected.name}`,
+      );
+    }
+    if (actual.digest !== `sha256:${expected.sha256}`) {
+      throw new Error(
+        `Published model asset has an unexpected digest: ${expected.name}`,
       );
     }
     const expectedUrl = `${manifest.base_url}/${expected.name}`;
