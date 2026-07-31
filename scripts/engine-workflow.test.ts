@@ -32,6 +32,15 @@ describe("engine workflow", () => {
     expect(engineSteps).toMatch(/run: cargo test/);
   });
 
+  it("rejects clippy warnings in the real shipped path", () => {
+    expect(engineSteps).toContain(
+      "run: cargo clippy --lib --tests -- -D warnings",
+    );
+    expect(engine.indexOf("run: cargo test")).toBeLessThan(
+      engine.indexOf("run: cargo clippy --lib --tests -- -D warnings"),
+    );
+  });
+
   it("pins the same Vulkan SDK the release build links against", () => {
     // A different SDK here would let this job pass against toolchain the
     // release never sees, which is the failure mode it exists to prevent.

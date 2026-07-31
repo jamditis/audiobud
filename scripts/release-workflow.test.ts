@@ -77,9 +77,27 @@ describe("Windows release signing workflow", () => {
     expect(workflow).not.toContain("AZURE_CLIENT_SECRET");
   });
 
+  test("takes the reproducible Rust build wins", () => {
+    const reproducibleStep = stepBlock("Configure reproducible Rust build");
+    expect(reproducibleStep).toContain("git show -s --format=%ct");
+    expect(reproducibleStep).toContain("SOURCE_DATE_EPOCH=");
+    expect(reproducibleStep).toContain(
+      "--remap-path-prefix=$env:GITHUB_WORKSPACE=.",
+    );
+    expect(reproducibleStep).toContain(
+      "--remap-path-prefix=$env:CARGO_TARGET_DIR=.target",
+    );
+    expect(reproducibleStep).toContain("RUSTFLAGS=");
+    expect(stepPosition("Configure reproducible Rust build")).toBeLessThan(
+      stepPosition("Build application without bundling"),
+    );
+  });
+
   test("signs patched application copies during bundling and signs release outputs", () => {
     expect(workflow).not.toContain("tauri-apps/tauri-action");
-    expect(workflow).toContain("bun run tauri build --no-bundle --ci");
+    expect(workflow).toContain(
+      "bun run tauri build --no-bundle --ci -- --locked",
+    );
     expect(workflow).toContain(
       "bun run tauri bundle --verbose --bundles nsis,msi --config src-tauri/tauri.signing.conf.json --ci",
     );
@@ -235,6 +253,17 @@ describe("Windows release signing workflow", () => {
     );
     expect(sbomStep).toContain("upload-artifact: false");
     expect(sbomStep).toContain("upload-release-assets: false");
+
+    const payloadStep = stepBlock("Verify packaged application signatures");
+    for (const dependencyFile of [
+      "Cargo.lock",
+      "Cargo.toml",
+      "bun.lock",
+      "package.json",
+    ]) {
+      expect(payloadStep).toContain(`\"${dependencyFile}\"`);
+    }
+    expect(payloadStep).toContain("dependency-manifests");
 
     const steps = [
       "Resolve SBOM path",

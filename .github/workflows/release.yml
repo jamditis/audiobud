@@ -204,6 +204,32 @@ jobs:
           "CARGO_TARGET_DIR=$targetDirectory" |
             Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
+      # Keep the cheap reproducibility properties even though the final
+      # Authenticode timestamp makes signed installers intentionally differ.
+      # SOURCE_DATE_EPOCH makes rustc pass /Brepro to link.exe; path remapping
+      # keeps runner-specific absolute paths out of the Rust output.
+      - name: Configure reproducible Rust build
+        shell: pwsh
+        run: |
+          $sourceDateEpoch = git show -s --format=%ct
+          if ($LASTEXITCODE -ne 0 -or $sourceDateEpoch -notmatch "^\d+$") {
+            throw "Could not resolve the source commit timestamp"
+          }
+          "SOURCE_DATE_EPOCH=$sourceDateEpoch" |
+            Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+          $remapFlags = @(
+            "--remap-path-prefix=$env:GITHUB_WORKSPACE=.",
+            "--remap-path-prefix=$env:CARGO_TARGET_DIR=.target"
+          )
+          if ($env:CARGO_HOME) {
+            $remapFlags += "--remap-path-prefix=$env:CARGO_HOME=.cargo"
+          }
+          "RUSTFLAGS=$($remapFlags -join ' ')" |
+            Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          Write-Output "SOURCE_DATE_EPOCH=$sourceDateEpoch"
+          Write-Output "Rust path prefixes remapped"
+
       # Disable native CPU targeting and SIMD above SSE4.2 so the x86_64 build
       # runs on CPUs without AVX or FMA. Vulkan handles the main compute load.
       - name: Build application without bundling
@@ -214,7 +240,7 @@ jobs:
           GGML_AVX2: "OFF"
           GGML_FMA: "OFF"
           GGML_F16C: "OFF"
-        run: bun run tauri build --no-bundle --ci
+        run: bun run tauri build --no-bundle --ci -- --locked
 
       - name: Resolve signing paths
         id: signing-paths
@@ -637,6 +663,19 @@ jobs:
           New-Item -ItemType Directory -Path $sbomPayloadDirectory | Out-Null
           Copy-Item -LiteralPath $msiDirectory -Destination (Join-Path $sbomPayloadDirectory "msi") -Recurse
           Copy-Item -LiteralPath $nsisDirectory -Destination (Join-Path $sbomPayloadDirectory "nsis") -Recurse
+          # Syft scans the packaged runtime plus the source lockfiles. Without
+          # these manifests the SBOM lists PE payloads but omits both Rust and
+          # JavaScript dependency trees.
+          $dependencyManifestDirectory = Join-Path $sbomPayloadDirectory "dependency-manifests"
+          New-Item -ItemType Directory -Path $dependencyManifestDirectory | Out-Null
+          foreach ($dependencyFile in @("Cargo.lock", "Cargo.toml")) {
+            Copy-Item -LiteralPath (Join-Path "src-tauri" $dependencyFile) `
+              -Destination (Join-Path $dependencyManifestDirectory $dependencyFile)
+          }
+          foreach ($dependencyFile in @("bun.lock", "package.json")) {
+            Copy-Item -LiteralPath $dependencyFile `
+              -Destination (Join-Path $dependencyManifestDirectory $dependencyFile)
+          }
           if ($env:STORE_CANDIDATE -eq "true") {
             if (-not (Test-Path -LiteralPath $env:WEBVIEW2_PAYLOAD_PATH -PathType Container)) {
               throw "Verified WebView2 payload path not found: $env:WEBVIEW2_PAYLOAD_PATH"

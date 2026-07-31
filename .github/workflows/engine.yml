@@ -95,3 +95,17 @@ jobs:
           GGML_FMA: "OFF"
           GGML_F16C: "OFF"
         run: cargo test
+
+      # Keep the warning budget at zero against the same real engine and
+      # Windows-only code that ships. Running after cargo test reuses the
+      # native build products instead of paying for a second cold compile.
+      - name: Run Clippy against the real engine
+        working-directory: src-tauri
+        shell: pwsh
+        env:
+          GGML_NATIVE: "OFF"
+          GGML_AVX: "OFF"
+          GGML_AVX2: "OFF"
+          GGML_FMA: "OFF"
+          GGML_F16C: "OFF"
+        run: cargo clippy --lib --tests -- -D warnings
