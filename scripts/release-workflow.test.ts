@@ -98,10 +98,19 @@ describe("Windows release signing workflow", () => {
     expect(workflow).toContain(
       "bun run tauri build --no-bundle --ci -- --locked",
     );
-    expect(workflow).toContain(
-      "bun run tauri bundle --verbose --bundles nsis,msi `\n              --config src-tauri/tauri.signing.conf.json `\n              --config src-tauri/tauri.updater.conf.json --ci",
+    const githubBundle = stepBlock("Bundle GitHub installers");
+    expect(githubBundle).toContain(
+      "bun run tauri bundle --verbose --bundles nsis,msi `",
     );
-    expect(stepBlock("Bundle installers")).toContain("bun run bundle:store");
+    expect(githubBundle).toContain(
+      "--config src-tauri/tauri.signing.conf.json `",
+    );
+    expect(githubBundle).toContain(
+      "--config src-tauri/tauri.updater.conf.json --ci",
+    );
+    expect(stepBlock("Bundle Store installers")).toContain(
+      "bun run bundle:store",
+    );
 
     const signingUses = workflow.match(
       /uses: azure\/artifact-signing-action@c7ab2a863ab5f9a846ddb8265964877ef296ee82 # v2/g,
@@ -117,7 +126,8 @@ describe("Windows release signing workflow", () => {
       "Authenticate to Azure",
       "Install Artifact Signing module",
       "Clear Store WebView2 installer cache",
-      "Bundle installers",
+      "Bundle Store installers",
+      "Bundle GitHub installers",
       "Resolve installer paths",
       "Verify Store WebView2 offline installers",
       "Sign release outputs",
@@ -427,10 +437,14 @@ describe("Windows release signing workflow", () => {
     // The normal GitHub release continues to ship the current signed NSIS/MSI
     // artifacts. Store candidates opt into the offline WebView2 config when
     // we build a package for Partner Center.
-    const bundleStep = stepBlock("Bundle installers");
-    expect(bundleStep).toContain("bun run bundle:store");
-    expect(bundleStep).toContain(
-      "bun run tauri bundle --verbose --bundles nsis,msi `\n              --config src-tauri/tauri.signing.conf.json `\n              --config src-tauri/tauri.updater.conf.json --ci",
+    const storeBundleStep = stepBlock("Bundle Store installers");
+    expect(storeBundleStep).toContain("bun run bundle:store");
+    const githubBundleStep = stepBlock("Bundle GitHub installers");
+    expect(githubBundleStep).toContain(
+      "--config src-tauri/tauri.signing.conf.json `",
+    );
+    expect(githubBundleStep).toContain(
+      "--config src-tauri/tauri.updater.conf.json --ci",
     );
   });
 
@@ -599,8 +613,8 @@ describe("Windows release signing workflow", () => {
   });
 
   test("keeps custom signer failures visible in the bundle log", () => {
-    expect(workflow).toContain(
-      "bun run tauri bundle --verbose --bundles nsis,msi `\n              --config src-tauri/tauri.signing.conf.json `\n              --config src-tauri/tauri.updater.conf.json --ci",
+    expect(stepBlock("Bundle GitHub installers")).toContain(
+      "bun run tauri bundle --verbose --bundles nsis,msi `",
     );
   });
 

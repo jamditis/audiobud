@@ -54,8 +54,6 @@ jobs:
       SILERO_VAD_SHA256: a35ebf52fd3ce5f1469b2a36158dba761bc47b973ea3382b3186ca15b1f5af28
       SILERO_VAD_BYTES: 1807522
       STORE_CANDIDATE: ${{ github.event_name == 'workflow_dispatch' && inputs.store_candidate }}
-      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
       VULKAN_RUNTIME_ARCHIVE_SHA256: 7d969f4d7b44e387667d3148f61559497c22d50cbe3d50adc9e5409afbce2df1
       VULKAN_RUNTIME_ARCHIVE_BYTES: 15738272
       WEBVIEW2_FIXED_VERSION: 150.0.4078.105
@@ -354,16 +352,24 @@ jobs:
             Where-Object { $_.Name -match "WebView2|MicrosoftEdge" } |
             Remove-Item -Force
 
-      - name: Bundle installers
+      - name: Bundle Store installers
+        if: ${{ env.STORE_CANDIDATE == 'true' }}
         shell: pwsh
+        run: bun run bundle:store
+
+      # These long-lived credentials can authorize any update accepted by an
+      # installed client. Keep them away from dependency installation, build
+      # scripts, third-party actions, and every non-updater packaging step.
+      - name: Bundle GitHub installers
+        if: ${{ env.STORE_CANDIDATE != 'true' }}
+        shell: pwsh
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
-          if ($env:STORE_CANDIDATE -eq "true") {
-            bun run bundle:store
-          } else {
-            bun run tauri bundle --verbose --bundles nsis,msi `
-              --config src-tauri/tauri.signing.conf.json `
-              --config src-tauri/tauri.updater.conf.json --ci
-          }
+          bun run tauri bundle --verbose --bundles nsis,msi `
+            --config src-tauri/tauri.signing.conf.json `
+            --config src-tauri/tauri.updater.conf.json --ci
 
       - name: Resolve installer paths
         shell: pwsh
@@ -486,10 +492,16 @@ jobs:
         run: |
           $directory = Join-Path $env:PORTABLE_TARGET_DIR "release\bundle\nsis"
           $source = Join-Path $directory "AudioBud_$($env:APP_VERSION)_x64-setup.exe"
-          $path = Join-Path $directory "AudioBud_$($env:APP_VERSION)_x64-portable-webview-setup.exe"
+          $artifactDirectory = Join-Path $env:CARGO_TARGET_DIR "release"
+          $path = Join-Path $artifactDirectory `
+            "AudioBud_$($env:APP_VERSION)_x64-portable-webview-setup.exe"
           if (-not (Test-Path -LiteralPath $source -PathType Leaf)) {
             throw "Fixed-runtime portable installer not found: $source"
           }
+          if (Test-Path -LiteralPath $path) {
+            throw "Portable release artifact already exists: $path"
+          }
+          New-Item -ItemType Directory -Force -Path $artifactDirectory | Out-Null
           Move-Item -LiteralPath $source -Destination $path
           "path=$path" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
 

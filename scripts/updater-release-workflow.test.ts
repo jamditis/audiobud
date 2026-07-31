@@ -22,14 +22,18 @@ describe("signed updater release artifacts", () => {
     expect(config.bundle.createUpdaterArtifacts).toBe(false);
     expect(updaterConfig.bundle.createUpdaterArtifacts).toBe(true);
     expect(storeConfig.bundle.createUpdaterArtifacts).toBe(false);
-    expect(stepBlock("Bundle installers")).toContain(
-      "--config src-tauri/tauri.updater.conf.json",
-    );
-    expect(workflow).toContain(
+    const bundle = stepBlock("Bundle GitHub installers");
+    expect(bundle).toContain("--config src-tauri/tauri.updater.conf.json");
+    expect(bundle).toContain(
       "TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}",
     );
-    expect(workflow).toContain(
+    expect(bundle).toContain(
       "TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}",
+    );
+    const jobEnvironment = workflow.slice(0, workflow.indexOf("    steps:"));
+    expect(jobEnvironment).not.toContain("TAURI_SIGNING_PRIVATE_KEY");
+    expect(stepBlock("Bundle Store installers")).not.toContain(
+      "TAURI_SIGNING_PRIVATE_KEY",
     );
   });
 

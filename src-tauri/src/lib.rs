@@ -63,7 +63,18 @@ pub static FILE_LOG_LEVEL: AtomicU8 = AtomicU8::new(log::LevelFilter::Debug as u
 // src/lib/updater.ts; the test below enforces the backend/config half.
 const UPDATER_FEED_READY: bool = true;
 
+fn ensure_cli_update_supported(is_portable: bool) -> Result<(), String> {
+    if is_portable {
+        return Err(
+            "Automatic updates are unavailable in portable mode; download the latest portable installer from the AudioBud releases page"
+                .to_string(),
+        );
+    }
+    Ok(())
+}
+
 async fn install_available_update(app: AppHandle) -> Result<bool, String> {
+    ensure_cli_update_supported(crate::portable::is_portable())?;
     let updater = app
         .updater()
         .map_err(|error| format!("Failed to initialize signed updater: {error}"))?;
@@ -814,7 +825,7 @@ pub fn run(cli_args: CliArgs) {
 
 #[cfg(test)]
 mod updater_gate_tests {
-    use super::UPDATER_FEED_READY;
+    use super::{ensure_cli_update_supported, UPDATER_FEED_READY};
 
     #[cfg(not(windows))]
     use super::{export_typescript_bindings, specta_builder};
@@ -884,5 +895,13 @@ mod updater_gate_tests {
             "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEE2QzRFMzNEODRCM0E1NUYKUldSZnBiT0VQZVBFcHYzY0NZd0RrSzVZdkk4MjYwdG5xMW15UTRoY0gyQmFSaExCN3k3R1p0TlIK",
             "updater must pin AudioBud's public signing key"
         );
+    }
+
+    #[test]
+    fn cli_updater_rejects_portable_mode() {
+        assert!(ensure_cli_update_supported(false).is_ok());
+        let error = ensure_cli_update_supported(true).expect_err("portable update must be blocked");
+        assert!(error.contains("portable mode"));
+        assert!(error.contains("releases page"));
     }
 }

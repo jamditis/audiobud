@@ -67,6 +67,13 @@ describe("self-contained portable WebView2 artifact", () => {
     expect(workflow).toContain(
       "AudioBud_$($env:APP_VERSION)_x64-portable-webview-setup.exe",
     );
+    const resolvedPath = stepBlock("Resolve fixed-runtime portable path");
+    expect(resolvedPath).toContain(
+      '$artifactDirectory = Join-Path $env:CARGO_TARGET_DIR "release"',
+    );
+    expect(resolvedPath).toContain(
+      "Move-Item -LiteralPath $source -Destination $path",
+    );
     expect(stepPosition("Resolve updater artifact paths")).toBeLessThan(
       stepPosition("Build fixed-runtime portable application"),
     );
@@ -105,5 +112,8 @@ describe("self-contained portable WebView2 artifact", () => {
         "steps.portable-webview-path.outputs.path",
       );
     }
+    expect(stepBlock("Upload release artifacts as CI artifact")).not.toContain(
+      "PORTABLE_TARGET_DIR",
+    );
   });
 });

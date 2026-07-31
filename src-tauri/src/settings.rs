@@ -1159,9 +1159,6 @@ mod tests {
     #[test]
     fn default_settings_enable_update_checks_only_on_windows() {
         let settings = get_default_settings();
-        assert_eq!(
-            settings.update_checks_enabled,
-            cfg!(target_os = "windows")
-        );
+        assert_eq!(settings.update_checks_enabled, cfg!(target_os = "windows"));
     }
 }

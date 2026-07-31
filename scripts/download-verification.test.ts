@@ -160,7 +160,7 @@ describe("download verification guidance", () => {
     // The href in the markup stays on the releases page: it can never 404 and
     // it names no version, so a release does not drag a site edit behind it.
     expect(compactHome).toMatch(
-      /<a class="button primary" data-download="\.exe" href="https:\/\/github\.com\/jamditis\/audiobud\/releases\/latest"/,
+      /<a class="button primary" data-download="_x64-setup\.exe" href="https:\/\/github\.com\/jamditis\/audiobud\/releases\/latest"/,
     );
 
     // Direct-downloading the .exe hides the MSI and the notes, so the card has
@@ -172,6 +172,7 @@ describe("download verification guidance", () => {
     const script = compact(read("docs/site.js"));
 
     expect(script).toContain("link.href = asset.browser_download_url");
+    expect(script).toContain('asset.name.endsWith("_x64-setup.exe")');
     // One request feeds both the checksums and the button, so the file the
     // button serves is the file the page publishes a digest for.
     expect(script.match(/fetch\(/g)).toHaveLength(1);
