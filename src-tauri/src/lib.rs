@@ -28,7 +28,7 @@ mod tray_i18n;
 mod utils;
 
 pub use cli::CliArgs;
-#[cfg(debug_assertions)]
+#[cfg(any(debug_assertions, test))]
 use specta_typescript::{BigIntExportBehavior, Typescript};
 use tauri_specta::{collect_commands, collect_events, Builder};
 
@@ -577,6 +577,31 @@ fn specta_builder() -> Builder<tauri::Wry> {
         .events(collect_events![managers::history::HistoryUpdatePayload,])
 }
 
+#[cfg(any(debug_assertions, test))]
+fn export_typescript_bindings(builder: &Builder<tauri::Wry>, output: &std::path::Path) {
+    builder
+        .export(
+            Typescript::default().bigint(BigIntExportBehavior::Number),
+            output,
+        )
+        .expect("Failed to export TypeScript bindings");
+
+    // tauri-specta emits spaces at a few generated line endings. Normalize
+    // those mechanical artifacts so the checked-in file passes git's
+    // whitespace gate and remains deterministic across debug builds.
+    let generated = std::fs::read_to_string(output).expect("generated bindings can be read");
+    let had_trailing_newline = generated.ends_with('\n');
+    let mut normalized = generated
+        .lines()
+        .map(str::trim_end)
+        .collect::<Vec<_>>()
+        .join("\n");
+    if had_trailing_newline {
+        normalized.push('\n');
+    }
+    std::fs::write(output, normalized).expect("normalized bindings can be written");
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run(cli_args: CliArgs) {
     // Detect portable mode before anything else
@@ -589,12 +614,10 @@ pub fn run(cli_args: CliArgs) {
     let specta_builder = specta_builder();
 
     #[cfg(debug_assertions)] // <- Only export on non-release builds
-    specta_builder
-        .export(
-            Typescript::default().bigint(BigIntExportBehavior::Number),
-            "../src/bindings.ts",
-        )
-        .expect("Failed to export typescript bindings");
+    export_typescript_bindings(
+        &specta_builder,
+        std::path::Path::new("../src/bindings.ts"),
+    );
 
     let invoke_handler = specta_builder.invoke_handler();
 
@@ -794,18 +817,13 @@ pub fn run(cli_args: CliArgs) {
 
 #[cfg(test)]
 mod updater_gate_tests {
-    use super::{specta_builder, BigIntExportBehavior, Typescript, UPDATER_FEED_READY};
+    use super::{export_typescript_bindings, specta_builder, UPDATER_FEED_READY};
 
     #[test]
     fn checked_in_typescript_bindings_match_specta_export() {
         let generated_path =
             std::env::temp_dir().join(format!("audiobud-bindings-{}.ts", std::process::id()));
-        specta_builder()
-            .export(
-                Typescript::default().bigint(BigIntExportBehavior::Number),
-                &generated_path,
-            )
-            .expect("temporary TypeScript binding export succeeds");
+        export_typescript_bindings(&specta_builder(), &generated_path);
 
         let generated = std::fs::read_to_string(&generated_path)
             .expect("temporary TypeScript bindings can be read");

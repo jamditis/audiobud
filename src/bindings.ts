@@ -446,7 +446,7 @@ async changeWhisperGpuDevice(device: number) : Promise<Result<null, string>> {
 },
 /**
  * Return which accelerators and GPU devices are available for this build.
- * 
+ *
  * First-call cost is dominated by enumerating GPU devices through the
  * whisper.cpp Metal/Vulkan backend, which loads dynamic libraries and
  * probes hardware. Run it on the blocking pool so the webview thread
@@ -884,7 +884,7 @@ async updatePersonalizationEnabled(enabled: boolean) : Promise<Result<null, stri
 },
 /**
  * Mine custom-vocabulary suggestions from the user's transcript history.
- * 
+ *
  * Returns an empty list when personalization is disabled. Words already in the dictionary,
  * already learned, or previously dismissed are excluded.
  */
@@ -931,8 +931,10 @@ async updateLearnedWords(words: string[]) : Promise<Result<null, string>> {
 }
 },
 /**
- * Clear all personalization data (the "reset personalization" control). User-authored
- * `custom_words`/`word_replacements` are untouched.
+ * Clear learned personalization data (the "reset personalization" control): learned words,
+ * learned replacements, and dismissed suggestions. The opt-in `enabled` toggle is preserved -- a
+ * deliberate opt-in shouldn't be silently revoked by clearing stale learned data -- and
+ * user-authored `custom_words`/`word_replacements` are untouched.
  */
 async resetPersonalization() : Promise<Result<null, string>> {
     try {
@@ -985,28 +987,49 @@ historyUpdatePayload: "history-update-payload"
 
 /** user-defined types **/
 
-export type AppSettings = { bindings: Partial<{ [key in string]: ShortcutBinding }>; push_to_talk: boolean; audio_feedback: boolean; audio_feedback_volume?: number; sound_theme?: SoundTheme; start_hidden?: boolean; autostart_enabled?: boolean; update_checks_enabled?: boolean; selected_model?: string; always_on_microphone?: boolean; selected_microphone?: string | null; clamshell_microphone?: string | null; selected_output_device?: string | null; translate_to_english?: boolean; selected_language?: string; overlay_position?: OverlayPosition; 
+export type AppSettings = { bindings: Partial<{ [key in string]: ShortcutBinding }>; push_to_talk: boolean; audio_feedback: boolean; audio_feedback_volume?: number; sound_theme?: SoundTheme; start_hidden?: boolean; autostart_enabled?: boolean; update_checks_enabled?: boolean; selected_model?: string; always_on_microphone?: boolean; selected_microphone?: string | null; clamshell_microphone?: string | null; selected_output_device?: string | null; translate_to_english?: boolean; selected_language?: string; overlay_position?: OverlayPosition;
 /**
  * User-chosen precise overlay placement (anchor + drag nudge). When set it
  * overrides the centered Top/Bottom placement; `None` = default placement.
  */
-overlay_custom_position?: OverlayCustomPosition | null; 
+overlay_custom_position?: OverlayCustomPosition | null;
 /**
  * Last visible overlay placement, remembered when the tray show/hide
  * toggle hides the overlay (sets `overlay_position` to None) so re-showing
  * restores the user's Top/Bottom choice instead of forcing the default.
  */
-overlay_restore_position?: OverlayPosition | null; debug_mode?: boolean; log_level?: LogLevel; custom_words?: string[]; 
+overlay_restore_position?: OverlayPosition | null; debug_mode?: boolean; log_level?: LogLevel; custom_words?: string[];
 /**
  * Deterministic literal heard->meant replacements, applied after fuzzy custom-word
  * correction and before filler removal, for every engine. See [`WordReplacement`].
  */
-word_replacements?: WordReplacement[]; model_unload_timeout?: ModelUnloadTimeout; word_correction_threshold?: number; history_limit?: number; recording_retention_period?: RecordingRetentionPeriod; paste_method?: PasteMethod; clipboard_handling?: ClipboardHandling; auto_submit?: boolean; auto_submit_key?: AutoSubmitKey; post_process_enabled?: boolean; post_process_provider_id?: string; post_process_providers?: PostProcessProvider[]; post_process_api_keys?: SecretMap; post_process_models?: Partial<{ [key in string]: string }>; post_process_prompts?: LLMPrompt[]; post_process_selected_prompt_id?: string | null; mute_while_recording?: boolean; append_trailing_space?: boolean; 
+word_replacements?: WordReplacement[]; model_unload_timeout?: ModelUnloadTimeout; word_correction_threshold?: number; history_limit?: number; recording_retention_period?: RecordingRetentionPeriod; paste_method?: PasteMethod; clipboard_handling?: ClipboardHandling; auto_submit?: boolean; auto_submit_key?: AutoSubmitKey; post_process_enabled?: boolean; post_process_provider_id?: string; post_process_providers?: PostProcessProvider[]; post_process_api_keys?: SecretMap; post_process_models?: Partial<{ [key in string]: string }>; post_process_prompts?: LLMPrompt[]; post_process_selected_prompt_id?: string | null; mute_while_recording?: boolean; append_trailing_space?: boolean;
 /**
  * When true, transcriptions are emitted as raw lowercased, unpunctuated text (issue #19).
  * A per-dictation shortcut / CLI flag can override this at runtime without persisting.
  */
-raw_output?: boolean; format_numbers?: boolean; format_raw_output?: boolean; app_language?: string; experimental_enabled?: boolean; lazy_stream_close?: boolean; keyboard_implementation?: KeyboardImplementation; show_tray_icon?: boolean; paste_delay_ms?: number; typing_tool?: TypingTool; external_script_path: string | null; custom_filler_words?: string[] | null; whisper_accelerator?: WhisperAcceleratorSetting; ort_accelerator?: OrtAcceleratorSetting; whisper_gpu_device?: number; extra_recording_buffer_ms?: number; 
+raw_output?: boolean;
+/**
+ * When true (default), a transcript has its spelled-out numbers rewritten as digits and
+ * symbols — "twenty five dollars" -> "$25", "ten percent" -> "10%", "three point five" ->
+ * "3.5". Applied on the normal dictation path, and on raw output when `format_raw_output`
+ * is also on. The LLM post-processing path does its own formatting and is left untouched.
+ * See [`crate::audio_toolkit::format_numbers`].
+ */
+format_numbers?: boolean;
+/**
+ * When true, raw output interprets spoken punctuation ("question mark" -> "?") and applies
+ * `format_numbers` if that is also on, so raw mode is usable for dictation with no model in
+ * the loop (issue #66).
+ *
+ * Defaults to false because turning it on rewrites text that raw mode historically passed
+ * through verbatim. The advanced settings toggle lets each user opt in without changing
+ * existing raw-mode installs on upgrade.
+ *
+ * Turning it off is also how you type the command words themselves, since there is no
+ * escape word. See [`crate::audio_toolkit::apply_spoken_punctuation`].
+ */
+format_raw_output?: boolean; app_language?: string; experimental_enabled?: boolean; lazy_stream_close?: boolean; keyboard_implementation?: KeyboardImplementation; show_tray_icon?: boolean; paste_delay_ms?: number; typing_tool?: TypingTool; external_script_path: string | null; custom_filler_words?: string[] | null; whisper_accelerator?: WhisperAcceleratorSetting; ort_accelerator?: OrtAcceleratorSetting; whisper_gpu_device?: number; extra_recording_buffer_ms?: number;
 /**
  * Opt-in, on-device personalization (issue #16, Tier 1). Off by default. See
  * [`PersonalizationData`].
@@ -1020,7 +1043,7 @@ export type ClipboardHandling = "dont_modify" | "copy_to_clipboard"
 export type CustomSounds = { start: boolean; stop: boolean }
 export type EngineType = "Whisper" | "Parakeet" | "Moonshine" | "MoonshineStreaming" | "SenseVoice" | "GigaAM" | "Canary" | "Cohere"
 export type GpuDeviceOption = { id: number; name: string; total_vram_mb: number }
-export type HistoryEntry = { id: number; file_name: string; timestamp: number; saved: boolean; title: string; transcription_text: string; post_processed_text: string | null; post_process_prompt: string | null; post_process_requested: boolean; 
+export type HistoryEntry = { id: number; file_name: string; timestamp: number; saved: boolean; title: string; transcription_text: string; post_processed_text: string | null; post_process_prompt: string | null; post_process_requested: boolean;
 /**
  * Whether this dictation was emitted as raw text (the effective raw decision at creation
  * time, after combining the per-dictation request with the persisted `raw_output` toggle).
@@ -1032,7 +1055,7 @@ export type HistoryUpdatePayload = { action: "added"; entry: HistoryEntry } | { 
 /**
  * Result of changing keyboard implementation
  */
-export type ImplementationChangeResult = { success: boolean; 
+export type ImplementationChangeResult = { success: boolean;
 /**
  * List of binding IDs that were reset to defaults due to incompatibility
  */
@@ -1064,28 +1087,28 @@ export type PasteMethod = "ctrl_v" | "direct" | "none" | "shift_insert" | "ctrl_
 export type PermissionAccess = "allowed" | "denied" | "unknown"
 /**
  * Opt-in, on-device personalization data (issue #16, Tier 1).
- * 
+ *
  * Kept in a separate store from the user-authored `custom_words`/`word_replacements` so it can be
  * inspected, exported, and reset on its own without ever touching hand-authored entries. All
  * processing is local; nothing leaves the device. When `enabled` is false (the default) none of
  * this data affects transcription and no history mining is surfaced.
  */
-export type PersonalizationData = { 
+export type PersonalizationData = {
 /**
  * Opt-in master switch. Off by default.
  */
-enabled?: boolean; 
+enabled?: boolean;
 /**
  * Words the user accepted from history-mined suggestions. Applied like `custom_words` (fuzzy)
  * when `enabled`.
  */
-learned_words?: string[]; 
+learned_words?: string[];
 /**
  * Learned heard->meant corrections captured from in-app transcript edits (issue #16 PR2).
  * Defined now for a forward-compatible data model; empty until the capture surface ships.
  * Applied like `word_replacements` (deterministic) when `enabled`.
  */
-learned_replacements?: WordReplacement[]; 
+learned_replacements?: WordReplacement[];
 /**
  * Mined suggestions the user dismissed, so they are never surfaced again.
  */
@@ -1100,25 +1123,25 @@ export type WhisperAcceleratorSetting = "auto" | "cpu" | "gpu"
 export type WindowsMicrophonePermissionStatus = { supported: boolean; overall_access: PermissionAccess; device_access: PermissionAccess; app_access: PermissionAccess; desktop_app_access: PermissionAccess }
 /**
  * A deterministic literal text replacement applied after fuzzy custom-word correction.
- * 
+ *
  * Unlike the fuzzy dictionary, this maps an exact heard phrase to an exact output, which is
  * the only safe way to fix large mishears the fuzzy matcher cannot (and must not) guess at,
  * e.g. "clawed" -> "Claude" (50% edit distance, phonetically distinct). Replacements run for
  * every engine and are applied in order.
  */
-export type WordReplacement = { 
+export type WordReplacement = {
 /**
  * The text to find, as heard/transcribed. May contain spaces for multi-word phrases.
  */
-from: string; 
+from: string;
 /**
  * The replacement text. An empty string deletes the matched text.
  */
-to: string; 
+to: string;
 /**
  * Match only on whole-word boundaries (default true). When false, matches substrings too.
  */
-whole_word?: boolean; 
+whole_word?: boolean;
 /**
  * Match case-sensitively (default false). When false, matching ignores case and the
  * replacement adapts to the matched text's case pattern.
@@ -1132,11 +1155,11 @@ preserve_replacement_case?: boolean }
 /**
  * A mined vocabulary suggestion: a word the user frequently dictates, with its occurrence count.
  */
-export type WordSuggestion = { 
+export type WordSuggestion = {
 /**
  * The suggested surface form (the most frequent capitalized spelling seen in history).
  */
-word: string; 
+word: string;
 /**
  * How many times the word appears across the mined transcripts.
  */
