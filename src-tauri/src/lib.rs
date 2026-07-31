@@ -614,10 +614,7 @@ pub fn run(cli_args: CliArgs) {
     let specta_builder = specta_builder();
 
     #[cfg(debug_assertions)] // <- Only export on non-release builds
-    export_typescript_bindings(
-        &specta_builder,
-        std::path::Path::new("../src/bindings.ts"),
-    );
+    export_typescript_bindings(&specta_builder, std::path::Path::new("../src/bindings.ts"));
 
     let invoke_handler = specta_builder.invoke_handler();
 
@@ -817,8 +814,16 @@ pub fn run(cli_args: CliArgs) {
 
 #[cfg(test)]
 mod updater_gate_tests {
-    use super::{export_typescript_bindings, specta_builder, UPDATER_FEED_READY};
+    use super::UPDATER_FEED_READY;
 
+    #[cfg(not(windows))]
+    use super::{export_typescript_bindings, specta_builder};
+
+    // Keeping this generator test out of the Windows test harness avoids
+    // retaining Wry's WebView2 loader in the unit-test executable. The runner
+    // then fails at process startup before any Rust test can run. Linux still
+    // verifies the same deterministic tauri-specta output on every CI run.
+    #[cfg(not(windows))]
     #[test]
     fn checked_in_typescript_bindings_match_specta_export() {
         let generated_path =
