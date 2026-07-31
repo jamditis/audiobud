@@ -31,6 +31,11 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
+env:
+  MODEL_ASSET_BASE_URL: https://github.com/jamditis/audiobud/releases/download/model-assets-v1
+  SILERO_VAD_BYTES: 1807522
+  SILERO_VAD_SHA256: a35ebf52fd3ce5f1469b2a36158dba761bc47b973ea3382b3186ca15b1f5af28
+
 jobs:
   real-engine:
     name: Rust tests (real transcription engine, Windows)
@@ -63,7 +68,10 @@ jobs:
           # silero_vad_loads_from_unicode_directory fails when the model is
           # absent rather than skipping, so keep this ahead of cargo test.
           mkdir -p resources/models
-          curl --fail --retry 3 -o resources/models/silero_vad_v4.onnx https://blob.handy.computer/silero_vad_v4.onnx
+          model="resources/models/silero_vad_v4.onnx"
+          curl --fail --location --retry 3 -o "$model" "$MODEL_ASSET_BASE_URL/silero_vad_v4.onnx"
+          test "$(wc -c < "$model")" -eq "$SILERO_VAD_BYTES"
+          echo "$SILERO_VAD_SHA256  $model" | sha256sum -c -
 
       # whisper-rs-sys drives cmake, which builds paths deep enough to cross
       # MAX_PATH under the default target directory. release.yml solves this the

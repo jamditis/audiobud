@@ -365,8 +365,12 @@ describe("Windows release signing workflow", () => {
     );
     expect(workflow).toContain("VULKAN_RUNTIME_ARCHIVE_BYTES: 15738272");
     expect(workflow).toContain(
-      "cjpais/Handy/17d6c763413e3e29ec5cee76aa19ad01eccb73b2/src-tauri/resources/models/silero_vad_v4.onnx",
+      "MODEL_ASSET_BASE_URL: https://github.com/jamditis/audiobud/releases/download/model-assets-v1",
     );
+    expect(workflow).toContain(
+      '"$env:MODEL_ASSET_BASE_URL/silero_vad_v4.onnx"',
+    );
+    expect(workflow).not.toContain("cjpais/Handy");
     expect(workflow).toContain("Get-FileHash -LiteralPath");
     expect(workflow).toContain("Downloaded Silero VAD model hash mismatch");
     expect(workflow).toContain(

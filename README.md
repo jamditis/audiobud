@@ -161,9 +161,9 @@ Use the in-app downloader when possible. If a proxy or firewall blocks it, insta
    - Linux: `~/.config/tech.amditis.audiobud/`
 2. Create a `models` folder inside that directory if needed.
 3. Download the model you want:
-   - Whisper small: `https://blob.handy.computer/ggml-small.bin`
-   - Whisper turbo: `https://blob.handy.computer/ggml-large-v3-turbo.bin`
-   - Parakeet V3: `https://blob.handy.computer/parakeet-v3-int8.tar.gz`
+   - Whisper small: `https://github.com/jamditis/audiobud/releases/download/model-assets-v1/ggml-small.bin`
+   - Whisper turbo: `https://github.com/jamditis/audiobud/releases/download/model-assets-v1/ggml-large-v3-turbo.bin`
+   - Parakeet V3: `https://github.com/jamditis/audiobud/releases/download/model-assets-v1/parakeet-v3-int8.tar.gz`
 4. Place Whisper `.bin` files directly in `models/`.
 5. Extract Parakeet archives into `models/`; the extracted folder for Parakeet V3 must be named `parakeet-tdt-0.6b-v3-int8`.
 6. Restart AudioBud. Installed models appear under **Settings -> Models**.

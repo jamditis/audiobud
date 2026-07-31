@@ -345,7 +345,7 @@ function model(overrides) {
     name: "",
     description: "",
     filename: "",
-    url: "https://blob.handy.computer/model.tar.gz",
+    url: "https://models.audiobud.invalid/model.tar.gz",
     sha256: "0".repeat(64),
     size_mb: 0,
     is_downloaded: false,

@@ -44,7 +44,7 @@ bun run format:backend    # cargo fmt only
 
 ```bash
 mkdir -p src-tauri/resources/models
-curl -o src-tauri/resources/models/silero_vad_v4.onnx https://blob.handy.computer/silero_vad_v4.onnx
+curl -L -o src-tauri/resources/models/silero_vad_v4.onnx https://github.com/jamditis/audiobud/releases/download/model-assets-v1/silero_vad_v4.onnx
 ```
 
 For detailed platform-specific build setup, see [BUILD.md](BUILD.md).

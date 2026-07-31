@@ -52,7 +52,7 @@ Before you begin, ensure you have the following installed:
 
    ```bash
    mkdir -p src-tauri/resources/models
-   curl -o src-tauri/resources/models/silero_vad_v4.onnx https://blob.handy.computer/silero_vad_v4.onnx
+   curl -L -o src-tauri/resources/models/silero_vad_v4.onnx https://github.com/jamditis/audiobud/releases/download/model-assets-v1/silero_vad_v4.onnx
    ```
 
 6. **Run in development mode**:
