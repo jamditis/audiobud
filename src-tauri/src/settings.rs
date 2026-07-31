@@ -554,7 +554,10 @@ fn default_autostart_enabled() -> bool {
 }
 
 fn default_update_checks_enabled() -> bool {
-    true
+    // v0.4.2 publishes a signed Windows updater entry. Keep inherited macOS
+    // and Linux builds quiet until their packages and feed entries are
+    // validated and published too.
+    cfg!(target_os = "windows")
 }
 
 fn default_selected_language() -> String {
@@ -1154,8 +1157,11 @@ mod tests {
     }
 
     #[test]
-    fn default_settings_enable_audiobud_update_checks() {
+    fn default_settings_enable_update_checks_only_on_windows() {
         let settings = get_default_settings();
-        assert!(settings.update_checks_enabled);
+        assert_eq!(
+            settings.update_checks_enabled,
+            cfg!(target_os = "windows")
+        );
     }
 }
