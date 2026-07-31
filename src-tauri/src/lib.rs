@@ -810,8 +810,8 @@ mod updater_gate_tests {
         let generated = std::fs::read_to_string(&generated_path)
             .expect("temporary TypeScript bindings can be read");
         std::fs::remove_file(&generated_path).expect("temporary bindings can be removed");
-        let checked_in_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../src/bindings.ts");
+        let checked_in_path =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../src/bindings.ts");
         let checked_in =
             std::fs::read_to_string(checked_in_path).expect("checked-in bindings can be read");
 
