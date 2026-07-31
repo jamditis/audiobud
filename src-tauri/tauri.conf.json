@@ -24,6 +24,14 @@
       }
     }
   },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEE2QzRFMzNEODRCM0E1NUYKUldSZnBiT0VQZVBFcHYzY0NZd0RrSzVZdkk4MjYwdG5xMW15UTRoY0gyQmFSaExCN3k3R1p0TlIK",
+      "endpoints": [
+        "https://github.com/jamditis/audiobud/releases/latest/download/latest.json"
+      ]
+    }
+  },
   "bundle": {
     "active": true,
     "createUpdaterArtifacts": true,

@@ -26,10 +26,8 @@ const UpdateChecker: React.FC<UpdateCheckerProps> = ({ className = "" }) => {
 
   const { settings, isLoading } = useSettings();
   const settingsLoaded = !isLoading && settings !== null;
-  // Milestone A: gate on the updater feed, not just the setting. The toggle
-  // updates the setting optimistically, which would otherwise let check() run
-  // against the upstream Handy feed before the backend load gate applies. See
-  // src/lib/updater.ts.
+  // Keep checks behind the compile-time feed gate as well as the user setting.
+  // This prevents a partial config change from querying an unintended feed.
   const updateChecksEnabled = updateChecksActive(
     settings?.update_checks_enabled,
   );

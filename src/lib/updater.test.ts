@@ -16,8 +16,8 @@ describe("release links", () => {
   // Attribution to cjpais belongs on the About page and in the locale files --
   // the MIT license requires it. What must never appear is a cjpais URL the
   // app *navigates to*, because the only such link was an installer download.
-  // The dialog it lived in is dark until UPDATER_FEED_READY flips, so nothing
-  // catches this at runtime today; it has to be caught here.
+  // Keep this as a source-level guard so future release-link changes cannot
+  // silently route an installed AudioBud build back to the upstream fork.
   it("routes no updater code path to the upstream repository", () => {
     const sources = [
       "src/lib/updater.ts",
@@ -40,15 +40,26 @@ describe("release links", () => {
 });
 
 describe("updateChecksActive", () => {
-  // Milestone A: the updater endpoint still points at upstream Handy (see
-  // superpowers/DEFERRED-issues.md "Provenance"). Update checks must never
-  // run until the feed is repointed in milestone B, even if a stored or
-  // optimistic setting says they are enabled. This guards the optimistic-toggle
-  // path that bypasses the backend load gate.
-  it("never reports active while the feed is upstream", () => {
-    expect(UPDATER_FEED_READY).toBe(false);
-    expect(updateChecksActive(true)).toBe(false);
+  it("honors the user setting once the AudioBud feed is ready", () => {
+    expect(UPDATER_FEED_READY).toBe(true);
+    expect(updateChecksActive(true)).toBe(true);
     expect(updateChecksActive(false)).toBe(false);
     expect(updateChecksActive(undefined)).toBe(false);
+  });
+
+  it("pins AudioBud's public key and published-release endpoint", () => {
+    const config = JSON.parse(
+      readFileSync("src-tauri/tauri.conf.json", "utf8"),
+    );
+    const updater = config.plugins.updater;
+    expect(updater.endpoints).toEqual([
+      "https://github.com/jamditis/audiobud/releases/latest/download/latest.json",
+    ]);
+    const decodedPublicKey = Buffer.from(updater.pubkey, "base64").toString(
+      "utf8",
+    );
+    expect(decodedPublicKey).toContain("minisign public key");
+    expect(decodedPublicKey).toContain("A6C4E33D84B3A55F");
+    expect(decodedPublicKey).not.toContain("PRIVATE KEY");
   });
 });

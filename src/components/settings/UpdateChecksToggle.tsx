@@ -15,10 +15,6 @@ export const UpdateChecksToggle: React.FC<UpdateChecksToggleProps> = ({
 }) => {
   const { t } = useTranslation();
   const { getSetting, updateSetting, isUpdating } = useSettings();
-  // Milestone A: the updater still points at upstream Handy (see
-  // src/lib/updater.ts), so the toggle is disabled and shown off. Enabling it
-  // would have no effect anyway - UpdateChecker gates on UPDATER_FEED_READY -
-  // but a disabled control avoids offering a setting that cannot take effect.
   const updateChecksEnabled =
     UPDATER_FEED_READY && (getSetting("update_checks_enabled") ?? true);
 

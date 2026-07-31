@@ -57,15 +57,10 @@ use crate::settings::get_settings;
 // We use u8 to store the log::LevelFilter as a number
 pub static FILE_LOG_LEVEL: AtomicU8 = AtomicU8::new(log::LevelFilter::Debug as u8);
 
-// Whether AudioBud has its own signed release feed wired up. While this is
-// false the updater plugin must NOT be registered, because tauri_plugin_updater
-// deserializes the `plugins.updater` block from tauri.conf.json when it builds,
-// and that block was removed (it pointed at upstream Handy's feed) -- registering
-// the plugin without it panics before the window opens (issue #32). This mirrors
-// the frontend gate in src/lib/updater.ts; flip both to true and restore the
-// config block together once the feed is AudioBud's own. The `updater_feed_gate`
-// test below ties this flag to the actual config so the two cannot drift.
-const UPDATER_FEED_READY: bool = false;
+// The updater plugin deserializes `plugins.updater` from tauri.conf.json at app
+// startup. Keep this in lockstep with that block and the frontend gate in
+// src/lib/updater.ts; the test below enforces the backend/config half.
+const UPDATER_FEED_READY: bool = true;
 
 fn level_filter_from_u8(value: u8) -> log::LevelFilter {
     match value {
@@ -744,15 +739,34 @@ mod updater_gate_tests {
     fn updater_feed_gate_matches_config() {
         let config: serde_json::Value = serde_json::from_str(include_str!("../tauri.conf.json"))
             .expect("tauri.conf.json is valid JSON");
-        let has_updater_config = config
+        let updater_config = config
             .get("plugins")
             .and_then(|plugins| plugins.get("updater"))
-            .is_some();
+            .cloned();
+        let has_updater_config = updater_config.is_some();
         assert_eq!(
             UPDATER_FEED_READY, has_updater_config,
             "UPDATER_FEED_READY ({UPDATER_FEED_READY}) must match the presence of a \
              `plugins.updater` block in tauri.conf.json ({has_updater_config}); registering \
              the updater plugin without that config panics at startup (issue #32)."
+        );
+
+        let updater_config = updater_config.expect("enabled updater has a config block");
+        assert_eq!(
+            updater_config.get("endpoints"),
+            Some(&serde_json::json!([
+                "https://github.com/jamditis/audiobud/releases/latest/download/latest.json"
+            ])),
+            "updater endpoint must resolve AudioBud's published latest.json"
+        );
+        let public_key = updater_config
+            .get("pubkey")
+            .and_then(serde_json::Value::as_str)
+            .expect("updater public key is configured");
+        assert_eq!(
+            public_key,
+            "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEE2QzRFMzNEODRCM0E1NUYKUldSZnBiT0VQZVBFcHYzY0NZd0RrSzVZdkk4MjYwdG5xMW15UTRoY0gyQmFSaExCN3k3R1p0TlIK",
+            "updater must pin AudioBud's public signing key"
         );
     }
 }
