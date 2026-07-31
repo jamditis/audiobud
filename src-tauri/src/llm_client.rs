@@ -32,6 +32,14 @@ pub struct ReasoningConfig {
     pub exclude: Option<bool>,
 }
 
+pub struct ChatCompletionOptions {
+    pub user_content: String,
+    pub system_prompt: Option<String>,
+    pub json_schema: Option<Value>,
+    pub reasoning_effort: Option<String>,
+    pub reasoning: Option<ReasoningConfig>,
+}
+
 #[derive(Debug, Serialize)]
 struct ChatCompletionRequest {
     model: String,
@@ -126,11 +134,13 @@ pub async fn send_chat_completion(
         provider,
         api_key,
         model,
-        prompt,
-        None,
-        None,
-        reasoning_effort,
-        reasoning,
+        ChatCompletionOptions {
+            user_content: prompt,
+            system_prompt: None,
+            json_schema: None,
+            reasoning_effort,
+            reasoning,
+        },
     )
     .await
 }
@@ -144,12 +154,15 @@ pub async fn send_chat_completion_with_schema(
     provider: &PostProcessProvider,
     api_key: String,
     model: &str,
-    user_content: String,
-    system_prompt: Option<String>,
-    json_schema: Option<Value>,
-    reasoning_effort: Option<String>,
-    reasoning: Option<ReasoningConfig>,
+    options: ChatCompletionOptions,
 ) -> Result<Option<String>, String> {
+    let ChatCompletionOptions {
+        user_content,
+        system_prompt,
+        json_schema,
+        reasoning_effort,
+        reasoning,
+    } = options;
     let base_url = provider.base_url.trim_end_matches('/');
     let url = format!("{}/chat/completions", base_url);
 

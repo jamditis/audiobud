@@ -131,8 +131,7 @@ pub fn mine_word_suggestions(
         for (word, sentence_initial) in tokenize_with_sentence_flags(text) {
             let lower = word.to_lowercase();
             let len = lower.chars().count();
-            if len < MIN_WORD_LEN
-                || len > MAX_WORD_LEN
+            if !(MIN_WORD_LEN..=MAX_WORD_LEN).contains(&len)
                 || is_numeric_token(&word)
                 || is_common_word(&lower)
                 || exclude_lower.contains(&lower)

@@ -166,7 +166,7 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let marker = dir.join("portable");
         let mut f = std::fs::File::create(&marker).unwrap();
-        write!(f, "  {}\n", PORTABLE_MARKER).unwrap();
+        writeln!(f, "  {}", PORTABLE_MARKER).unwrap();
         assert!(is_valid_portable_marker(&marker));
         std::fs::remove_dir_all(dir).unwrap();
     }

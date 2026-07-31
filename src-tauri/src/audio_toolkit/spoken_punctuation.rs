@@ -98,7 +98,7 @@ fn match_command(words: &[&str], i: usize) -> Option<(&'static str, Attach, usiz
             .iter()
             .enumerate()
             .all(|(k, w)| core_of(words[i + k]) == *w)
-            && best.map_or(true, |(_, _, best_n)| n > best_n)
+            && best.is_none_or(|(_, _, best_n)| n > best_n)
         {
             best = Some((symbol, *attach, n));
         }
