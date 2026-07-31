@@ -32,7 +32,9 @@ describe("offline app fonts", () => {
       const relativePath = `src/assets/fonts/${filename}`;
       expect(stylesheet).toContain(`./assets/fonts/${filename}`);
       expect(existsSync(path.join(root, relativePath))).toBe(true);
-      expect(statSync(path.join(root, relativePath)).size).toBeGreaterThan(1_000);
+      expect(statSync(path.join(root, relativePath)).size).toBeGreaterThan(
+        1_000,
+      );
     }
 
     for (const filename of ["OFL-Bungee.txt", "OFL-Fredoka.txt"]) {
