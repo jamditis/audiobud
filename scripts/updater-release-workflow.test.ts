@@ -26,6 +26,7 @@ describe("signed updater release artifacts", () => {
 
     const archive = stepBlock("Create updater archive");
     expect(archive).toContain("Compress-Archive");
+    expect(archive).toContain("-CompressionLevel NoCompression");
     expect(archive).not.toContain("TAURI_SIGNING_PRIVATE_KEY");
 
     const signer = stepBlock("Sign updater archive");

@@ -385,7 +385,7 @@ jobs:
           }
 
           Compress-Archive -LiteralPath $env:NSIS_PATH `
-            -DestinationPath $archive -CompressionLevel Optimal
+            -DestinationPath $archive -CompressionLevel NoCompression
           if (-not (Test-Path -LiteralPath $archive -PathType Leaf)) {
             throw "Updater archive was not created: $archive"
           }
