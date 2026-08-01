@@ -120,6 +120,28 @@ describe("self-contained portable WebView2 artifact", () => {
     );
   });
 
+  test("removes only superseded fixed runtimes during in-place upgrades", () => {
+    const cleanup = nsisFunctionBlock("RemoveSupersededFixedRuntimes");
+    expect(cleanup).toContain(
+      'FindFirst $0 $1 "$INSTDIR\\Microsoft.WebView2.FixedVersionRuntime.*.x64"',
+    );
+    expect(cleanup).toContain('${If} $1 != "${FIXEDWEBVIEW2DIRECTORY}"');
+    expect(cleanup).toContain('RMDir /r "$INSTDIR\\$1"');
+    expect(cleanup).toContain("FindClose $0");
+    expect(cleanup).not.toContain("Data");
+
+    const installSection = nsisTemplate.slice(
+      nsisTemplate.indexOf("Section Install"),
+      nsisTemplate.indexOf(
+        "SectionEnd",
+        nsisTemplate.indexOf("Section Install"),
+      ),
+    );
+    expect(installSection).toMatch(
+      /!if "\$\{INSTALLWEBVIEW2MODE\}" == "fixedRuntime"\s+Call RemoveSupersededFixedRuntimes\s+!endif/,
+    );
+  });
+
   test("checksums, attests, and uploads the separate artifact", () => {
     for (const stepName of [
       "Write SHA256SUMS",

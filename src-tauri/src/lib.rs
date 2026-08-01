@@ -41,10 +41,10 @@ use managers::transcription::TranscriptionManager;
 use signal_hook::consts::{SIGUSR1, SIGUSR2};
 #[cfg(unix)]
 use signal_hook::iterator::Signals;
-use std::path::Path;
 use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::Arc;
 use tauri::image::Image;
+use tauri::utils::config::BundleType;
 pub use transcription_coordinator::TranscriptionCoordinator;
 
 use tauri::tray::TrayIconBuilder;
@@ -67,23 +67,16 @@ const UPDATER_FEED_READY: bool = true;
 fn nsis_update_channel_available(
     is_windows: bool,
     is_portable: bool,
-    current_executable: Option<&Path>,
+    bundle_type: Option<BundleType>,
 ) -> bool {
-    if !is_windows || is_portable {
-        return false;
-    }
-
-    current_executable
-        .and_then(Path::parent)
-        .is_some_and(|directory| directory.join("uninstall.exe").is_file())
+    is_windows && !is_portable && matches!(bundle_type, Some(BundleType::Nsis))
 }
 
 pub(crate) fn update_channel_available() -> bool {
-    let current_executable = std::env::current_exe().ok();
     nsis_update_channel_available(
         cfg!(target_os = "windows"),
         crate::portable::is_portable(),
-        current_executable.as_deref(),
+        tauri::utils::platform::bundle_type(),
     )
 }
 
@@ -921,6 +914,7 @@ mod updater_gate_tests {
         cli_option, ensure_cli_update_supported, nsis_update_channel_available,
         update_checks_action_enabled_for_channel, UPDATER_FEED_READY,
     };
+    use tauri::utils::config::BundleType;
 
     #[cfg(not(windows))]
     use super::{export_typescript_bindings, specta_builder};
@@ -1009,32 +1003,27 @@ mod updater_gate_tests {
 
     #[test]
     fn updater_channel_accepts_only_installed_nsis_packages() {
-        let directory = tempfile::tempdir().expect("temporary install directory");
-        let executable = directory.path().join("AudioBud.exe");
-        std::fs::write(&executable, b"app").expect("temporary app can be written");
-
         assert!(!nsis_update_channel_available(
             true,
             false,
-            Some(&executable)
+            Some(BundleType::Msi)
         ));
-        std::fs::write(directory.path().join("uninstall.exe"), b"uninstaller")
-            .expect("temporary uninstaller can be written");
         assert!(nsis_update_channel_available(
             true,
             false,
-            Some(&executable)
+            Some(BundleType::Nsis)
         ));
         assert!(!nsis_update_channel_available(
             true,
             true,
-            Some(&executable)
+            Some(BundleType::Nsis)
         ));
         assert!(!nsis_update_channel_available(
             false,
             false,
-            Some(&executable)
+            Some(BundleType::Nsis)
         ));
+        assert!(!nsis_update_channel_available(true, false, None));
     }
 
     #[test]

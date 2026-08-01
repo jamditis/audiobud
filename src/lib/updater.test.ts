@@ -69,6 +69,9 @@ describe("updateChecksActive", () => {
     const backend = readFileSync("src-tauri/src/lib.rs", "utf8");
     const tray = readFileSync("src-tauri/src/tray.rs", "utf8");
 
+    expect(backend).toContain("tauri::utils::platform::bundle_type()");
+    expect(backend).toContain("Some(BundleType::Nsis)");
+    expect(backend).not.toContain('directory.join("uninstall.exe").is_file()');
     expect(
       backend.match(
         /update_checks_action_enabled\(settings\.update_checks_enabled\)/g,

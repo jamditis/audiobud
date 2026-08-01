@@ -540,6 +540,26 @@ FunctionEnd
   !include "{{this}}"
 {{/each}}
 
+; Fixed-runtime portable releases use a versioned resource directory. Remove
+; only older directories from an in-place install so upgrades do not retain a
+; roughly 300 MB runtime per version. The current runtime and portable Data/
+; directory are deliberately outside the deletion set.
+Function RemoveSupersededFixedRuntimes
+  FindFirst $0 $1 "$INSTDIR\Microsoft.WebView2.FixedVersionRuntime.*.x64"
+  remove_superseded_fixed_runtime_loop:
+    ${If} $1 == ""
+      Goto remove_superseded_fixed_runtime_done
+    ${EndIf}
+    ${If} $1 != "${FIXEDWEBVIEW2DIRECTORY}"
+      DetailPrint "Removing superseded WebView2 fixed runtime: $1"
+      RMDir /r "$INSTDIR\$1"
+    ${EndIf}
+    FindNext $0 $1
+    Goto remove_superseded_fixed_runtime_loop
+  remove_superseded_fixed_runtime_done:
+  FindClose $0
+FunctionEnd
+
 Function .onInit
   ${GetOptions} $CMDLINE "/P" $PassiveMode
   ${IfNot} ${Errors}
@@ -752,6 +772,10 @@ Section Install
   !endif
 
   !insertmacro CheckIfAppIsRunning "${MAINBINARYNAME}.exe" "${PRODUCTNAME}"
+
+  !if "${INSTALLWEBVIEW2MODE}" == "fixedRuntime"
+    Call RemoveSupersededFixedRuntimes
+  !endif
 
   ; Copy main executable
   File "${MAINBINARYSRCPATH}"
