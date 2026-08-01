@@ -41,6 +41,10 @@ describe("published update feed workflow", () => {
     expect(workflow).toContain('gh release download "$TAG"');
     expect(workflow).toContain('--pattern "*.nsis.zip"');
     expect(workflow).toContain('--pattern "*.nsis.zip.sig"');
+    expect(workflow).toContain('--pattern "updater-signing-public-key.pub"');
+    expect(workflow).toContain("gh attestation verify");
+    expect(workflow).toContain("steps.updater.outputs.public_key");
+    expect(workflow).not.toContain("src-tauri/tauri.conf.json");
     expect(workflow).toContain("scripts/verify-updater-signature/Cargo.toml");
     expect(workflow).toContain("cargo run --locked --release");
     expect(workflow).toContain("steps.updater.outputs.archive");

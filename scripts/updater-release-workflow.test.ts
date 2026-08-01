@@ -47,7 +47,7 @@ describe("signed updater release artifacts", () => {
     expect(paths).toContain("Expand-Archive");
   });
 
-  test("verifies the updater signature against the client public key", () => {
+  test("verifies the updater signature against the release signing key", () => {
     const verifierPath = "scripts/verify-updater-signature/src/main.rs";
     expect(existsSync(verifierPath)).toBe(true);
     const verifier = readFileSync(verifierPath, "utf8");
@@ -56,7 +56,11 @@ describe("signed updater release artifacts", () => {
     expect(verifier).toContain("finalize()");
 
     const paths = stepBlock("Resolve updater artifact paths");
-    expect(paths).toContain("src-tauri/tauri.conf.json");
+    expect(paths).toContain(
+      "TAURI_SIGNING_PUBLIC_KEY: ${{ vars.TAURI_SIGNING_PUBLIC_KEY }}",
+    );
+    expect(paths).toContain("updater-signing-public-key.pub");
+    expect(paths).not.toContain("src-tauri/tauri.conf.json");
     expect(paths).toContain("[Convert]::FromBase64String");
     expect(paths).toContain("scripts/verify-updater-signature/Cargo.toml");
     expect(paths).toContain("cargo run --locked --release");
@@ -71,6 +75,7 @@ describe("signed updater release artifacts", () => {
       const step = stepBlock(stepName);
       expect(step).toContain("steps.updater-paths.outputs.archive");
       expect(step).toContain("steps.updater-paths.outputs.signature");
+      expect(step).toContain("steps.updater-paths.outputs.public_key");
     }
     expect(workflow).not.toContain("latest.json");
   });

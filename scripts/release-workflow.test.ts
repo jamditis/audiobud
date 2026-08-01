@@ -203,8 +203,9 @@ describe("Windows release signing workflow", () => {
       "$env:NSIS_PATH $env:MSI_PATH $env:UPDATER_ARCHIVE",
     );
     expect(workflow).toContain(
-      "$env:UPDATER_SIGNATURE $env:PORTABLE_PATH $env:SBOM_PATH",
+      "$env:UPDATER_SIGNATURE $env:UPDATER_PUBLIC_KEY",
     );
+    expect(workflow).toContain("$env:PORTABLE_PATH $env:SBOM_PATH");
     expect(workflow).toContain("$env:CHECKSUM_PATH --clobber");
     expect(workflow).toContain(
       "CHECKSUM_PATH: ${{ steps.checksums.outputs.path }}",
@@ -310,6 +311,7 @@ describe("Windows release signing workflow", () => {
       "${{ steps.signing-paths.outputs.msi }}",
       "${{ steps.updater-paths.outputs.archive }}",
       "${{ steps.updater-paths.outputs.signature }}",
+      "${{ steps.updater-paths.outputs.public_key }}",
       "${{ steps.portable-webview-path.outputs.path }}",
       "${{ steps.sbom-path.outputs.path }}",
       "${{ steps.checksums.outputs.path }}",

@@ -404,6 +404,7 @@ jobs:
         shell: pwsh
         env:
           APP_VERSION: ${{ steps.meta.outputs.version }}
+          TAURI_SIGNING_PUBLIC_KEY: ${{ vars.TAURI_SIGNING_PUBLIC_KEY }}
         run: |
           $nsisDirectory = Join-Path $env:CARGO_TARGET_DIR "release\bundle\nsis"
           $archive = Join-Path $nsisDirectory "AudioBud_$($env:APP_VERSION)_x64-setup.nsis.zip"
@@ -455,10 +456,9 @@ jobs:
             throw "signtool verification failed for updater installer"
           }
 
-          $config = Get-Content -LiteralPath "src-tauri/tauri.conf.json" -Raw | ConvertFrom-Json
-          $publicKeyValue = $config.plugins.updater.pubkey
+          $publicKeyValue = $env:TAURI_SIGNING_PUBLIC_KEY
           if ($publicKeyValue -isnot [string] -or [string]::IsNullOrWhiteSpace($publicKeyValue)) {
-            throw "Updater public key is missing from src-tauri/tauri.conf.json"
+            throw "TAURI_SIGNING_PUBLIC_KEY repository variable is missing"
           }
           try {
             $publicKeyBytes = [Convert]::FromBase64String($publicKeyValue)
@@ -467,7 +467,8 @@ jobs:
             throw "Updater public key or signature has invalid outer base64 encoding"
           }
 
-          $publicKeyPath = Join-Path $verificationDirectory "updater-public-key.pub"
+          $publicKeyPath = Join-Path $env:CARGO_TARGET_DIR `
+            "release\updater-signing-public-key.pub"
           $decodedSignaturePath = Join-Path $verificationDirectory "updater-signature.sig"
           [System.IO.File]::WriteAllBytes($publicKeyPath, $publicKeyBytes)
           [System.IO.File]::WriteAllBytes($decodedSignaturePath, $signatureBytes)
@@ -492,6 +493,7 @@ jobs:
 
           "archive=$archive" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           "signature=$signature" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "public_key=$publicKeyPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
 
       # Tauri records fixedRuntime as a build resource, so this variant needs
       # its own compilation as well as its own NSIS bundle. A separate target
@@ -1057,6 +1059,7 @@ jobs:
             ${{ steps.signing-paths.outputs.msi }}
             ${{ steps.updater-paths.outputs.archive }}
             ${{ steps.updater-paths.outputs.signature }}
+            ${{ steps.updater-paths.outputs.public_key }}
             ${{ steps.portable-webview-path.outputs.path }}
             ${{ steps.sbom-path.outputs.path }}
             ${{ steps.checksums.outputs.path }}
@@ -1120,11 +1123,13 @@ jobs:
           CHECKSUM_PATH: ${{ steps.checksums.outputs.path }}
           UPDATER_ARCHIVE: ${{ steps.updater-paths.outputs.archive }}
           UPDATER_SIGNATURE: ${{ steps.updater-paths.outputs.signature }}
+          UPDATER_PUBLIC_KEY: ${{ steps.updater-paths.outputs.public_key }}
           PORTABLE_PATH: ${{ steps.portable-webview-path.outputs.path }}
         run: |
           gh release upload $env:RELEASE_TAG `
             $env:NSIS_PATH $env:MSI_PATH $env:UPDATER_ARCHIVE `
-            $env:UPDATER_SIGNATURE $env:PORTABLE_PATH $env:SBOM_PATH `
+            $env:UPDATER_SIGNATURE $env:UPDATER_PUBLIC_KEY `
+            $env:PORTABLE_PATH $env:SBOM_PATH `
             $env:CHECKSUM_PATH --clobber
           if ($LASTEXITCODE -ne 0) {
             throw "Failed to upload release artifacts to $env:RELEASE_TAG"
@@ -1139,6 +1144,7 @@ jobs:
             ${{ steps.signing-paths.outputs.msi }}
             ${{ steps.updater-paths.outputs.archive }}
             ${{ steps.updater-paths.outputs.signature }}
+            ${{ steps.updater-paths.outputs.public_key }}
             ${{ steps.portable-webview-path.outputs.path }}
             ${{ steps.sbom-path.outputs.path }}
             ${{ steps.checksums.outputs.path }}

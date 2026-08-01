@@ -1,10 +1,6 @@
 import { describe, it, expect } from "bun:test";
 import { readFileSync } from "node:fs";
-import {
-  RELEASES_URL,
-  UPDATER_FEED_READY,
-  updateChecksActive,
-} from "./updater";
+import { RELEASES_URL, updateChecksActive, updaterFeedReady } from "./updater";
 
 describe("release links", () => {
   it("sends portable users to AudioBud's releases, not the fork's", () => {
@@ -40,11 +36,18 @@ describe("release links", () => {
 });
 
 describe("updateChecksActive", () => {
-  it("honors the user setting once the AudioBud feed is ready", () => {
-    expect(UPDATER_FEED_READY).toBe(true);
-    expect(updateChecksActive(true)).toBe(true);
-    expect(updateChecksActive(false)).toBe(false);
-    expect(updateChecksActive(undefined)).toBe(false);
+  it("enables the published feed only on Windows", () => {
+    expect(updaterFeedReady("windows")).toBe(true);
+    expect(updaterFeedReady("macos")).toBe(false);
+    expect(updaterFeedReady("linux")).toBe(false);
+  });
+
+  it("honors the user setting only on a supported platform", () => {
+    expect(updateChecksActive(true, "windows")).toBe(true);
+    expect(updateChecksActive(false, "windows")).toBe(false);
+    expect(updateChecksActive(undefined, "windows")).toBe(false);
+    expect(updateChecksActive(true, "macos")).toBe(false);
+    expect(updateChecksActive(true, "linux")).toBe(false);
   });
 
   it("pins AudioBud's public key and published-release endpoint", () => {
@@ -74,6 +77,13 @@ describe("updateChecksActive", () => {
     expect(advancedSettings).toContain(
       '<UpdateChecksToggle descriptionMode="tooltip" grouped={true} />',
     );
+
+    const toggle = readFileSync(
+      "src/components/settings/UpdateChecksToggle.tsx",
+      "utf8",
+    );
+    expect(toggle).toContain("updaterFeedReady(platform())");
+    expect(toggle).toContain("if (!feedReady) return null;");
 
     const readme = readFileSync("README.md", "utf8");
     expect(readme).not.toContain("Automatic update checks remain disabled");

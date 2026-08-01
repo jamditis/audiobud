@@ -83,12 +83,14 @@ jobs:
             --repo "$GITHUB_REPOSITORY" \
             --dir "$ASSET_DIRECTORY" \
             --pattern "*.nsis.zip" \
-            --pattern "*.nsis.zip.sig"
+            --pattern "*.nsis.zip.sig" \
+            --pattern "updater-signing-public-key.pub"
 
           mapfile -t ARCHIVES < <(find "$ASSET_DIRECTORY" -maxdepth 1 -type f -name '*.nsis.zip')
           mapfile -t SIGNATURES < <(find "$ASSET_DIRECTORY" -maxdepth 1 -type f -name '*.nsis.zip.sig')
-          if [[ ${#ARCHIVES[@]} -ne 1 || ${#SIGNATURES[@]} -ne 1 ]]; then
-            echo "::error::Expected one updater archive and one signature"
+          mapfile -t PUBLIC_KEYS < <(find "$ASSET_DIRECTORY" -maxdepth 1 -type f -name 'updater-signing-public-key.pub')
+          if [[ ${#ARCHIVES[@]} -ne 1 || ${#SIGNATURES[@]} -ne 1 || ${#PUBLIC_KEYS[@]} -ne 1 ]]; then
+            echo "::error::Expected one updater archive, signature, and signing public key"
             exit 1
           fi
           if [[ "${SIGNATURES[0]}" != "${ARCHIVES[0]}.sig" ]]; then
@@ -98,20 +100,34 @@ jobs:
 
           echo "archive=${ARCHIVES[0]}" >> "$GITHUB_OUTPUT"
           echo "signature=${SIGNATURES[0]}" >> "$GITHUB_OUTPUT"
+          echo "public_key=${PUBLIC_KEYS[0]}" >> "$GITHUB_OUTPUT"
+
+      - name: Verify updater provenance
+        shell: bash
+        env:
+          ARCHIVE: ${{ steps.updater.outputs.archive }}
+          GH_TOKEN: ${{ github.token }}
+          PUBLIC_KEY: ${{ steps.updater.outputs.public_key }}
+          SIGNATURE: ${{ steps.updater.outputs.signature }}
+        run: |
+          set -euo pipefail
+          for artifact in "$ARCHIVE" "$SIGNATURE" "$PUBLIC_KEY"; do
+            gh attestation verify "$artifact" \
+              --repo "$GITHUB_REPOSITORY" \
+              --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml"
+          done
 
       - name: Verify updater signature
         shell: bash
         env:
           ARCHIVE: ${{ steps.updater.outputs.archive }}
+          PUBLIC_KEY: ${{ steps.updater.outputs.public_key }}
           SIGNATURE: ${{ steps.updater.outputs.signature }}
         run: |
           set -euo pipefail
-          PUBLIC_KEY_VALUE=$(jq -er \
-            '.plugins.updater.pubkey | select(type == "string" and length > 0)' \
-            src-tauri/tauri.conf.json)
           SIGNATURE_VALUE=$(<"$SIGNATURE")
-          if [[ ! "$PUBLIC_KEY_VALUE" =~ ^[A-Za-z0-9+/=]+$ ]]; then
-            echo "::error::Updater public key is not a single base64 value"
+          if [[ ! -s "$PUBLIC_KEY" ]]; then
+            echo "::error::Updater signing public key is empty"
             exit 1
           fi
           if [[ ! "$SIGNATURE_VALUE" =~ ^[A-Za-z0-9+/=]+$ ]]; then
@@ -119,15 +135,13 @@ jobs:
             exit 1
           fi
 
-          PUBLIC_KEY_PATH="$RUNNER_TEMP/updater-public-key.pub"
           DECODED_SIGNATURE_PATH="$RUNNER_TEMP/updater-signature.sig"
-          printf '%s' "$PUBLIC_KEY_VALUE" | base64 --decode > "$PUBLIC_KEY_PATH"
           printf '%s' "$SIGNATURE_VALUE" | base64 --decode > "$DECODED_SIGNATURE_PATH"
 
           CARGO_TARGET_DIR="$RUNNER_TEMP/updater-signature-target" \
             cargo run --locked --release \
               --manifest-path scripts/verify-updater-signature/Cargo.toml -- \
-              "$PUBLIC_KEY_PATH" "$DECODED_SIGNATURE_PATH" "$ARCHIVE"
+              "$PUBLIC_KEY" "$DECODED_SIGNATURE_PATH" "$ARCHIVE"
 
       - name: Generate latest.json
         id: manifest

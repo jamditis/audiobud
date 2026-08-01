@@ -9,10 +9,13 @@ describe("updater signing key operations", () => {
     for (const name of [
       "TAURI_SIGNING_PRIVATE_KEY",
       "TAURI_SIGNING_PRIVATE_KEY_PASSWORD",
+      "TAURI_SIGNING_PUBLIC_KEY",
     ]) {
       expect(runbook).toContain(name);
-      expect(workflow).toContain(`secrets.${name}`);
     }
+    expect(workflow).toContain("secrets.TAURI_SIGNING_PRIVATE_KEY");
+    expect(workflow).toContain("secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD");
+    expect(workflow).toContain("vars.TAURI_SIGNING_PUBLIC_KEY");
     expect(runbook).toContain("claude/audiobud/updater-private-key");
     expect(runbook).toContain("claude/audiobud/updater-private-key-password");
   });

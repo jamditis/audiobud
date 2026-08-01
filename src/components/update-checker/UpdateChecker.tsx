@@ -4,10 +4,15 @@ import { check } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { listen } from "@tauri-apps/api/event";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { platform } from "@tauri-apps/plugin-os";
 import { ProgressBar } from "../shared";
 import { useSettings } from "../../hooks/useSettings";
 import { commands } from "../../bindings";
-import { RELEASES_URL, updateChecksActive } from "../../lib/updater";
+import {
+  RELEASES_URL,
+  updateChecksActive,
+  updaterFeedReady,
+} from "../../lib/updater";
 
 interface UpdateCheckerProps {
   className?: string;
@@ -26,10 +31,14 @@ const UpdateChecker: React.FC<UpdateCheckerProps> = ({ className = "" }) => {
 
   const { settings, isLoading } = useSettings();
   const settingsLoaded = !isLoading && settings !== null;
-  // Keep checks behind the compile-time feed gate as well as the user setting.
-  // This prevents a partial config change from querying an unintended feed.
+  const currentPlatform = platform();
+  const feedReady = updaterFeedReady(currentPlatform);
+  // Keep checks behind the platform-specific feed gate as well as the user
+  // setting. This prevents a partial config change from querying a feed that
+  // has no payload for this operating system.
   const updateChecksEnabled = updateChecksActive(
     settings?.update_checks_enabled,
+    currentPlatform,
   );
 
   const upToDateTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
@@ -186,6 +195,8 @@ const UpdateChecker: React.FC<UpdateCheckerProps> = ({ className = "" }) => {
   const isUpdateDisabled = !updateChecksEnabled || isChecking || isInstalling;
   const isUpdateClickable =
     !isUpdateDisabled && (updateAvailable || (!isChecking && !showUpToDate));
+
+  if (!feedReady) return null;
 
   return (
     <>
