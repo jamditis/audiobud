@@ -26,6 +26,9 @@ export const RELEASES_URL =
 export function updateChecksActive(
   enabled: boolean | undefined,
   platformName: string,
+  updateChannelAvailable: boolean,
 ): boolean {
-  return updaterFeedReady(platformName) && Boolean(enabled);
+  return (
+    updaterFeedReady(platformName) && updateChannelAvailable && Boolean(enabled)
+  );
 }

@@ -4,7 +4,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 use specta::Type;
 use std::collections::HashMap;
 use std::fmt;
-use tauri::AppHandle;
+use tauri::{AppHandle, Emitter};
 use tauri_plugin_store::StoreExt;
 
 pub const APPLE_INTELLIGENCE_PROVIDER_ID: &str = "apple_intelligence";
@@ -554,26 +554,27 @@ fn default_autostart_enabled() -> bool {
 }
 
 fn default_update_checks_enabled() -> bool {
-    // v0.4.2 publishes a signed Windows updater entry. Keep inherited macOS
-    // and Linux builds quiet until their packages and feed entries are
-    // validated and published too.
-    cfg!(target_os = "windows")
+    // Package detection runs after Tauri resolves the installed executable.
+    // Keep the serialized default off until that one-time migration determines
+    // whether this is an installed NSIS package rather than MSI, Store, or portable.
+    false
 }
 
 fn migrate_update_checks_v0_4_2(
     settings: &mut AppSettings,
     migration_complete: bool,
-    is_windows: bool,
-) -> bool {
-    if migration_complete || !is_windows {
-        return false;
+    update_channel_available: bool,
+) -> Option<bool> {
+    if migration_complete {
+        return None;
     }
 
-    // Every release through v0.4.1 forced this value off because AudioBud did
-    // not have its own signed feed. Enable the new Windows feed once, then let
-    // the durable marker preserve any opt-out the user makes afterward.
-    settings.update_checks_enabled = true;
-    true
+    // Every release through v0.4.1 forced this value off. Enable the new feed
+    // once for installed NSIS packages, while keeping MSI, Store, portable, and
+    // non-Windows packages on their own update paths. The durable marker then
+    // preserves any later user opt-out.
+    settings.update_checks_enabled = update_channel_available;
+    Some(update_channel_available)
 }
 
 fn default_selected_language() -> String {
@@ -1051,14 +1052,18 @@ pub fn load_or_create_app_settings(app: &AppHandle) -> AppSettings {
         .get(UPDATE_CHECKS_V0_4_2_MIGRATION_KEY)
         .and_then(|value| value.as_bool())
         .unwrap_or(false);
-    if migrate_update_checks_v0_4_2(
+    if let Some(enabled) = migrate_update_checks_v0_4_2(
         &mut settings,
         update_checks_migrated,
-        cfg!(target_os = "windows"),
+        crate::update_channel_available(),
     ) {
         store.set("settings", serde_json::to_value(&settings).unwrap());
         store.set(UPDATE_CHECKS_V0_4_2_MIGRATION_KEY, true);
-        debug!("Enabled signed update checks for the v0.4.2 Windows migration");
+        let _ = app.emit(
+            "settings-changed",
+            serde_json::json!({ "setting": "update_checks_enabled", "value": enabled }),
+        );
+        debug!("Configured signed update checks for the v0.4.2 package migration: {enabled}");
     }
 
     settings
@@ -1188,9 +1193,9 @@ mod tests {
     }
 
     #[test]
-    fn default_settings_enable_update_checks_only_on_windows() {
+    fn default_settings_wait_for_installed_package_detection() {
         let settings = get_default_settings();
-        assert_eq!(settings.update_checks_enabled, cfg!(target_os = "windows"));
+        assert!(!settings.update_checks_enabled);
     }
 
     #[test]
@@ -1198,7 +1203,10 @@ mod tests {
         let mut settings = get_default_settings();
         settings.update_checks_enabled = false;
 
-        assert!(migrate_update_checks_v0_4_2(&mut settings, false, true));
+        assert_eq!(
+            migrate_update_checks_v0_4_2(&mut settings, false, true),
+            Some(true)
+        );
         assert!(settings.update_checks_enabled);
     }
 
@@ -1207,16 +1215,22 @@ mod tests {
         let mut settings = get_default_settings();
         settings.update_checks_enabled = false;
 
-        assert!(!migrate_update_checks_v0_4_2(&mut settings, true, true));
+        assert_eq!(
+            migrate_update_checks_v0_4_2(&mut settings, true, true),
+            None
+        );
         assert!(!settings.update_checks_enabled);
     }
 
     #[test]
-    fn v0_4_2_migration_keeps_other_platforms_disabled() {
+    fn v0_4_2_migration_disables_packages_without_an_nsis_channel() {
         let mut settings = get_default_settings();
-        settings.update_checks_enabled = false;
+        settings.update_checks_enabled = true;
 
-        assert!(!migrate_update_checks_v0_4_2(&mut settings, false, false));
+        assert_eq!(
+            migrate_update_checks_v0_4_2(&mut settings, false, false),
+            Some(false)
+        );
         assert!(!settings.update_checks_enabled);
     }
 }

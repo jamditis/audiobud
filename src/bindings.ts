@@ -499,6 +499,9 @@ async cancelOperation() : Promise<void> {
 async isPortable() : Promise<boolean> {
     return await TAURI_INVOKE("is_portable");
 },
+async isUpdateChannelAvailable() : Promise<boolean> {
+    return await TAURI_INVOKE("is_update_channel_available");
+},
 async getAppDirPath() : Promise<Result<string, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("get_app_dir_path") };

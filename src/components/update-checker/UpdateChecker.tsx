@@ -7,6 +7,7 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { platform } from "@tauri-apps/plugin-os";
 import { ProgressBar } from "../shared";
 import { useSettings } from "../../hooks/useSettings";
+import { useUpdateChannelAvailable } from "../../hooks/useUpdateChannelAvailable";
 import { commands } from "../../bindings";
 import {
   RELEASES_URL,
@@ -32,13 +33,15 @@ const UpdateChecker: React.FC<UpdateCheckerProps> = ({ className = "" }) => {
   const { settings, isLoading } = useSettings();
   const settingsLoaded = !isLoading && settings !== null;
   const currentPlatform = platform();
-  const feedReady = updaterFeedReady(currentPlatform);
+  const updateChannelAvailable = useUpdateChannelAvailable();
+  const feedReady = updaterFeedReady(currentPlatform) && updateChannelAvailable;
   // Keep checks behind the platform-specific feed gate as well as the user
   // setting. This prevents a partial config change from querying a feed that
   // has no payload for this operating system.
   const updateChecksEnabled = updateChecksActive(
     settings?.update_checks_enabled,
     currentPlatform,
+    updateChannelAvailable,
   );
 
   const upToDateTimeoutRef = useRef<ReturnType<typeof setTimeout>>();

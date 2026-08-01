@@ -41,6 +41,7 @@ use managers::transcription::TranscriptionManager;
 use signal_hook::consts::{SIGUSR1, SIGUSR2};
 #[cfg(unix)]
 use signal_hook::iterator::Signals;
+use std::path::Path;
 use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::Arc;
 use tauri::image::Image;
@@ -63,13 +64,46 @@ pub static FILE_LOG_LEVEL: AtomicU8 = AtomicU8::new(log::LevelFilter::Debug as u
 // src/lib/updater.ts; the test below enforces the backend/config half.
 const UPDATER_FEED_READY: bool = true;
 
-fn ensure_cli_update_supported(is_portable: bool, is_windows: bool) -> Result<(), String> {
+fn nsis_update_channel_available(
+    is_windows: bool,
+    is_portable: bool,
+    current_executable: Option<&Path>,
+) -> bool {
+    if !is_windows || is_portable {
+        return false;
+    }
+
+    current_executable
+        .and_then(Path::parent)
+        .is_some_and(|directory| directory.join("uninstall.exe").is_file())
+}
+
+pub(crate) fn update_channel_available() -> bool {
+    let current_executable = std::env::current_exe().ok();
+    nsis_update_channel_available(
+        cfg!(target_os = "windows"),
+        crate::portable::is_portable(),
+        current_executable.as_deref(),
+    )
+}
+
+fn ensure_cli_update_supported(
+    is_portable: bool,
+    is_windows: bool,
+    update_channel_available: bool,
+) -> Result<(), String> {
     if !is_windows {
         return Err("Automatic updates are currently supported only on Windows".to_string());
     }
     if is_portable {
         return Err(
             "Automatic updates are unavailable in portable mode; download the latest portable installer from the AudioBud releases page"
+                .to_string(),
+        );
+    }
+    if !update_channel_available {
+        return Err(
+            "Automatic updates are available only for installed NSIS packages; MSI and Store packages use their own update channel"
                 .to_string(),
         );
     }
@@ -80,7 +114,11 @@ async fn install_available_update(
     app: AppHandle,
     verification_endpoint: Option<String>,
 ) -> Result<bool, String> {
-    ensure_cli_update_supported(crate::portable::is_portable(), cfg!(target_os = "windows"))?;
+    ensure_cli_update_supported(
+        crate::portable::is_portable(),
+        cfg!(target_os = "windows"),
+        update_channel_available(),
+    )?;
     let updater = if let Some(endpoint) = verification_endpoint {
         let endpoint = endpoint
             .parse::<tauri::Url>()
@@ -562,6 +600,7 @@ fn specta_builder() -> Builder<tauri::Wry> {
             show_main_window_command,
             commands::cancel_operation,
             commands::is_portable,
+            commands::is_update_channel_available,
             commands::get_app_dir_path,
             commands::get_app_settings,
             commands::get_default_settings,
@@ -867,7 +906,9 @@ pub fn run(cli_args: CliArgs) {
 
 #[cfg(test)]
 mod updater_gate_tests {
-    use super::{cli_option, ensure_cli_update_supported, UPDATER_FEED_READY};
+    use super::{
+        cli_option, ensure_cli_update_supported, nsis_update_channel_available, UPDATER_FEED_READY,
+    };
 
     #[cfg(not(windows))]
     use super::{export_typescript_bindings, specta_builder};
@@ -941,18 +982,55 @@ mod updater_gate_tests {
 
     #[test]
     fn cli_updater_rejects_portable_mode() {
-        assert!(ensure_cli_update_supported(false, true).is_ok());
-        let error =
-            ensure_cli_update_supported(true, true).expect_err("portable update must be blocked");
+        let error = ensure_cli_update_supported(true, true, true)
+            .expect_err("portable update must be blocked");
         assert!(error.contains("portable mode"));
         assert!(error.contains("releases page"));
     }
 
     #[test]
     fn cli_updater_rejects_non_windows_platforms() {
-        let error = ensure_cli_update_supported(false, false)
+        let error = ensure_cli_update_supported(false, false, false)
             .expect_err("a Windows-only feed must fail before it is queried");
         assert!(error.contains("Windows"));
+    }
+
+    #[test]
+    fn updater_channel_accepts_only_installed_nsis_packages() {
+        let directory = tempfile::tempdir().expect("temporary install directory");
+        let executable = directory.path().join("AudioBud.exe");
+        std::fs::write(&executable, b"app").expect("temporary app can be written");
+
+        assert!(!nsis_update_channel_available(
+            true,
+            false,
+            Some(&executable)
+        ));
+        std::fs::write(directory.path().join("uninstall.exe"), b"uninstaller")
+            .expect("temporary uninstaller can be written");
+        assert!(nsis_update_channel_available(
+            true,
+            false,
+            Some(&executable)
+        ));
+        assert!(!nsis_update_channel_available(
+            true,
+            true,
+            Some(&executable)
+        ));
+        assert!(!nsis_update_channel_available(
+            false,
+            false,
+            Some(&executable)
+        ));
+    }
+
+    #[test]
+    fn cli_updater_rejects_msi_and_store_packages() {
+        let error = ensure_cli_update_supported(false, true, false)
+            .expect_err("the NSIS feed must reject non-NSIS packages");
+        assert!(error.contains("NSIS"));
+        assert!(ensure_cli_update_supported(false, true, true).is_ok());
     }
 
     #[test]

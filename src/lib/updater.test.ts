@@ -43,11 +43,31 @@ describe("updateChecksActive", () => {
   });
 
   it("honors the user setting only on a supported platform", () => {
-    expect(updateChecksActive(true, "windows")).toBe(true);
-    expect(updateChecksActive(false, "windows")).toBe(false);
-    expect(updateChecksActive(undefined, "windows")).toBe(false);
-    expect(updateChecksActive(true, "macos")).toBe(false);
-    expect(updateChecksActive(true, "linux")).toBe(false);
+    expect(updateChecksActive(true, "windows", true)).toBe(true);
+    expect(updateChecksActive(false, "windows", true)).toBe(false);
+    expect(updateChecksActive(undefined, "windows", true)).toBe(false);
+    expect(updateChecksActive(true, "windows", false)).toBe(false);
+    expect(updateChecksActive(true, "macos", true)).toBe(false);
+    expect(updateChecksActive(true, "linux", true)).toBe(false);
+  });
+
+  it("queries the installed package type before enabling updates", () => {
+    const hook = readFileSync("src/hooks/useUpdateChannelAvailable.ts", "utf8");
+    expect(hook).toMatch(/commands\s*\.isUpdateChannelAvailable\(\)/);
+
+    for (const path of [
+      "src/components/settings/UpdateChecksToggle.tsx",
+      "src/components/update-checker/UpdateChecker.tsx",
+    ]) {
+      expect(readFileSync(path, "utf8")).toContain(
+        "useUpdateChannelAvailable()",
+      );
+    }
+  });
+
+  it("refreshes the tray when the one-time updater migration runs", () => {
+    const settings = readFileSync("src-tauri/src/settings.rs", "utf8");
+    expect(settings).toMatch(/app\.emit\(\s*"settings-changed"/);
   });
 
   it("pins AudioBud's public key and published-release endpoint", () => {

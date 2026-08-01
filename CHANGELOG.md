@@ -18,9 +18,10 @@ and Linux code is inherited and untested.
 
 ### Added
 
-- A signed automatic-update feed, an offline updater-signing key backup and
-  rotation runbook, and a clean-Windows upgrade test for later releases
-  (#157-#159).
+- A signed automatic-update feed for installed NSIS packages, an offline
+  updater-signing key backup and rotation runbook, and a clean-Windows upgrade
+  test for later releases (#157-#159). MSI and Store packages remain on their
+  package-managed update paths.
 - A separate portable Windows installer that includes a pinned WebView2 fixed
   runtime and verifies every packaged executable signature (#39).
 - CycloneDX release SBOMs covering the packaged binaries plus the locked Rust
@@ -35,7 +36,7 @@ and Linux code is inherited and untested.
   release, with exact byte counts and SHA-256 digests checked in CI (#180).
 - Application fonts are bundled locally, and the production content security
   policy no longer permits external font requests (#196).
-- Existing Windows installs receive a one-time migration from the updater value
+- Existing NSIS installs receive a one-time migration from the updater value
   that earlier releases forced off. Later user opt-outs remain unchanged.
 - Windows release builds use locked dependency resolution, a fixed source date,
   stable remapped source paths, and provenance attestations for each published
@@ -47,7 +48,7 @@ and Linux code is inherited and untested.
 
 - v0.4.1 did not have AudioBud's signed feed enabled, so that version still
   requires a manual update to v0.4.2. Future signed updates can install from
-  v0.4.2 when update checks are enabled.
+  an NSIS v0.4.2 package when update checks are enabled.
 - SmartScreen can still show a reputation warning for a new signed release. The
   signature identifies the publisher and detects modified files; it does not
   guarantee an immediate reputation score.

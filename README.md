@@ -22,7 +22,7 @@ Direct GitHub release installers remain available. Beginning with v0.4.0, Window
 
 Windows is the validated target for this milestone. macOS and Linux code is inherited from Handy and may work, but this fork has not validated those builds yet.
 
-Beginning with v0.4.2, the Windows build checks AudioBud's signed GitHub release feed for updates by default. You can opt out in Settings > Advanced. macOS and Linux update behavior remains unvalidated.
+Beginning with v0.4.2, installed Windows NSIS builds check AudioBud's signed GitHub release feed for updates by default. You can opt out in Settings > Advanced. MSI and Microsoft Store packages stay on their package-managed update paths; macOS and Linux update behavior remains unvalidated.
 
 ## How it works
 
