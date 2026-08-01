@@ -8,6 +8,17 @@ AudioBud is a detached fork of [Handy](https://github.com/cjpais/Handy) by CJ Pa
 restate Handy's own history. AudioBud versions independently of Handy, starting at
 `0.1.0`. Windows releases are code-signed beginning with `0.4.0`.
 
+## 0.4.4 - 2026-08-01
+
+A signed updater packaging fix. The v0.4.3 feed validation downloaded and
+verified its updater archive but correctly blocked promotion when Tauri could
+not extract the archive.
+
+### Fixed
+
+- Package the NSIS updater with stored ZIP entries, matching the compression
+  methods enabled in AudioBud's Tauri updater build (#159).
+
 ## 0.4.3 - 2026-08-01
 
 An updater-validation release. Publishing a version newer than v0.4.2 lets the
