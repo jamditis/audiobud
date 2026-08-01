@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 
 const workflow = readFileSync(".github/workflows/release.yml", "utf8");
+const ciWorkflow = readFileSync(".github/workflows/ci.yml", "utf8");
 const config = JSON.parse(
   readFileSync("src-tauri/tauri.portable-webview.conf.json", "utf8"),
 );
@@ -99,6 +100,10 @@ describe("self-contained portable WebView2 artifact", () => {
     expect(aclCommands[1]).toContain("*S-1-15-2-1:(OI)(CI)(RX)");
     expect(aclCommands[1]).not.toContain("*S-1-15-2-2:(OI)(CI)(RX)");
     for (const command of aclCommands) {
+      expect(command).toContain(`ExecWait '"$SYSDIR\\icacls.exe"`);
+      expect(command).toContain(`"$INSTDIR\\${"${FIXEDWEBVIEW2DIRECTORY}"}"`);
+      expect(command).not.toContain('\\"');
+      expect(command).not.toContain('/grant "');
       expect(command).not.toContain(" /T");
       expect(command).not.toContain(" /C");
     }
@@ -130,8 +135,44 @@ describe("self-contained portable WebView2 artifact", () => {
     expect(verification).toContain("ObjectInherit");
     expect(verification).toContain("ContainerInherit");
     expect(verification).toContain("AccessControlType]::Allow");
-    expect(verification).toContain("Get-Acl -LiteralPath $browser");
+    expect(verification).toContain("Get-NumericAclRules -Path $browser");
+    expect(verification).toContain("GetAccessRules(");
+    expect(verification).toContain("SecurityIdentifier");
+    expect(verification).toContain("GetSecurityDescriptorSddlForm(");
     expect(verification).toContain("IsInherited");
+
+    const integrationStepName = "Verify fixed-runtime AppContainer ACL command";
+    const integrationStart = ciWorkflow.indexOf(
+      `- name: ${integrationStepName}`,
+    );
+    expect(
+      integrationStart,
+      `Missing workflow step: ${integrationStepName}`,
+    ).toBeGreaterThan(-1);
+    const integrationEnd = ciWorkflow.indexOf(
+      "\n      - name:",
+      integrationStart + 1,
+    );
+    const integration = ciWorkflow.slice(
+      integrationStart,
+      integrationEnd === -1 ? undefined : integrationEnd,
+    );
+    expect(integration).toContain("nsis-3.11.zip");
+    expect(integration).toContain("EF7FF767E5CBD9EDD22ADD3A32C9B8F4500BB10D");
+    expect(integration).toContain("makensis.exe");
+    expect(integration).toContain('OutFile "acl-probe.exe"');
+    expect(integration).toContain("$INSTDIR\\quoted");
+    expect(integration).toContain("$INSTDIR\\unquoted");
+    expect(integration).toContain('Join-Path $probeRoot "direct"');
+    expect(integration).toContain("icacls.exe");
+    expect(integration).toContain("*S-1-15-2-2:(OI)(CI)(RX)");
+    expect(integration).toContain("*S-1-15-2-1:(OI)(CI)(RX)");
+    expect(integration).toContain("GetAccessRules(");
+    expect(integration).toContain("SecurityIdentifier");
+    expect(integration).toContain("GetSecurityDescriptorSddlForm(");
+    expect(integration).toContain("ReadAndExecute");
+    expect(integration).toContain("ObjectInherit");
+    expect(integration).toContain("ContainerInherit");
   });
 
   test("forces every fixed-runtime install into portable mode", () => {
