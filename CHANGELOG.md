@@ -24,7 +24,7 @@ and Linux code is inherited and untested.
   package-managed update paths.
 - A separate portable Windows installer that includes a pinned WebView2 fixed
   runtime and verifies every packaged executable signature (#39).
-- CycloneDX release SBOMs covering the packaged binaries plus the locked Rust
+- SPDX JSON release SBOMs covering the packaged binaries plus the locked Rust
   and Bun dependency graphs (#154).
 - An advanced setting that lets raw transcript mode interpret spoken
   punctuation and number formatting without enabling model post-processing
