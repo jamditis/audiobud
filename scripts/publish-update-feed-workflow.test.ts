@@ -108,6 +108,9 @@ describe("published update feed workflow", () => {
     expect(workflow).toContain("verify_update:");
     expect(workflow).toContain("needs: prepare");
     expect(workflow).toContain("runs-on: windows-2025");
+    expect(workflow).toMatch(
+      /verify_update:[\s\S]*?runs-on: windows-2025[\s\S]*?timeout-minutes: 25/,
+    );
     expect(stepPosition("Resolve prior updater-capable release")).toBeLessThan(
       stepPosition("Install prior release"),
     );
@@ -120,5 +123,18 @@ describe("published update feed workflow", () => {
     expect(workflow).toContain('"--install-update"');
     expect(workflow).toContain("Get-AuthenticodeSignature");
     expect(workflow).toContain("VersionInfo.ProductVersion");
+  });
+
+  test("captures updater bootstrap failures and logs before version polling", () => {
+    expect(workflow).toContain("-RedirectStandardOutput $stdoutLog");
+    expect(workflow).toContain("-RedirectStandardError $stderrLog");
+    expect(workflow).toContain("$process.WaitForExit(480000)");
+    expect(workflow).toContain(
+      "Updater bootstrap process failed with exit code",
+    );
+    expect(workflow).toContain("AudioBud updater stdout");
+    expect(workflow).toContain("AudioBud updater stderr");
+    expect(workflow).toContain("AudioBud file logs");
+    expect(workflow).toContain("AudioBud updater temp directories");
   });
 });
