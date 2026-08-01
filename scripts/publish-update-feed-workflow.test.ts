@@ -20,9 +20,7 @@ describe("published update feed workflow", () => {
     expect(workflow).toContain("tag:");
     expect(workflow).toContain("^v[0-9]+\\.[0-9]+\\.[0-9]+$");
     expect(workflow).toContain('"publish=false" >> "$GITHUB_OUTPUT"');
-    expect(workflow).toContain(
-      "if: needs.gate.outputs.publish == 'true'",
-    );
+    expect(workflow).toContain("if: needs.gate.outputs.publish == 'true'");
     expect(workflow).toContain("attestations: read");
     expect(workflow).toContain("contents: write");
     expect(releaseWorkflow).not.toContain("latest.json");
@@ -61,9 +59,7 @@ describe("published update feed workflow", () => {
     expect(workflow).toContain("cargo run --locked --release");
     expect(workflow).toContain("steps.updater.outputs.archive");
     expect(workflow).toContain("scripts/generate-update-manifest.ts");
-    expect(workflow).toContain(
-      'MANIFEST="$RUNNER_TEMP/latest-candidate.json"',
-    );
+    expect(workflow).toContain('MANIFEST="$RUNNER_TEMP/latest-candidate.json"');
     expect(workflow).toContain(
       'gh release upload "$TAG" "$MANIFEST" --clobber',
     );
