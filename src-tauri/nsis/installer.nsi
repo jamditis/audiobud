@@ -177,7 +177,10 @@ Var InstallTypeRadioPortable
 Page custom PageInstallType PageLeaveInstallType
 
 Function PageInstallType
-  !if "${INSTALLWEBVIEW2MODE}" == "fixedRuntime"
+  ; Tauri 2.10 renders no installer mode for a bundled fixed runtime. In this
+  ; project, the fixed-runtime portable overlay is the only build with an empty
+  ; mode; regular and Store builds use downloadBootstrapper/offlineInstaller.
+  !if "${INSTALLWEBVIEW2MODE}" == ""
     StrCpy $PortableMode 1
     Abort
   !endif
@@ -578,7 +581,7 @@ Function .onInit
 
   ; --- PORTABLE MODE --- Fixed-runtime builds are always portable. Other
   ; builds keep the explicit /PORTABLE opt-in for silent/passive installs.
-  !if "${INSTALLWEBVIEW2MODE}" == "fixedRuntime"
+  !if "${INSTALLWEBVIEW2MODE}" == ""
     StrCpy $PortableMode 1
   !else
     ${GetOptions} $CMDLINE "/PORTABLE" $PortableMode
@@ -773,7 +776,7 @@ Section Install
 
   !insertmacro CheckIfAppIsRunning "${MAINBINARYNAME}.exe" "${PRODUCTNAME}"
 
-  !if "${INSTALLWEBVIEW2MODE}" == "fixedRuntime"
+  !if "${INSTALLWEBVIEW2MODE}" == ""
     Call RemoveSupersededFixedRuntimes
   !endif
 
@@ -816,7 +819,7 @@ Section Install
     File /a "/oname={{this.[1]}}" "{{no-escape @key}}"
   {{/each}}
 
-  !if "${INSTALLWEBVIEW2MODE}" == "fixedRuntime"
+  !if "${INSTALLWEBVIEW2MODE}" == ""
     ; Microsoft requires both AppContainer groups to read fixed runtime 120+
     ; when an unpackaged app runs on Windows 10. Use SIDs so this works on
     ; localized Windows installations as well.
