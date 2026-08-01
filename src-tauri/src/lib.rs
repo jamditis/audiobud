@@ -148,9 +148,17 @@ fn spawn_update_install(
 }
 
 fn cli_option(args: &[String], option: &str) -> Option<String> {
-    args.windows(2)
-        .find(|pair| pair[0] == option)
-        .map(|pair| pair[1].clone())
+    args.iter().enumerate().find_map(|(index, argument)| {
+        if argument == option {
+            return args.get(index + 1).cloned();
+        }
+
+        argument
+            .strip_prefix(option)
+            .and_then(|suffix| suffix.strip_prefix('='))
+            .filter(|value| !value.is_empty())
+            .map(str::to_string)
+    })
 }
 
 fn level_filter_from_u8(value: u8) -> log::LevelFilter {
@@ -859,7 +867,7 @@ pub fn run(cli_args: CliArgs) {
 
 #[cfg(test)]
 mod updater_gate_tests {
-    use super::{ensure_cli_update_supported, UPDATER_FEED_READY};
+    use super::{cli_option, ensure_cli_update_supported, UPDATER_FEED_READY};
 
     #[cfg(not(windows))]
     use super::{export_typescript_bindings, specta_builder};
@@ -945,5 +953,18 @@ mod updater_gate_tests {
         let error = ensure_cli_update_supported(false, false)
             .expect_err("a Windows-only feed must fail before it is queried");
         assert!(error.contains("Windows"));
+    }
+
+    #[test]
+    fn single_instance_cli_options_accept_both_clap_value_forms() {
+        let endpoint =
+            "https://github.com/jamditis/audiobud/releases/download/v0.4.2/latest-candidate.json";
+        let option = "--install-update-endpoint";
+        let separated = ["AudioBud.exe", option, endpoint].map(str::to_string);
+        let joined = ["AudioBud.exe".to_string(), format!("{option}={endpoint}")];
+
+        assert_eq!(cli_option(&separated, option).as_deref(), Some(endpoint));
+        assert_eq!(cli_option(&joined, option).as_deref(), Some(endpoint));
+        assert_eq!(cli_option(&separated, "--missing"), None);
     }
 }
