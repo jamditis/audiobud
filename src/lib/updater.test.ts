@@ -56,7 +56,7 @@ describe("updateChecksActive", () => {
     );
     const updater = config.plugins.updater;
     expect(updater.endpoints).toEqual([
-      "https://github.com/jamditis/audiobud/releases/latest/download/latest.json",
+      "https://github.com/jamditis/audiobud/releases/download/update-feed/latest.json",
     ]);
     const decodedPublicKey = Buffer.from(updater.pubkey, "base64").toString(
       "utf8",

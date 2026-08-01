@@ -31,7 +31,7 @@ pub struct CliArgs {
     #[arg(long)]
     pub debug: bool,
 
-    /// Download and apply an available signed update, then exit
+    /// On Windows, download and apply an available signed update, then exit
     #[arg(long)]
     pub install_update: bool,
 

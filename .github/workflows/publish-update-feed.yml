@@ -63,6 +63,7 @@ jobs:
       contents: write
     outputs:
       tag: ${{ steps.release.outputs.tag }}
+      commit: ${{ steps.release.outputs.commit }}
     steps:
       - name: Check out repository
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -102,7 +103,14 @@ jobs:
             exit 1
           fi
 
+          TAG_SHA=$(gh api "repos/$GITHUB_REPOSITORY/commits/$TAG" --jq '.sha')
+          if [[ ! "$TAG_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::Release tag did not resolve to a commit"
+            exit 1
+          fi
+
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "commit=$TAG_SHA" >> "$GITHUB_OUTPUT"
           echo "json=$RELEASE_JSON" >> "$GITHUB_OUTPUT"
 
       - name: Download signed updater assets
@@ -144,13 +152,15 @@ jobs:
           ARCHIVE: ${{ steps.updater.outputs.archive }}
           GH_TOKEN: ${{ github.token }}
           PUBLIC_KEY: ${{ steps.updater.outputs.public_key }}
+          RELEASE_COMMIT: ${{ steps.release.outputs.commit }}
           SIGNATURE: ${{ steps.updater.outputs.signature }}
         run: |
           set -euo pipefail
           for artifact in "$ARCHIVE" "$SIGNATURE" "$PUBLIC_KEY"; do
             gh attestation verify "$artifact" \
               --repo "$GITHUB_REPOSITORY" \
-              --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml"
+              --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml" \
+              --source-digest "$RELEASE_COMMIT"
           done
 
       - name: Verify updater signature
@@ -400,6 +410,7 @@ jobs:
     permissions:
       contents: write
     env:
+      FEED_TAG: update-feed
       GH_TOKEN: ${{ github.token }}
       TAG: ${{ needs.prepare.outputs.tag }}
     steps:
@@ -416,6 +427,13 @@ jobs:
             exit 1
           fi
 
+          FEED_RELEASE_JSON="$RUNNER_TEMP/feed-release.json"
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$FEED_TAG" > "$FEED_RELEASE_JSON"
+          if jq -e '.draft or .prerelease or (.published_at == null)' "$FEED_RELEASE_JSON" > /dev/null; then
+            echo "::error::The dedicated update feed release must be published and stable"
+            exit 1
+          fi
+
           MANIFEST_DIRECTORY="$RUNNER_TEMP/update-manifest"
           mkdir -p "$MANIFEST_DIRECTORY"
           gh release download "$TAG" \
@@ -424,8 +442,8 @@ jobs:
             --pattern "latest-candidate.json"
           LIVE_MANIFEST="$MANIFEST_DIRECTORY/latest.json"
           cp "$MANIFEST_DIRECTORY/latest-candidate.json" "$LIVE_MANIFEST"
-          gh release upload "$TAG" "$LIVE_MANIFEST" --clobber --repo "$GITHUB_REPOSITORY"
-          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" \
+          gh release upload "$FEED_TAG" "$LIVE_MANIFEST" --clobber --repo "$GITHUB_REPOSITORY"
+          gh release view "$FEED_TAG" --repo "$GITHUB_REPOSITORY" \
             --json assets --jq '.assets[].name' | grep -Fx latest.json
 
       - name: Remove candidate manifest

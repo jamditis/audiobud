@@ -103,11 +103,9 @@ describe("Windows release signing workflow", () => {
       "bun run tauri bundle --verbose --bundles nsis,msi `",
     );
     expect(githubBundle).toContain(
-      "--config src-tauri/tauri.signing.conf.json `",
+      "--config src-tauri/tauri.signing.conf.json --ci",
     );
-    expect(githubBundle).toContain(
-      "--config src-tauri/tauri.updater.conf.json --ci",
-    );
+    expect(githubBundle).not.toContain("tauri.updater.conf.json");
     expect(stepBlock("Bundle Store installers")).toContain(
       "bun run bundle:store",
     );
@@ -443,11 +441,9 @@ describe("Windows release signing workflow", () => {
     expect(storeBundleStep).toContain("bun run bundle:store");
     const githubBundleStep = stepBlock("Bundle GitHub installers");
     expect(githubBundleStep).toContain(
-      "--config src-tauri/tauri.signing.conf.json `",
+      "--config src-tauri/tauri.signing.conf.json --ci",
     );
-    expect(githubBundleStep).toContain(
-      "--config src-tauri/tauri.updater.conf.json --ci",
-    );
+    expect(githubBundleStep).not.toContain("tauri.updater.conf.json");
   });
 
   test("verifies the mutable Store WebView2 offline installers before upload", () => {

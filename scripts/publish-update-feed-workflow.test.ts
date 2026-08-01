@@ -6,6 +6,9 @@ const workflow = readFileSync(
   "utf8",
 );
 const releaseWorkflow = readFileSync(".github/workflows/release.yml", "utf8");
+const tauriConfig = JSON.parse(
+  readFileSync("src-tauri/tauri.conf.json", "utf8"),
+);
 
 function stepPosition(name: string): number {
   const position = workflow.indexOf(`- name: ${name}`);
@@ -60,6 +63,11 @@ describe("published update feed workflow", () => {
     expect(workflow).toContain('--pattern "*.nsis.zip.sig"');
     expect(workflow).toContain('--pattern "updater-signing-public-key.pub"');
     expect(workflow).toContain("gh attestation verify");
+    expect(workflow).toContain(
+      'gh api "repos/$GITHUB_REPOSITORY/commits/$TAG"',
+    );
+    expect(workflow).toContain("commit: ${{ steps.release.outputs.commit }}");
+    expect(workflow).toContain('--source-digest "$RELEASE_COMMIT"');
     expect(workflow).toContain("steps.updater.outputs.public_key");
     expect(workflow).not.toContain("src-tauri/tauri.conf.json");
     expect(workflow).toContain("scripts/verify-updater-signature/Cargo.toml");
@@ -72,9 +80,13 @@ describe("published update feed workflow", () => {
     );
     expect(workflow).toContain("--install-update-endpoint");
     expect(workflow).toContain("latest-candidate.json");
+    expect(workflow).toContain("FEED_TAG: update-feed");
     expect(workflow).toContain(
-      'gh release upload "$TAG" "$LIVE_MANIFEST" --clobber',
+      'gh release upload "$FEED_TAG" "$LIVE_MANIFEST" --clobber',
     );
+    expect(tauriConfig.plugins.updater.endpoints).toEqual([
+      "https://github.com/jamditis/audiobud/releases/download/update-feed/latest.json",
+    ]);
     expect(workflow).not.toContain("#latest-candidate.json");
     expect(workflow).not.toContain("#latest.json");
     expect(workflow).toContain("Remove candidate manifest");

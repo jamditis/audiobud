@@ -32,6 +32,9 @@ describe("updater signing key operations", () => {
   test("documents candidate validation before live feed publication", () => {
     expect(runbook).toContain("latest-candidate.json");
     expect(runbook).toContain("Only after that job succeeds");
+    expect(runbook).toContain("`update-feed`");
+    expect(runbook).toContain("gh release create update-feed");
+    expect(runbook).toContain("--latest=false");
     expect(runbook).toContain("vMAJOR.MINOR.PATCH");
   });
 

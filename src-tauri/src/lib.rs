@@ -63,7 +63,10 @@ pub static FILE_LOG_LEVEL: AtomicU8 = AtomicU8::new(log::LevelFilter::Debug as u
 // src/lib/updater.ts; the test below enforces the backend/config half.
 const UPDATER_FEED_READY: bool = true;
 
-fn ensure_cli_update_supported(is_portable: bool) -> Result<(), String> {
+fn ensure_cli_update_supported(is_portable: bool, is_windows: bool) -> Result<(), String> {
+    if !is_windows {
+        return Err("Automatic updates are currently supported only on Windows".to_string());
+    }
     if is_portable {
         return Err(
             "Automatic updates are unavailable in portable mode; download the latest portable installer from the AudioBud releases page"
@@ -77,7 +80,7 @@ async fn install_available_update(
     app: AppHandle,
     verification_endpoint: Option<String>,
 ) -> Result<bool, String> {
-    ensure_cli_update_supported(crate::portable::is_portable())?;
+    ensure_cli_update_supported(crate::portable::is_portable(), cfg!(target_os = "windows"))?;
     let updater = if let Some(endpoint) = verification_endpoint {
         let endpoint = endpoint
             .parse::<tauri::Url>()
@@ -913,9 +916,9 @@ mod updater_gate_tests {
         assert_eq!(
             updater_config.get("endpoints"),
             Some(&serde_json::json!([
-                "https://github.com/jamditis/audiobud/releases/latest/download/latest.json"
+                "https://github.com/jamditis/audiobud/releases/download/update-feed/latest.json"
             ])),
-            "updater endpoint must resolve AudioBud's published latest.json"
+            "updater endpoint must resolve AudioBud's dedicated published feed"
         );
         let public_key = updater_config
             .get("pubkey")
@@ -930,9 +933,17 @@ mod updater_gate_tests {
 
     #[test]
     fn cli_updater_rejects_portable_mode() {
-        assert!(ensure_cli_update_supported(false).is_ok());
-        let error = ensure_cli_update_supported(true).expect_err("portable update must be blocked");
+        assert!(ensure_cli_update_supported(false, true).is_ok());
+        let error =
+            ensure_cli_update_supported(true, true).expect_err("portable update must be blocked");
         assert!(error.contains("portable mode"));
         assert!(error.contains("releases page"));
+    }
+
+    #[test]
+    fn cli_updater_rejects_non_windows_platforms() {
+        let error = ensure_cli_update_supported(false, false)
+            .expect_err("a Windows-only feed must fail before it is queried");
+        assert!(error.contains("Windows"));
     }
 }

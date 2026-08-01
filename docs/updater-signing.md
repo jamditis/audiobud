@@ -43,13 +43,24 @@ installer signature checks before a release build is attempted.
 
 ## Feed publication
 
+The `update-feed` release is a permanent, non-latest container for the mutable
+manifest. Create it once before the first updater-capable app release:
+
+```bash
+gh release create update-feed --repo jamditis/audiobud --target main \
+  --title "AudioBud update feed" \
+  --notes "Permanent release container for AudioBud's signed Windows update manifest." \
+  --latest=false
+```
+
 Publishing a stable app release stages `latest-candidate.json` on that exact
 release. A clean Windows runner uses the candidate endpoint to update a real
 prior installation. Only after that job succeeds does the workflow copy the
-candidate to the client-facing `latest.json`; it then removes the candidate
-asset whether validation passed or failed. Releases whose tags are not exact
-`vMAJOR.MINOR.PATCH` versions, such as model-asset mirrors, skip this workflow
-without changing the live feed.
+candidate to `latest.json` on the dedicated `update-feed` release; it then
+removes the candidate asset whether validation passed or failed. The fixed feed
+tag keeps model mirrors and other repository releases from changing the URL
+installed clients query. Releases whose tags are not exact `vMAJOR.MINOR.PATCH`
+versions skip this workflow without changing the live feed.
 
 ## Planned rotation
 
@@ -78,7 +89,7 @@ Treat a leaked updater key as control of the update channel. There is no
 revocation check inside an already installed app.
 
 1. Stop release publication and disable the publish-update-feed workflow.
-2. Remove `latest.json` from the current release so automatic checks fail
+2. Remove `latest.json` from the `update-feed` release so automatic checks fail
    closed while the incident is investigated.
 3. Replace both GitHub secrets, audit repository access and workflow logs, and
    inspect release assets and tags for unauthorized changes.

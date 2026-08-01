@@ -357,19 +357,57 @@ jobs:
         shell: pwsh
         run: bun run bundle:store
 
-      # These long-lived credentials can authorize any update accepted by an
-      # installed client. Keep them away from dependency installation, build
-      # scripts, third-party actions, and every non-updater packaging step.
+      # Bundle without updater credentials. This runs beforeBundleCommand and
+      # the packaging subprocesses that do not need access to the update key.
       - name: Bundle GitHub installers
+        if: ${{ env.STORE_CANDIDATE != 'true' }}
+        shell: pwsh
+        run: |
+          bun run tauri bundle --verbose --bundles nsis,msi `
+            --config src-tauri/tauri.signing.conf.json --ci
+
+      - name: Create updater archive
+        if: ${{ env.STORE_CANDIDATE != 'true' }}
+        id: updater-archive
+        shell: pwsh
+        env:
+          APP_VERSION: ${{ steps.meta.outputs.version }}
+          NSIS_PATH: ${{ steps.signing-paths.outputs.nsis }}
+        run: |
+          $nsisDirectory = Split-Path -Parent $env:NSIS_PATH
+          $archive = Join-Path $nsisDirectory `
+            "AudioBud_$($env:APP_VERSION)_x64-setup.nsis.zip"
+          if (-not (Test-Path -LiteralPath $env:NSIS_PATH -PathType Leaf)) {
+            throw "Updater installer not found: $env:NSIS_PATH"
+          }
+          if (Test-Path -LiteralPath $archive) {
+            throw "Updater archive already exists: $archive"
+          }
+
+          Compress-Archive -LiteralPath $env:NSIS_PATH `
+            -DestinationPath $archive -CompressionLevel Optimal
+          if (-not (Test-Path -LiteralPath $archive -PathType Leaf)) {
+            throw "Updater archive was not created: $archive"
+          }
+          "archive=$archive" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      # Only the signer process receives the long-lived updater credentials.
+      # Installer bundling and its beforeBundleCommand hook have already ended.
+      - name: Sign updater archive
         if: ${{ env.STORE_CANDIDATE != 'true' }}
         shell: pwsh
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          UPDATER_ARCHIVE: ${{ steps.updater-archive.outputs.archive }}
         run: |
-          bun run tauri bundle --verbose --bundles nsis,msi `
-            --config src-tauri/tauri.signing.conf.json `
-            --config src-tauri/tauri.updater.conf.json --ci
+          bun run tauri signer sign "$env:UPDATER_ARCHIVE"
+          if ($LASTEXITCODE -ne 0) {
+            throw "Updater archive signing failed"
+          }
+          if (-not (Test-Path -LiteralPath "$env:UPDATER_ARCHIVE.sig" -PathType Leaf)) {
+            throw "Updater signature was not created"
+          }
 
       - name: Resolve installer paths
         shell: pwsh
@@ -405,9 +443,14 @@ jobs:
         env:
           APP_VERSION: ${{ steps.meta.outputs.version }}
           TAURI_SIGNING_PUBLIC_KEY: ${{ vars.TAURI_SIGNING_PUBLIC_KEY }}
+          UPDATER_ARCHIVE: ${{ steps.updater-archive.outputs.archive }}
         run: |
           $nsisDirectory = Join-Path $env:CARGO_TARGET_DIR "release\bundle\nsis"
-          $archive = Join-Path $nsisDirectory "AudioBud_$($env:APP_VERSION)_x64-setup.nsis.zip"
+          $expectedArchive = Join-Path $nsisDirectory "AudioBud_$($env:APP_VERSION)_x64-setup.nsis.zip"
+          $archive = $env:UPDATER_ARCHIVE
+          if ($archive -ne $expectedArchive) {
+            throw "Unexpected updater archive path: $archive"
+          }
           $signature = "$archive.sig"
           foreach ($path in @($archive, $signature)) {
             if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {

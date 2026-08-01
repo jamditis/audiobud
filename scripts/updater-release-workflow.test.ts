@@ -3,9 +3,6 @@ import { existsSync, readFileSync } from "node:fs";
 
 const workflow = readFileSync(".github/workflows/release.yml", "utf8");
 const config = JSON.parse(readFileSync("src-tauri/tauri.conf.json", "utf8"));
-const updaterConfig = JSON.parse(
-  readFileSync("src-tauri/tauri.updater.conf.json", "utf8"),
-);
 const storeConfig = JSON.parse(
   readFileSync("src-tauri/tauri.microsoftstore.conf.json", "utf8"),
 );
@@ -18,17 +15,36 @@ function stepBlock(name: string): string {
 }
 
 describe("signed updater release artifacts", () => {
-  test("creates updater artifacts only for the normal GitHub package", () => {
+  test("creates and signs updater artifacts after unrelated bundle hooks", () => {
     expect(config.bundle.createUpdaterArtifacts).toBe(false);
-    expect(updaterConfig.bundle.createUpdaterArtifacts).toBe(true);
     expect(storeConfig.bundle.createUpdaterArtifacts).toBe(false);
+    expect(existsSync("src-tauri/tauri.updater.conf.json")).toBe(false);
+
     const bundle = stepBlock("Bundle GitHub installers");
-    expect(bundle).toContain("--config src-tauri/tauri.updater.conf.json");
-    expect(bundle).toContain(
+    expect(bundle).not.toContain("TAURI_SIGNING_PRIVATE_KEY");
+    expect(bundle).not.toContain("createUpdaterArtifacts");
+
+    const archive = stepBlock("Create updater archive");
+    expect(archive).toContain("Compress-Archive");
+    expect(archive).not.toContain("TAURI_SIGNING_PRIVATE_KEY");
+
+    const signer = stepBlock("Sign updater archive");
+    expect(signer).toContain("bun run tauri signer sign");
+    expect(signer).not.toContain("tauri bundle");
+    expect(signer).toContain(
       "TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}",
     );
-    expect(bundle).toContain(
+    expect(signer).toContain(
       "TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}",
+    );
+    expect(
+      workflow.match(/secrets\.TAURI_SIGNING_PRIVATE_KEY\s*}}/g),
+    ).toHaveLength(1);
+    expect(
+      workflow.match(/secrets\.TAURI_SIGNING_PRIVATE_KEY_PASSWORD\s*}}/g),
+    ).toHaveLength(1);
+    expect(workflow.indexOf("- name: Bundle GitHub installers")).toBeLessThan(
+      workflow.indexOf("- name: Sign updater archive"),
     );
     const jobEnvironment = workflow.slice(0, workflow.indexOf("    steps:"));
     expect(jobEnvironment).not.toContain("TAURI_SIGNING_PRIVATE_KEY");
