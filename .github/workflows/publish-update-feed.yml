@@ -94,6 +94,14 @@ jobs:
             exit 1
           fi
 
+          LATEST_JSON="$RUNNER_TEMP/latest-release.json"
+          gh api "repos/$GITHUB_REPOSITORY/releases/latest" > "$LATEST_JSON"
+          LATEST_TAG=$(jq -r ".tag_name" "$LATEST_JSON")
+          if [[ "$LATEST_TAG" != "$TAG" ]]; then
+            echo "::error::Update feeds can only be published for GitHub's latest release ($LATEST_TAG)"
+            exit 1
+          fi
+
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "json=$RELEASE_JSON" >> "$GITHUB_OUTPUT"
 
@@ -400,6 +408,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          LATEST_JSON="$RUNNER_TEMP/latest-release.json"
+          gh api "repos/$GITHUB_REPOSITORY/releases/latest" > "$LATEST_JSON"
+          LATEST_TAG=$(jq -r ".tag_name" "$LATEST_JSON")
+          if [[ "$LATEST_TAG" != "$TAG" ]]; then
+            echo "::error::Update feed promotion requires GitHub's latest release ($LATEST_TAG)"
+            exit 1
+          fi
+
           MANIFEST_DIRECTORY="$RUNNER_TEMP/update-manifest"
           mkdir -p "$MANIFEST_DIRECTORY"
           gh release download "$TAG" \

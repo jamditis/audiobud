@@ -48,6 +48,13 @@ describe("published update feed workflow", () => {
     expect(workflow).toContain(
       ".draft or .prerelease or (.published_at == null)",
     );
+    expect(
+      workflow.match(/gh api "repos\/\$GITHUB_REPOSITORY\/releases\/latest"/g),
+    ).toHaveLength(2);
+    expect(workflow).toContain(
+      'LATEST_TAG=$(jq -r ".tag_name" "$LATEST_JSON")',
+    );
+    expect(workflow).toContain('if [[ "$LATEST_TAG" != "$TAG" ]]');
     expect(workflow).toContain('gh release download "$TAG"');
     expect(workflow).toContain('--pattern "*.nsis.zip"');
     expect(workflow).toContain('--pattern "*.nsis.zip.sig"');
