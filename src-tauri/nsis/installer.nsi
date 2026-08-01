@@ -822,10 +822,19 @@ Section Install
   !if "${INSTALLWEBVIEW2MODE}" == ""
     ; Microsoft requires both AppContainer groups to read fixed runtime 120+
     ; when an unpackaged app runs on Windows 10. Use SIDs so this works on
-    ; localized Windows installations as well.
-    ExecWait '"$SYSDIR\icacls.exe" "$INSTDIR\${FIXEDWEBVIEW2DIRECTORY}" /grant "*S-1-15-2-2:(OI)(CI)(RX)" "*S-1-15-2-1:(OI)(CI)(RX)" /T /C' $1
-    ${If} $1 <> 0
-      Abort "Could not apply the required WebView2 fixed-runtime permissions."
+    ; localized Windows installations as well. icacls accepts one SID per
+    ; /grant, and Microsoft's WebView2 guidance specifies two commands.
+    ClearErrors
+    ExecWait '"$SYSDIR\icacls.exe" "$INSTDIR\${FIXEDWEBVIEW2DIRECTORY}" /grant "*S-1-15-2-2:(OI)(CI)(RX)"' $1
+    ${If} ${Errors}
+    ${OrIf} $1 <> 0
+      Abort "Could not grant WebView2 access to all application packages."
+    ${EndIf}
+    ClearErrors
+    ExecWait '"$SYSDIR\icacls.exe" "$INSTDIR\${FIXEDWEBVIEW2DIRECTORY}" /grant "*S-1-15-2-1:(OI)(CI)(RX)"' $1
+    ${If} ${Errors}
+    ${OrIf} $1 <> 0
+      Abort "Could not grant WebView2 access to restricted application packages."
     ${EndIf}
   !endif
 

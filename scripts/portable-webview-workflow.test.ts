@@ -87,13 +87,30 @@ describe("self-contained portable WebView2 artifact", () => {
     );
   });
 
-  test("applies the fixed-runtime ACLs and verifies portable invariants", () => {
+  test("applies each fixed-runtime AppContainer ACL with its own icacls command", () => {
     expect(nsisTemplate).toContain(
       '!define FIXEDWEBVIEW2DIRECTORY "Microsoft.WebView2.FixedVersionRuntime.150.0.4078.105.x64"',
     );
-    expect(nsisTemplate).toContain("*S-1-15-2-2:(OI)(CI)(RX)");
-    expect(nsisTemplate).toContain("*S-1-15-2-1:(OI)(CI)(RX)");
-    expect(nsisTemplate).toContain("icacls.exe");
+    const aclCommands =
+      nsisTemplate.match(/^\s*ExecWait .*icacls\.exe.*$/gm) ?? [];
+    expect(aclCommands).toHaveLength(2);
+    expect(aclCommands[0]).toContain("*S-1-15-2-2:(OI)(CI)(RX)");
+    expect(aclCommands[0]).not.toContain("*S-1-15-2-1:(OI)(CI)(RX)");
+    expect(aclCommands[1]).toContain("*S-1-15-2-1:(OI)(CI)(RX)");
+    expect(aclCommands[1]).not.toContain("*S-1-15-2-2:(OI)(CI)(RX)");
+    for (const command of aclCommands) {
+      expect(command).not.toContain(" /T");
+      expect(command).not.toContain(" /C");
+    }
+    const installSection = nsisTemplate.slice(
+      nsisTemplate.indexOf("Section Install"),
+      nsisTemplate.indexOf(
+        "SectionEnd",
+        nsisTemplate.indexOf("Section Install"),
+      ),
+    );
+    expect(installSection.match(/ClearErrors/g)).toHaveLength(2);
+    expect(installSection.match(/\$\{If\} \$\{Errors\}/g)).toHaveLength(2);
 
     const verification = stepBlock("Verify fixed-runtime portable install");
     expect(verification).toContain(
@@ -109,6 +126,12 @@ describe("self-contained portable WebView2 artifact", () => {
     );
     expect(verification).toContain("S-1-15-2-2");
     expect(verification).toContain("S-1-15-2-1");
+    expect(verification).toContain("ReadAndExecute");
+    expect(verification).toContain("ObjectInherit");
+    expect(verification).toContain("ContainerInherit");
+    expect(verification).toContain("AccessControlType]::Allow");
+    expect(verification).toContain("Get-Acl -LiteralPath $browser");
+    expect(verification).toContain("IsInherited");
   });
 
   test("forces every fixed-runtime install into portable mode", () => {
