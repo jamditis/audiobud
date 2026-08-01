@@ -494,7 +494,11 @@
       },
       "formatNumbers": {
         "label": "Sayıları biçimlendir",
-        "description": "Biçimlendirilmiş bir dökümde söylenen sayıları rakamlara ve sembollere dönüştürür; örneğin $25, %10 veya 3.5. API anahtarı olmadan çevrimdışı çalışır. Ham dökümlere uygulanmaz."
+        "description": "Biçimlendirilmiş dökümlerde söylenen sayıları rakamlara ve sembollere dönüştürür. Ham metin biçimlendirmesi açıkken de uygulanır. API anahtarı olmadan çevrimdışı çalışır."
+      },
+      "formatRawOutput": {
+        "label": "Ham dökümü biçimlendir",
+        "description": "Ham modda İngilizce noktalama komutlarını yorumlar. İngilizce “question mark” ifadesi “?” olur. Sayı biçimi yukarıdaki ayarı izler. Komutları olduğu gibi yazdırmak için kapatın."
       }
     },
     "postProcessing": {

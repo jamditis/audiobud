@@ -204,42 +204,44 @@ fn is_mouse_within_monitor(
 /// Clamp the overlay's top-left so its full rect stays inside the monitor's
 /// logical bounds (so a drag nudge or a resolution change can never strand the
 /// bug off-screen).
+#[derive(Clone, Copy)]
+struct LogicalRect {
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
+}
+
 fn clamp_overlay_to_monitor(
     x: f64,
     y: f64,
-    monitor_x: f64,
-    monitor_y: f64,
-    monitor_w: f64,
-    monitor_h: f64,
-    overlay_w: f64,
-    overlay_h: f64,
+    monitor: LogicalRect,
+    overlay_size: (f64, f64),
 ) -> (f64, f64) {
-    let max_x = monitor_x + (monitor_w - overlay_w).max(0.0);
-    let max_y = monitor_y + (monitor_h - overlay_h).max(0.0);
-    (x.clamp(monitor_x, max_x), y.clamp(monitor_y, max_y))
+    let (overlay_width, overlay_height) = overlay_size;
+    let max_x = monitor.x + (monitor.width - overlay_width).max(0.0);
+    let max_y = monitor.y + (monitor.height - overlay_height).max(0.0);
+    (x.clamp(monitor.x, max_x), y.clamp(monitor.y, max_y))
 }
 
 /// Resolve a 3x3 grid anchor plus a logical-pixel nudge (dx, dy) into the
 /// overlay's top-left position on the given monitor, clamped fully on-screen.
 /// Pure function so the placement math is unit-tested without a running app.
 fn resolve_overlay_anchor_position(
-    monitor_x: f64,
-    monitor_y: f64,
-    monitor_w: f64,
-    monitor_h: f64,
-    overlay_w: f64,
-    overlay_h: f64,
+    monitor: LogicalRect,
+    overlay_size: (f64, f64),
     anchor: OverlayAnchor,
-    dx: f64,
-    dy: f64,
+    nudge: (f64, f64),
 ) -> (f64, f64) {
-    let left = monitor_x + OVERLAY_SIDE_OFFSET;
-    let center_x = monitor_x + (monitor_w - overlay_w) / 2.0;
-    let right = monitor_x + monitor_w - overlay_w - OVERLAY_SIDE_OFFSET;
+    let (overlay_width, overlay_height) = overlay_size;
+    let (dx, dy) = nudge;
+    let left = monitor.x + OVERLAY_SIDE_OFFSET;
+    let center_x = monitor.x + (monitor.width - overlay_width) / 2.0;
+    let right = monitor.x + monitor.width - overlay_width - OVERLAY_SIDE_OFFSET;
 
-    let top = monitor_y + OVERLAY_TOP_OFFSET;
-    let middle_y = monitor_y + (monitor_h - overlay_h) / 2.0;
-    let bottom = monitor_y + monitor_h - overlay_h - OVERLAY_BOTTOM_OFFSET;
+    let top = monitor.y + OVERLAY_TOP_OFFSET;
+    let middle_y = monitor.y + (monitor.height - overlay_height) / 2.0;
+    let bottom = monitor.y + monitor.height - overlay_height - OVERLAY_BOTTOM_OFFSET;
 
     let (base_x, base_y) = match anchor {
         OverlayAnchor::TopLeft => (left, top),
@@ -253,16 +255,7 @@ fn resolve_overlay_anchor_position(
         OverlayAnchor::BottomRight => (right, bottom),
     };
 
-    clamp_overlay_to_monitor(
-        base_x + dx,
-        base_y + dy,
-        monitor_x,
-        monitor_y,
-        monitor_w,
-        monitor_h,
-        overlay_w,
-        overlay_h,
-    )
+    clamp_overlay_to_monitor(base_x + dx, base_y + dy, monitor, overlay_size)
 }
 
 /// We must use LogicalPosition (not PhysicalPosition) because Tauri/tao
@@ -283,15 +276,15 @@ fn calculate_overlay_position(app_handle: &AppHandle) -> Option<(f64, f64)> {
     // clamped fully on-screen.
     if let Some(custom) = settings.overlay_custom_position {
         return Some(resolve_overlay_anchor_position(
-            monitor_x,
-            monitor_y,
-            monitor_width,
-            monitor_height,
-            OVERLAY_WIDTH,
-            OVERLAY_HEIGHT,
+            LogicalRect {
+                x: monitor_x,
+                y: monitor_y,
+                width: monitor_width,
+                height: monitor_height,
+            },
+            (OVERLAY_WIDTH, OVERLAY_HEIGHT),
             custom.anchor,
-            custom.dx,
-            custom.dy,
+            (custom.dx, custom.dy),
         ));
     }
 
@@ -501,15 +494,15 @@ mod tests {
 
     fn place(anchor: OverlayAnchor, dx: f64, dy: f64) -> (f64, f64) {
         resolve_overlay_anchor_position(
-            0.0,
-            0.0,
-            MW,
-            MH,
-            OVERLAY_WIDTH,
-            OVERLAY_HEIGHT,
+            LogicalRect {
+                x: 0.0,
+                y: 0.0,
+                width: MW,
+                height: MH,
+            },
+            (OVERLAY_WIDTH, OVERLAY_HEIGHT),
             anchor,
-            dx,
-            dy,
+            (dx, dy),
         )
     }
 
@@ -558,15 +551,15 @@ mod tests {
     fn the_anchor_resolves_relative_to_a_secondary_monitor() {
         // A second monitor offset to the right at x=1920 (logical).
         let (x, y) = resolve_overlay_anchor_position(
-            1920.0,
-            0.0,
-            1920.0,
-            1080.0,
-            OVERLAY_WIDTH,
-            OVERLAY_HEIGHT,
+            LogicalRect {
+                x: 1920.0,
+                y: 0.0,
+                width: 1920.0,
+                height: 1080.0,
+            },
+            (OVERLAY_WIDTH, OVERLAY_HEIGHT),
             OverlayAnchor::BottomCenter,
-            0.0,
-            0.0,
+            (0.0, 0.0),
         );
         assert_eq!(x, 1920.0 + (1920.0 - OVERLAY_WIDTH) / 2.0);
         assert_eq!(y, 1080.0 - OVERLAY_HEIGHT - OVERLAY_BOTTOM_OFFSET);

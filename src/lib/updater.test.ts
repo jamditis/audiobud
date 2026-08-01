@@ -1,10 +1,6 @@
 import { describe, it, expect } from "bun:test";
 import { readFileSync } from "node:fs";
-import {
-  RELEASES_URL,
-  UPDATER_FEED_READY,
-  updateChecksActive,
-} from "./updater";
+import { RELEASES_URL, updateChecksActive, updaterFeedReady } from "./updater";
 
 describe("release links", () => {
   it("sends portable users to AudioBud's releases, not the fork's", () => {
@@ -16,8 +12,8 @@ describe("release links", () => {
   // Attribution to cjpais belongs on the About page and in the locale files --
   // the MIT license requires it. What must never appear is a cjpais URL the
   // app *navigates to*, because the only such link was an installer download.
-  // The dialog it lived in is dark until UPDATER_FEED_READY flips, so nothing
-  // catches this at runtime today; it has to be caught here.
+  // Keep this as a source-level guard so future release-link changes cannot
+  // silently route an installed AudioBud build back to the upstream fork.
   it("routes no updater code path to the upstream repository", () => {
     const sources = [
       "src/lib/updater.ts",
@@ -40,15 +36,93 @@ describe("release links", () => {
 });
 
 describe("updateChecksActive", () => {
-  // Milestone A: the updater endpoint still points at upstream Handy (see
-  // superpowers/DEFERRED-issues.md "Provenance"). Update checks must never
-  // run until the feed is repointed in milestone B, even if a stored or
-  // optimistic setting says they are enabled. This guards the optimistic-toggle
-  // path that bypasses the backend load gate.
-  it("never reports active while the feed is upstream", () => {
-    expect(UPDATER_FEED_READY).toBe(false);
-    expect(updateChecksActive(true)).toBe(false);
-    expect(updateChecksActive(false)).toBe(false);
-    expect(updateChecksActive(undefined)).toBe(false);
+  it("enables the published feed only on Windows", () => {
+    expect(updaterFeedReady("windows")).toBe(true);
+    expect(updaterFeedReady("macos")).toBe(false);
+    expect(updaterFeedReady("linux")).toBe(false);
+  });
+
+  it("honors the user setting only on a supported platform", () => {
+    expect(updateChecksActive(true, "windows", true)).toBe(true);
+    expect(updateChecksActive(false, "windows", true)).toBe(false);
+    expect(updateChecksActive(undefined, "windows", true)).toBe(false);
+    expect(updateChecksActive(true, "windows", false)).toBe(false);
+    expect(updateChecksActive(true, "macos", true)).toBe(false);
+    expect(updateChecksActive(true, "linux", true)).toBe(false);
+  });
+
+  it("queries the installed package type before enabling updates", () => {
+    const hook = readFileSync("src/hooks/useUpdateChannelAvailable.ts", "utf8");
+    expect(hook).toMatch(/commands\s*\.isUpdateChannelAvailable\(\)/);
+
+    for (const path of [
+      "src/components/settings/UpdateChecksToggle.tsx",
+      "src/components/update-checker/UpdateChecker.tsx",
+    ]) {
+      expect(readFileSync(path, "utf8")).toContain(
+        "useUpdateChannelAvailable()",
+      );
+    }
+  });
+
+  it("gates every backend update action on the installed package type", () => {
+    const backend = readFileSync("src-tauri/src/lib.rs", "utf8");
+    const tray = readFileSync("src-tauri/src/tray.rs", "utf8");
+
+    expect(backend).toContain("tauri::utils::platform::bundle_type()");
+    expect(backend).toContain("Some(BundleType::Nsis)");
+    expect(backend).not.toContain('directory.join("uninstall.exe").is_file()');
+    expect(
+      backend.match(
+        /update_checks_action_enabled\(settings\.update_checks_enabled\)/g,
+      ),
+    ).toHaveLength(2);
+    expect(tray).toContain(
+      "crate::update_checks_action_enabled(settings.update_checks_enabled)",
+    );
+  });
+
+  it("refreshes the tray when the one-time updater migration runs", () => {
+    const settings = readFileSync("src-tauri/src/settings.rs", "utf8");
+    expect(settings).toMatch(/app\.emit\(\s*"settings-changed"/);
+  });
+
+  it("pins AudioBud's public key and published-release endpoint", () => {
+    const config = JSON.parse(
+      readFileSync("src-tauri/tauri.conf.json", "utf8"),
+    );
+    const updater = config.plugins.updater;
+    expect(updater.endpoints).toEqual([
+      "https://github.com/jamditis/audiobud/releases/download/update-feed/latest.json",
+    ]);
+    const decodedPublicKey = Buffer.from(updater.pubkey, "base64").toString(
+      "utf8",
+    );
+    expect(decodedPublicKey).toContain("minisign public key");
+    expect(decodedPublicKey).toContain("A6C4E33D84B3A55F");
+    expect(decodedPublicKey).not.toContain("PRIVATE KEY");
+  });
+
+  it("exposes the Windows update opt-out in normal Advanced settings", () => {
+    const advancedSettings = readFileSync(
+      "src/components/settings/advanced/AdvancedSettings.tsx",
+      "utf8",
+    );
+    expect(advancedSettings).toContain(
+      'import { UpdateChecksToggle } from "../UpdateChecksToggle";',
+    );
+    expect(advancedSettings).toContain(
+      '<UpdateChecksToggle descriptionMode="tooltip" grouped={true} />',
+    );
+
+    const toggle = readFileSync(
+      "src/components/settings/UpdateChecksToggle.tsx",
+      "utf8",
+    );
+    expect(toggle).toContain("updaterFeedReady(platform())");
+    expect(toggle).toContain("if (!feedReady) return null;");
+
+    const readme = readFileSync("README.md", "utf8");
+    expect(readme).not.toContain("Automatic update checks remain disabled");
   });
 });

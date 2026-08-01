@@ -498,7 +498,11 @@
       },
       "formatNumbers": {
         "label": "Formatuj liczby",
-        "description": "Zamienia wypowiedziane liczby na cyfry i symbole w sformatowanej transkrypcji, na przykład $25, 10% lub 3.5. Działa offline, bez klucza API. Nie dotyczy surowych transkrypcji."
+        "description": "Zamienia wypowiedziane liczby na cyfry i symbole w sformatowanych transkrypcjach. Działa też po włączeniu formatowania surowego tekstu. Działa offline, bez klucza API."
+      },
+      "formatRawOutput": {
+        "label": "Formatuj surową transkrypcję",
+        "description": "Rozpoznaje angielskie polecenia interpunkcyjne w trybie surowym. Angielska fraza „question mark” zmienia się w „?”. Format liczb zależy od ustawienia powyżej. Wyłącz, aby dyktować polecenia dosłownie."
       }
     },
     "postProcessing": {

@@ -494,7 +494,11 @@
       },
       "formatNumbers": {
         "label": "Formater les nombres",
-        "description": "Convertit les nombres dictés en chiffres et symboles dans une transcription formatée, par exemple 25 $, 10 % ou 3,5. Fonctionne hors ligne, sans clé API. Ne s'applique pas aux transcriptions brutes."
+        "description": "Convertit les nombres dictés en chiffres et symboles dans les transcriptions formatées. S’applique aussi lorsque le formatage brut est activé. Fonctionne hors ligne, sans clé API."
+      },
+      "formatRawOutput": {
+        "label": "Formater la transcription brute",
+        "description": "Interprète les commandes de ponctuation anglaises en mode brut. L’expression anglaise « question mark » devient « ? ». Les nombres suivent le réglage ci-dessus. Désactivez ceci pour dicter les commandes littéralement."
       }
     },
     "postProcessing": {

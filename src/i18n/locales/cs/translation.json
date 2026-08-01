@@ -496,7 +496,11 @@
       },
       "formatNumbers": {
         "label": "Formátovat čísla",
-        "description": "Převádí vyslovená čísla na číslice a symboly ve formátovaném přepisu, například $25, 10 % nebo 3.5. Funguje offline bez klíče API. Nevztahuje se na neupravené přepisy."
+        "description": "Převádí vyslovená čísla na číslice a symboly ve formátovaných přepisech. Použije se také při zapnutém formátování neupraveného textu. Funguje offline bez klíče API."
+      },
+      "formatRawOutput": {
+        "label": "Formátovat neupravený přepis",
+        "description": "Rozpozná anglické interpunkční příkazy v neupraveném režimu. Anglická fráze „question mark“ se změní na „?“. Formátování čísel se řídí nastavením výše. Vypnutím můžete diktovat příkazy doslova."
       }
     },
     "postProcessing": {

@@ -494,7 +494,11 @@
       },
       "formatNumbers": {
         "label": "Formatta i numeri",
-        "description": "Converte i numeri pronunciati in cifre e simboli in una trascrizione formattata, ad esempio $25, 10% o 3.5. Funziona offline senza chiave API. Non si applica alle trascrizioni non formattate."
+        "description": "Converte i numeri pronunciati in cifre e simboli nelle trascrizioni formattate. Si applica anche quando è attiva la formattazione del testo grezzo. Funziona offline senza chiave API."
+      },
+      "formatRawOutput": {
+        "label": "Formatta la trascrizione grezza",
+        "description": "Interpreta i comandi di punteggiatura in inglese in modalità grezza. La frase inglese «question mark» diventa «?». I numeri seguono l’impostazione sopra. Disattiva per dettare letteralmente i comandi."
       }
     },
     "postProcessing": {

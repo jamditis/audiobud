@@ -41,7 +41,7 @@ jobs:
     if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
     environment: artifact-signing
     runs-on: windows-2025
-    timeout-minutes: 60
+    timeout-minutes: 90
     permissions:
       attestations: write
       contents: write
@@ -50,11 +50,16 @@ jobs:
       ARTIFACT_SIGNING_ENDPOINT: ${{ vars.ARTIFACT_SIGNING_ENDPOINT }}
       ARTIFACT_SIGNING_ACCOUNT_NAME: ${{ vars.ARTIFACT_SIGNING_ACCOUNT_NAME }}
       ARTIFACT_SIGNING_CERTIFICATE_PROFILE_NAME: ${{ vars.ARTIFACT_SIGNING_CERTIFICATE_PROFILE_NAME }}
+      MODEL_ASSET_BASE_URL: https://github.com/jamditis/audiobud/releases/download/model-assets-v1
       SILERO_VAD_SHA256: a35ebf52fd3ce5f1469b2a36158dba761bc47b973ea3382b3186ca15b1f5af28
       SILERO_VAD_BYTES: 1807522
       STORE_CANDIDATE: ${{ github.event_name == 'workflow_dispatch' && inputs.store_candidate }}
       VULKAN_RUNTIME_ARCHIVE_SHA256: 7d969f4d7b44e387667d3148f61559497c22d50cbe3d50adc9e5409afbce2df1
       VULKAN_RUNTIME_ARCHIVE_BYTES: 15738272
+      WEBVIEW2_FIXED_VERSION: 150.0.4078.105
+      WEBVIEW2_FIXED_DIRECTORY: Microsoft.WebView2.FixedVersionRuntime.150.0.4078.105.x64
+      WEBVIEW2_FIXED_CAB_SHA256: 26c07cad95615a672cde8c1843a326e18ad25d691f004347544e5e099bff9b92
+      WEBVIEW2_FIXED_CAB_BYTES: 297904860
     steps:
       # whisper-rs-sys cmake builds and the VS toolchain create paths well past
       # the legacy 260-character MAX_PATH limit.
@@ -146,7 +151,7 @@ jobs:
 
       # silero_vad_v4.onnx is gitignored, but bundle.resources ships
       # resources/**/* and the application needs the VAD model at runtime. The
-      # commit-pinned Handy file is byte-identical to the hosted copy.
+      # pinned AudioBud model release carries the byte-identical hosted copy.
       - name: Download Silero VAD model
         shell: pwsh
         run: |
@@ -154,7 +159,7 @@ jobs:
           $model = Join-Path $directory "silero_vad_v4.onnx"
           New-Item -ItemType Directory -Force -Path $directory | Out-Null
           Invoke-WebRequest `
-            -Uri "https://raw.githubusercontent.com/cjpais/Handy/17d6c763413e3e29ec5cee76aa19ad01eccb73b2/src-tauri/resources/models/silero_vad_v4.onnx" `
+            -Uri "$env:MODEL_ASSET_BASE_URL/silero_vad_v4.onnx" `
             -OutFile $model -MaximumRetryCount 3 -RetryIntervalSec 5
           $modelBytes = (Get-Item -LiteralPath $model).Length
           if ($modelBytes -ne [long]$env:SILERO_VAD_BYTES) {
@@ -193,6 +198,51 @@ jobs:
             Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           Write-Output "Staged Vulkan loader: $($dll.FullName) ($($dll.Length) bytes)"
 
+      # The regular installer stays small and uses the system Evergreen
+      # runtime. This pinned fixed runtime is used only by the additional
+      # self-contained portable artifact below.
+      - name: Fetch fixed WebView2 runtime
+        if: ${{ env.STORE_CANDIDATE != 'true' }}
+        shell: pwsh
+        run: |
+          $runtimeName = "Microsoft.WebView2.FixedVersionRuntime.$env:WEBVIEW2_FIXED_VERSION.x64"
+          $archive = Join-Path $env:RUNNER_TEMP "Microsoft.WebView2.FixedVersionRuntime.150.0.4078.105.x64.cab"
+          $url = "https://msedge.sf.dl.delivery.mp.microsoft.com/filestreamingservice/files/b401c036-cfb8-4dc4-a58e-8766441df4ac/Microsoft.WebView2.FixedVersionRuntime.150.0.4078.105.x64.cab"
+          Invoke-WebRequest -Uri $url -OutFile $archive -MaximumRetryCount 3 -RetryIntervalSec 5
+
+          $archiveBytes = (Get-Item -LiteralPath $archive).Length
+          if ($archiveBytes -ne [long]$env:WEBVIEW2_FIXED_CAB_BYTES) {
+            throw "Downloaded WebView2 fixed runtime size mismatch: $archiveBytes"
+          }
+          $archiveHash = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($archiveHash -ne $env:WEBVIEW2_FIXED_CAB_SHA256) {
+            throw "Downloaded WebView2 fixed runtime hash mismatch: $archiveHash"
+          }
+          $archiveSignature = Get-AuthenticodeSignature -LiteralPath $archive
+          if ($archiveSignature.Status -ne [System.Management.Automation.SignatureStatus]::Valid) {
+            throw "Invalid Microsoft WebView2 CAB signature: $($archiveSignature.StatusMessage)"
+          }
+          if ($archiveSignature.SignerCertificate.Subject -notlike "*CN=Microsoft Corporation*") {
+            throw "Unexpected WebView2 CAB signer: $($archiveSignature.SignerCertificate.Subject)"
+          }
+
+          $destination = Join-Path $env:GITHUB_WORKSPACE "src-tauri"
+          $runtimeDirectory = Join-Path $destination $runtimeName
+          if (Test-Path -LiteralPath $runtimeDirectory) {
+            throw "WebView2 fixed runtime directory already exists: $runtimeDirectory"
+          }
+          & "$env:SystemRoot\System32\expand.exe" $archive "-F:*" $destination
+          if ($LASTEXITCODE -ne 0) {
+            throw "expand.exe failed to extract the WebView2 fixed runtime"
+          }
+          if (-not (Test-Path -LiteralPath $runtimeDirectory -PathType Container)) {
+            throw "Extracted WebView2 fixed runtime not found: $runtimeDirectory"
+          }
+          $browser = Join-Path $runtimeDirectory "msedgewebview2.exe"
+          if (-not (Test-Path -LiteralPath $browser -PathType Leaf)) {
+            throw "Extracted WebView2 browser executable not found: $browser"
+          }
+
       # Keep Cargo's target directory short so whisper-rs-sys cmake paths stay
       # below MAX_PATH. This is also the root for every signing path.
       - name: Shorten build path
@@ -200,9 +250,40 @@ jobs:
         run: |
           $drive = Split-Path -Qualifier $env:GITHUB_WORKSPACE
           $targetDirectory = "$drive\t"
+          $portableTargetDirectory = "$drive\p"
           New-Item -ItemType Directory -Force -Path $targetDirectory | Out-Null
+          New-Item -ItemType Directory -Force -Path $portableTargetDirectory | Out-Null
           "CARGO_TARGET_DIR=$targetDirectory" |
             Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "PORTABLE_TARGET_DIR=$portableTargetDirectory" |
+            Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      # Keep the cheap reproducibility properties even though the final
+      # Authenticode timestamp makes signed installers intentionally differ.
+      # SOURCE_DATE_EPOCH makes rustc pass /Brepro to link.exe; path remapping
+      # keeps runner-specific absolute paths out of the Rust output.
+      - name: Configure reproducible Rust build
+        shell: pwsh
+        run: |
+          $sourceDateEpoch = git show -s --format=%ct
+          if ($LASTEXITCODE -ne 0 -or $sourceDateEpoch -notmatch "^\d+$") {
+            throw "Could not resolve the source commit timestamp"
+          }
+          "SOURCE_DATE_EPOCH=$sourceDateEpoch" |
+            Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+          $remapFlags = @(
+            "--remap-path-prefix=$env:GITHUB_WORKSPACE=.",
+            "--remap-path-prefix=$env:CARGO_TARGET_DIR=.target",
+            "--remap-path-prefix=$env:PORTABLE_TARGET_DIR=.portable-target"
+          )
+          if ($env:CARGO_HOME) {
+            $remapFlags += "--remap-path-prefix=$env:CARGO_HOME=.cargo"
+          }
+          "RUSTFLAGS=$($remapFlags -join ' ')" |
+            Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          Write-Output "SOURCE_DATE_EPOCH=$sourceDateEpoch"
+          Write-Output "Rust path prefixes remapped"
 
       # Disable native CPU targeting and SIMD above SSE4.2 so the x86_64 build
       # runs on CPUs without AVX or FMA. Vulkan handles the main compute load.
@@ -214,7 +295,7 @@ jobs:
           GGML_AVX2: "OFF"
           GGML_FMA: "OFF"
           GGML_F16C: "OFF"
-        run: bun run tauri build --no-bundle --ci
+        run: bun run tauri build --no-bundle --ci -- --locked
 
       - name: Resolve signing paths
         id: signing-paths
@@ -271,13 +352,61 @@ jobs:
             Where-Object { $_.Name -match "WebView2|MicrosoftEdge" } |
             Remove-Item -Force
 
-      - name: Bundle installers
+      - name: Bundle Store installers
+        if: ${{ env.STORE_CANDIDATE == 'true' }}
+        shell: pwsh
+        run: bun run bundle:store
+
+      # Bundle without updater credentials. This runs beforeBundleCommand and
+      # the packaging subprocesses that do not need access to the update key.
+      - name: Bundle GitHub installers
+        if: ${{ env.STORE_CANDIDATE != 'true' }}
         shell: pwsh
         run: |
-          if ($env:STORE_CANDIDATE -eq "true") {
-            bun run bundle:store
-          } else {
-            bun run tauri bundle --verbose --bundles nsis,msi --config src-tauri/tauri.signing.conf.json --ci
+          bun run tauri bundle --verbose --bundles nsis,msi `
+            --config src-tauri/tauri.signing.conf.json --ci
+
+      - name: Create updater archive
+        if: ${{ env.STORE_CANDIDATE != 'true' }}
+        id: updater-archive
+        shell: pwsh
+        env:
+          APP_VERSION: ${{ steps.meta.outputs.version }}
+          NSIS_PATH: ${{ steps.signing-paths.outputs.nsis }}
+        run: |
+          $nsisDirectory = Split-Path -Parent $env:NSIS_PATH
+          $archive = Join-Path $nsisDirectory `
+            "AudioBud_$($env:APP_VERSION)_x64-setup.nsis.zip"
+          if (-not (Test-Path -LiteralPath $env:NSIS_PATH -PathType Leaf)) {
+            throw "Updater installer not found: $env:NSIS_PATH"
+          }
+          if (Test-Path -LiteralPath $archive) {
+            throw "Updater archive already exists: $archive"
+          }
+
+          Compress-Archive -LiteralPath $env:NSIS_PATH `
+            -DestinationPath $archive -CompressionLevel Optimal
+          if (-not (Test-Path -LiteralPath $archive -PathType Leaf)) {
+            throw "Updater archive was not created: $archive"
+          }
+          "archive=$archive" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      # Only the signer process receives the long-lived updater credentials.
+      # Installer bundling and its beforeBundleCommand hook have already ended.
+      - name: Sign updater archive
+        if: ${{ env.STORE_CANDIDATE != 'true' }}
+        shell: pwsh
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          UPDATER_ARCHIVE: ${{ steps.updater-archive.outputs.archive }}
+        run: |
+          bun run tauri signer sign "$env:UPDATER_ARCHIVE"
+          if ($LASTEXITCODE -ne 0) {
+            throw "Updater archive signing failed"
+          }
+          if (-not (Test-Path -LiteralPath "$env:UPDATER_ARCHIVE.sig" -PathType Leaf)) {
+            throw "Updater signature was not created"
           }
 
       - name: Resolve installer paths
@@ -303,6 +432,163 @@ jobs:
           if ($msiFiles[0].FullName -ne $env:MSI_PATH) {
             throw "Unexpected MSI installer path: $($msiFiles[0].FullName)"
           }
+
+      # Tauri signs the final NSIS installer through signCommand before it
+      # creates this updater archive. Validate the archived installer now; the
+      # later Azure action signs the standalone release copy independently.
+      - name: Resolve updater artifact paths
+        if: ${{ env.STORE_CANDIDATE != 'true' }}
+        id: updater-paths
+        shell: pwsh
+        env:
+          APP_VERSION: ${{ steps.meta.outputs.version }}
+          TAURI_SIGNING_PUBLIC_KEY: ${{ vars.TAURI_SIGNING_PUBLIC_KEY }}
+          UPDATER_ARCHIVE: ${{ steps.updater-archive.outputs.archive }}
+        run: |
+          $nsisDirectory = Join-Path $env:CARGO_TARGET_DIR "release\bundle\nsis"
+          $expectedArchive = Join-Path $nsisDirectory "AudioBud_$($env:APP_VERSION)_x64-setup.nsis.zip"
+          $archive = $env:UPDATER_ARCHIVE
+          if ($archive -ne $expectedArchive) {
+            throw "Unexpected updater archive path: $archive"
+          }
+          $signature = "$archive.sig"
+          foreach ($path in @($archive, $signature)) {
+            if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+              throw "Updater artifact not found: $path"
+            }
+            if ((Get-Item -LiteralPath $path).Length -le 0) {
+              throw "Updater artifact is empty: $path"
+            }
+          }
+
+          $signatureValue = (Get-Content -LiteralPath $signature -Raw).Trim()
+          if ($signatureValue -notmatch '^[A-Za-z0-9+/=]+$') {
+            throw "Updater signature is not a single base64 value"
+          }
+
+          $verificationDirectory = Join-Path $env:RUNNER_TEMP `
+            "audiobud-updater-verification-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
+          if (Test-Path -LiteralPath $verificationDirectory) {
+            throw "Updater verification directory already exists: $verificationDirectory"
+          }
+          Expand-Archive -LiteralPath $archive -DestinationPath $verificationDirectory
+          $installers = @(Get-ChildItem -LiteralPath $verificationDirectory -Filter "*.exe" -File -Recurse)
+          if ($installers.Count -ne 1) {
+            throw "Expected one installer in updater archive, found $($installers.Count)"
+          }
+
+          $archivedSignature = Get-AuthenticodeSignature -LiteralPath $installers[0].FullName
+          if ($archivedSignature.Status -ne [System.Management.Automation.SignatureStatus]::Valid) {
+            throw "Invalid Authenticode signature in updater archive: $($archivedSignature.StatusMessage)"
+          }
+          if (-not $archivedSignature.TimeStamperCertificate) {
+            throw "Timestamp certificate missing from updater installer"
+          }
+          if ($archivedSignature.SignerCertificate.Subject -notlike "*CN=Joseph Amditis*") {
+            throw "Unexpected updater installer signer: $($archivedSignature.SignerCertificate.Subject)"
+          }
+
+          $signTool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" `
+            -Filter "signtool.exe" -File -Recurse |
+            Where-Object { $_.FullName -match "\\x64\\signtool\.exe$" } |
+            Sort-Object FullName |
+            Select-Object -Last 1
+          if (-not $signTool) { throw "signtool.exe was not found" }
+          & $signTool.FullName verify /pa /all /v $installers[0].FullName
+          if ($LASTEXITCODE -ne 0) {
+            throw "signtool verification failed for updater installer"
+          }
+
+          $publicKeyValue = $env:TAURI_SIGNING_PUBLIC_KEY
+          if ($publicKeyValue -isnot [string] -or [string]::IsNullOrWhiteSpace($publicKeyValue)) {
+            throw "TAURI_SIGNING_PUBLIC_KEY repository variable is missing"
+          }
+          $publicKeyValue = $publicKeyValue.Trim()
+          bun scripts/validate-updater-key-transition.ts
+          if ($LASTEXITCODE -ne 0) {
+            throw "Updater signing key transition validation failed"
+          }
+          try {
+            $publicKeyBytes = [Convert]::FromBase64String($publicKeyValue)
+            $signatureBytes = [Convert]::FromBase64String($signatureValue)
+          } catch {
+            throw "Updater public key or signature has invalid outer base64 encoding"
+          }
+
+          $publicKeyPath = Join-Path $env:CARGO_TARGET_DIR `
+            "release\updater-signing-public-key.pub"
+          $decodedSignaturePath = Join-Path $verificationDirectory "updater-signature.sig"
+          [System.IO.File]::WriteAllBytes($publicKeyPath, $publicKeyBytes)
+          [System.IO.File]::WriteAllBytes($decodedSignaturePath, $signatureBytes)
+
+          $verifierTargetDirectory = Join-Path $env:RUNNER_TEMP `
+            "audiobud-updater-verifier-target-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
+          if (Test-Path -LiteralPath $verifierTargetDirectory) {
+            throw "Updater verifier target directory already exists: $verifierTargetDirectory"
+          }
+          $releaseTargetDirectory = $env:CARGO_TARGET_DIR
+          try {
+            $env:CARGO_TARGET_DIR = $verifierTargetDirectory
+            cargo run --locked --release `
+              --manifest-path scripts/verify-updater-signature/Cargo.toml -- `
+              $publicKeyPath $decodedSignaturePath $archive
+            if ($LASTEXITCODE -ne 0) {
+              throw "Updater minisign verification failed"
+            }
+          } finally {
+            $env:CARGO_TARGET_DIR = $releaseTargetDirectory
+          }
+
+          "archive=$archive" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "signature=$signature" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "public_key=$publicKeyPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      # Tauri records fixedRuntime as a build resource, so this variant needs
+      # its own compilation as well as its own NSIS bundle. A separate target
+      # directory preserves the regular installers and signed updater archive.
+      - name: Build fixed-runtime portable application
+        if: ${{ env.STORE_CANDIDATE != 'true' }}
+        shell: pwsh
+        env:
+          GGML_NATIVE: "OFF"
+          GGML_AVX: "OFF"
+          GGML_AVX2: "OFF"
+          GGML_FMA: "OFF"
+          GGML_F16C: "OFF"
+        run: |
+          $env:CARGO_TARGET_DIR = $env:PORTABLE_TARGET_DIR
+          bun run tauri build --no-bundle --config src-tauri/tauri.portable-webview.conf.json --ci -- --locked
+
+      - name: Bundle fixed-runtime portable installer
+        if: ${{ env.STORE_CANDIDATE != 'true' }}
+        shell: pwsh
+        run: |
+          $env:CARGO_TARGET_DIR = $env:PORTABLE_TARGET_DIR
+          bun run tauri bundle --verbose --bundles nsis `
+            --config src-tauri/tauri.signing.conf.json `
+            --config src-tauri/tauri.portable-webview.conf.json --ci
+
+      - name: Resolve fixed-runtime portable path
+        if: ${{ env.STORE_CANDIDATE != 'true' }}
+        id: portable-webview-path
+        shell: pwsh
+        env:
+          APP_VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          $directory = Join-Path $env:PORTABLE_TARGET_DIR "release\bundle\nsis"
+          $source = Join-Path $directory "AudioBud_$($env:APP_VERSION)_x64-setup.exe"
+          $artifactDirectory = Join-Path $env:CARGO_TARGET_DIR "release"
+          $path = Join-Path $artifactDirectory `
+            "AudioBud_$($env:APP_VERSION)_x64-portable-webview-setup.exe"
+          if (-not (Test-Path -LiteralPath $source -PathType Leaf)) {
+            throw "Fixed-runtime portable installer not found: $source"
+          }
+          if (Test-Path -LiteralPath $path) {
+            throw "Portable release artifact already exists: $path"
+          }
+          New-Item -ItemType Directory -Force -Path $artifactDirectory | Out-Null
+          Move-Item -LiteralPath $source -Destination $path
+          "path=$path" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
 
       - name: Verify Store WebView2 offline installers
         if: ${{ env.STORE_CANDIDATE == 'true' }}
@@ -417,6 +703,7 @@ jobs:
           APP_PATH: ${{ steps.signing-paths.outputs.app }}
           NSIS_PATH: ${{ steps.signing-paths.outputs.nsis }}
           MSI_PATH: ${{ steps.signing-paths.outputs.msi }}
+          PORTABLE_PATH: ${{ steps.portable-webview-path.outputs.path }}
         run: |
           $signTool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" `
             -Filter "signtool.exe" -File -Recurse |
@@ -426,6 +713,9 @@ jobs:
           if (-not $signTool) { throw "signtool.exe was not found" }
 
           $files = @($env:APP_PATH, $env:NSIS_PATH, $env:MSI_PATH)
+          if ($env:PORTABLE_PATH) {
+            $files += $env:PORTABLE_PATH
+          }
           foreach ($file in $files) {
             if (-not (Test-Path -LiteralPath $file -PathType Leaf)) {
               throw "Signed output not found: $file"
@@ -448,6 +738,79 @@ jobs:
             }
           }
 
+      # Install the large variant in portable mode on the disposable runner.
+      # This verifies the runtime is actually packaged, portable state remains
+      # app-local, and the Windows 10 AppContainer ACLs are present.
+      - name: Verify fixed-runtime portable install
+        if: ${{ env.STORE_CANDIDATE != 'true' }}
+        id: portable-webview-payload
+        shell: pwsh
+        env:
+          PORTABLE_PATH: ${{ steps.portable-webview-path.outputs.path }}
+        run: |
+          $installDirectory = Join-Path $env:RUNNER_TEMP `
+            "audiobud-portable-webview-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
+          if (Test-Path -LiteralPath $installDirectory) {
+            throw "Portable verification directory already exists: $installDirectory"
+          }
+
+          $process = Start-Process -FilePath $env:PORTABLE_PATH `
+            -ArgumentList @("/S", "/PORTABLE", "/D=$installDirectory") `
+            -Wait -PassThru
+          if ($process.ExitCode -ne 0) {
+            throw "Fixed-runtime portable install failed with exit code $($process.ExitCode)"
+          }
+
+          $marker = Join-Path $installDirectory "portable"
+          if ((Get-Content -LiteralPath $marker -Raw) -ne "AudioBud Portable Mode") {
+            throw "Portable marker is missing or invalid"
+          }
+          if (-not (Test-Path -LiteralPath (Join-Path $installDirectory "Data") -PathType Container)) {
+            throw "Portable Data directory is missing"
+          }
+          if (Test-Path -LiteralPath (Join-Path $installDirectory "uninstall.exe")) {
+            throw "Portable install must not create an uninstaller"
+          }
+
+          $runtimeDirectory = Join-Path $installDirectory $env:WEBVIEW2_FIXED_DIRECTORY
+          if (-not (Test-Path -LiteralPath $runtimeDirectory -PathType Container)) {
+            throw "Packaged WebView2 fixed runtime is missing: $runtimeDirectory"
+          }
+          $browser = Join-Path $runtimeDirectory "msedgewebview2.exe"
+          if (-not (Test-Path -LiteralPath $browser -PathType Leaf)) {
+            throw "Packaged WebView2 browser executable is missing"
+          }
+
+          $requiredSids = @("S-1-15-2-2", "S-1-15-2-1")
+          $acl = Get-Acl -LiteralPath $runtimeDirectory
+          $accessSids = @($acl.Access | ForEach-Object {
+            try {
+              $_.IdentityReference.Translate([System.Security.Principal.SecurityIdentifier]).Value
+            } catch {
+              $_.IdentityReference.Value
+            }
+          })
+          foreach ($sid in $requiredSids) {
+            if ($sid -notin $accessSids) {
+              throw "Required WebView2 fixed-runtime ACL is missing: $sid"
+            }
+          }
+
+          $peFiles = @(Get-ChildItem -LiteralPath $installDirectory -File -Recurse |
+            Where-Object { $_.Extension -in @(".exe", ".dll") })
+          if ($peFiles.Count -eq 0) {
+            throw "No portable PE files found"
+          }
+          foreach ($peFile in $peFiles) {
+            $signature = Get-AuthenticodeSignature -LiteralPath $peFile.FullName
+            if ($signature.Status -ne [System.Management.Automation.SignatureStatus]::Valid) {
+              throw "Invalid portable PE signature for $($peFile.FullName): $($signature.StatusMessage)"
+            }
+          }
+
+          "path=$installDirectory" |
+            Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
       # Extract the MSI and perform a silent NSIS install on the disposable
       # runner. Verify the packaged app copies and the generated uninstaller,
       # then confirm Tauri did not alter the bundled third-party DLLs.
@@ -458,6 +821,7 @@ jobs:
           NSIS_PATH: ${{ steps.signing-paths.outputs.nsis }}
           MSI_PATH: ${{ steps.signing-paths.outputs.msi }}
           WEBVIEW2_PAYLOAD_PATH: ${{ steps.store-webview2.outputs.path }}
+          PORTABLE_PAYLOAD_PATH: ${{ steps.portable-webview-payload.outputs.path }}
         run: |
           $signTool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" `
             -Filter "signtool.exe" -File -Recurse |
@@ -637,12 +1001,31 @@ jobs:
           New-Item -ItemType Directory -Path $sbomPayloadDirectory | Out-Null
           Copy-Item -LiteralPath $msiDirectory -Destination (Join-Path $sbomPayloadDirectory "msi") -Recurse
           Copy-Item -LiteralPath $nsisDirectory -Destination (Join-Path $sbomPayloadDirectory "nsis") -Recurse
+          # Syft scans the packaged runtime plus the source lockfiles. Without
+          # these manifests the SBOM lists PE payloads but omits both Rust and
+          # JavaScript dependency trees.
+          $dependencyManifestDirectory = Join-Path $sbomPayloadDirectory "dependency-manifests"
+          New-Item -ItemType Directory -Path $dependencyManifestDirectory | Out-Null
+          foreach ($dependencyFile in @("Cargo.lock", "Cargo.toml")) {
+            Copy-Item -LiteralPath (Join-Path "src-tauri" $dependencyFile) `
+              -Destination (Join-Path $dependencyManifestDirectory $dependencyFile)
+          }
+          foreach ($dependencyFile in @("bun.lock", "package.json")) {
+            Copy-Item -LiteralPath $dependencyFile `
+              -Destination (Join-Path $dependencyManifestDirectory $dependencyFile)
+          }
           if ($env:STORE_CANDIDATE -eq "true") {
             if (-not (Test-Path -LiteralPath $env:WEBVIEW2_PAYLOAD_PATH -PathType Container)) {
               throw "Verified WebView2 payload path not found: $env:WEBVIEW2_PAYLOAD_PATH"
             }
             Copy-Item -LiteralPath $env:WEBVIEW2_PAYLOAD_PATH `
               -Destination (Join-Path $sbomPayloadDirectory "webview2") -Recurse
+          } else {
+            if (-not (Test-Path -LiteralPath $env:PORTABLE_PAYLOAD_PATH -PathType Container)) {
+              throw "Verified portable WebView2 payload path not found: $env:PORTABLE_PAYLOAD_PATH"
+            }
+            Copy-Item -LiteralPath $env:PORTABLE_PAYLOAD_PATH `
+              -Destination (Join-Path $sbomPayloadDirectory "portable-webview2") -Recurse
           }
           "path=$sbomPayloadDirectory" |
             Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
@@ -685,11 +1068,16 @@ jobs:
         env:
           NSIS_PATH: ${{ steps.signing-paths.outputs.nsis }}
           MSI_PATH: ${{ steps.signing-paths.outputs.msi }}
+          PORTABLE_PATH: ${{ steps.portable-webview-path.outputs.path }}
         run: |
           $checksumPath = Join-Path $env:CARGO_TARGET_DIR "release\SHA256SUMS.txt"
-          $lines = foreach ($path in @($env:NSIS_PATH, $env:MSI_PATH)) {
+          $artifactPaths = @($env:NSIS_PATH, $env:MSI_PATH)
+          if ($env:PORTABLE_PATH) {
+            $artifactPaths += $env:PORTABLE_PATH
+          }
+          $lines = foreach ($path in $artifactPaths) {
             if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
-              throw "Cannot checksum a missing installer: $path"
+              throw "Cannot checksum a missing release artifact: $path"
             }
             $hash = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
             "$hash  $([System.IO.Path]::GetFileName($path))"
@@ -717,6 +1105,10 @@ jobs:
           subject-path: |
             ${{ steps.signing-paths.outputs.nsis }}
             ${{ steps.signing-paths.outputs.msi }}
+            ${{ steps.updater-paths.outputs.archive }}
+            ${{ steps.updater-paths.outputs.signature }}
+            ${{ steps.updater-paths.outputs.public_key }}
+            ${{ steps.portable-webview-path.outputs.path }}
             ${{ steps.sbom-path.outputs.path }}
             ${{ steps.checksums.outputs.path }}
 
@@ -726,6 +1118,8 @@ jobs:
           subject-path: |
             ${{ steps.signing-paths.outputs.nsis }}
             ${{ steps.signing-paths.outputs.msi }}
+            ${{ steps.updater-paths.outputs.archive }}
+            ${{ steps.portable-webview-path.outputs.path }}
           sbom-path: ${{ steps.sbom-path.outputs.path }}
 
       # A draft is created only after all signatures pass. Reruns reuse the
@@ -775,9 +1169,16 @@ jobs:
           MSI_PATH: ${{ steps.signing-paths.outputs.msi }}
           SBOM_PATH: ${{ steps.sbom-path.outputs.path }}
           CHECKSUM_PATH: ${{ steps.checksums.outputs.path }}
+          UPDATER_ARCHIVE: ${{ steps.updater-paths.outputs.archive }}
+          UPDATER_SIGNATURE: ${{ steps.updater-paths.outputs.signature }}
+          UPDATER_PUBLIC_KEY: ${{ steps.updater-paths.outputs.public_key }}
+          PORTABLE_PATH: ${{ steps.portable-webview-path.outputs.path }}
         run: |
           gh release upload $env:RELEASE_TAG `
-            $env:NSIS_PATH $env:MSI_PATH $env:SBOM_PATH $env:CHECKSUM_PATH --clobber
+            $env:NSIS_PATH $env:MSI_PATH $env:UPDATER_ARCHIVE `
+            $env:UPDATER_SIGNATURE $env:UPDATER_PUBLIC_KEY `
+            $env:PORTABLE_PATH $env:SBOM_PATH `
+            $env:CHECKSUM_PATH --clobber
           if ($LASTEXITCODE -ne 0) {
             throw "Failed to upload release artifacts to $env:RELEASE_TAG"
           }
@@ -789,6 +1190,10 @@ jobs:
           path: |
             ${{ steps.signing-paths.outputs.nsis }}
             ${{ steps.signing-paths.outputs.msi }}
+            ${{ steps.updater-paths.outputs.archive }}
+            ${{ steps.updater-paths.outputs.signature }}
+            ${{ steps.updater-paths.outputs.public_key }}
+            ${{ steps.portable-webview-path.outputs.path }}
             ${{ steps.sbom-path.outputs.path }}
             ${{ steps.checksums.outputs.path }}
           retention-days: 30

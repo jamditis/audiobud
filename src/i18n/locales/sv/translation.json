@@ -494,7 +494,11 @@
       },
       "formatNumbers": {
         "label": "Formatera tal",
-        "description": "Omvandlar talade tal till siffror och symboler i en formaterad transkription, till exempel $25, 10 % eller 3.5. Fungerar offline utan API-nyckel. Gäller inte råa transkriptioner."
+        "description": "Omvandlar talade tal till siffror och symboler i formaterade transkriptioner. Gäller även när råformatering är på. Fungerar offline utan API-nyckel."
+      },
+      "formatRawOutput": {
+        "label": "Formatera rå transkription",
+        "description": "Tolkar engelska skiljeteckenkommandon i råläget. Den engelska frasen ”question mark” blir ”?”. Talformatering följer inställningen ovan. Stäng av för att diktera kommandon ordagrant."
       }
     },
     "postProcessing": {

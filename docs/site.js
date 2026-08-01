@@ -119,7 +119,9 @@ if (checksumList || downloadLinks.length > 0) {
         releaseLabel.textContent = `Release ${release.tag_name}`;
       }
 
-      const installer = installers.find((asset) => asset.name.endsWith(".exe"));
+      const installer = installers.find((asset) =>
+        asset.name.endsWith("_x64-setup.exe"),
+      );
       if (commandLine && installer) {
         commandLine.textContent = `Get-FileHash -Algorithm SHA256 .\\${installer.name}`;
       }

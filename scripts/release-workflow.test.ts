@@ -77,13 +77,38 @@ describe("Windows release signing workflow", () => {
     expect(workflow).not.toContain("AZURE_CLIENT_SECRET");
   });
 
+  test("takes the reproducible Rust build wins", () => {
+    const reproducibleStep = stepBlock("Configure reproducible Rust build");
+    expect(reproducibleStep).toContain("git show -s --format=%ct");
+    expect(reproducibleStep).toContain("SOURCE_DATE_EPOCH=");
+    expect(reproducibleStep).toContain(
+      "--remap-path-prefix=$env:GITHUB_WORKSPACE=.",
+    );
+    expect(reproducibleStep).toContain(
+      "--remap-path-prefix=$env:CARGO_TARGET_DIR=.target",
+    );
+    expect(reproducibleStep).toContain("RUSTFLAGS=");
+    expect(stepPosition("Configure reproducible Rust build")).toBeLessThan(
+      stepPosition("Build application without bundling"),
+    );
+  });
+
   test("signs patched application copies during bundling and signs release outputs", () => {
     expect(workflow).not.toContain("tauri-apps/tauri-action");
-    expect(workflow).toContain("bun run tauri build --no-bundle --ci");
     expect(workflow).toContain(
-      "bun run tauri bundle --verbose --bundles nsis,msi --config src-tauri/tauri.signing.conf.json --ci",
+      "bun run tauri build --no-bundle --ci -- --locked",
     );
-    expect(stepBlock("Bundle installers")).toContain("bun run bundle:store");
+    const githubBundle = stepBlock("Bundle GitHub installers");
+    expect(githubBundle).toContain(
+      "bun run tauri bundle --verbose --bundles nsis,msi `",
+    );
+    expect(githubBundle).toContain(
+      "--config src-tauri/tauri.signing.conf.json --ci",
+    );
+    expect(githubBundle).not.toContain("tauri.updater.conf.json");
+    expect(stepBlock("Bundle Store installers")).toContain(
+      "bun run bundle:store",
+    );
 
     const signingUses = workflow.match(
       /uses: azure\/artifact-signing-action@c7ab2a863ab5f9a846ddb8265964877ef296ee82 # v2/g,
@@ -99,7 +124,8 @@ describe("Windows release signing workflow", () => {
       "Authenticate to Azure",
       "Install Artifact Signing module",
       "Clear Store WebView2 installer cache",
-      "Bundle installers",
+      "Bundle Store installers",
+      "Bundle GitHub installers",
       "Resolve installer paths",
       "Verify Store WebView2 offline installers",
       "Sign release outputs",
@@ -172,8 +198,13 @@ describe("Windows release signing workflow", () => {
       '$checksumPath = Join-Path $env:CARGO_TARGET_DIR "release\\SHA256SUMS.txt"',
     );
     expect(workflow).toContain(
-      "$env:NSIS_PATH $env:MSI_PATH $env:SBOM_PATH $env:CHECKSUM_PATH --clobber",
+      "$env:NSIS_PATH $env:MSI_PATH $env:UPDATER_ARCHIVE",
     );
+    expect(workflow).toContain(
+      "$env:UPDATER_SIGNATURE $env:UPDATER_PUBLIC_KEY",
+    );
+    expect(workflow).toContain("$env:PORTABLE_PATH $env:SBOM_PATH");
+    expect(workflow).toContain("$env:CHECKSUM_PATH --clobber");
     expect(workflow).toContain(
       "CHECKSUM_PATH: ${{ steps.checksums.outputs.path }}",
     );
@@ -183,13 +214,17 @@ describe("Windows release signing workflow", () => {
 
     const checksumStep = stepBlock("Write SHA256SUMS");
     expect(checksumStep).toContain(
-      "$lines = foreach ($path in @($env:NSIS_PATH, $env:MSI_PATH))",
+      "$artifactPaths = @($env:NSIS_PATH, $env:MSI_PATH)",
+    );
+    expect(checksumStep).toContain("$artifactPaths += $env:PORTABLE_PATH");
+    expect(checksumStep).toContain(
+      "$lines = foreach ($path in $artifactPaths)",
     );
     expect(checksumStep).not.toContain("steps.sbom-path.outputs.path");
 
     // Hashing a path that does not exist would otherwise publish a file
     // listing one installer and silently omit the other.
-    expect(workflow).toContain("Cannot checksum a missing installer");
+    expect(workflow).toContain("Cannot checksum a missing release artifact");
 
     // sha256sum -c wants lowercase hex, two spaces, a bare file name, LF, and
     // no BOM. Get-FileHash returns uppercase and Out-File writes CRLF+BOM.
@@ -236,6 +271,17 @@ describe("Windows release signing workflow", () => {
     expect(sbomStep).toContain("upload-artifact: false");
     expect(sbomStep).toContain("upload-release-assets: false");
 
+    const payloadStep = stepBlock("Verify packaged application signatures");
+    for (const dependencyFile of [
+      "Cargo.lock",
+      "Cargo.toml",
+      "bun.lock",
+      "package.json",
+    ]) {
+      expect(payloadStep).toContain(`\"${dependencyFile}\"`);
+    }
+    expect(payloadStep).toContain("dependency-manifests");
+
     const steps = [
       "Resolve SBOM path",
       "Generate release SBOM",
@@ -261,6 +307,10 @@ describe("Windows release signing workflow", () => {
     const uploadedPaths = [
       "${{ steps.signing-paths.outputs.nsis }}",
       "${{ steps.signing-paths.outputs.msi }}",
+      "${{ steps.updater-paths.outputs.archive }}",
+      "${{ steps.updater-paths.outputs.signature }}",
+      "${{ steps.updater-paths.outputs.public_key }}",
+      "${{ steps.portable-webview-path.outputs.path }}",
       "${{ steps.sbom-path.outputs.path }}",
       "${{ steps.checksums.outputs.path }}",
     ];
@@ -298,6 +348,8 @@ describe("Windows release signing workflow", () => {
     expect(multilineInput(sbomAttestationStep, "subject-path")).toEqual([
       "${{ steps.signing-paths.outputs.nsis }}",
       "${{ steps.signing-paths.outputs.msi }}",
+      "${{ steps.updater-paths.outputs.archive }}",
+      "${{ steps.portable-webview-path.outputs.path }}",
     ]);
     expect(sbomAttestationStep).toContain(
       "sbom-path: ${{ steps.sbom-path.outputs.path }}",
@@ -323,8 +375,12 @@ describe("Windows release signing workflow", () => {
     );
     expect(workflow).toContain("VULKAN_RUNTIME_ARCHIVE_BYTES: 15738272");
     expect(workflow).toContain(
-      "cjpais/Handy/17d6c763413e3e29ec5cee76aa19ad01eccb73b2/src-tauri/resources/models/silero_vad_v4.onnx",
+      "MODEL_ASSET_BASE_URL: https://github.com/jamditis/audiobud/releases/download/model-assets-v1",
     );
+    expect(workflow).toContain(
+      '"$env:MODEL_ASSET_BASE_URL/silero_vad_v4.onnx"',
+    );
+    expect(workflow).not.toContain("cjpais/Handy");
     expect(workflow).toContain("Get-FileHash -LiteralPath");
     expect(workflow).toContain("Downloaded Silero VAD model hash mismatch");
     expect(workflow).toContain(
@@ -369,6 +425,7 @@ describe("Windows release signing workflow", () => {
     expect(microsoftStoreConfig).toEqual({
       $schema: "https://schema.tauri.app/config/2",
       bundle: {
+        createUpdaterArtifacts: false,
         windows: {
           webviewInstallMode: {
             type: "offlineInstaller",
@@ -380,11 +437,13 @@ describe("Windows release signing workflow", () => {
     // The normal GitHub release continues to ship the current signed NSIS/MSI
     // artifacts. Store candidates opt into the offline WebView2 config when
     // we build a package for Partner Center.
-    const bundleStep = stepBlock("Bundle installers");
-    expect(bundleStep).toContain("bun run bundle:store");
-    expect(bundleStep).toContain(
-      "bun run tauri bundle --verbose --bundles nsis,msi --config src-tauri/tauri.signing.conf.json --ci",
+    const storeBundleStep = stepBlock("Bundle Store installers");
+    expect(storeBundleStep).toContain("bun run bundle:store");
+    const githubBundleStep = stepBlock("Bundle GitHub installers");
+    expect(githubBundleStep).toContain(
+      "--config src-tauri/tauri.signing.conf.json --ci",
     );
+    expect(githubBundleStep).not.toContain("tauri.updater.conf.json");
   });
 
   test("verifies the mutable Store WebView2 offline installers before upload", () => {
@@ -552,8 +611,8 @@ describe("Windows release signing workflow", () => {
   });
 
   test("keeps custom signer failures visible in the bundle log", () => {
-    expect(workflow).toContain(
-      "bun run tauri bundle --verbose --bundles nsis,msi --config src-tauri/tauri.signing.conf.json --ci",
+    expect(stepBlock("Bundle GitHub installers")).toContain(
+      "bun run tauri bundle --verbose --bundles nsis,msi `",
     );
   });
 
@@ -567,12 +626,15 @@ describe("Windows release signing workflow", () => {
     expect(existsSync(resolve(tauriDirectory, scriptPath))).toBe(true);
   });
 
-  test("limits the Tauri signer to patched app copies and the NSIS uninstaller", () => {
+  test("limits the Tauri signer to patched app copies, final installers, and the NSIS uninstaller", () => {
     expect(signingScript).toContain("[switch] $TauriNsisUninstaller");
     expect(signingScript).toContain('-ieq "audiobud.exe"');
-    expect(signingScript).toContain(
-      "if (-not $isApplication -and -not $TauriNsisUninstaller)",
-    );
+    expect(signingScript).toContain("$isFinalNsis");
+    expect(signingScript).toContain("$isFinalMsi");
+    expect(signingScript).toContain("^AudioBud_");
+    expect(signingScript).toContain("_x64-setup\\.exe$");
+    expect(signingScript).toContain("_x64_en-US\\.msi$");
+    expect(signingScript).toContain("if (-not $isApprovedInput)");
     expect(signingScript).toContain(
       "Import-Module ArtifactSigning -RequiredVersion 0.1.8",
     );

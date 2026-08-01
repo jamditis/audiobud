@@ -30,12 +30,20 @@ pub struct CliArgs {
     /// Enable debug mode with verbose logging
     #[arg(long)]
     pub debug: bool,
+
+    /// On Windows, download and apply an available signed update, then exit
+    #[arg(long)]
+    pub install_update: bool,
+
+    /// Override the signed update endpoint for release verification
+    #[arg(long, requires = "install_update", hide = true)]
+    pub install_update_endpoint: Option<String>,
 }
 
 #[cfg(test)]
 mod tests {
     use super::CliArgs;
-    use clap::CommandFactory;
+    use clap::{CommandFactory, Parser};
 
     #[test]
     fn help_text_names_audiobud_not_the_upstream_fork() {
@@ -49,6 +57,31 @@ mod tests {
         assert!(
             about.contains("AudioBud"),
             "--help omits the app name: {about:?}"
+        );
+    }
+
+    #[test]
+    fn install_update_flag_is_available_for_release_verification() {
+        let args = CliArgs::try_parse_from(["audiobud", "--install-update"])
+            .expect("--install-update is accepted");
+        assert!(args.install_update);
+    }
+
+    #[test]
+    fn candidate_endpoint_requires_the_release_verification_flag() {
+        let endpoint =
+            "https://github.com/jamditis/audiobud/releases/download/v0.4.2/latest-candidate.json";
+        let args = CliArgs::try_parse_from([
+            "audiobud",
+            "--install-update",
+            "--install-update-endpoint",
+            endpoint,
+        ])
+        .expect("release verification endpoint is accepted with --install-update");
+        assert_eq!(args.install_update_endpoint.as_deref(), Some(endpoint));
+
+        assert!(
+            CliArgs::try_parse_from(["audiobud", "--install-update-endpoint", endpoint,]).is_err()
         );
     }
 }

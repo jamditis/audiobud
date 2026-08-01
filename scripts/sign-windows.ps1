@@ -17,8 +17,11 @@ if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
 $resolvedPath = (Get-Item -LiteralPath $Path).FullName
 $fileName = [System.IO.Path]::GetFileName($resolvedPath)
 $isApplication = $fileName -ieq "audiobud.exe"
+$isFinalNsis = $fileName -match '^AudioBud_\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?_x64-setup\.exe$'
+$isFinalMsi = $fileName -match '^AudioBud_\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?_x64_en-US\.msi$'
+$isApprovedInput = $isApplication -or $isFinalNsis -or $isFinalMsi -or $TauriNsisUninstaller
 
-if (-not $isApplication -and -not $TauriNsisUninstaller) {
+if (-not $isApprovedInput) {
   Write-Output "Skipping Tauri signing input: $fileName"
   exit 0
 }

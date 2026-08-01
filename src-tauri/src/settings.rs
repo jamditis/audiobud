@@ -4,7 +4,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 use specta::Type;
 use std::collections::HashMap;
 use std::fmt;
-use tauri::AppHandle;
+use tauri::{AppHandle, Emitter};
 use tauri_plugin_store::StoreExt;
 
 pub const APPLE_INTELLIGENCE_PROVIDER_ID: &str = "apple_intelligence";
@@ -197,12 +197,13 @@ pub struct OverlayCustomPosition {
     pub dy: f64,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Type)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, Default, PartialEq, Eq, Type)]
 #[serde(rename_all = "snake_case")]
 pub enum ModelUnloadTimeout {
     Never,
     Immediately,
     Min2,
+    #[default]
     Min5,
     Min10,
     Min15,
@@ -221,16 +222,18 @@ pub enum PasteMethod {
     ExternalScript,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Type)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, Default, PartialEq, Eq, Type)]
 #[serde(rename_all = "snake_case")]
 pub enum ClipboardHandling {
+    #[default]
     DontModify,
     CopyToClipboard,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Type)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, Default, PartialEq, Eq, Type)]
 #[serde(rename_all = "snake_case")]
 pub enum AutoSubmitKey {
+    #[default]
     Enter,
     CtrlEnter,
     CmdEnter,
@@ -262,12 +265,6 @@ impl Default for KeyboardImplementation {
     }
 }
 
-impl Default for ModelUnloadTimeout {
-    fn default() -> Self {
-        ModelUnloadTimeout::Min5
-    }
-}
-
 impl Default for PasteMethod {
     fn default() -> Self {
         // Default to CtrlV for macOS and Windows, Direct for Linux
@@ -275,18 +272,6 @@ impl Default for PasteMethod {
         return PasteMethod::Direct;
         #[cfg(not(target_os = "linux"))]
         return PasteMethod::CtrlV;
-    }
-}
-
-impl Default for ClipboardHandling {
-    fn default() -> Self {
-        ClipboardHandling::DontModify
-    }
-}
-
-impl Default for AutoSubmitKey {
-    fn default() -> Self {
-        AutoSubmitKey::Enter
     }
 }
 
@@ -323,7 +308,7 @@ pub enum SoundTheme {
 }
 
 impl SoundTheme {
-    fn as_str(&self) -> &'static str {
+    fn as_str(self) -> &'static str {
         match self {
             SoundTheme::Marimba => "marimba",
             SoundTheme::Pop => "pop",
@@ -331,18 +316,19 @@ impl SoundTheme {
         }
     }
 
-    pub fn to_start_path(&self) -> String {
+    pub fn to_start_path(self) -> String {
         format!("resources/{}_start.wav", self.as_str())
     }
 
-    pub fn to_stop_path(&self) -> String {
+    pub fn to_stop_path(self) -> String {
         format!("resources/{}_stop.wav", self.as_str())
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Type)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, Default, PartialEq, Eq, Type)]
 #[serde(rename_all = "snake_case")]
 pub enum TypingTool {
+    #[default]
     Auto,
     Wtype,
     Kwtype,
@@ -351,41 +337,25 @@ pub enum TypingTool {
     Xdotool,
 }
 
-impl Default for TypingTool {
-    fn default() -> Self {
-        TypingTool::Auto
-    }
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Type)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, Default, PartialEq, Eq, Type)]
 #[serde(rename_all = "snake_case")]
 pub enum WhisperAcceleratorSetting {
+    #[default]
     Auto,
     Cpu,
     Gpu,
 }
 
-impl Default for WhisperAcceleratorSetting {
-    fn default() -> Self {
-        WhisperAcceleratorSetting::Auto
-    }
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Type)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, Default, PartialEq, Eq, Type)]
 #[serde(rename_all = "snake_case")]
 pub enum OrtAcceleratorSetting {
+    #[default]
     Auto,
     Cpu,
     Cuda,
     #[serde(rename = "directml")]
     DirectMl,
     Rocm,
-}
-
-impl Default for OrtAcceleratorSetting {
-    fn default() -> Self {
-        OrtAcceleratorSetting::Auto
-    }
 }
 
 #[derive(Clone, Serialize, Deserialize, Type)]
@@ -516,15 +486,9 @@ pub struct AppSettings {
     /// `format_numbers` if that is also on, so raw mode is usable for dictation with no model in
     /// the loop (issue #66).
     ///
-    /// Defaults to false: turning it on rewrites text that raw mode has always passed through
-    /// verbatim, and there is no settings toggle yet (issue #115), so a true default would change
-    /// every existing raw-mode install on upgrade with no supported way back.
-    ///
-    /// Until #115 lands there is no in-app writer for this either -- every other setting is
-    /// changed through its own `change_*_setting` command and this one has none, so switching it
-    /// on means editing the persisted settings store by hand. `get_settings` is read per
-    /// transcription, so an edit takes effect on the next dictation. The default is worth
-    /// revisiting once the toggle ships.
+    /// Defaults to false because turning it on rewrites text that raw mode historically passed
+    /// through verbatim. The advanced settings toggle lets each user opt in without changing
+    /// existing raw-mode installs on upgrade.
     ///
     /// Turning it off is also how you type the command words themselves, since there is no
     /// escape word. See [`crate::audio_toolkit::apply_spoken_punctuation`].
@@ -590,12 +554,28 @@ fn default_autostart_enabled() -> bool {
 }
 
 fn default_update_checks_enabled() -> bool {
-    // Off by default for fresh settings until the updater feed and signing are
-    // repointed from upstream Handy to AudioBud (milestone B; see
-    // DEFERRED-issues.md "Provenance"). Existing stored values are left
-    // untouched and gated in the UI (src/lib/updater.ts) so no build queries the
-    // upstream feed, which preserves the user's preference for milestone B.
+    // Package detection runs after Tauri resolves the installed executable.
+    // Keep the serialized default off until that one-time migration determines
+    // whether this is an installed NSIS package rather than MSI, Store, or portable.
     false
+}
+
+fn migrate_update_checks_v0_4_2(
+    settings: &mut AppSettings,
+    migration_complete: bool,
+    update_channel_available: bool,
+) -> Option<bool> {
+    if migration_complete || !update_channel_available {
+        return None;
+    }
+
+    // Every release through v0.4.1 forced this value off. Enable the new feed
+    // once an installed NSIS package is actually running. MSI, Store, portable,
+    // and non-Windows packages must not consume the migration because they can
+    // share AppData with a later NSIS install. The durable marker then preserves
+    // any later user opt-out.
+    settings.update_checks_enabled = true;
+    Some(true)
 }
 
 fn default_selected_language() -> String {
@@ -853,6 +833,7 @@ fn ensure_post_process_defaults(settings: &mut AppSettings) -> bool {
 }
 
 pub const SETTINGS_STORE_PATH: &str = "settings_store.json";
+const UPDATE_CHECKS_V0_4_2_MIGRATION_KEY: &str = "update_checks_v0_4_2_migrated";
 
 pub fn get_default_settings() -> AppSettings {
     #[cfg(target_os = "windows")]
@@ -1034,9 +1015,11 @@ pub fn load_or_create_app_settings(app: &AppHandle) -> AppSettings {
 
                 // Merge default bindings into existing settings
                 for (key, value) in default_settings.bindings {
-                    if !settings.bindings.contains_key(&key) {
-                        debug!("Adding missing binding: {}", key);
-                        settings.bindings.insert(key, value);
+                    if let std::collections::hash_map::Entry::Vacant(entry) =
+                        settings.bindings.entry(key)
+                    {
+                        debug!("Adding missing binding: {}", entry.key());
+                        entry.insert(value);
                         updated = true;
                     }
                 }
@@ -1064,6 +1047,24 @@ pub fn load_or_create_app_settings(app: &AppHandle) -> AppSettings {
 
     if ensure_post_process_defaults(&mut settings) {
         store.set("settings", serde_json::to_value(&settings).unwrap());
+    }
+
+    let update_checks_migrated = store
+        .get(UPDATE_CHECKS_V0_4_2_MIGRATION_KEY)
+        .and_then(|value| value.as_bool())
+        .unwrap_or(false);
+    if let Some(enabled) = migrate_update_checks_v0_4_2(
+        &mut settings,
+        update_checks_migrated,
+        crate::update_channel_available(),
+    ) {
+        store.set("settings", serde_json::to_value(&settings).unwrap());
+        store.set(UPDATE_CHECKS_V0_4_2_MIGRATION_KEY, true);
+        let _ = app.emit(
+            "settings-changed",
+            serde_json::json!({ "setting": "update_checks_enabled", "value": enabled }),
+        );
+        debug!("Configured signed update checks for the v0.4.2 package migration: {enabled}");
     }
 
     settings
@@ -1192,17 +1193,51 @@ mod tests {
         assert_eq!(settings.selected_model, "parakeet-tdt-0.6b-v3");
     }
 
-    // Update checks are off by default. The inherited updater still points at
-    // upstream Handy's release feed and verifies against upstream's key (see
-    // DEFERRED-issues.md "Provenance"), so a default build must not offer to
-    // install an upstream Handy release over AudioBud. Re-enable once the feed
-    // and signing are repointed to AudioBud in milestone B.
-    // Fresh settings default update checks off. Existing stored values are left
-    // untouched (preserved for milestone B) and gated in the UI - see
-    // src/lib/updater.test.ts for the milestone-A "never active" invariant.
     #[test]
-    fn default_settings_disable_update_checks() {
+    fn default_settings_wait_for_installed_package_detection() {
         let settings = get_default_settings();
         assert!(!settings.update_checks_enabled);
+    }
+
+    #[test]
+    fn v0_4_2_migration_enables_the_first_signed_feed_on_windows() {
+        let mut settings = get_default_settings();
+        settings.update_checks_enabled = false;
+
+        assert_eq!(
+            migrate_update_checks_v0_4_2(&mut settings, false, true),
+            Some(true)
+        );
+        assert!(settings.update_checks_enabled);
+    }
+
+    #[test]
+    fn v0_4_2_migration_preserves_a_later_user_opt_out() {
+        let mut settings = get_default_settings();
+        settings.update_checks_enabled = false;
+
+        assert_eq!(
+            migrate_update_checks_v0_4_2(&mut settings, true, true),
+            None
+        );
+        assert!(!settings.update_checks_enabled);
+    }
+
+    #[test]
+    fn v0_4_2_migration_waits_for_an_nsis_channel() {
+        let mut settings = get_default_settings();
+        settings.update_checks_enabled = false;
+
+        assert_eq!(
+            migrate_update_checks_v0_4_2(&mut settings, false, false),
+            None
+        );
+        assert!(!settings.update_checks_enabled);
+
+        assert_eq!(
+            migrate_update_checks_v0_4_2(&mut settings, false, true),
+            Some(true)
+        );
+        assert!(settings.update_checks_enabled);
     }
 }

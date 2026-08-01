@@ -1,0 +1,109 @@
+{
+  "schema_version": 1,
+  "release_tag": "model-assets-v1",
+  "base_url": "https://github.com/jamditis/audiobud/releases/download/model-assets-v1",
+  "assets": [
+    {
+      "name": "ggml-small.bin",
+      "bytes": 487601967,
+      "sha256": "1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b",
+      "source_url": "https://blob.handy.computer/ggml-small.bin"
+    },
+    {
+      "name": "whisper-medium-q4_1.bin",
+      "bytes": 491852915,
+      "sha256": "79283fc1f9fe12ca3248543fbd54b73292164d8df5a16e095e2bceeaaabddf57",
+      "source_url": "https://blob.handy.computer/whisper-medium-q4_1.bin"
+    },
+    {
+      "name": "ggml-large-v3-turbo.bin",
+      "bytes": 1624555275,
+      "sha256": "1fc70f774d38eb169993ac391eea357ef47c88757ef72ee5943879b7e8e2bc69",
+      "source_url": "https://blob.handy.computer/ggml-large-v3-turbo.bin"
+    },
+    {
+      "name": "ggml-large-v3-q5_0.bin",
+      "bytes": 1081140203,
+      "sha256": "d75795ecff3f83b5faa89d1900604ad8c780abd5739fae406de19f23ecd98ad1",
+      "source_url": "https://blob.handy.computer/ggml-large-v3-q5_0.bin"
+    },
+    {
+      "name": "breeze-asr-q5_k.bin",
+      "bytes": 1080732108,
+      "sha256": "8efbf0ce8a3f50fe332b7617da787fb81354b358c288b008d3bdef8359df64c6",
+      "source_url": "https://blob.handy.computer/breeze-asr-q5_k.bin"
+    },
+    {
+      "name": "parakeet-v2-int8.tar.gz",
+      "bytes": 473166028,
+      "sha256": "ac9b9429984dd565b25097337a887bb7f0f8ac393573661c651f0e7d31563991",
+      "source_url": "https://blob.handy.computer/parakeet-v2-int8.tar.gz"
+    },
+    {
+      "name": "parakeet-v3-int8.tar.gz",
+      "bytes": 478517071,
+      "sha256": "43d37191602727524a7d8c6da0eef11c4ba24320f5b4730f1a2497befc2efa77",
+      "source_url": "https://blob.handy.computer/parakeet-v3-int8.tar.gz"
+    },
+    {
+      "name": "moonshine-base.tar.gz",
+      "bytes": 57901034,
+      "sha256": "04bf6ab012cfceebd4ac7cf88c1b31d027bbdd3cd704649b692e2e935236b7e8",
+      "source_url": "https://blob.handy.computer/moonshine-base.tar.gz"
+    },
+    {
+      "name": "moonshine-tiny-streaming-en.tar.gz",
+      "bytes": 33006044,
+      "sha256": "465addcfca9e86117415677dfdc98b21edc53537210333a3ecdb58509a80abaf",
+      "source_url": "https://blob.handy.computer/moonshine-tiny-streaming-en.tar.gz"
+    },
+    {
+      "name": "moonshine-small-streaming-en.tar.gz",
+      "bytes": 104842676,
+      "sha256": "dbb3e1c1832bd88a4ac712f7449a136cc2c9a18c5fe33a12ed1b7cb1cfe9cdd5",
+      "source_url": "https://blob.handy.computer/moonshine-small-streaming-en.tar.gz"
+    },
+    {
+      "name": "moonshine-medium-streaming-en.tar.gz",
+      "bytes": 201780020,
+      "sha256": "07a66f3bff1c77e75a2f637e5a263928a08baae3c29c4c053fc968a9a9373d13",
+      "source_url": "https://blob.handy.computer/moonshine-medium-streaming-en.tar.gz"
+    },
+    {
+      "name": "sense-voice-int8.tar.gz",
+      "bytes": 160307845,
+      "sha256": "171d611fe5d353a50bbb741b6f3ef42559b1565685684e9aa888ef563ba3e8a4",
+      "source_url": "https://blob.handy.computer/sense-voice-int8.tar.gz"
+    },
+    {
+      "name": "giga-am-v3-int8.tar.gz",
+      "bytes": 159235143,
+      "sha256": "d872462268430db140b69b72e0fc4b787b194c1dbe51b58de39444d55b6da45b",
+      "source_url": "https://blob.handy.computer/giga-am-v3-int8.tar.gz"
+    },
+    {
+      "name": "canary-180m-flash.tar.gz",
+      "bytes": 153194652,
+      "sha256": "6d9cfca6118b296e196eaedc1c8fa9788305a7b0f1feafdb6dc91932ab6e53f7",
+      "source_url": "https://blob.handy.computer/canary-180m-flash.tar.gz"
+    },
+    {
+      "name": "canary-1b-v2.tar.gz",
+      "bytes": 725374161,
+      "sha256": "02305b2a25f9cf3e7deaffa7f94df00efa44f442cd55c101c2cb9c000f904666",
+      "source_url": "https://blob.handy.computer/canary-1b-v2.tar.gz"
+    },
+    {
+      "name": "cohere-int8.tar.gz",
+      "bytes": 1791654555,
+      "sha256": "ea2257d52434f3644574f187dcdcf666e302cd11b92866116ab8e14cd9c887f0",
+      "source_url": "https://blob.handy.computer/cohere-int8.tar.gz"
+    },
+    {
+      "name": "silero_vad_v4.onnx",
+      "bytes": 1807522,
+      "sha256": "a35ebf52fd3ce5f1469b2a36158dba761bc47b973ea3382b3186ca15b1f5af28",
+      "source_url": "https://blob.handy.computer/silero_vad_v4.onnx"
+    }
+  ]
+}

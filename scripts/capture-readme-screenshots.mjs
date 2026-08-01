@@ -345,7 +345,7 @@ function model(overrides) {
     name: "",
     description: "",
     filename: "",
-    url: "https://blob.handy.computer/model.tar.gz",
+    url: "https://models.audiobud.invalid/model.tar.gz",
     sha256: "0".repeat(64),
     size_mb: 0,
     is_downloaded: false,
@@ -522,6 +522,8 @@ function installTauriMocks(settings, models) {
         case "check_apple_intelligence_available":
         case "is_laptop":
           return false;
+        case "is_update_channel_available":
+          return true;
         case "get_available_typing_tools":
           return ["auto"];
         default:

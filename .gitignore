@@ -44,6 +44,7 @@ node_modules/
 dist/
 desktop.ini
 src-tauri/resources/models/silero_vad_v4.onnx
+src-tauri/Microsoft.WebView2.FixedVersionRuntime.*.x64/
 
 # Secrets - never commit
 .env

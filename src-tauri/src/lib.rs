@@ -28,7 +28,7 @@ mod tray_i18n;
 mod utils;
 
 pub use cli::CliArgs;
-#[cfg(debug_assertions)]
+#[cfg(any(debug_assertions, test))]
 use specta_typescript::{BigIntExportBehavior, Typescript};
 use tauri_specta::{collect_commands, collect_events, Builder};
 
@@ -44,12 +44,14 @@ use signal_hook::iterator::Signals;
 use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::Arc;
 use tauri::image::Image;
+use tauri::utils::config::BundleType;
 pub use transcription_coordinator::TranscriptionCoordinator;
 
 use tauri::tray::TrayIconBuilder;
 use tauri::{AppHandle, Emitter, Listener, Manager};
 use tauri_plugin_autostart::{MacosLauncher, ManagerExt};
 use tauri_plugin_log::{Builder as LogBuilder, RotationStrategy, Target, TargetKind};
+use tauri_plugin_updater::UpdaterExt;
 
 use crate::settings::get_settings;
 
@@ -57,15 +59,149 @@ use crate::settings::get_settings;
 // We use u8 to store the log::LevelFilter as a number
 pub static FILE_LOG_LEVEL: AtomicU8 = AtomicU8::new(log::LevelFilter::Debug as u8);
 
-// Whether AudioBud has its own signed release feed wired up. While this is
-// false the updater plugin must NOT be registered, because tauri_plugin_updater
-// deserializes the `plugins.updater` block from tauri.conf.json when it builds,
-// and that block was removed (it pointed at upstream Handy's feed) -- registering
-// the plugin without it panics before the window opens (issue #32). This mirrors
-// the frontend gate in src/lib/updater.ts; flip both to true and restore the
-// config block together once the feed is AudioBud's own. The `updater_feed_gate`
-// test below ties this flag to the actual config so the two cannot drift.
-const UPDATER_FEED_READY: bool = false;
+// The updater plugin deserializes `plugins.updater` from tauri.conf.json at app
+// startup. Keep this in lockstep with that block and the frontend gate in
+// src/lib/updater.ts; the test below enforces the backend/config half.
+const UPDATER_FEED_READY: bool = true;
+
+fn nsis_update_channel_available(
+    is_windows: bool,
+    is_portable: bool,
+    bundle_type: Option<BundleType>,
+) -> bool {
+    is_windows && !is_portable && matches!(bundle_type, Some(BundleType::Nsis))
+}
+
+pub(crate) fn update_channel_available() -> bool {
+    nsis_update_channel_available(
+        cfg!(target_os = "windows"),
+        crate::portable::is_portable(),
+        tauri::utils::platform::bundle_type(),
+    )
+}
+
+fn update_checks_action_enabled_for_channel(
+    setting_enabled: bool,
+    update_channel_available: bool,
+) -> bool {
+    setting_enabled && update_channel_available
+}
+
+pub(crate) fn update_checks_action_enabled(setting_enabled: bool) -> bool {
+    update_checks_action_enabled_for_channel(setting_enabled, update_channel_available())
+}
+
+fn ensure_cli_update_supported(
+    is_portable: bool,
+    is_windows: bool,
+    update_channel_available: bool,
+) -> Result<(), String> {
+    if !is_windows {
+        return Err("Automatic updates are currently supported only on Windows".to_string());
+    }
+    if is_portable {
+        return Err(
+            "Automatic updates are unavailable in portable mode; download the latest portable installer from the AudioBud releases page"
+                .to_string(),
+        );
+    }
+    if !update_channel_available {
+        return Err(
+            "Automatic updates are available only for installed NSIS packages; MSI and Store packages use their own update channel"
+                .to_string(),
+        );
+    }
+    Ok(())
+}
+
+async fn install_available_update(
+    app: AppHandle,
+    verification_endpoint: Option<String>,
+) -> Result<bool, String> {
+    ensure_cli_update_supported(
+        crate::portable::is_portable(),
+        cfg!(target_os = "windows"),
+        update_channel_available(),
+    )?;
+    let updater = if let Some(endpoint) = verification_endpoint {
+        let endpoint = endpoint
+            .parse::<tauri::Url>()
+            .map_err(|error| format!("Invalid signed update verification endpoint: {error}"))?;
+        app.updater_builder()
+            .endpoints(vec![endpoint])
+            .map_err(|error| format!("Invalid signed update verification endpoint: {error}"))?
+            .build()
+            .map_err(|error| format!("Failed to initialize signed updater: {error}"))?
+    } else {
+        app.updater()
+            .map_err(|error| format!("Failed to initialize signed updater: {error}"))?
+    };
+    let Some(update) = updater
+        .check()
+        .await
+        .map_err(|error| format!("Failed to check signed update feed: {error}"))?
+    else {
+        log::info!("No signed AudioBud update is available");
+        return Ok(false);
+    };
+
+    log::info!(
+        "Applying signed AudioBud update from {} to {}",
+        update.current_version,
+        update.version
+    );
+    let mut downloaded = 0usize;
+    update
+        .download_and_install(
+            |chunk_length, content_length| {
+                downloaded += chunk_length;
+                log::info!(
+                    "Downloaded {downloaded} bytes of signed update ({content_length:?} total)"
+                );
+            },
+            || log::info!("Signed update download finished and verified"),
+        )
+        .await
+        .map_err(|error| format!("Failed to download or install signed update: {error}"))?;
+    Ok(true)
+}
+
+fn spawn_update_install(
+    app: AppHandle,
+    exit_when_current: bool,
+    verification_endpoint: Option<String>,
+) {
+    tauri::async_runtime::spawn(async move {
+        match install_available_update(app.clone(), verification_endpoint).await {
+            Ok(applied) => {
+                log::info!("Signed updater finished; update applied: {applied}");
+                if exit_when_current {
+                    app.exit(0);
+                }
+            }
+            Err(error) => {
+                log::error!("{error}");
+                if exit_when_current {
+                    app.exit(1);
+                }
+            }
+        }
+    });
+}
+
+fn cli_option(args: &[String], option: &str) -> Option<String> {
+    args.iter().enumerate().find_map(|(index, argument)| {
+        if argument == option {
+            return args.get(index + 1).cloned();
+        }
+
+        argument
+            .strip_prefix(option)
+            .and_then(|suffix| suffix.strip_prefix('='))
+            .filter(|value| !value.is_empty())
+            .map(str::to_string)
+    })
+}
 
 fn level_filter_from_u8(value: u8) -> log::LevelFilter {
     match value {
@@ -241,7 +377,7 @@ fn initialize_core_logic(app_handle: &AppHandle) {
             }
             "check_updates" => {
                 let settings = settings::get_settings(app);
-                if settings.update_checks_enabled {
+                if update_checks_action_enabled(settings.update_checks_enabled) {
                     show_main_window(app);
                     let _ = app.emit("check-for-updates", ());
                 }
@@ -372,7 +508,7 @@ fn initialize_core_logic(app_handle: &AppHandle) {
 
     // Get the autostart manager and configure based on user setting
     let autostart_manager = app_handle.autolaunch();
-    let settings = settings::get_settings(&app_handle);
+    let settings = settings::get_settings(app_handle);
 
     if settings.autostart_enabled {
         // Enable autostart if user has opted in
@@ -390,7 +526,7 @@ fn initialize_core_logic(app_handle: &AppHandle) {
 #[specta::specta]
 fn trigger_update_check(app: AppHandle) -> Result<(), String> {
     let settings = settings::get_settings(&app);
-    if !settings.update_checks_enabled {
+    if !update_checks_action_enabled(settings.update_checks_enabled) {
         return Ok(());
     }
     app.emit("check-for-updates", ())
@@ -405,16 +541,8 @@ fn show_main_window_command(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-#[cfg_attr(mobile, tauri::mobile_entry_point)]
-pub fn run(cli_args: CliArgs) {
-    // Detect portable mode before anything else
-    portable::init();
-
-    // Parse console logging directives from RUST_LOG, falling back to info-level logging
-    // when the variable is unset
-    let console_filter = build_console_filter();
-
-    let specta_builder = Builder::<tauri::Wry>::new()
+fn specta_builder() -> Builder<tauri::Wry> {
+    Builder::<tauri::Wry>::new()
         .commands(collect_commands![
             shortcut::change_binding,
             shortcut::reset_binding,
@@ -458,6 +586,7 @@ pub fn run(cli_args: CliArgs) {
             shortcut::change_append_trailing_space_setting,
             shortcut::change_raw_output_setting,
             shortcut::change_format_numbers_setting,
+            shortcut::change_format_raw_output_setting,
             shortcut::update_word_replacements,
             shortcut::change_lazy_stream_close_setting,
             shortcut::change_app_language_setting,
@@ -475,6 +604,7 @@ pub fn run(cli_args: CliArgs) {
             show_main_window_command,
             commands::cancel_operation,
             commands::is_portable,
+            commands::is_update_channel_available,
             commands::get_app_dir_path,
             commands::get_app_settings,
             commands::get_default_settings,
@@ -532,15 +662,47 @@ pub fn run(cli_args: CliArgs) {
             commands::personalization::export_personalization,
             helpers::clamshell::is_laptop,
         ])
-        .events(collect_events![managers::history::HistoryUpdatePayload,]);
+        .events(collect_events![managers::history::HistoryUpdatePayload,])
+}
 
-    #[cfg(debug_assertions)] // <- Only export on non-release builds
-    specta_builder
+#[cfg(any(debug_assertions, test))]
+fn export_typescript_bindings(builder: &Builder<tauri::Wry>, output: &std::path::Path) {
+    builder
         .export(
             Typescript::default().bigint(BigIntExportBehavior::Number),
-            "../src/bindings.ts",
+            output,
         )
-        .expect("Failed to export typescript bindings");
+        .expect("Failed to export TypeScript bindings");
+
+    // tauri-specta emits spaces at a few generated line endings. Normalize
+    // those mechanical artifacts so the checked-in file passes git's
+    // whitespace gate and remains deterministic across debug builds.
+    let generated = std::fs::read_to_string(output).expect("generated bindings can be read");
+    let had_trailing_newline = generated.ends_with('\n');
+    let mut normalized = generated
+        .lines()
+        .map(str::trim_end)
+        .collect::<Vec<_>>()
+        .join("\n");
+    if had_trailing_newline {
+        normalized.push('\n');
+    }
+    std::fs::write(output, normalized).expect("normalized bindings can be written");
+}
+
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run(cli_args: CliArgs) {
+    // Detect portable mode before anything else
+    portable::init();
+
+    // Parse console logging directives from RUST_LOG, falling back to info-level logging
+    // when the variable is unset
+    let console_filter = build_console_filter();
+
+    let specta_builder = specta_builder();
+
+    #[cfg(debug_assertions)] // <- Only export on non-release builds
+    export_typescript_bindings(&specta_builder, std::path::Path::new("../src/bindings.ts"));
 
     let invoke_handler = specta_builder.invoke_handler();
 
@@ -594,7 +756,13 @@ pub fn run(cli_args: CliArgs) {
 
     builder
         .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
-            if args.iter().any(|a| a == "--toggle-transcription") {
+            if args.iter().any(|a| a == "--install-update") {
+                spawn_update_install(
+                    app.clone(),
+                    false,
+                    cli_option(&args, "--install-update-endpoint"),
+                );
+            } else if args.iter().any(|a| a == "--toggle-transcription") {
                 signal_handle::send_transcription_input(app, "transcribe", "CLI");
             } else if args.iter().any(|a| a == "--toggle-post-process") {
                 signal_handle::send_transcription_input(app, "transcribe_with_post_process", "CLI");
@@ -639,7 +807,19 @@ pub fn run(cli_args: CliArgs) {
 
             win_builder.build()?;
 
-            let mut settings = get_settings(&app.handle());
+            // This is the release E2E entry point: it exercises the same pinned
+            // feed, signature verification, and installer as the UI without
+            // requiring a WebView click on a disposable Windows runner.
+            if cli_args.install_update {
+                spawn_update_install(
+                    app.handle().clone(),
+                    true,
+                    cli_args.install_update_endpoint.clone(),
+                );
+                return Ok(());
+            }
+
+            let mut settings = get_settings(app.handle());
 
             // CLI --debug flag overrides debug_mode and log level (runtime-only, not persisted)
             if cli_args.debug {
@@ -712,7 +892,7 @@ pub fn run(cli_args: CliArgs) {
             tauri::WindowEvent::ThemeChanged(theme) => {
                 log::info!("Theme changed to: {:?}", theme);
                 // Update tray icon to match new theme, maintaining idle state
-                utils::change_tray_icon(&window.app_handle(), utils::TrayIconState::Idle);
+                utils::change_tray_icon(window.app_handle(), utils::TrayIconState::Idle);
             }
             _ => {}
         })
@@ -730,7 +910,39 @@ pub fn run(cli_args: CliArgs) {
 
 #[cfg(test)]
 mod updater_gate_tests {
-    use super::UPDATER_FEED_READY;
+    use super::{
+        cli_option, ensure_cli_update_supported, nsis_update_channel_available,
+        update_checks_action_enabled_for_channel, UPDATER_FEED_READY,
+    };
+    use tauri::utils::config::BundleType;
+
+    #[cfg(not(windows))]
+    use super::{export_typescript_bindings, specta_builder};
+
+    // Keeping this generator test out of the Windows test harness avoids
+    // retaining Wry's WebView2 loader in the unit-test executable. The runner
+    // then fails at process startup before any Rust test can run. Linux still
+    // verifies the same deterministic tauri-specta output on every CI run.
+    #[cfg(not(windows))]
+    #[test]
+    fn checked_in_typescript_bindings_match_specta_export() {
+        let generated_path =
+            std::env::temp_dir().join(format!("audiobud-bindings-{}.ts", std::process::id()));
+        export_typescript_bindings(&specta_builder(), &generated_path);
+
+        let generated = std::fs::read_to_string(&generated_path)
+            .expect("temporary TypeScript bindings can be read");
+        std::fs::remove_file(&generated_path).expect("temporary bindings can be removed");
+        let checked_in_path =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../src/bindings.ts");
+        let checked_in =
+            std::fs::read_to_string(checked_in_path).expect("checked-in bindings can be read");
+
+        assert_eq!(
+            generated, checked_in,
+            "src/bindings.ts is stale; run a debug AudioBud build and commit the generated file"
+        );
+    }
 
     /// Regression guard for issue #32. tauri_plugin_updater deserializes the
     /// `plugins.updater` block from tauri.conf.json when it builds, so the app
@@ -743,15 +955,103 @@ mod updater_gate_tests {
     fn updater_feed_gate_matches_config() {
         let config: serde_json::Value = serde_json::from_str(include_str!("../tauri.conf.json"))
             .expect("tauri.conf.json is valid JSON");
-        let has_updater_config = config
+        let updater_config = config
             .get("plugins")
             .and_then(|plugins| plugins.get("updater"))
-            .is_some();
+            .cloned();
+        let has_updater_config = updater_config.is_some();
         assert_eq!(
             UPDATER_FEED_READY, has_updater_config,
             "UPDATER_FEED_READY ({UPDATER_FEED_READY}) must match the presence of a \
              `plugins.updater` block in tauri.conf.json ({has_updater_config}); registering \
              the updater plugin without that config panics at startup (issue #32)."
         );
+
+        let updater_config = updater_config.expect("enabled updater has a config block");
+        assert_eq!(
+            updater_config.get("endpoints"),
+            Some(&serde_json::json!([
+                "https://github.com/jamditis/audiobud/releases/download/update-feed/latest.json"
+            ])),
+            "updater endpoint must resolve AudioBud's dedicated published feed"
+        );
+        let public_key = updater_config
+            .get("pubkey")
+            .and_then(serde_json::Value::as_str)
+            .expect("updater public key is configured");
+        assert_eq!(
+            public_key,
+            "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEE2QzRFMzNEODRCM0E1NUYKUldSZnBiT0VQZVBFcHYzY0NZd0RrSzVZdkk4MjYwdG5xMW15UTRoY0gyQmFSaExCN3k3R1p0TlIK",
+            "updater must pin AudioBud's public signing key"
+        );
+    }
+
+    #[test]
+    fn cli_updater_rejects_portable_mode() {
+        let error = ensure_cli_update_supported(true, true, true)
+            .expect_err("portable update must be blocked");
+        assert!(error.contains("portable mode"));
+        assert!(error.contains("releases page"));
+    }
+
+    #[test]
+    fn cli_updater_rejects_non_windows_platforms() {
+        let error = ensure_cli_update_supported(false, false, false)
+            .expect_err("a Windows-only feed must fail before it is queried");
+        assert!(error.contains("Windows"));
+    }
+
+    #[test]
+    fn updater_channel_accepts_only_installed_nsis_packages() {
+        assert!(!nsis_update_channel_available(
+            true,
+            false,
+            Some(BundleType::Msi)
+        ));
+        assert!(nsis_update_channel_available(
+            true,
+            false,
+            Some(BundleType::Nsis)
+        ));
+        assert!(!nsis_update_channel_available(
+            true,
+            true,
+            Some(BundleType::Nsis)
+        ));
+        assert!(!nsis_update_channel_available(
+            false,
+            false,
+            Some(BundleType::Nsis)
+        ));
+        assert!(!nsis_update_channel_available(true, false, None));
+    }
+
+    #[test]
+    fn cli_updater_rejects_msi_and_store_packages() {
+        let error = ensure_cli_update_supported(false, true, false)
+            .expect_err("the NSIS feed must reject non-NSIS packages");
+        assert!(error.contains("NSIS"));
+        assert!(ensure_cli_update_supported(false, true, true).is_ok());
+    }
+
+    #[test]
+    fn update_actions_require_an_enabled_nsis_channel() {
+        assert!(update_checks_action_enabled_for_channel(true, true));
+        assert!(!update_checks_action_enabled_for_channel(false, true));
+        assert!(!update_checks_action_enabled_for_channel(true, false));
+        assert!(!update_checks_action_enabled_for_channel(false, false));
+    }
+
+    #[test]
+    fn single_instance_cli_options_accept_both_clap_value_forms() {
+        let endpoint =
+            "https://github.com/jamditis/audiobud/releases/download/v0.4.2/latest-candidate.json";
+        let option = "--install-update-endpoint";
+        let separated = ["AudioBud.exe", option, endpoint].map(str::to_string);
+        let joined = ["AudioBud.exe".to_string(), format!("{option}={endpoint}")];
+
+        assert_eq!(cli_option(&separated, option).as_deref(), Some(endpoint));
+        assert_eq!(cli_option(&joined, option).as_deref(), Some(endpoint));
+        assert_eq!(cli_option(&separated, "--missing"), None);
     }
 }

@@ -1,0 +1,463 @@
+name: Publish update feed
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Published stable release tag to validate and republish"
+        required: true
+        type: string
+      prior_tag:
+        description: "Optional prior updater-capable release for the Windows E2E"
+        required: false
+        type: string
+
+concurrency:
+  group: publish-update-feed
+  cancel-in-progress: false
+
+jobs:
+  gate:
+    name: Select stable app releases
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    permissions:
+      contents: read
+    outputs:
+      publish: ${{ steps.gate.outputs.publish }}
+      tag: ${{ steps.gate.outputs.tag }}
+    steps:
+      - name: Gate stable app release
+        id: gate
+        shell: bash
+        env:
+          EVENT_TAG: ${{ github.event.release.tag_name }}
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          TAG="${EVENT_TAG:-$INPUT_TAG}"
+          if [[ -z "$TAG" ]]; then
+            echo "::error::A release tag is required"
+            exit 1
+          fi
+
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Skipping update feed publication for non-app release $TAG"
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "publish=true" >> "$GITHUB_OUTPUT"
+
+  prepare:
+    name: Prepare signed candidate manifest
+    needs: gate
+    if: needs.gate.outputs.publish == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      attestations: read
+      contents: write
+    outputs:
+      tag: ${{ steps.release.outputs.tag }}
+      commit: ${{ steps.release.outputs.commit }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.3.14
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+        with:
+          toolchain: stable
+
+      - name: Resolve published release
+        id: release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.gate.outputs.tag }}
+        run: |
+          set -euo pipefail
+          RELEASE_JSON="$RUNNER_TEMP/release.json"
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" > "$RELEASE_JSON"
+          if jq -e '.draft or .prerelease or (.published_at == null)' "$RELEASE_JSON" > /dev/null; then
+            echo "::error::Update feeds require a published, stable release"
+            exit 1
+          fi
+
+          LATEST_JSON="$RUNNER_TEMP/latest-release.json"
+          gh api "repos/$GITHUB_REPOSITORY/releases/latest" > "$LATEST_JSON"
+          LATEST_TAG=$(jq -r ".tag_name" "$LATEST_JSON")
+          if [[ "$LATEST_TAG" != "$TAG" ]]; then
+            echo "::error::Update feeds can only be published for GitHub's latest release ($LATEST_TAG)"
+            exit 1
+          fi
+
+          TAG_SHA=$(gh api "repos/$GITHUB_REPOSITORY/commits/$TAG" --jq '.sha')
+          if [[ ! "$TAG_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::Release tag did not resolve to a commit"
+            exit 1
+          fi
+
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "commit=$TAG_SHA" >> "$GITHUB_OUTPUT"
+          echo "json=$RELEASE_JSON" >> "$GITHUB_OUTPUT"
+
+      - name: Download signed updater assets
+        id: updater
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          set -euo pipefail
+          ASSET_DIRECTORY="$RUNNER_TEMP/update-assets"
+          mkdir -p "$ASSET_DIRECTORY"
+          gh release download "$TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --dir "$ASSET_DIRECTORY" \
+            --pattern "*.nsis.zip" \
+            --pattern "*.nsis.zip.sig" \
+            --pattern "updater-signing-public-key.pub"
+
+          mapfile -t ARCHIVES < <(find "$ASSET_DIRECTORY" -maxdepth 1 -type f -name '*.nsis.zip')
+          mapfile -t SIGNATURES < <(find "$ASSET_DIRECTORY" -maxdepth 1 -type f -name '*.nsis.zip.sig')
+          mapfile -t PUBLIC_KEYS < <(find "$ASSET_DIRECTORY" -maxdepth 1 -type f -name 'updater-signing-public-key.pub')
+          if [[ ${#ARCHIVES[@]} -ne 1 || ${#SIGNATURES[@]} -ne 1 || ${#PUBLIC_KEYS[@]} -ne 1 ]]; then
+            echo "::error::Expected one updater archive, signature, and signing public key"
+            exit 1
+          fi
+          if [[ "${SIGNATURES[0]}" != "${ARCHIVES[0]}.sig" ]]; then
+            echo "::error::Updater archive and signature names do not match"
+            exit 1
+          fi
+
+          echo "archive=${ARCHIVES[0]}" >> "$GITHUB_OUTPUT"
+          echo "signature=${SIGNATURES[0]}" >> "$GITHUB_OUTPUT"
+          echo "public_key=${PUBLIC_KEYS[0]}" >> "$GITHUB_OUTPUT"
+
+      - name: Verify updater provenance
+        shell: bash
+        env:
+          ARCHIVE: ${{ steps.updater.outputs.archive }}
+          GH_TOKEN: ${{ github.token }}
+          PUBLIC_KEY: ${{ steps.updater.outputs.public_key }}
+          RELEASE_COMMIT: ${{ steps.release.outputs.commit }}
+          SIGNATURE: ${{ steps.updater.outputs.signature }}
+        run: |
+          set -euo pipefail
+          for artifact in "$ARCHIVE" "$SIGNATURE" "$PUBLIC_KEY"; do
+            gh attestation verify "$artifact" \
+              --repo "$GITHUB_REPOSITORY" \
+              --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml" \
+              --source-digest "$RELEASE_COMMIT"
+          done
+
+      - name: Verify updater signature
+        shell: bash
+        env:
+          ARCHIVE: ${{ steps.updater.outputs.archive }}
+          PUBLIC_KEY: ${{ steps.updater.outputs.public_key }}
+          SIGNATURE: ${{ steps.updater.outputs.signature }}
+        run: |
+          set -euo pipefail
+          SIGNATURE_VALUE=$(<"$SIGNATURE")
+          if [[ ! -s "$PUBLIC_KEY" ]]; then
+            echo "::error::Updater signing public key is empty"
+            exit 1
+          fi
+          if [[ ! "$SIGNATURE_VALUE" =~ ^[A-Za-z0-9+/=]+$ ]]; then
+            echo "::error::Updater signature is not a single base64 value"
+            exit 1
+          fi
+
+          DECODED_SIGNATURE_PATH="$RUNNER_TEMP/updater-signature.sig"
+          printf '%s' "$SIGNATURE_VALUE" | base64 --decode > "$DECODED_SIGNATURE_PATH"
+
+          CARGO_TARGET_DIR="$RUNNER_TEMP/updater-signature-target" \
+            cargo run --locked --release \
+              --manifest-path scripts/verify-updater-signature/Cargo.toml -- \
+              "$PUBLIC_KEY" "$DECODED_SIGNATURE_PATH" "$ARCHIVE"
+
+      - name: Generate latest.json
+        id: manifest
+        shell: bash
+        env:
+          RELEASE_JSON: ${{ steps.release.outputs.json }}
+          SIGNATURE: ${{ steps.updater.outputs.signature }}
+        run: |
+          set -euo pipefail
+          MANIFEST="$RUNNER_TEMP/latest-candidate.json"
+          bun scripts/generate-update-manifest.ts \
+            --release "$RELEASE_JSON" \
+            --repository "$GITHUB_REPOSITORY" \
+            --signature "$SIGNATURE" \
+            --output "$MANIFEST"
+          jq -e . "$MANIFEST" > /dev/null
+          echo "path=$MANIFEST" >> "$GITHUB_OUTPUT"
+
+      - name: Upload candidate manifest
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release.outputs.tag }}
+          MANIFEST: ${{ steps.manifest.outputs.path }}
+        run: |
+          set -euo pipefail
+          gh release upload "$TAG" "$MANIFEST" --clobber --repo "$GITHUB_REPOSITORY"
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" \
+            --json assets --jq '.assets[].name' | grep -Fx latest-candidate.json
+
+  verify_update:
+    name: Apply update from prior Windows release
+    needs: prepare
+    runs-on: windows-2025
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Resolve prior updater-capable release
+        id: prior
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INPUT_PRIOR_TAG: ${{ inputs.prior_tag }}
+          TARGET_TAG: ${{ needs.prepare.outputs.tag }}
+        run: |
+          $targetMatch = [regex]::Match($env:TARGET_TAG, '^v?(\d+\.\d+\.\d+)$')
+          if (-not $targetMatch.Success) {
+            throw "Target release tag is not stable semver: $env:TARGET_TAG"
+          }
+          $targetVersionText = $targetMatch.Groups[1].Value
+          $targetVersion = [version]$targetVersionText
+          $minimumPriorVersion = [version]'0.4.2'
+          $requestedPriorTag = $env:INPUT_PRIOR_TAG.Trim()
+
+          $releases = gh api "repos/$env:GITHUB_REPOSITORY/releases?per_page=100" |
+            ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to list releases"
+          }
+
+          $candidates = foreach ($release in $releases) {
+            if ($release.draft -or $release.prerelease -or -not $release.published_at) {
+              continue
+            }
+            $match = [regex]::Match($release.tag_name, '^v?(\d+\.\d+\.\d+)$')
+            if (-not $match.Success) { continue }
+            $versionText = $match.Groups[1].Value
+            $version = [version]$versionText
+            if ($version -ge $targetVersion -or $version -lt $minimumPriorVersion) {
+              continue
+            }
+            if ($requestedPriorTag -and $release.tag_name -ne $requestedPriorTag) {
+              continue
+            }
+            $installerName = "AudioBud_$($versionText)_x64-setup.exe"
+            if ($release.assets.name -notcontains $installerName) { continue }
+
+            [PSCustomObject]@{
+              Tag = $release.tag_name
+              Version = $version
+              VersionText = $versionText
+              InstallerName = $installerName
+            }
+          }
+
+          $prior = $candidates | Sort-Object Version -Descending | Select-Object -First 1
+          if (-not $prior) {
+            if ($requestedPriorTag) {
+              throw "Requested prior release is not an eligible updater build: $requestedPriorTag"
+            }
+            "eligible=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+            "### Windows updater E2E`n`nNo earlier updater-capable release exists yet. The next stable release will exercise this path." |
+              Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+            exit 0
+          }
+
+          "eligible=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "tag=$($prior.Tag)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "version=$($prior.VersionText)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "installer_name=$($prior.InstallerName)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "target_version=$targetVersionText" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      - name: Install prior release
+        if: steps.prior.outputs.eligible == 'true'
+        id: install
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INSTALLER_NAME: ${{ steps.prior.outputs.installer_name }}
+          PRIOR_TAG: ${{ steps.prior.outputs.tag }}
+          PRIOR_VERSION: ${{ steps.prior.outputs.version }}
+        run: |
+          $downloadDirectory = Join-Path $env:RUNNER_TEMP 'prior-release'
+          New-Item -ItemType Directory -Path $downloadDirectory | Out-Null
+          gh release download $env:PRIOR_TAG `
+            --repo $env:GITHUB_REPOSITORY `
+            --dir $downloadDirectory `
+            --pattern $env:INSTALLER_NAME
+          if ($LASTEXITCODE -ne 0) { throw "Failed to download $env:INSTALLER_NAME" }
+
+          $installer = Join-Path $downloadDirectory $env:INSTALLER_NAME
+          $installerSignature = Get-AuthenticodeSignature -LiteralPath $installer
+          if ($installerSignature.Status -ne [System.Management.Automation.SignatureStatus]::Valid) {
+            throw "Prior installer signature is invalid: $($installerSignature.StatusMessage)"
+          }
+          if ($installerSignature.SignerCertificate.Subject -notlike '*CN=Joseph Amditis*') {
+            throw "Prior installer has an unexpected signer: $($installerSignature.SignerCertificate.Subject)"
+          }
+
+          $installDirectory = "C:\au$env:GITHUB_RUN_ID"
+          if (Test-Path -LiteralPath $installDirectory) {
+            throw "Clean install directory already exists: $installDirectory"
+          }
+          $installProcess = Start-Process -FilePath $installer `
+            -ArgumentList @('/S', "/D=$installDirectory") -Wait -PassThru
+          if ($installProcess.ExitCode -ne 0) {
+            throw "Prior release installation failed with exit code $($installProcess.ExitCode)"
+          }
+
+          $executable = Join-Path $installDirectory 'AudioBud.exe'
+          if (-not (Test-Path -LiteralPath $executable -PathType Leaf)) {
+            throw "Installed executable was not found: $executable"
+          }
+          $installedVersion = (Get-Item -LiteralPath $executable).VersionInfo.ProductVersion
+          if ($installedVersion -notmatch "^$([regex]::Escape($env:PRIOR_VERSION))(\.0)?$") {
+            throw "Expected installed version $env:PRIOR_VERSION, found $installedVersion"
+          }
+          "executable=$executable" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      - name: Apply signed update
+        if: steps.prior.outputs.eligible == 'true'
+        id: apply
+        shell: pwsh
+        env:
+          EXECUTABLE: ${{ steps.install.outputs.executable }}
+          TARGET_TAG: ${{ needs.prepare.outputs.tag }}
+          TARGET_VERSION: ${{ steps.prior.outputs.target_version }}
+        run: |
+          $manifestUrl = "https://github.com/$env:GITHUB_REPOSITORY/releases/download/$env:TARGET_TAG/latest-candidate.json"
+          $manifest = Invoke-RestMethod -Uri $manifestUrl
+          if ($manifest.version -ne $env:TARGET_VERSION) {
+            throw "Published feed describes $($manifest.version), expected $env:TARGET_VERSION"
+          }
+          $expectedArchive = "https://github.com/$env:GITHUB_REPOSITORY/releases/download/$env:TARGET_TAG/AudioBud_$($env:TARGET_VERSION)_x64-setup.nsis.zip"
+          if ($manifest.platforms.'windows-x86_64'.url -ne $expectedArchive) {
+            throw "Published feed has an unexpected Windows updater URL"
+          }
+
+          $process = Start-Process -FilePath $env:EXECUTABLE `
+            -ArgumentList @("--install-update", "--install-update-endpoint", $manifestUrl, '--start-hidden', '--no-tray') -PassThru
+          "process_id=$($process.Id)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      - name: Assert installed version and signature
+        if: steps.prior.outputs.eligible == 'true'
+        shell: pwsh
+        env:
+          EXECUTABLE: ${{ steps.install.outputs.executable }}
+          PROCESS_ID: ${{ steps.apply.outputs.process_id }}
+          TARGET_VERSION: ${{ steps.prior.outputs.target_version }}
+        run: |
+          $deadline = (Get-Date).AddMinutes(8)
+          $installedVersion = ''
+          while ((Get-Date) -lt $deadline) {
+            if (Test-Path -LiteralPath $env:EXECUTABLE -PathType Leaf) {
+              $installedVersion = (Get-Item -LiteralPath $env:EXECUTABLE).VersionInfo.ProductVersion
+              if ($installedVersion -match "^$([regex]::Escape($env:TARGET_VERSION))(\.0)?$") {
+                break
+              }
+            }
+
+            $initialProcess = Get-Process -Id $env:PROCESS_ID -ErrorAction SilentlyContinue
+            if ($initialProcess -and $initialProcess.HasExited -and $initialProcess.ExitCode -ne 0) {
+              throw "Updater process failed with exit code $($initialProcess.ExitCode)"
+            }
+            Start-Sleep -Seconds 5
+          }
+
+          if ($installedVersion -notmatch "^$([regex]::Escape($env:TARGET_VERSION))(\.0)?$") {
+            throw "Updater did not install $env:TARGET_VERSION; found $installedVersion"
+          }
+          $signature = Get-AuthenticodeSignature -LiteralPath $env:EXECUTABLE
+          if ($signature.Status -ne [System.Management.Automation.SignatureStatus]::Valid) {
+            throw "Updated executable signature is invalid: $($signature.StatusMessage)"
+          }
+          if ($signature.SignerCertificate.Subject -notlike '*CN=Joseph Amditis*') {
+            throw "Updated executable has an unexpected signer: $($signature.SignerCertificate.Subject)"
+          }
+
+          Get-Process -Name AudioBud -ErrorAction SilentlyContinue | Stop-Process -Force
+          "### Windows updater E2E`n`nInstalled, detected, downloaded, verified, and applied $env:TARGET_VERSION from a real prior release on a clean runner." |
+            Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+
+  finalize:
+    name: Promote verified update feed
+    needs: [prepare, verify_update]
+    if: ${{ always() && needs.prepare.result == 'success' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    env:
+      FEED_TAG: update-feed
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ needs.prepare.outputs.tag }}
+    steps:
+      - name: Publish latest.json
+        if: needs.verify_update.result == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          LATEST_JSON="$RUNNER_TEMP/latest-release.json"
+          gh api "repos/$GITHUB_REPOSITORY/releases/latest" > "$LATEST_JSON"
+          LATEST_TAG=$(jq -r ".tag_name" "$LATEST_JSON")
+          if [[ "$LATEST_TAG" != "$TAG" ]]; then
+            echo "::error::Update feed promotion requires GitHub's latest release ($LATEST_TAG)"
+            exit 1
+          fi
+
+          FEED_RELEASE_JSON="$RUNNER_TEMP/feed-release.json"
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$FEED_TAG" > "$FEED_RELEASE_JSON"
+          if jq -e '.draft or .prerelease or (.published_at == null)' "$FEED_RELEASE_JSON" > /dev/null; then
+            echo "::error::The dedicated update feed release must be published and stable"
+            exit 1
+          fi
+
+          MANIFEST_DIRECTORY="$RUNNER_TEMP/update-manifest"
+          mkdir -p "$MANIFEST_DIRECTORY"
+          gh release download "$TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --dir "$MANIFEST_DIRECTORY" \
+            --pattern "latest-candidate.json"
+          LIVE_MANIFEST="$MANIFEST_DIRECTORY/latest.json"
+          cp "$MANIFEST_DIRECTORY/latest-candidate.json" "$LIVE_MANIFEST"
+          gh release upload "$FEED_TAG" "$LIVE_MANIFEST" --clobber --repo "$GITHUB_REPOSITORY"
+          gh release view "$FEED_TAG" --repo "$GITHUB_REPOSITORY" \
+            --json assets --jq '.assets[].name' | grep -Fx latest.json
+
+      - name: Remove candidate manifest
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          ASSET_ID=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" \
+            --jq '.assets[] | select(.name == "latest-candidate.json") | .id')
+          if [[ -n "$ASSET_ID" ]]; then
+            gh api --method DELETE "repos/$GITHUB_REPOSITORY/releases/assets/$ASSET_ID"
+          fi
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" \
+            --json assets --jq '.assets[].name' | grep -Fx latest-candidate.json; then
+            echo "::error::Candidate update manifest remains published"
+            exit 1
+          fi

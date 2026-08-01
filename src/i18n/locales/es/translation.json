@@ -494,7 +494,11 @@
       },
       "formatNumbers": {
         "label": "Formatear números",
-        "description": "Convierte los números hablados en dígitos y símbolos en una transcripción con formato, por ejemplo $25, 10 % o 3.5. Funciona sin conexión y sin clave de API. No se aplica a las transcripciones sin formato."
+        "description": "Convierte los números hablados en dígitos y símbolos en las transcripciones con formato. También se aplica cuando está activo el formato del texto sin procesar. Funciona sin conexión y sin clave de API."
+      },
+      "formatRawOutput": {
+        "label": "Formatear transcripción sin procesar",
+        "description": "Interpreta comandos de puntuación en inglés en modo sin procesar. La frase inglesa «question mark» se convierte en «?». Los números siguen el ajuste anterior. Desactívalo para dictar comandos literalmente."
       }
     },
     "postProcessing": {

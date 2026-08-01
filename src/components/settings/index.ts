@@ -23,6 +23,7 @@ export { CustomWords } from "./CustomWords";
 export { WordReplacements } from "./WordReplacements";
 export { RawOutput } from "./RawOutput";
 export { FormatNumbers } from "./FormatNumbers";
+export { FormatRawOutput } from "./FormatRawOutput";
 export { PostProcessingToggle } from "./PostProcessingToggle";
 export { PostProcessingSettingsApi } from "./PostProcessingSettingsApi";
 export { PostProcessingSettingsPrompts } from "./PostProcessingSettingsPrompts";

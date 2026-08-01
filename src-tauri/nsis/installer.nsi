@@ -62,6 +62,10 @@ ${StrLoc}
 !define WEBVIEW2BOOTSTRAPPERPATH "{{webview2_bootstrapper_path}}"
 !define WEBVIEW2INSTALLERPATH "{{webview2_installer_path}}"
 !define MINIMUMWEBVIEW2VERSION "{{minimum_webview2_version}}"
+; Keep this version synchronized with tauri.portable-webview.conf.json and the
+; pinned download in release.yml. WebView2 fixed runtime 120+ needs explicit
+; AppContainer read/execute ACLs on Windows 10.
+!define FIXEDWEBVIEW2DIRECTORY "Microsoft.WebView2.FixedVersionRuntime.150.0.4078.105.x64"
 !define UNINSTKEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCTNAME}"
 !define MANUKEY "Software\${MANUFACTURER}"
 !define MANUPRODUCTKEY "${MANUKEY}\${PRODUCTNAME}"
@@ -173,6 +177,11 @@ Var InstallTypeRadioPortable
 Page custom PageInstallType PageLeaveInstallType
 
 Function PageInstallType
+  !if "${INSTALLWEBVIEW2MODE}" == "fixedRuntime"
+    StrCpy $PortableMode 1
+    Abort
+  !endif
+
   ; Skip for passive/silent/update modes — portable flag is handled via /PORTABLE
   ${If} $PassiveMode = 1
   ${OrIf} ${Silent}
@@ -531,6 +540,26 @@ FunctionEnd
   !include "{{this}}"
 {{/each}}
 
+; Fixed-runtime portable releases use a versioned resource directory. Remove
+; only older directories from an in-place install so upgrades do not retain a
+; roughly 300 MB runtime per version. The current runtime and portable Data/
+; directory are deliberately outside the deletion set.
+Function RemoveSupersededFixedRuntimes
+  FindFirst $0 $1 "$INSTDIR\Microsoft.WebView2.FixedVersionRuntime.*.x64"
+  remove_superseded_fixed_runtime_loop:
+    ${If} $1 == ""
+      Goto remove_superseded_fixed_runtime_done
+    ${EndIf}
+    ${If} $1 != "${FIXEDWEBVIEW2DIRECTORY}"
+      DetailPrint "Removing superseded WebView2 fixed runtime: $1"
+      RMDir /r "$INSTDIR\$1"
+    ${EndIf}
+    FindNext $0 $1
+    Goto remove_superseded_fixed_runtime_loop
+  remove_superseded_fixed_runtime_done:
+  FindClose $0
+FunctionEnd
+
 Function .onInit
   ${GetOptions} $CMDLINE "/P" $PassiveMode
   ${IfNot} ${Errors}
@@ -547,11 +576,16 @@ Function .onInit
     StrCpy $UpdateMode 1
   ${EndIf}
 
-  ; --- PORTABLE MODE --- Parse /PORTABLE flag for silent/passive installs
-  ${GetOptions} $CMDLINE "/PORTABLE" $PortableMode
-  ${IfNot} ${Errors}
+  ; --- PORTABLE MODE --- Fixed-runtime builds are always portable. Other
+  ; builds keep the explicit /PORTABLE opt-in for silent/passive installs.
+  !if "${INSTALLWEBVIEW2MODE}" == "fixedRuntime"
     StrCpy $PortableMode 1
-  ${EndIf}
+  !else
+    ${GetOptions} $CMDLINE "/PORTABLE" $PortableMode
+    ${IfNot} ${Errors}
+      StrCpy $PortableMode 1
+    ${EndIf}
+  !endif
 
   !if "${DISPLAYLANGUAGESELECTOR}" == "true"
     !insertmacro MUI_LANGDLL_DISPLAY
@@ -739,6 +773,10 @@ Section Install
 
   !insertmacro CheckIfAppIsRunning "${MAINBINARYNAME}.exe" "${PRODUCTNAME}"
 
+  !if "${INSTALLWEBVIEW2MODE}" == "fixedRuntime"
+    Call RemoveSupersededFixedRuntimes
+  !endif
+
   ; Copy main executable
   File "${MAINBINARYSRCPATH}"
 
@@ -777,6 +815,16 @@ Section Install
   {{#each resources}}
     File /a "/oname={{this.[1]}}" "{{no-escape @key}}"
   {{/each}}
+
+  !if "${INSTALLWEBVIEW2MODE}" == "fixedRuntime"
+    ; Microsoft requires both AppContainer groups to read fixed runtime 120+
+    ; when an unpackaged app runs on Windows 10. Use SIDs so this works on
+    ; localized Windows installations as well.
+    ExecWait '"$SYSDIR\icacls.exe" "$INSTDIR\${FIXEDWEBVIEW2DIRECTORY}" /grant "*S-1-15-2-2:(OI)(CI)(RX)" "*S-1-15-2-1:(OI)(CI)(RX)" /T /C' $1
+    ${If} $1 <> 0
+      Abort "Could not apply the required WebView2 fixed-runtime permissions."
+    ${EndIf}
+  !endif
 
   ; Copy external binaries
   {{#each binaries}}

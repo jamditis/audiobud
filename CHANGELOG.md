@@ -8,6 +8,51 @@ AudioBud is a detached fork of [Handy](https://github.com/cjpais/Handy) by CJ Pa
 restate Handy's own history. AudioBud versions independently of Handy, starting at
 `0.1.0`. Windows releases are code-signed beginning with `0.4.0`.
 
+## 0.4.2 - 2026-07-31
+
+A release-integrity update that makes AudioBud's Windows distribution
+self-contained. App fonts and speech models now come from AudioBud-controlled
+assets, the signed updater is active, and release builds produce stronger
+verification material. Windows (x64) remains the validated target; the macOS
+and Linux code is inherited and untested.
+
+### Added
+
+- A signed automatic-update feed for installed NSIS packages, an offline
+  updater-signing key backup and rotation runbook, and a clean-Windows upgrade
+  test for later releases (#157-#159). MSI and Store packages remain on their
+  package-managed update paths.
+- A separate portable Windows installer that includes a pinned WebView2 fixed
+  runtime and verifies every packaged executable signature (#39).
+- SPDX JSON release SBOMs covering the packaged binaries plus the locked Rust
+  and Bun dependency graphs (#154).
+- An advanced setting that lets raw transcript mode interpret spoken
+  punctuation and number formatting without enabling model post-processing
+  (#115).
+
+### Changed
+
+- All downloadable speech and VAD models use the versioned AudioBud model asset
+  release, with exact byte counts and SHA-256 digests checked in CI (#180).
+- Application fonts are bundled locally, and the production content security
+  policy no longer permits external font requests (#196).
+- Existing NSIS installs receive a one-time migration from the updater value
+  that earlier releases forced off. Later user opt-outs remain unchanged.
+- Windows release builds use locked dependency resolution, a fixed source date,
+  stable remapped source paths, and provenance attestations for each published
+  artifact (#155).
+- The real transcription-engine workflow rejects every Clippy warning, including
+  code paths omitted by the fast mock-engine tests (#78, #146).
+
+### Known issues
+
+- v0.4.1 did not have AudioBud's signed feed enabled, so that version still
+  requires a manual update to v0.4.2. Future signed updates can install from
+  an NSIS v0.4.2 package when update checks are enabled.
+- SmartScreen can still show a reputation warning for a new signed release. The
+  signature identifies the publisher and detects modified files; it does not
+  guarantee an immediate reputation score.
+
 ## 0.4.1 - 2026-07-22
 
 A Windows clipboard and release-integrity patch. Temporary dictation writes no

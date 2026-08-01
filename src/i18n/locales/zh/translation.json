@@ -494,7 +494,11 @@
       },
       "formatNumbers": {
         "label": "格式化数字",
-        "description": "在格式化的转录中，将口述的数字转换为数字和符号，例如 $25、10% 或 3.5。无需 API 密钥，可离线运行。不适用于原始转录。"
+        "description": "在格式化的转录中，将口述的数字转换为数字和符号。启用原始转录格式化时也会应用。无需 API 密钥，可离线运行。"
+      },
+      "formatRawOutput": {
+        "label": "格式化原始转录",
+        "description": "在原始模式中识别英文标点指令。英文短语“question mark”会变成“?”。数字格式遵循上方设置。关闭后可逐字输入命令。"
       }
     },
     "postProcessing": {
