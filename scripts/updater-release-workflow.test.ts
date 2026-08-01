@@ -76,7 +76,11 @@ describe("signed updater release artifacts", () => {
       "TAURI_SIGNING_PUBLIC_KEY: ${{ vars.TAURI_SIGNING_PUBLIC_KEY }}",
     );
     expect(paths).toContain("updater-signing-public-key.pub");
-    expect(paths).not.toContain("src-tauri/tauri.conf.json");
+    expect(paths).toContain("src-tauri/tauri.conf.json");
+    expect(paths).toContain("plugins.updater.pubkey");
+    expect(paths).toContain(
+      "$publicKeyValue -cne $pinnedPublicKeyValue.Trim()",
+    );
     expect(paths).toContain("[Convert]::FromBase64String");
     expect(paths).toContain("scripts/verify-updater-signature/Cargo.toml");
     expect(paths).toContain("cargo run --locked --release");

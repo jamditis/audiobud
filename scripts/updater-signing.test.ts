@@ -38,6 +38,14 @@ describe("updater signing key operations", () => {
     expect(runbook).toContain("vMAJOR.MINOR.PATCH");
   });
 
+  test("rejects a repository public key that differs from the client key", () => {
+    expect(workflow).toContain("src-tauri/tauri.conf.json");
+    expect(workflow).toContain("plugins.updater.pubkey");
+    expect(workflow).toContain(
+      "TAURI_SIGNING_PUBLIC_KEY does not match the updater key pinned in tauri.conf.json",
+    );
+  });
+
   test("never suggests printing secret material", () => {
     expect(runbook).not.toMatch(/echo\s+\$?TAURI_SIGNING_PRIVATE_KEY/);
     expect(runbook).not.toMatch(/gh secret set[^\n]+--body/);
