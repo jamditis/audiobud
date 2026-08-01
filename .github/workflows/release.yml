@@ -782,9 +782,27 @@ jobs:
           }
 
           $requiredSids = @("S-1-15-2-2", "S-1-15-2-1")
+          function Get-NumericAclRules {
+            param([string] $Path, [string] $Label)
+
+            $acl = Get-Acl -LiteralPath $Path
+            Write-Host "[$Label] icacls output:"
+            & "$env:SystemRoot\System32\icacls.exe" $Path | Out-Host
+            Write-Host "[$Label] SDDL: $($acl.GetSecurityDescriptorSddlForm(
+              [System.Security.AccessControl.AccessControlSections]::Access))"
+            $rules = @($acl.GetAccessRules(
+              $true,
+              $true,
+              [System.Security.Principal.SecurityIdentifier]))
+            $rules | Format-Table IdentityReference, FileSystemRights, `
+              InheritanceFlags, PropagationFlags, AccessControlType, IsInherited `
+              -AutoSize | Out-String | Write-Host
+            return $rules
+          }
+
           function Test-AllowReadAndExecuteAcl {
             param(
-              [System.Security.AccessControl.FileSystemSecurity] $Acl,
+              [object[]] $Rules,
               [string] $Sid,
               [bool] $RequireDirectoryInheritance,
               [bool] $RequireInherited
@@ -794,21 +812,14 @@ jobs:
             $requiredInheritance = `
               [System.Security.AccessControl.InheritanceFlags]::ObjectInherit -bor `
               [System.Security.AccessControl.InheritanceFlags]::ContainerInherit
-            foreach ($rule in $Acl.Access) {
-              try {
-                $ruleSid = $rule.IdentityReference.Translate(
-                  [System.Security.Principal.SecurityIdentifier]).Value
-              } catch {
-                $ruleSid = $rule.IdentityReference.Value
-              }
-
+            foreach ($rule in $Rules) {
               $hasRights = `
                 ($rule.FileSystemRights -band $requiredRights) -eq $requiredRights
               $hasInheritance = `
                 (-not $RequireDirectoryInheritance) -or `
                 (($rule.InheritanceFlags -band $requiredInheritance) -eq $requiredInheritance)
               $isInherited = (-not $RequireInherited) -or $rule.IsInherited
-              if ($ruleSid -eq $Sid -and
+              if ($rule.IdentityReference.Value -eq $Sid -and
                   $rule.AccessControlType -eq [System.Security.AccessControl.AccessControlType]::Allow -and
                   $hasRights -and $hasInheritance -and $isInherited) {
                 return $true
@@ -817,19 +828,23 @@ jobs:
             return $false
           }
 
-          $acl = Get-Acl -LiteralPath $runtimeDirectory
+          $runtimeRules = @(
+            Get-NumericAclRules -Path $runtimeDirectory -Label "fixed runtime directory"
+          )
           foreach ($sid in $requiredSids) {
             if (-not (Test-AllowReadAndExecuteAcl `
-                -Acl $acl -Sid $sid `
+                -Rules $runtimeRules -Sid $sid `
                 -RequireDirectoryInheritance $true -RequireInherited $false)) {
               throw "Required inheritable WebView2 fixed-runtime read/execute ACL is missing: $sid"
             }
           }
 
-          $browserAcl = Get-Acl -LiteralPath $browser
+          $browserRules = @(
+            Get-NumericAclRules -Path $browser -Label "fixed runtime browser"
+          )
           foreach ($sid in $requiredSids) {
             if (-not (Test-AllowReadAndExecuteAcl `
-                -Acl $browserAcl -Sid $sid `
+                -Rules $browserRules -Sid $sid `
                 -RequireDirectoryInheritance $false -RequireInherited $true)) {
               throw "WebView2 browser did not inherit the required read/execute ACL: $sid"
             }
