@@ -35,6 +35,8 @@ and Linux code is inherited and untested.
   release, with exact byte counts and SHA-256 digests checked in CI (#180).
 - Application fonts are bundled locally, and the production content security
   policy no longer permits external font requests (#196).
+- Existing Windows installs receive a one-time migration from the updater value
+  that earlier releases forced off. Later user opt-outs remain unchanged.
 - Windows release builds use locked dependency resolution, a fixed source date,
   stable remapped source paths, and provenance attestations for each published
   artifact (#155).

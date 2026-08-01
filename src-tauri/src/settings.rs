@@ -560,6 +560,22 @@ fn default_update_checks_enabled() -> bool {
     cfg!(target_os = "windows")
 }
 
+fn migrate_update_checks_v0_4_2(
+    settings: &mut AppSettings,
+    migration_complete: bool,
+    is_windows: bool,
+) -> bool {
+    if migration_complete || !is_windows {
+        return false;
+    }
+
+    // Every release through v0.4.1 forced this value off because AudioBud did
+    // not have its own signed feed. Enable the new Windows feed once, then let
+    // the durable marker preserve any opt-out the user makes afterward.
+    settings.update_checks_enabled = true;
+    true
+}
+
 fn default_selected_language() -> String {
     "auto".to_string()
 }
@@ -815,6 +831,7 @@ fn ensure_post_process_defaults(settings: &mut AppSettings) -> bool {
 }
 
 pub const SETTINGS_STORE_PATH: &str = "settings_store.json";
+const UPDATE_CHECKS_V0_4_2_MIGRATION_KEY: &str = "update_checks_v0_4_2_migrated";
 
 pub fn get_default_settings() -> AppSettings {
     #[cfg(target_os = "windows")]
@@ -1030,6 +1047,20 @@ pub fn load_or_create_app_settings(app: &AppHandle) -> AppSettings {
         store.set("settings", serde_json::to_value(&settings).unwrap());
     }
 
+    let update_checks_migrated = store
+        .get(UPDATE_CHECKS_V0_4_2_MIGRATION_KEY)
+        .and_then(|value| value.as_bool())
+        .unwrap_or(false);
+    if migrate_update_checks_v0_4_2(
+        &mut settings,
+        update_checks_migrated,
+        cfg!(target_os = "windows"),
+    ) {
+        store.set("settings", serde_json::to_value(&settings).unwrap());
+        store.set(UPDATE_CHECKS_V0_4_2_MIGRATION_KEY, true);
+        debug!("Enabled signed update checks for the v0.4.2 Windows migration");
+    }
+
     settings
 }
 
@@ -1160,5 +1191,32 @@ mod tests {
     fn default_settings_enable_update_checks_only_on_windows() {
         let settings = get_default_settings();
         assert_eq!(settings.update_checks_enabled, cfg!(target_os = "windows"));
+    }
+
+    #[test]
+    fn v0_4_2_migration_enables_the_first_signed_feed_on_windows() {
+        let mut settings = get_default_settings();
+        settings.update_checks_enabled = false;
+
+        assert!(migrate_update_checks_v0_4_2(&mut settings, false, true));
+        assert!(settings.update_checks_enabled);
+    }
+
+    #[test]
+    fn v0_4_2_migration_preserves_a_later_user_opt_out() {
+        let mut settings = get_default_settings();
+        settings.update_checks_enabled = false;
+
+        assert!(!migrate_update_checks_v0_4_2(&mut settings, true, true));
+        assert!(!settings.update_checks_enabled);
+    }
+
+    #[test]
+    fn v0_4_2_migration_keeps_other_platforms_disabled() {
+        let mut settings = get_default_settings();
+        settings.update_checks_enabled = false;
+
+        assert!(!migrate_update_checks_v0_4_2(&mut settings, false, false));
+        assert!(!settings.update_checks_enabled);
     }
 }
