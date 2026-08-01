@@ -37,7 +37,7 @@ describe("self-contained portable WebView2 artifact", () => {
         windows: {
           webviewInstallMode: {
             type: "fixedRuntime",
-            path: "./Microsoft.WebView2.FixedVersionRuntime.150.0.4078.105.x64",
+            path: "Microsoft.WebView2.FixedVersionRuntime.150.0.4078.105.x64",
           },
         },
       },
@@ -104,6 +104,9 @@ describe("self-contained portable WebView2 artifact", () => {
     expect(verification).toContain(
       'Join-Path $installDirectory "uninstall.exe"',
     );
+    expect(verification).toContain(
+      'Join-Path $runtimeDirectory "msedgewebview2.exe"',
+    );
     expect(verification).toContain("S-1-15-2-2");
     expect(verification).toContain("S-1-15-2-1");
   });
@@ -111,12 +114,12 @@ describe("self-contained portable WebView2 artifact", () => {
   test("forces every fixed-runtime install into portable mode", () => {
     const installTypePage = nsisFunctionBlock("PageInstallType");
     expect(installTypePage).toMatch(
-      /!if "\$\{INSTALLWEBVIEW2MODE\}" == "fixedRuntime"\s+StrCpy \$PortableMode 1\s+Abort\s+!endif/,
+      /!if "\$\{INSTALLWEBVIEW2MODE\}" == ""\s+StrCpy \$PortableMode 1\s+Abort\s+!endif/,
     );
 
     const onInit = nsisFunctionBlock(".onInit");
     expect(onInit).toMatch(
-      /!if "\$\{INSTALLWEBVIEW2MODE\}" == "fixedRuntime"\s+StrCpy \$PortableMode 1\s+!else[\s\S]*\$CMDLINE "\/PORTABLE" \$PortableMode[\s\S]*!endif/,
+      /!if "\$\{INSTALLWEBVIEW2MODE\}" == ""\s+StrCpy \$PortableMode 1\s+!else[\s\S]*\$CMDLINE "\/PORTABLE" \$PortableMode[\s\S]*!endif/,
     );
   });
 
@@ -138,7 +141,10 @@ describe("self-contained portable WebView2 artifact", () => {
       ),
     );
     expect(installSection).toMatch(
-      /!if "\$\{INSTALLWEBVIEW2MODE\}" == "fixedRuntime"\s+Call RemoveSupersededFixedRuntimes\s+!endif/,
+      /!if "\$\{INSTALLWEBVIEW2MODE\}" == ""\s+Call RemoveSupersededFixedRuntimes\s+!endif/,
+    );
+    expect(installSection).toMatch(
+      /!if "\$\{INSTALLWEBVIEW2MODE\}" == ""[\s\S]*icacls\.exe[\s\S]*!endif/,
     );
   });
 
