@@ -222,7 +222,7 @@ jobs:
     name: Apply update from prior Windows release
     needs: prepare
     runs-on: windows-2025
-    timeout-minutes: 15
+    timeout-minutes: 25
     permissions:
       contents: read
     steps:
@@ -357,16 +357,28 @@ jobs:
             throw "Published feed has an unexpected Windows updater URL"
           }
 
+          $diagnosticDirectory = Join-Path $env:RUNNER_TEMP 'audiobud-updater-diagnostics'
+          New-Item -ItemType Directory -Path $diagnosticDirectory -Force | Out-Null
+          $stdoutLog = Join-Path $diagnosticDirectory 'stdout.log'
+          $stderrLog = Join-Path $diagnosticDirectory 'stderr.log'
           $process = Start-Process -FilePath $env:EXECUTABLE `
-            -ArgumentList @("--install-update", "--install-update-endpoint", $manifestUrl, '--start-hidden', '--no-tray') -PassThru
-          "process_id=$($process.Id)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+            -ArgumentList @("--install-update", "--install-update-endpoint", $manifestUrl, '--start-hidden', '--no-tray') `
+            -RedirectStandardOutput $stdoutLog `
+            -RedirectStandardError $stderrLog `
+            -PassThru
+          if (-not $process.WaitForExit(480000)) {
+            Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+            throw "Updater bootstrap process did not exit within 8 minutes"
+          }
+          if ($process.ExitCode -ne 0) {
+            throw "Updater bootstrap process failed with exit code $($process.ExitCode)"
+          }
 
       - name: Assert installed version and signature
         if: steps.prior.outputs.eligible == 'true'
         shell: pwsh
         env:
           EXECUTABLE: ${{ steps.install.outputs.executable }}
-          PROCESS_ID: ${{ steps.apply.outputs.process_id }}
           TARGET_VERSION: ${{ steps.prior.outputs.target_version }}
         run: |
           $deadline = (Get-Date).AddMinutes(8)
@@ -379,10 +391,6 @@ jobs:
               }
             }
 
-            $initialProcess = Get-Process -Id $env:PROCESS_ID -ErrorAction SilentlyContinue
-            if ($initialProcess -and $initialProcess.HasExited -and $initialProcess.ExitCode -ne 0) {
-              throw "Updater process failed with exit code $($initialProcess.ExitCode)"
-            }
             Start-Sleep -Seconds 5
           }
 
@@ -400,6 +408,83 @@ jobs:
           Get-Process -Name AudioBud -ErrorAction SilentlyContinue | Stop-Process -Force
           "### Windows updater E2E`n`nInstalled, detected, downloaded, verified, and applied $env:TARGET_VERSION from a real prior release on a clean runner." |
             Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+
+      - name: Dump updater diagnostics
+        if: ${{ failure() && steps.prior.outputs.eligible == 'true' }}
+        shell: pwsh
+        run: |
+          $diagnosticDirectory = Join-Path $env:RUNNER_TEMP 'audiobud-updater-diagnostics'
+          foreach ($stream in @(
+            @{ Label = 'AudioBud updater stdout'; Path = Join-Path $diagnosticDirectory 'stdout.log' },
+            @{ Label = 'AudioBud updater stderr'; Path = Join-Path $diagnosticDirectory 'stderr.log' }
+          )) {
+            Write-Host "::group::$($stream.Label)"
+            if (Test-Path -LiteralPath $stream.Path -PathType Leaf) {
+              Get-Content -LiteralPath $stream.Path -Raw
+            } else {
+              Write-Host "No captured stream was written: $($stream.Path)"
+            }
+            Write-Host '::endgroup::'
+          }
+
+          Write-Host '::group::AudioBud file logs'
+          $logDirectories = @(
+            Join-Path $env:APPDATA 'tech.amditis.audiobud\logs'
+            Join-Path $env:LOCALAPPDATA 'tech.amditis.audiobud\logs'
+            Join-Path $env:APPDATA 'AudioBud\logs'
+            Join-Path $env:LOCALAPPDATA 'AudioBud\logs'
+          ) | Select-Object -Unique
+          $logFiles = foreach ($logDirectory in $logDirectories) {
+            if (Test-Path -LiteralPath $logDirectory -PathType Container) {
+              Get-ChildItem -LiteralPath $logDirectory -File -Recurse -ErrorAction SilentlyContinue
+            }
+          }
+          if (-not $logFiles) {
+            Write-Host "No AudioBud file logs were found under: $($logDirectories -join ', ')"
+          }
+          foreach ($logFile in @($logFiles)) {
+            Write-Host "--- $($logFile.FullName)"
+            Get-Content -LiteralPath $logFile.FullName -Tail 400 -ErrorAction Continue
+          }
+          Write-Host '::endgroup::'
+
+          Write-Host '::group::AudioBud updater temp directories'
+          $recentThreshold = (Get-Date).AddMinutes(-20)
+          $tempRoots = @($env:RUNNER_TEMP, $env:TEMP) | Select-Object -Unique
+          $tempDirectories = foreach ($tempRoot in $tempRoots) {
+            if (Test-Path -LiteralPath $tempRoot -PathType Container) {
+              Get-ChildItem -LiteralPath $tempRoot -Directory -Force -ErrorAction SilentlyContinue |
+                Where-Object {
+                  $_.LastWriteTime -ge $recentThreshold -or
+                  $_.Name -match '(?i)(audiobud|updat|nsis)'
+                }
+            }
+          }
+          if (-not $tempDirectories) {
+            Write-Host "No recent updater temp directories were found under: $($tempRoots -join ', ')"
+          }
+          foreach ($tempDirectory in @($tempDirectories | Sort-Object LastWriteTime -Descending)) {
+            Write-Host "--- $($tempDirectory.FullName) [$($tempDirectory.LastWriteTime.ToString('o'))]"
+            Get-ChildItem -LiteralPath $tempDirectory.FullName -Force -Recurse -ErrorAction SilentlyContinue |
+              Select-Object -First 100 FullName, Length, LastWriteTime |
+              Format-Table -AutoSize | Out-String | Write-Host
+          }
+          Write-Host '::endgroup::'
+
+          Write-Host '::group::AudioBud updater process state'
+          $relatedProcesses = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
+            Where-Object {
+              $_.Name -match '(?i)(audiobud|nsis|update)' -or
+              $_.ExecutablePath -match '(?i)(audiobud|nsis|update)' -or
+              $_.CommandLine -match '(?i)(audiobud|nsis|update)'
+            } |
+            Select-Object ProcessId, ParentProcessId, Name, ExecutablePath, CommandLine
+          if ($relatedProcesses) {
+            $relatedProcesses | Format-List | Out-String | Write-Host
+          } else {
+            Write-Host 'No related updater processes are running.'
+          }
+          Write-Host '::endgroup::'
 
   finalize:
     name: Promote verified update feed
