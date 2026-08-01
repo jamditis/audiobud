@@ -504,14 +504,9 @@ jobs:
             throw "TAURI_SIGNING_PUBLIC_KEY repository variable is missing"
           }
           $publicKeyValue = $publicKeyValue.Trim()
-          $tauriConfig = Get-Content -LiteralPath "src-tauri/tauri.conf.json" -Raw |
-            ConvertFrom-Json
-          $pinnedPublicKeyValue = [string]$tauriConfig.plugins.updater.pubkey
-          if (
-            [string]::IsNullOrWhiteSpace($pinnedPublicKeyValue) -or
-            $publicKeyValue -cne $pinnedPublicKeyValue.Trim()
-          ) {
-            throw "TAURI_SIGNING_PUBLIC_KEY does not match the updater key pinned in tauri.conf.json"
+          bun scripts/validate-updater-key-transition.ts
+          if ($LASTEXITCODE -ne 0) {
+            throw "Updater signing key transition validation failed"
           }
           try {
             $publicKeyBytes = [Convert]::FromBase64String($publicKeyValue)

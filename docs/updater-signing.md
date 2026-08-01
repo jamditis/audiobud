@@ -11,12 +11,14 @@ The release workflow reads these repository secrets:
 - `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`
 
 The matching outer-base64 public key lives in the repository variable
-`TAURI_SIGNING_PUBLIC_KEY`. It is deliberately separate from the client public
-key in `src-tauri/tauri.conf.json`: during a planned bridge release, the former
-still verifies the old signing key while the latter teaches installed clients
-to trust the replacement key. Each release publishes and attests the decoded
-signing public key beside its updater archive so that feed publication and
-later retries verify the key that actually signed that release.
+`TAURI_SIGNING_PUBLIC_KEY`. Normal releases require it to match the client
+public key in `src-tauri/tauri.conf.json`. A planned bridge release is the only
+exception: a reviewed `updater-key-bridge.json` pins the release version, old
+signing public key, and replacement client public key. Release validation fails
+for any other mismatch and also rejects a stale bridge declaration. Each
+release publishes and attests the decoded signing public key beside its updater
+archive so feed publication and later retries verify the key that signed that
+release.
 
 The private values are backed up in the encrypted credential authority on
 `houseofjawn` at these pointers:
@@ -69,13 +71,19 @@ rotation therefore needs a bridge release:
 
 1. Pause normal release publication and generate the replacement keypair.
 2. Keep the old key in the release secrets and keep its public half in the
-   `TAURI_SIGNING_PUBLIC_KEY` variable. Put the new public key in the app config
-   and publish one bridge update signed and verified by the old key.
+   `TAURI_SIGNING_PUBLIC_KEY` variable. Put the new public key in the app config.
+   Add `updater-key-bridge.json` to the bridge release change with exactly these
+   fields: `version` for the bridge app version, `signing_public_key` for the old
+   outer-base64 public key, and `client_public_key` for the replacement
+   outer-base64 public key. Publish one bridge update signed and verified by the
+   old key. The release workflow accepts the mismatch only when all three values
+   match the reviewed declaration.
 3. Leave the bridge release as the latest update for the announced migration
    window. Confirm update telemetry and support reports before continuing.
 4. Replace the repository secrets with the new private key and password, update
-   `TAURI_SIGNING_PUBLIC_KEY` to the matching new public key, then publish the
-   next release signed by the new key.
+   `TAURI_SIGNING_PUBLIC_KEY` to the matching new public key, remove
+   `updater-key-bridge.json`, then publish the next release signed by the new
+   key.
 5. Retain the old key in the encrypted credential authority for incident
    investigation. Do not use it for new releases.
 

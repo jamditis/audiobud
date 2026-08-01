@@ -3,6 +3,10 @@ import { readFileSync } from "node:fs";
 
 const runbook = readFileSync("docs/updater-signing.md", "utf8");
 const workflow = readFileSync(".github/workflows/release.yml", "utf8");
+const keyTransitionValidator = readFileSync(
+  "scripts/validate-updater-key-transition.ts",
+  "utf8",
+);
 
 describe("updater signing key operations", () => {
   test("documents the secret names and encrypted backup pointers", () => {
@@ -38,12 +42,14 @@ describe("updater signing key operations", () => {
     expect(runbook).toContain("vMAJOR.MINOR.PATCH");
   });
 
-  test("rejects a repository public key that differs from the client key", () => {
-    expect(workflow).toContain("src-tauri/tauri.conf.json");
-    expect(workflow).toContain("plugins.updater.pubkey");
-    expect(workflow).toContain(
+  test("rejects accidental key drift and requires an exact bridge declaration", () => {
+    expect(workflow).toContain("scripts/validate-updater-key-transition.ts");
+    expect(keyTransitionValidator).toContain("src-tauri/tauri.conf.json");
+    expect(keyTransitionValidator).toContain("updater-key-bridge.json");
+    expect(keyTransitionValidator).toContain(
       "TAURI_SIGNING_PUBLIC_KEY does not match the updater key pinned in tauri.conf.json",
     );
+    expect(runbook).toContain("updater-key-bridge.json");
   });
 
   test("never suggests printing secret material", () => {
