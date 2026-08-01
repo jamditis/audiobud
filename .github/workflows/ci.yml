@@ -125,6 +125,163 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Compile a tiny installer with the same NSIS ExecWait shape as the real
+      # portable installer. This catches quoting/serialization regressions
+      # without rebuilding the hour-long signed release. The archive and SHA-1
+      # are the exact NSIS toolchain pinned by Tauri CLI 2.10.0.
+      - name: Verify fixed-runtime AppContainer ACL command
+        shell: pwsh
+        run: |
+          $workspace = Join-Path $env:RUNNER_TEMP `
+            "audiobud-webview-acl-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
+          New-Item -ItemType Directory -Path $workspace | Out-Null
+          $nsisArchive = Join-Path $workspace "nsis-3.11.zip"
+          Invoke-WebRequest `
+            -Uri "https://github.com/tauri-apps/binary-releases/releases/download/nsis-3.11/nsis-3.11.zip" `
+            -OutFile $nsisArchive
+          $expectedSha1 = "EF7FF767E5CBD9EDD22ADD3A32C9B8F4500BB10D"
+          $actualSha1 = (Get-FileHash -LiteralPath $nsisArchive -Algorithm SHA1).Hash
+          if ($actualSha1 -ne $expectedSha1) {
+            throw "NSIS archive SHA-1 mismatch: $actualSha1"
+          }
+          Expand-Archive -LiteralPath $nsisArchive -DestinationPath $workspace
+          $makensis = Join-Path $workspace "nsis-3.11\makensis.exe"
+
+          $probeScript = Join-Path $workspace "acl-probe.nsi"
+          @'
+          Unicode true
+          SilentInstall silent
+          RequestExecutionLevel user
+          OutFile "acl-probe.exe"
+
+          Section
+            CreateDirectory "$INSTDIR"
+            FileOpen $9 "$INSTDIR\probe-exits.txt" w
+
+            CreateDirectory "$INSTDIR\quoted"
+            FileOpen $8 "$INSTDIR\quoted\msedgewebview2.exe" w
+            FileClose $8
+            ExecWait '"$SYSDIR\icacls.exe" "$INSTDIR\quoted" /grant "*S-1-15-2-2:(OI)(CI)(RX)"' $0
+            FileWrite $9 "quoted-all=$0$\r$\n"
+            ExecWait '"$SYSDIR\icacls.exe" "$INSTDIR\quoted" /grant "*S-1-15-2-1:(OI)(CI)(RX)"' $0
+            FileWrite $9 "quoted-restricted=$0$\r$\n"
+
+            CreateDirectory "$INSTDIR\unquoted"
+            FileOpen $8 "$INSTDIR\unquoted\msedgewebview2.exe" w
+            FileClose $8
+            ExecWait '"$SYSDIR\icacls.exe" "$INSTDIR\unquoted" /grant *S-1-15-2-2:(OI)(CI)(RX)' $0
+            FileWrite $9 "unquoted-all=$0$\r$\n"
+            ExecWait '"$SYSDIR\icacls.exe" "$INSTDIR\unquoted" /grant *S-1-15-2-1:(OI)(CI)(RX)' $0
+            FileWrite $9 "unquoted-restricted=$0$\r$\n"
+
+            FileClose $9
+          SectionEnd
+          '@ | Set-Content -LiteralPath $probeScript -Encoding utf8
+
+          Push-Location $workspace
+          try {
+            & $makensis /V4 $probeScript
+            if ($LASTEXITCODE -ne 0) {
+              throw "makensis failed with exit code $LASTEXITCODE"
+            }
+          } finally {
+            Pop-Location
+          }
+
+          $probeRoot = Join-Path $workspace "installed"
+          $probe = Start-Process -FilePath (Join-Path $workspace "acl-probe.exe") `
+            -ArgumentList @("/S", "/D=$probeRoot") -Wait -PassThru
+          if ($probe.ExitCode -ne 0) {
+            throw "NSIS ACL probe failed with exit code $($probe.ExitCode)"
+          }
+          Get-Content -LiteralPath (Join-Path $probeRoot "probe-exits.txt")
+
+          # Keep a direct PowerShell invocation as a control for the runner's
+          # icacls behavior, independent of NSIS command-line serialization.
+          $directDirectory = Join-Path $probeRoot "direct"
+          New-Item -ItemType Directory -Path $directDirectory | Out-Null
+          New-Item -ItemType File `
+            -Path (Join-Path $directDirectory "msedgewebview2.exe") | Out-Null
+          foreach ($grant in @(
+              "*S-1-15-2-2:(OI)(CI)(RX)",
+              "*S-1-15-2-1:(OI)(CI)(RX)")) {
+            & "$env:SystemRoot\System32\icacls.exe" $directDirectory /grant $grant
+            if ($LASTEXITCODE -ne 0) {
+              throw "Direct icacls control failed for $grant with exit code $LASTEXITCODE"
+            }
+          }
+
+          function Get-NumericAclRules {
+            param([string] $Path, [string] $Label)
+
+            $acl = Get-Acl -LiteralPath $Path
+            Write-Host "[$Label] icacls output:"
+            & "$env:SystemRoot\System32\icacls.exe" $Path | Out-Host
+            Write-Host "[$Label] SDDL: $($acl.GetSecurityDescriptorSddlForm(
+              [System.Security.AccessControl.AccessControlSections]::Access))"
+            $rules = @($acl.GetAccessRules(
+              $true,
+              $true,
+              [System.Security.Principal.SecurityIdentifier]))
+            $rules | Format-Table IdentityReference, FileSystemRights, `
+              InheritanceFlags, PropagationFlags, AccessControlType, IsInherited `
+              -AutoSize | Out-String | Write-Host
+            return $rules
+          }
+
+          function Test-AllowReadAndExecuteAcl {
+            param(
+              [object[]] $Rules,
+              [string] $Sid,
+              [bool] $RequireDirectoryInheritance,
+              [bool] $RequireInherited
+            )
+
+            $requiredRights = [System.Security.AccessControl.FileSystemRights]::ReadAndExecute
+            $requiredInheritance = `
+              [System.Security.AccessControl.InheritanceFlags]::ObjectInherit -bor `
+              [System.Security.AccessControl.InheritanceFlags]::ContainerInherit
+            foreach ($rule in $Rules) {
+              $hasRights = `
+                ($rule.FileSystemRights -band $requiredRights) -eq $requiredRights
+              $hasInheritance = `
+                (-not $RequireDirectoryInheritance) -or `
+                (($rule.InheritanceFlags -band $requiredInheritance) -eq $requiredInheritance)
+              $isInherited = (-not $RequireInherited) -or $rule.IsInherited
+              if ($rule.IdentityReference.Value -eq $Sid -and
+                  $rule.AccessControlType -eq [System.Security.AccessControl.AccessControlType]::Allow -and
+                  $hasRights -and $hasInheritance -and $isInherited) {
+                return $true
+              }
+            }
+            return $false
+          }
+
+          $requiredSids = @("S-1-15-2-2", "S-1-15-2-1")
+          foreach ($variant in @("quoted", "unquoted", "direct")) {
+            $directory = Join-Path $probeRoot $variant
+            $browser = Join-Path $directory "msedgewebview2.exe"
+            $directoryRules = @(Get-NumericAclRules -Path $directory -Label "$variant directory")
+            $browserRules = @(Get-NumericAclRules -Path $browser -Label "$variant browser")
+
+            # The unquoted form is the production command; the direct variant
+            # is its control. The old quoted form remains diagnostic so the log
+            # records whether argument quoting caused the original failure.
+            if ($variant -eq "quoted") { continue }
+            foreach ($sid in $requiredSids) {
+              if (-not (Test-AllowReadAndExecuteAcl `
+                  -Rules $directoryRules -Sid $sid `
+                  -RequireDirectoryInheritance $true -RequireInherited $false)) {
+                throw "Required $variant directory ACL is missing: $sid"
+              }
+              if (-not (Test-AllowReadAndExecuteAcl `
+                  -Rules $browserRules -Sid $sid `
+                  -RequireDirectoryInheritance $false -RequireInherited $true)) {
+                throw "Required $variant inherited browser ACL is missing: $sid"
+              }
+            }
+          }
+
       - uses: swatinem/rust-cache@v2
         with:
           workspaces: "./src-tauri -> target"
