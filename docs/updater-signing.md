@@ -41,6 +41,16 @@ After restoring, run the release workflow without creating a release. It must
 produce the `.nsis.zip` and `.nsis.zip.sig` CI artifacts and pass the archived
 installer signature checks before a release build is attempted.
 
+## Feed publication
+
+Publishing a stable app release stages `latest-candidate.json` on that exact
+release. A clean Windows runner uses the candidate endpoint to update a real
+prior installation. Only after that job succeeds does the workflow copy the
+candidate to the client-facing `latest.json`; it then removes the candidate
+asset whether validation passed or failed. Releases whose tags are not exact
+`vMAJOR.MINOR.PATCH` versions, such as model-asset mirrors, skip this workflow
+without changing the live feed.
+
 ## Planned rotation
 
 An installed app trusts the public key compiled into that version. A planned

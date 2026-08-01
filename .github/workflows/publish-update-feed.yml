@@ -14,18 +14,53 @@ on:
         required: false
         type: string
 
-permissions:
-  contents: write
-
 concurrency:
   group: publish-update-feed
   cancel-in-progress: false
 
 jobs:
-  publish:
-    name: Publish signed latest.json
+  gate:
+    name: Select stable app releases
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    permissions:
+      contents: read
+    outputs:
+      publish: ${{ steps.gate.outputs.publish }}
+      tag: ${{ steps.gate.outputs.tag }}
+    steps:
+      - name: Gate stable app release
+        id: gate
+        shell: bash
+        env:
+          EVENT_TAG: ${{ github.event.release.tag_name }}
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          TAG="${EVENT_TAG:-$INPUT_TAG}"
+          if [[ -z "$TAG" ]]; then
+            echo "::error::A release tag is required"
+            exit 1
+          fi
+
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Skipping update feed publication for non-app release $TAG"
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "publish=true" >> "$GITHUB_OUTPUT"
+
+  prepare:
+    name: Prepare signed candidate manifest
+    needs: gate
+    if: needs.gate.outputs.publish == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    permissions:
+      attestations: read
+      contents: write
     outputs:
       tag: ${{ steps.release.outputs.tag }}
     steps:
@@ -48,17 +83,10 @@ jobs:
         id: release
         shell: bash
         env:
-          EVENT_TAG: ${{ github.event.release.tag_name }}
-          INPUT_TAG: ${{ inputs.tag }}
           GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.gate.outputs.tag }}
         run: |
           set -euo pipefail
-          TAG="${EVENT_TAG:-$INPUT_TAG}"
-          if [[ -z "$TAG" ]]; then
-            echo "::error::A release tag is required"
-            exit 1
-          fi
-
           RELEASE_JSON="$RUNNER_TEMP/release.json"
           gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" > "$RELEASE_JSON"
           if jq -e '.draft or .prerelease or (.published_at == null)' "$RELEASE_JSON" > /dev/null; then
@@ -151,7 +179,7 @@ jobs:
           SIGNATURE: ${{ steps.updater.outputs.signature }}
         run: |
           set -euo pipefail
-          MANIFEST="$RUNNER_TEMP/latest.json"
+          MANIFEST="$RUNNER_TEMP/latest-candidate.json"
           bun scripts/generate-update-manifest.ts \
             --release "$RELEASE_JSON" \
             --repository "$GITHUB_REPOSITORY" \
@@ -160,7 +188,7 @@ jobs:
           jq -e . "$MANIFEST" > /dev/null
           echo "path=$MANIFEST" >> "$GITHUB_OUTPUT"
 
-      - name: Upload latest.json
+      - name: Upload candidate manifest
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -170,11 +198,11 @@ jobs:
           set -euo pipefail
           gh release upload "$TAG" "$MANIFEST" --clobber --repo "$GITHUB_REPOSITORY"
           gh release view "$TAG" --repo "$GITHUB_REPOSITORY" \
-            --json assets --jq '.assets[].name' | grep -Fx latest.json
+            --json assets --jq '.assets[].name' | grep -Fx latest-candidate.json
 
   verify_update:
     name: Apply update from prior Windows release
-    needs: publish
+    needs: prepare
     runs-on: windows-2025
     timeout-minutes: 15
     permissions:
@@ -186,7 +214,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           INPUT_PRIOR_TAG: ${{ inputs.prior_tag }}
-          TARGET_TAG: ${{ needs.publish.outputs.tag }}
+          TARGET_TAG: ${{ needs.prepare.outputs.tag }}
         run: |
           $targetMatch = [regex]::Match($env:TARGET_TAG, '^v?(\d+\.\d+\.\d+)$')
           if (-not $targetMatch.Success) {
@@ -298,10 +326,10 @@ jobs:
         shell: pwsh
         env:
           EXECUTABLE: ${{ steps.install.outputs.executable }}
-          TARGET_TAG: ${{ needs.publish.outputs.tag }}
+          TARGET_TAG: ${{ needs.prepare.outputs.tag }}
           TARGET_VERSION: ${{ steps.prior.outputs.target_version }}
         run: |
-          $manifestUrl = "https://github.com/$env:GITHUB_REPOSITORY/releases/latest/download/latest.json"
+          $manifestUrl = "https://github.com/$env:GITHUB_REPOSITORY/releases/download/$env:TARGET_TAG/latest-candidate.json"
           $manifest = Invoke-RestMethod -Uri $manifestUrl
           if ($manifest.version -ne $env:TARGET_VERSION) {
             throw "Published feed describes $($manifest.version), expected $env:TARGET_VERSION"
@@ -312,7 +340,7 @@ jobs:
           }
 
           $process = Start-Process -FilePath $env:EXECUTABLE `
-            -ArgumentList @("--install-update", '--start-hidden', '--no-tray') -PassThru
+            -ArgumentList @("--install-update", "--install-update-endpoint", $manifestUrl, '--start-hidden', '--no-tray') -PassThru
           "process_id=$($process.Id)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
 
       - name: Assert installed version and signature
@@ -354,3 +382,48 @@ jobs:
           Get-Process -Name AudioBud -ErrorAction SilentlyContinue | Stop-Process -Force
           "### Windows updater E2E`n`nInstalled, detected, downloaded, verified, and applied $env:TARGET_VERSION from a real prior release on a clean runner." |
             Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+
+  finalize:
+    name: Promote verified update feed
+    needs: [prepare, verify_update]
+    if: ${{ always() && needs.prepare.result == 'success' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ needs.prepare.outputs.tag }}
+    steps:
+      - name: Publish latest.json
+        if: needs.verify_update.result == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          MANIFEST_DIRECTORY="$RUNNER_TEMP/update-manifest"
+          mkdir -p "$MANIFEST_DIRECTORY"
+          gh release download "$TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --dir "$MANIFEST_DIRECTORY" \
+            --pattern "latest-candidate.json"
+          LIVE_MANIFEST="$MANIFEST_DIRECTORY/latest.json"
+          cp "$MANIFEST_DIRECTORY/latest-candidate.json" "$LIVE_MANIFEST"
+          gh release upload "$TAG" "$LIVE_MANIFEST" --clobber --repo "$GITHUB_REPOSITORY"
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" \
+            --json assets --jq '.assets[].name' | grep -Fx latest.json
+
+      - name: Remove candidate manifest
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          ASSET_ID=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" \
+            --jq '.assets[] | select(.name == "latest-candidate.json") | .id')
+          if [[ -n "$ASSET_ID" ]]; then
+            gh api --method DELETE "repos/$GITHUB_REPOSITORY/releases/assets/$ASSET_ID"
+          fi
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" \
+            --json assets --jq '.assets[].name' | grep -Fx latest-candidate.json; then
+            echo "::error::Candidate update manifest remains published"
+            exit 1
+          fi

@@ -18,11 +18,17 @@ describe("published update feed workflow", () => {
     expect(workflow).toContain("release:\n    types: [published]");
     expect(workflow).toContain("workflow_dispatch:");
     expect(workflow).toContain("tag:");
+    expect(workflow).toContain("^v[0-9]+\\.[0-9]+\\.[0-9]+$");
+    expect(workflow).toContain('"publish=false" >> "$GITHUB_OUTPUT"');
+    expect(workflow).toContain(
+      "if: needs.gate.outputs.publish == 'true'",
+    );
+    expect(workflow).toContain("attestations: read");
     expect(workflow).toContain("contents: write");
     expect(releaseWorkflow).not.toContain("latest.json");
   });
 
-  test("validates the release before uploading the manifest", () => {
+  test("validates a candidate before promoting the live manifest", () => {
     expect(stepPosition("Resolve published release")).toBeLessThan(
       stepPosition("Download signed updater assets"),
     );
@@ -33,7 +39,13 @@ describe("published update feed workflow", () => {
       stepPosition("Generate latest.json"),
     );
     expect(stepPosition("Generate latest.json")).toBeLessThan(
-      stepPosition("Upload latest.json"),
+      stepPosition("Upload candidate manifest"),
+    );
+    expect(stepPosition("Upload candidate manifest")).toBeLessThan(
+      stepPosition("Apply signed update"),
+    );
+    expect(stepPosition("Apply signed update")).toBeLessThan(
+      stepPosition("Publish latest.json"),
     );
     expect(workflow).toContain(
       ".draft or .prerelease or (.published_at == null)",
@@ -50,8 +62,19 @@ describe("published update feed workflow", () => {
     expect(workflow).toContain("steps.updater.outputs.archive");
     expect(workflow).toContain("scripts/generate-update-manifest.ts");
     expect(workflow).toContain(
+      'MANIFEST="$RUNNER_TEMP/latest-candidate.json"',
+    );
+    expect(workflow).toContain(
       'gh release upload "$TAG" "$MANIFEST" --clobber',
     );
+    expect(workflow).toContain("--install-update-endpoint");
+    expect(workflow).toContain("latest-candidate.json");
+    expect(workflow).toContain(
+      'gh release upload "$TAG" "$LIVE_MANIFEST" --clobber',
+    );
+    expect(workflow).not.toContain("#latest-candidate.json");
+    expect(workflow).not.toContain("#latest.json");
+    expect(workflow).toContain("Remove candidate manifest");
   });
 
   test("pins all third-party actions", () => {
@@ -68,7 +91,7 @@ describe("published update feed workflow", () => {
 
   test("applies an update from a real prior install on clean Windows", () => {
     expect(workflow).toContain("verify_update:");
-    expect(workflow).toContain("needs: publish");
+    expect(workflow).toContain("needs: prepare");
     expect(workflow).toContain("runs-on: windows-2025");
     expect(stepPosition("Resolve prior updater-capable release")).toBeLessThan(
       stepPosition("Install prior release"),

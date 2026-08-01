@@ -29,6 +29,12 @@ describe("updater signing key operations", () => {
     expect(runbook).toContain("Authenticode");
   });
 
+  test("documents candidate validation before live feed publication", () => {
+    expect(runbook).toContain("latest-candidate.json");
+    expect(runbook).toContain("Only after that job succeeds");
+    expect(runbook).toContain("vMAJOR.MINOR.PATCH");
+  });
+
   test("never suggests printing secret material", () => {
     expect(runbook).not.toMatch(/echo\s+\$?TAURI_SIGNING_PRIVATE_KEY/);
     expect(runbook).not.toMatch(/gh secret set[^\n]+--body/);

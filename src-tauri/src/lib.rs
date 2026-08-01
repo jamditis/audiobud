@@ -73,11 +73,24 @@ fn ensure_cli_update_supported(is_portable: bool) -> Result<(), String> {
     Ok(())
 }
 
-async fn install_available_update(app: AppHandle) -> Result<bool, String> {
+async fn install_available_update(
+    app: AppHandle,
+    verification_endpoint: Option<String>,
+) -> Result<bool, String> {
     ensure_cli_update_supported(crate::portable::is_portable())?;
-    let updater = app
-        .updater()
-        .map_err(|error| format!("Failed to initialize signed updater: {error}"))?;
+    let updater = if let Some(endpoint) = verification_endpoint {
+        let endpoint = endpoint
+            .parse::<tauri::Url>()
+            .map_err(|error| format!("Invalid signed update verification endpoint: {error}"))?;
+        app.updater_builder()
+            .endpoints(vec![endpoint])
+            .map_err(|error| format!("Invalid signed update verification endpoint: {error}"))?
+            .build()
+            .map_err(|error| format!("Failed to initialize signed updater: {error}"))?
+    } else {
+        app.updater()
+            .map_err(|error| format!("Failed to initialize signed updater: {error}"))?
+    };
     let Some(update) = updater
         .check()
         .await
@@ -108,9 +121,13 @@ async fn install_available_update(app: AppHandle) -> Result<bool, String> {
     Ok(true)
 }
 
-fn spawn_update_install(app: AppHandle, exit_when_current: bool) {
+fn spawn_update_install(
+    app: AppHandle,
+    exit_when_current: bool,
+    verification_endpoint: Option<String>,
+) {
     tauri::async_runtime::spawn(async move {
-        match install_available_update(app.clone()).await {
+        match install_available_update(app.clone(), verification_endpoint).await {
             Ok(applied) => {
                 log::info!("Signed updater finished; update applied: {applied}");
                 if exit_when_current {
@@ -125,6 +142,12 @@ fn spawn_update_install(app: AppHandle, exit_when_current: bool) {
             }
         }
     });
+}
+
+fn cli_option(args: &[String], option: &str) -> Option<String> {
+    args.windows(2)
+        .find(|pair| pair[0] == option)
+        .map(|pair| pair[1].clone())
 }
 
 fn level_filter_from_u8(value: u8) -> log::LevelFilter {
@@ -680,7 +703,11 @@ pub fn run(cli_args: CliArgs) {
     builder
         .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
             if args.iter().any(|a| a == "--install-update") {
-                spawn_update_install(app.clone(), false);
+                spawn_update_install(
+                    app.clone(),
+                    false,
+                    cli_option(&args, "--install-update-endpoint"),
+                );
             } else if args.iter().any(|a| a == "--toggle-transcription") {
                 signal_handle::send_transcription_input(app, "transcribe", "CLI");
             } else if args.iter().any(|a| a == "--toggle-post-process") {
@@ -730,7 +757,11 @@ pub fn run(cli_args: CliArgs) {
             // feed, signature verification, and installer as the UI without
             // requiring a WebView click on a disposable Windows runner.
             if cli_args.install_update {
-                spawn_update_install(app.handle().clone(), true);
+                spawn_update_install(
+                    app.handle().clone(),
+                    true,
+                    cli_args.install_update_endpoint.clone(),
+                );
                 return Ok(());
             }
 
