@@ -65,6 +65,20 @@ describe("updateChecksActive", () => {
     }
   });
 
+  it("gates every backend update action on the installed package type", () => {
+    const backend = readFileSync("src-tauri/src/lib.rs", "utf8");
+    const tray = readFileSync("src-tauri/src/tray.rs", "utf8");
+
+    expect(
+      backend.match(
+        /update_checks_action_enabled\(settings\.update_checks_enabled\)/g,
+      ),
+    ).toHaveLength(2);
+    expect(tray).toContain(
+      "crate::update_checks_action_enabled(settings.update_checks_enabled)",
+    );
+  });
+
   it("refreshes the tray when the one-time updater migration runs", () => {
     const settings = readFileSync("src-tauri/src/settings.rs", "utf8");
     expect(settings).toMatch(/app\.emit\(\s*"settings-changed"/);

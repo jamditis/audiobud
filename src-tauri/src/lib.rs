@@ -87,6 +87,17 @@ pub(crate) fn update_channel_available() -> bool {
     )
 }
 
+fn update_checks_action_enabled_for_channel(
+    setting_enabled: bool,
+    update_channel_available: bool,
+) -> bool {
+    setting_enabled && update_channel_available
+}
+
+pub(crate) fn update_checks_action_enabled(setting_enabled: bool) -> bool {
+    update_checks_action_enabled_for_channel(setting_enabled, update_channel_available())
+}
+
 fn ensure_cli_update_supported(
     is_portable: bool,
     is_windows: bool,
@@ -373,7 +384,7 @@ fn initialize_core_logic(app_handle: &AppHandle) {
             }
             "check_updates" => {
                 let settings = settings::get_settings(app);
-                if settings.update_checks_enabled {
+                if update_checks_action_enabled(settings.update_checks_enabled) {
                     show_main_window(app);
                     let _ = app.emit("check-for-updates", ());
                 }
@@ -522,7 +533,7 @@ fn initialize_core_logic(app_handle: &AppHandle) {
 #[specta::specta]
 fn trigger_update_check(app: AppHandle) -> Result<(), String> {
     let settings = settings::get_settings(&app);
-    if !settings.update_checks_enabled {
+    if !update_checks_action_enabled(settings.update_checks_enabled) {
         return Ok(());
     }
     app.emit("check-for-updates", ())
@@ -907,7 +918,8 @@ pub fn run(cli_args: CliArgs) {
 #[cfg(test)]
 mod updater_gate_tests {
     use super::{
-        cli_option, ensure_cli_update_supported, nsis_update_channel_available, UPDATER_FEED_READY,
+        cli_option, ensure_cli_update_supported, nsis_update_channel_available,
+        update_checks_action_enabled_for_channel, UPDATER_FEED_READY,
     };
 
     #[cfg(not(windows))]
@@ -1031,6 +1043,14 @@ mod updater_gate_tests {
             .expect_err("the NSIS feed must reject non-NSIS packages");
         assert!(error.contains("NSIS"));
         assert!(ensure_cli_update_supported(false, true, true).is_ok());
+    }
+
+    #[test]
+    fn update_actions_require_an_enabled_nsis_channel() {
+        assert!(update_checks_action_enabled_for_channel(true, true));
+        assert!(!update_checks_action_enabled_for_channel(false, true));
+        assert!(!update_checks_action_enabled_for_channel(true, false));
+        assert!(!update_checks_action_enabled_for_channel(false, false));
     }
 
     #[test]

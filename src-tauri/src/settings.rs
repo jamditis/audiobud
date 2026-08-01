@@ -565,16 +565,17 @@ fn migrate_update_checks_v0_4_2(
     migration_complete: bool,
     update_channel_available: bool,
 ) -> Option<bool> {
-    if migration_complete {
+    if migration_complete || !update_channel_available {
         return None;
     }
 
     // Every release through v0.4.1 forced this value off. Enable the new feed
-    // once for installed NSIS packages, while keeping MSI, Store, portable, and
-    // non-Windows packages on their own update paths. The durable marker then
-    // preserves any later user opt-out.
-    settings.update_checks_enabled = update_channel_available;
-    Some(update_channel_available)
+    // once an installed NSIS package is actually running. MSI, Store, portable,
+    // and non-Windows packages must not consume the migration because they can
+    // share AppData with a later NSIS install. The durable marker then preserves
+    // any later user opt-out.
+    settings.update_checks_enabled = true;
+    Some(true)
 }
 
 fn default_selected_language() -> String {
@@ -1223,14 +1224,20 @@ mod tests {
     }
 
     #[test]
-    fn v0_4_2_migration_disables_packages_without_an_nsis_channel() {
+    fn v0_4_2_migration_waits_for_an_nsis_channel() {
         let mut settings = get_default_settings();
-        settings.update_checks_enabled = true;
+        settings.update_checks_enabled = false;
 
         assert_eq!(
             migrate_update_checks_v0_4_2(&mut settings, false, false),
-            Some(false)
+            None
         );
         assert!(!settings.update_checks_enabled);
+
+        assert_eq!(
+            migrate_update_checks_v0_4_2(&mut settings, false, true),
+            Some(true)
+        );
+        assert!(settings.update_checks_enabled);
     }
 }
