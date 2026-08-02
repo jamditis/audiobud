@@ -112,6 +112,34 @@ release environment, build the Store candidate installers with:
 bun run bundle:store
 ```
 
+To produce the signed candidate from a reviewed commit before merge, create an
+immutable versioned candidate tag whose suffix binds the tag to that commit,
+then dispatch the release workflow at the tag:
+
+```bash
+candidate_sha=$(git rev-parse HEAD)
+candidate_version=$(jq -r '.version' src-tauri/tauri.conf.json)
+candidate_tag="v${candidate_version}-store-candidate-${candidate_sha:0:12}"
+git tag -a "$candidate_tag" "$candidate_sha" \
+  -m "AudioBud ${candidate_version} Store candidate ${candidate_sha:0:12}"
+git push origin "refs/tags/$candidate_tag"
+gh workflow run release.yml \
+  --ref "$candidate_tag" \
+  -f make_release=false \
+  -f store_candidate=true \
+  -f expected_commit_sha="$candidate_sha"
+```
+
+The `artifact-signing` environment must remain limited to `main` and `v*` tags.
+Do not add feature branches to the environment policy. The workflow suppresses
+the candidate tag's automatic push build and accepts it only through a manual
+Store-candidate dispatch. It then requires the tag name's version and short SHA,
+the supplied 40-character SHA, and GitHub's dispatched commit to agree exactly.
+These workflow checks catch operator mistakes; the protected environment's
+deployment policy is the signing authorization boundary. Do not move, reuse, or
+delete a candidate tag after its artifact is submitted. Candidate artifacts are
+never published to a GitHub release.
+
 That command layers configs in this order:
 
 1. `src-tauri/tauri.signing.conf.json`

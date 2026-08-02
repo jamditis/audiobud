@@ -54,13 +54,19 @@ function multilineInput(step: string, name: string): string[] {
 }
 
 describe("Windows release signing workflow", () => {
-  test("limits signing to the protected environment and approved refs", () => {
+  test("limits signing to the protected main and version-tag refs", () => {
     expect(workflow).toContain("group: release-windows");
     expect(workflow).toContain("environment: artifact-signing");
     expect(workflow).toContain("id-token: write");
+    expect(workflow).toContain("github.ref == 'refs/heads/main' ||");
+    expect(workflow).toContain("startsWith(github.ref, 'refs/tags/v') &&");
     expect(workflow).toContain(
-      "if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')",
+      "!contains(github.ref_name, '-store-candidate-') ||",
     );
+    expect(workflow).toContain("github.event_name == 'workflow_dispatch' &&");
+    expect(workflow).toContain("inputs.store_candidate");
+    expect(workflow).not.toContain("github.ref_type == 'branch'");
+    expect(workflow).not.toContain("github.actor == github.repository_owner");
     expect(workflow).toContain("runs-on: windows-2025");
     expect(workflow).toContain("persist-credentials: false");
   });
@@ -495,6 +501,7 @@ describe("Windows release signing workflow", () => {
 
   test("keeps Store candidate artifacts out of GitHub releases", () => {
     expect(workflow).toContain("store_candidate:");
+    expect(workflow).toContain("expected_commit_sha:");
     expect(workflow).toContain(
       "Build a Microsoft Store candidate CI artifact with offline WebView2 packaging",
     );
@@ -505,7 +512,33 @@ describe("Windows release signing workflow", () => {
       "Store candidate artifacts cannot be published as a GitHub release",
     );
     expect(stepBlock("Validate release mode")).toContain(
-      "Store candidate artifacts must be built from main, not tag refs",
+      "EXPECTED_COMMIT_SHA: ${{ inputs.expected_commit_sha }}",
+    );
+    expect(stepBlock("Validate release mode")).toContain(
+      '$env:EXPECTED_COMMIT_SHA -notmatch "^[0-9a-f]{40}$"',
+    );
+    expect(stepBlock("Validate release mode")).toContain(
+      "$env:EXPECTED_COMMIT_SHA -cne $env:GITHUB_SHA",
+    );
+    expect(stepBlock("Validate release mode")).toContain(
+      "Store candidate expected commit",
+    );
+    expect(stepBlock("Validate release mode")).toContain(
+      '"v$env:APP_VERSION-store-candidate-$shortCommit"',
+    );
+    expect(stepBlock("Validate release mode")).toContain("Store candidate tag");
+    expect(stepBlock("Validate release mode")).toContain(
+      "Store candidates must use main or an immutable versioned candidate tag",
+    );
+    expect(storeSubmission).toContain(
+      'candidate_tag="v${candidate_version}-store-candidate-${candidate_sha:0:12}"',
+    );
+    expect(storeSubmission).toContain(
+      'git push origin "refs/tags/$candidate_tag"',
+    );
+    expect(storeSubmission).toContain('--ref "$candidate_tag"');
+    expect(storeSubmission).toContain(
+      "Do not add feature branches to the environment policy",
     );
     expect(stepBlock("Find or create draft release")).toContain(
       "env.STORE_CANDIDATE != 'true'",
@@ -608,6 +641,15 @@ describe("Windows release signing workflow", () => {
     );
     expect(packagedVerificationStep).toContain(
       "Store NSIS signed-update probe failed",
+    );
+    expect(packagedVerificationStep).toContain(
+      "$applicationHashBeforeProbe = (Get-FileHash -LiteralPath $nsisApplication -Algorithm SHA256).Hash",
+    );
+    expect(packagedVerificationStep).toContain(
+      "$applicationHashAfterProbe = (Get-FileHash -LiteralPath $nsisApplication -Algorithm SHA256).Hash",
+    );
+    expect(packagedVerificationStep).toContain(
+      "Store NSIS signed-update probe changed the installed application",
     );
   });
 
