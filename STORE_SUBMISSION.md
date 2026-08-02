@@ -1,10 +1,11 @@
 # Microsoft Store submission
 
-This checklist records the first AudioBud Microsoft Store submission and the
-package rules for future submissions.
+This checklist records the published AudioBud Microsoft Store listing, the
+first package checkpoint, and the servicing rules for replacement submissions.
 
-Status: submitted for Microsoft Store review on July 24, 2026. Partner Center
-shows the app as `In review` with a three-business-day review SLA.
+Status: approved and available in the Microsoft Store on August 2, 2026.
+
+Store listing: `https://apps.microsoft.com/detail/xpff8hfmd98gnd`.
 
 ## Submitted app setup
 
@@ -40,10 +41,11 @@ Use this text unless the implementation changes:
 > drivers or NT services are installed. The Windows installers support silent
 > install and uninstall.
 
-## Package values
+## Published 0.4.1 package checkpoint
 
-Use an MSI package for the first submission because Partner Center supports MSI
-silent install parameters directly.
+The first submission used an MSI because Partner Center supports MSI silent
+install parameters directly. Keep these values as an immutable record of what
+Microsoft certified and published:
 
 - Submitted package ID: `55846694`.
 - Submitted package URL:
@@ -54,21 +56,52 @@ silent install parameters directly.
 - Malware check: clean.
 - Code sign check: signed.
 - Silent install status: unknown in Partner Center, with install error code `0`.
-- Package URL rule: use a versioned, immutable HTTPS URL for the tested MSI.
+- Package URL rule: use a versioned, immutable HTTPS URL for the tested package.
 - Do not use a GitHub Actions artifact URL. Actions artifacts require
   authentication and expire.
-- Host the exact tested MSI at a durable public HTTPS URL before entering it in
-  Partner Center.
+- Host the exact tested package at a durable public HTTPS URL before entering it
+  in Partner Center.
 - Do not use a `/latest` URL.
 - App type: `MSI`.
 - Architecture: `x64`.
 - Installer parameters: `/qn /norestart`.
 - Language: `English (United States)`.
 
-For future submissions, record the servicing decision before submitting.
-Microsoft Store MSI/EXE distribution uses our hosted installer URL and the app
-or installer remains responsible for updates; MSIX is the Store path with
-built-in update delivery.
+The published 0.4.1 MSI cannot receive AudioBud's signed in-app updates because
+the app deliberately enables that channel only for NSIS installations. A Store
+update submission makes the current package available to new customers, but
+Microsoft does not automatically or manually service existing unpackaged
+MSI/EXE installations. Existing Store 0.4.1 users therefore need one manual
+transition: uninstall the 0.4.1 Store package, then install the current signed
+NSIS release to cross onto the supported channel.
+
+## Replacement servicing decision
+
+Replace the Store package with the signed Store-candidate NSIS build of the
+current AudioBud release. It uses the same installer flavor and signed update
+path as the direct release, while layering in the offline WebView2 runtime that
+the Store candidate requires. Do not substitute the normal GitHub release asset:
+record and host the exact Store-candidate binary verified by the workflow.
+
+- Replacement target version: `0.4.4`.
+- Replacement app type: `EXE`.
+- Architecture: `x64`.
+- Replacement installer parameters: `/S`.
+- Expected immutable package URL:
+  `https://share.amditis.tech/audiobud/downloads/0.4.4/AudioBud_0.4.4_x64-setup.exe`.
+- Replacement SHA-256: record the digest from the verified Store-candidate
+  artifact before hosting or submitting it.
+- Language: `English (United States)`.
+
+Use the generated NSIS executable for the replacement Store submission. The
+NSIS bundle type is the runtime signal that enables AudioBud's signed updater,
+and the release workflow must prove that the installed candidate can initialize
+and check that feed before the artifact is accepted. After that one-time
+transition, Store users receive signed updates through AudioBud's update feed.
+
+Do not enter the expected URL in Partner Center until it serves the exact
+signed artifact whose digest was recorded. Creating or submitting the Partner
+Center update remains an explicit release action.
 
 ## Store candidate build
 
@@ -87,40 +120,53 @@ That command layers configs in this order:
 The order matters: the package must keep the Artifact Signing command and add
 the Store-only offline WebView2 install mode.
 
-Use the generated MSI for Partner Center. The NSIS output is retained so the
-same signing and package-verification checks keep running in the release
-workflow.
+Use the generated NSIS executable for Partner Center. The MSI output remains in
+the workflow so GitHub release compatibility and the existing package checks do
+not regress, but it is not the Store servicing package.
 
 ## Package verification
 
-Before saving the package in Partner Center:
+Before saving the replacement package in Partner Center:
 
-1. Verify the MSI Authenticode signature and timestamp.
-2. Extract the MSI payload and verify every packaged `.exe` and `.dll` has a
-   valid Authenticode signature that chains to a trusted CA.
+1. Verify the NSIS executable's Authenticode signature and timestamp.
+2. Silently install the NSIS candidate into a clean directory with `/S` and
+   verify every packaged `.exe` and `.dll` has a valid Authenticode signature
+   that chains to a trusted CA.
 3. Verify AudioBud-owned packaged files are signed by the expected publisher.
-4. For Store candidates, verify the MSI-embedded WebView2 offline installer is
-   Authenticode-signed by Microsoft and those extracted bytes are included in
+4. Extract the Store NSIS candidate and verify its embedded WebView2 offline
+   installer is Authenticode-signed by Microsoft; include those exact bytes in
    the SBOM scan payload.
-5. Run the real MSI silent install command:
+5. Run the installed candidate's `--install-update` probe against
+   `https://github.com/jamditis/audiobud/releases/download/update-feed/latest.json`
+   and require a clean exit.
+6. Launch the installed app, complete one dictation, quit, relaunch, and complete
+   another dictation. If the test machine has a virtual microphone such as
+   NVIDIA Broadcast, also verify that an unavailable or restarting virtual
+   device produces a recoverable recording error rather than terminating the
+   app.
+7. Run the real NSIS silent uninstall command:
 
    ```powershell
-   msiexec.exe /i .\AudioBud_<version>_x64_en-US.msi /qn /norestart
+   .\uninstall.exe /S
    ```
 
-6. Run the real MSI silent uninstall command:
+8. Install and uninstall on a clean Windows machine.
+9. Confirm the hosted URL downloads the same SHA-256 digest that was tested.
+10. Archive the exact submitted NSIS executable outside the 30-day CI artifact
+    retention window.
+11. Freeze that URL. Do not replace the binary behind the URL after submission.
 
-   ```powershell
-   msiexec.exe /x .\AudioBud_<version>_x64_en-US.msi /qn /norestart
-   ```
-
-7. Install and uninstall on a clean Windows machine.
-8. Confirm the hosted URL downloads the same SHA-256 digest that was tested.
-9. Archive the exact submitted MSI outside the 30-day CI artifact retention
-   window.
-10. Freeze that URL. Do not replace the binary behind the URL after submission.
+After Microsoft certifies the replacement, verify the public Store listing
+installs 0.4.4. Then install a newer test build through the signed update feed
+and confirm AudioBud reports, downloads, verifies, and applies the update.
 
 ## Listing copy
+
+What's new in this version:
+
+> AudioBud 0.4.4 adds a signed in-app update channel for new Store installs and
+> completes the Windows updater path. The first Store 0.4.1 package requires one
+> manual transition before it can receive later signed updates.
 
 Short description:
 
@@ -156,3 +202,9 @@ Existing assets that can seed the Store listing:
 
 Before submission, review each Store upload slot in Partner Center and generate
 replacement screenshots if any required size or aspect ratio is missing.
+
+## References
+
+- [Publish an update to an MSI/EXE app](https://learn.microsoft.com/en-us/windows/apps/publish/publish-your-app/msi/publish-update-to-your-app-on-store)
+- [Microsoft Store MSI/EXE package requirements](https://learn.microsoft.com/en-us/windows/apps/publish/publish-your-app/msi/app-package-requirements)
+- [Tauri Microsoft Store distribution](https://v2.tauri.app/distribute/microsoft-store/)

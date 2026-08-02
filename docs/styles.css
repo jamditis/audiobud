@@ -1264,15 +1264,15 @@ kbd {
   color: var(--green);
 }
 
-.store-pending {
+.store-available {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   padding: 7px 12px;
-  border: 1px solid rgba(255, 185, 79, 0.3);
+  border: 1px solid rgba(139, 220, 82, 0.34);
   border-radius: 999px;
-  background: rgba(255, 185, 79, 0.09);
-  color: var(--amber);
+  background: rgba(139, 220, 82, 0.1);
+  color: var(--green);
   font-size: 13px;
   font-weight: 800;
 }
@@ -1393,12 +1393,6 @@ main > .section:first-child:not(.hero) {
   border-color: rgba(139, 220, 82, 0.34);
   background: rgba(139, 220, 82, 0.1);
   color: var(--green);
-}
-
-.status-progress {
-  border-color: rgba(255, 185, 79, 0.34);
-  background: rgba(255, 185, 79, 0.1);
-  color: var(--amber);
 }
 
 .status-planned {

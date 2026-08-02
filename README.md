@@ -8,21 +8,21 @@ AudioBud is a detached fork of [Handy](https://github.com/cjpais/Handy) by CJ Pa
 - **Privacy:** <https://audiobud.amditis.tech/privacy.html>
 - **Terms:** <https://audiobud.amditis.tech/terms.html>
 - **Support:** <https://github.com/jamditis/audiobud/issues>
-- **Download:** [latest release](https://github.com/jamditis/audiobud/releases/latest)
-- **Microsoft Store:** submitted for review on July 24, 2026
+- **Microsoft Store:** [official listing](https://apps.microsoft.com/detail/xpff8hfmd98gnd) (0.4.4 package refresh in progress)
+- **Direct downloads:** [latest GitHub release](https://github.com/jamditis/audiobud/releases/latest)
 - **Changelog:** [CHANGELOG.md](CHANGELOG.md)
 
 ![AudioBud general settings in dark mode with shortcut, microphone, input level, and audio feedback controls.](screenshots/app-general.png)
 
 ## Current status
 
-AudioBud is packaged for Windows x64, and the first Microsoft Store submission is in review as of July 24, 2026. If the app is approved, the Store install path will become the recommended install path for U.S. Windows users and should avoid the direct-download reputation warning flow that new GitHub release installers can trigger.
+AudioBud is approved and available in the [Microsoft Store](https://apps.microsoft.com/detail/xpff8hfmd98gnd) as of August 2, 2026. The first Store package contains v0.4.1; while its v0.4.4 replacement completes the Store submission process, use the latest signed GitHub installer to get the current release.
 
-Direct GitHub release installers remain available. Beginning with v0.4.0, Windows release installers are signed and timestamped through Microsoft Artifact Signing. The signature identifies Joseph Amditis as the publisher. SmartScreen can still show a reputation warning for direct downloads while a new release builds reputation.
+Direct GitHub release installers remain available for portable installs, deployment tooling, and users who cannot access the Store listing. Beginning with v0.4.0, Windows release installers are signed and timestamped through Microsoft Artifact Signing. The signature identifies Joseph Amditis as the publisher. SmartScreen can still show a reputation warning for direct downloads while a new release builds reputation.
 
 Windows is the validated target for this milestone. macOS and Linux code is inherited from Handy and may work, but this fork has not validated those builds yet.
 
-Beginning with v0.4.2, installed Windows NSIS builds check AudioBud's signed GitHub release feed for updates by default. You can opt out in Settings > Advanced. MSI and Microsoft Store packages stay on their package-managed update paths; macOS and Linux update behavior remains unvalidated.
+Beginning with v0.4.2, installed Windows NSIS builds check AudioBud's signed GitHub release feed for updates by default. You can opt out in Settings > Advanced. The replacement Store package uses that same NSIS update channel. The first Store v0.4.1 MSI did not include it and requires one manual transition onto the current NSIS release; macOS and Linux update behavior remains unvalidated.
 
 ## How it works
 
@@ -68,12 +68,12 @@ Parakeet V3 is the Windows default in this fork because it was the best small lo
 
 ## Install
 
-AudioBud has been submitted to the Microsoft Store and is waiting for review. If approved, Store installation will become the recommended path for U.S. Windows users.
-
-Until then, download the Windows installer from the [latest release](https://github.com/jamditis/audiobud/releases/latest):
+For the current release, download a signed installer from the [latest GitHub release](https://github.com/jamditis/audiobud/releases/latest):
 
 - `AudioBud_<version>_x64-setup.exe` — the setup wizard, which can install normally or in portable mode
 - `AudioBud_<version>_x64_en-US.msi` — the MSI package, for deployment tooling
+
+The official [Microsoft Store listing](https://apps.microsoft.com/detail/xpff8hfmd98gnd) is live, but its first published package is v0.4.1. A v0.4.4 NSIS replacement is being prepared so new Store installs join AudioBud's signed update feed. If you installed the first Store package, uninstall that copy in Windows Settings, then install the current NSIS setup executable once; later updates can arrive through AudioBud.
 
 On first run, choose a model if one is not already installed and grant microphone permission when Windows asks.
 

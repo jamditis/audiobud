@@ -19,7 +19,7 @@ describe("download verification guidance", () => {
     // rather than the same-page "#verify" the install note can use.
     for (const page of ["index", "roadmap", "privacy", "terms"]) {
       expect(compact(read(`docs/${page}.html`))).toMatch(
-        /<nav class="footer-links"[^>]*> <a href="\.\/index\.html#verify">Verify a download<\/a>/,
+        /<nav class="footer-links"[^>]*>[\s\S]*?<a href="\.\/index\.html#verify">Verify a download<\/a>/,
       );
     }
   });

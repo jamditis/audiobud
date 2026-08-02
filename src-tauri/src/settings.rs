@@ -556,7 +556,7 @@ fn default_autostart_enabled() -> bool {
 fn default_update_checks_enabled() -> bool {
     // Package detection runs after Tauri resolves the installed executable.
     // Keep the serialized default off until that one-time migration determines
-    // whether this is an installed NSIS package rather than MSI, Store, or portable.
+    // whether this is an installed NSIS package rather than MSI or portable.
     false
 }
 
@@ -570,8 +570,8 @@ fn migrate_update_checks_v0_4_2(
     }
 
     // Every release through v0.4.1 forced this value off. Enable the new feed
-    // once an installed NSIS package is actually running. MSI, Store, portable,
-    // and non-Windows packages must not consume the migration because they can
+    // once an installed NSIS package is actually running. MSI, portable, and
+    // non-Windows packages must not consume the migration because they can
     // share AppData with a later NSIS install. The durable marker then preserves
     // any later user opt-out.
     settings.update_checks_enabled = true;

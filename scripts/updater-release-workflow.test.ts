@@ -84,7 +84,7 @@ describe("signed updater release artifacts", () => {
     expect(paths).toContain("cargo run --locked --release");
   });
 
-  test("publishes and attests updater files but never latest.json", () => {
+  test("publishes and attests updater files without publishing latest.json", () => {
     for (const stepName of [
       "Attest release provenance",
       "Upload release artifacts to GitHub release",
@@ -94,7 +94,9 @@ describe("signed updater release artifacts", () => {
       expect(step).toContain("steps.updater-paths.outputs.archive");
       expect(step).toContain("steps.updater-paths.outputs.signature");
       expect(step).toContain("steps.updater-paths.outputs.public_key");
+      expect(step).not.toContain("latest.json");
     }
-    expect(workflow).not.toContain("latest.json");
+    expect(workflow).not.toContain("- name: Generate latest.json");
+    expect(workflow).not.toContain("- name: Publish latest.json");
   });
 });

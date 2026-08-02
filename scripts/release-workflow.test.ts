@@ -532,7 +532,7 @@ describe("Windows release signing workflow", () => {
     expect(storeSubmission).toContain("App type: `MSI`.");
     expect(storeSubmission).toContain("Architecture: `x64`.");
     expect(storeSubmission).toContain(
-      "Status: submitted for Microsoft Store review on July 24, 2026.",
+      "Status: approved and available in the Microsoft Store on August 2, 2026.",
     );
     expect(storeSubmission).toContain("Submitted package ID: `55846694`.");
     expect(storeSubmission).toContain(
@@ -550,6 +550,64 @@ describe("Windows release signing workflow", () => {
     expect(storeSubmission).toContain("src-tauri/tauri.signing.conf.json");
     expect(storeSubmission).toContain(
       "src-tauri/tauri.microsoftstore.conf.json",
+    );
+  });
+
+  test("keeps new Store installs on AudioBud's signed NSIS update channel", () => {
+    expect(storeSubmission).toContain(
+      "Store listing: `https://apps.microsoft.com/detail/xpff8hfmd98gnd`.",
+    );
+    expect(storeSubmission).toContain("Replacement app type: `EXE`.");
+    expect(storeSubmission).toContain(
+      "Replacement installer parameters: `/S`.",
+    );
+    expect(storeSubmission).toContain(
+      "Use the generated NSIS executable for the replacement Store submission.",
+    );
+    expect(storeSubmission).toContain(
+      "Replace the Store package with the signed Store-candidate NSIS build",
+    );
+    expect(storeSubmission).toContain(
+      "Do not substitute the normal GitHub release asset",
+    );
+    expect(storeSubmission).toContain(
+      "The published 0.4.1 MSI cannot receive AudioBud's signed in-app updates",
+    );
+    expect(storeSubmission).toMatch(
+      /After that one-time\s+transition, Store users receive signed updates through AudioBud's update feed\./,
+    );
+
+    const webview2Step = stepBlock("Verify Store WebView2 offline installers");
+    expect(webview2Step).toContain(
+      "NSIS_PATH: ${{ steps.signing-paths.outputs.nsis }}",
+    );
+    expect(webview2Step).toContain('Get-Command "7z.exe"');
+    expect(webview2Step).toContain(
+      'Join-Path $env:ProgramFiles "7-Zip\\7z.exe"',
+    );
+    expect(webview2Step).toContain("7z.exe was not found");
+    expect(webview2Step).toContain(
+      "Expected at least one NSIS-embedded WebView2 offline installer",
+    );
+
+    const packagedVerificationStep = stepBlock(
+      "Verify packaged application signatures",
+    );
+    expect(packagedVerificationStep).toContain(
+      "APP_VERSION: ${{ steps.meta.outputs.version }}",
+    );
+    expect(packagedVerificationStep).toContain(
+      'if ($env:STORE_CANDIDATE -eq "true")',
+    );
+    expect(packagedVerificationStep).toContain(
+      "Store candidate $env:APP_VERSION is behind live update feed",
+    );
+    expect(packagedVerificationStep).toContain('"--install-update"');
+    expect(packagedVerificationStep).toContain(
+      "https://github.com/jamditis/audiobud/releases/download/update-feed/latest.json",
+    );
+    expect(packagedVerificationStep).toContain(
+      "Store NSIS signed-update probe failed",
     );
   });
 

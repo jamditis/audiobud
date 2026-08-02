@@ -81,6 +81,10 @@ const sitePages = [
   },
 ];
 const footerLinks = [
+  {
+    label: "Microsoft Store",
+    href: "https://apps.microsoft.com/detail/xpff8hfmd98gnd",
+  },
   { label: "Verify a download", href: "./index.html#verify" },
   { label: "Roadmap", href: "./roadmap.html" },
   { label: "Privacy", href: "./privacy.html" },
@@ -461,6 +465,7 @@ describe("Real document tag scanner", () => {
       <div data-copy="<footer><nav class='footer-links'></nav></footer>"></div>
       <!-- <footer><nav class="footer-links"><a href="./wrong.html">Wrong</a></nav></footer> -->
       <footer><nav class="footer-links">
+        <a href="https://apps.microsoft.com/detail/xpff8hfmd98gnd">Microsoft Store</a>
         <a href="./index.html#verify">Verify a download</a>
         <a href="./roadmap.html">Roadmap</a>
         <a href="./privacy.html">Privacy</a>
@@ -1112,23 +1117,30 @@ describe("AudioBud public policy pages", () => {
     });
   }
 
-  it("keeps the Store review status beside the download CTA", () => {
+  it("keeps the Store approval and package refresh beside the download CTA", () => {
     const home = read("index.html");
     const homeText = readText("index.html");
 
     expect(home).toContain('class="install-note"');
-    expect(homeText).toContain("Microsoft Store review in progress");
-    expect(homeText).toContain("Microsoft Store review pending");
-    expect(home).toContain("<strong>Current direct download:</strong>");
-    expect(homeText).toContain("signed, and timestamped through Microsoft");
+    expect(homeText).toContain("Microsoft Store approved");
+    expect(home).toContain(
+      'href="https://apps.microsoft.com/detail/xpff8hfmd98gnd"',
+    );
+    expect(home).toContain(
+      'href="https://github.com/jamditis/audiobud/releases/latest"',
+    );
+    expect(home).toContain(
+      "<strong>Installed the first Store package?</strong>",
+    );
+    expect(homeText).toContain(
+      "Its first package is behind the current release",
+    );
+    expect(homeText).toContain(
+      "while the Store replacement completes submission",
+    );
+    expect(homeText).toContain("AudioBud's signed update feed");
     expect(homeText).toContain(
       "SmartScreen can still show a reputation warning for direct downloads",
-    );
-    expect(homeText).toContain(
-      "For users who can access the Store listing, that path should avoid the downloaded-installer warning flow once Microsoft approves the app",
-    );
-    expect(homeText).toContain(
-      "Direct downloads can still trigger SmartScreen",
     );
     expect(home).not.toContain("<strong>Unsigned release:</strong>");
   });
@@ -1152,15 +1164,15 @@ describe("AudioBud public policy pages", () => {
     // "stability & reliability" while that milestone held only the
     // output-routing epic, so the site misdescribed the next release and the
     // two milestones holding the reliability work were not linked at all.
-    for (const milestone of [10, 6, 7, 8, 11, 9]) {
+    for (const milestone of [6, 7, 8, 11, 9]) {
       expect(roadmap).toContain(
         `href="https://github.com/jamditis/audiobud/milestone/${milestone}"`,
       );
     }
 
-    expect(roadmap).toContain("v0.4.1 &mdash; release integrity");
-    expect(roadmap).toContain("turn on auto-update");
-    expect(roadmap).toContain("Store submission through review");
+    expect(roadmap).toContain("<h3>Microsoft Store</h3>");
+    expect(roadmap).toContain("v0.4.4 NSIS replacement");
+    expect(roadmap).toContain("AudioBud's signed update feed");
     expect(roadmap).toContain("v0.5.0 &mdash; output routing");
     expect(roadmap).toContain("v0.8.0 &mdash; reliability &amp; accessibility");
     expect(roadmap).not.toContain("v0.5.0 &mdash; stability");
@@ -1292,10 +1304,14 @@ describe("AudioBud public policy pages", () => {
     const readme = readRoot("README.md");
 
     expect(readme).toContain(
-      "the first Microsoft Store submission is in review as of July 24, 2026",
+      "approved and available in the [Microsoft Store](https://apps.microsoft.com/detail/xpff8hfmd98gnd) as of August 2, 2026",
+    );
+    expect(readme).toContain("The first Store package contains v0.4.1");
+    expect(readme).toContain(
+      "while its v0.4.4 replacement completes the Store submission process",
     );
     expect(readme).toContain(
-      "Store install path will become the recommended install path for U.S. Windows users",
+      "The replacement Store package uses that same NSIS update channel",
     );
     expect(readme).toContain("Beginning with v0.4.0");
     expect(readme).toContain("signed and timestamped through Microsoft");
@@ -1360,7 +1376,7 @@ describe("AudioBud public policy pages", () => {
     const termsText = readText("terms.html");
     const normalizedTerms = terms.toLowerCase();
     const termsDescription =
-      "Terms for AudioBud's official project website, release pages, support channels, and other maintainer-operated surfaces.";
+      "Terms for AudioBud's official website, Microsoft Store listing, release pages, support channels, and other maintainer-operated surfaces.";
     const termsImageAlt = "AudioBud local dictation for Windows app interface";
     expect(termsText).toContain(
       "The MIT License's warranty terms govern AudioBud software.",

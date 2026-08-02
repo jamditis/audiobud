@@ -595,6 +595,7 @@ jobs:
         id: store-webview2
         shell: pwsh
         env:
+          NSIS_PATH: ${{ steps.signing-paths.outputs.nsis }}
           MSI_PATH: ${{ steps.signing-paths.outputs.msi }}
         run: |
           $signTool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" `
@@ -661,6 +662,34 @@ jobs:
             throw "Expected at least one MSI-embedded WebView2 offline installer"
           }
 
+          $sevenZip = Get-Command "7z.exe" -ErrorAction SilentlyContinue
+          $sevenZipPath = if ($sevenZip) {
+            $sevenZip.Source
+          } else {
+            Join-Path $env:ProgramFiles "7-Zip\7z.exe"
+          }
+          if (-not (Test-Path -LiteralPath $sevenZipPath -PathType Leaf)) {
+            throw "7z.exe was not found"
+          }
+          $nsisBinaryDirectory = Join-Path $env:RUNNER_TEMP `
+            "audiobud-nsis-binary-verification-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
+          if (Test-Path -LiteralPath $nsisBinaryDirectory) {
+            throw "NSIS binary verification directory already exists: $nsisBinaryDirectory"
+          }
+          New-Item -ItemType Directory -Path $nsisBinaryDirectory | Out-Null
+          & $sevenZipPath x "-o$nsisBinaryDirectory" -y $env:NSIS_PATH
+          if ($LASTEXITCODE -ne 0) {
+            throw "7z.exe failed to extract NSIS embedded binaries"
+          }
+
+          $nsisEmbeddedInstallers = @(
+            Get-ChildItem -LiteralPath $nsisBinaryDirectory -File -Recurse |
+              Where-Object { $_.Name -match "WebView2|MicrosoftEdge" -and $_.Extension -eq ".exe" }
+          )
+          if ($nsisEmbeddedInstallers.Count -lt 1) {
+            throw "Expected at least one NSIS-embedded WebView2 offline installer"
+          }
+
           $webView2PayloadDirectory = Join-Path $env:CARGO_TARGET_DIR "release\webview2-payload"
           if (Test-Path -LiteralPath $webView2PayloadDirectory) {
             Remove-Item -LiteralPath $webView2PayloadDirectory -Recurse -Force
@@ -671,6 +700,13 @@ jobs:
             Assert-MicrosoftWebView2Signature -Path $embeddedInstaller.FullName
             $destination = Join-Path $webView2PayloadDirectory `
               "msi-$index-$($embeddedInstaller.Name)"
+            Copy-Item -LiteralPath $embeddedInstaller.FullName -Destination $destination
+          }
+          for ($index = 0; $index -lt $nsisEmbeddedInstallers.Count; $index += 1) {
+            $embeddedInstaller = $nsisEmbeddedInstallers[$index]
+            Assert-MicrosoftWebView2Signature -Path $embeddedInstaller.FullName
+            $destination = Join-Path $webView2PayloadDirectory `
+              "nsis-$index-$($embeddedInstaller.Name)"
             Copy-Item -LiteralPath $embeddedInstaller.FullName -Destination $destination
           }
 
@@ -872,6 +908,7 @@ jobs:
         id: packaged-payload
         shell: pwsh
         env:
+          APP_VERSION: ${{ steps.meta.outputs.version }}
           NSIS_PATH: ${{ steps.signing-paths.outputs.nsis }}
           MSI_PATH: ${{ steps.signing-paths.outputs.msi }}
           WEBVIEW2_PAYLOAD_PATH: ${{ steps.store-webview2.outputs.path }}
@@ -1018,6 +1055,45 @@ jobs:
           Assert-AudioBudSignature -Path $nsisUninstaller
           Assert-PackagedPeSignatures -Root $msiDirectory
           Assert-PackagedPeSignatures -Root $nsisDirectory
+
+          if ($env:STORE_CANDIDATE -eq "true") {
+            $updateEndpoint = "https://github.com/jamditis/audiobud/releases/download/update-feed/latest.json"
+            $liveManifest = Invoke-RestMethod -Uri $updateEndpoint
+            try {
+              $candidateVersion = [System.Management.Automation.SemanticVersion]$env:APP_VERSION
+              $liveVersion = [System.Management.Automation.SemanticVersion]$liveManifest.version
+            } catch {
+              throw "Could not compare Store candidate and live update-feed versions: $($_.Exception.Message)"
+            }
+            if ($liveVersion -gt $candidateVersion) {
+              throw "Store candidate $env:APP_VERSION is behind live update feed $($liveManifest.version)"
+            }
+
+            $updateProbeStdout = Join-Path $verificationRoot "store-update-probe.stdout.log"
+            $updateProbeStderr = Join-Path $verificationRoot "store-update-probe.stderr.log"
+            $updateProbe = Start-Process -FilePath $nsisApplication `
+              -ArgumentList @(
+                "--install-update",
+                "--install-update-endpoint",
+                $updateEndpoint,
+                "--start-hidden",
+                "--no-tray"
+              ) `
+              -RedirectStandardOutput $updateProbeStdout `
+              -RedirectStandardError $updateProbeStderr `
+              -PassThru
+            if (-not $updateProbe.WaitForExit(120000)) {
+              Stop-Process -Id $updateProbe.Id -Force -ErrorAction SilentlyContinue
+              Get-Content -LiteralPath $updateProbeStdout -Tail 100 -ErrorAction SilentlyContinue
+              Get-Content -LiteralPath $updateProbeStderr -Tail 100 -ErrorAction SilentlyContinue
+              throw "Store NSIS signed-update probe timed out"
+            }
+            if ($updateProbe.ExitCode -ne 0) {
+              Get-Content -LiteralPath $updateProbeStdout -Tail 100 -ErrorAction SilentlyContinue
+              Get-Content -LiteralPath $updateProbeStderr -Tail 100 -ErrorAction SilentlyContinue
+              throw "Store NSIS signed-update probe failed with exit code $($updateProbe.ExitCode)"
+            }
+          }
 
           $runtimeFiles = @(
             "msvcp140.dll",
