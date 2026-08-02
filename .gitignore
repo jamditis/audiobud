@@ -26,7 +26,8 @@ dist-ssr
 *.sln
 *.sw?
 
-.claude/
+.claude/*
+!.claude/settings.json
 
 /target/
 recording_*

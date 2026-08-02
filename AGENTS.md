@@ -218,3 +218,18 @@ See the [Troubleshooting](README.md#troubleshooting) section in README.md.
 
 - On the Partner Center package validation page, expanded validation sections may have been opened by the user. Do not infer that automation expanded them or that their helper text is the final validation result. Wait for the overall package validation run to leave `In progress` before deciding whether follow-up work is needed.
 - Joe's AudioBud workflow is press once to start recording, then press again to stop and send the transcript. Do not describe his workflow as "hold the hotkey." If docs need to describe default app behavior, verify the current `push_to_talk` default first.
+
+## Commits and attribution
+
+No AI attribution in commits, PR bodies, issues, docs, or code. `.claude/settings.json` disables automatic session links and blanks the commit and PR attribution strings. Web and Remote Control sessions can otherwise add that metadata by default. The setting lives in the repo rather than `~/.claude/settings.json` because cloud sessions clone the repo and never read user-level config. Don't reintroduce any of it by hand.
+
+No `Co-authored-by` trailers of any kind, including Joe's own aliases.
+
+Git identity — set before committing, in every worktree and every agent session:
+
+```sh
+git config user.name "Joe Amditis"
+git config user.email "6799804+jamditis@users.noreply.github.com"
+```
+
+Any other author email either trips GitHub's email-privacy push block (GH007) or makes a squash merge inject a `Co-authored-by` line into the merge body.
