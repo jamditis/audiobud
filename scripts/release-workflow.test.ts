@@ -595,6 +595,21 @@ describe("Windows release signing workflow", () => {
       "Replacement installer parameters: `/S`.",
     );
     expect(storeSubmission).toContain(
+      "Immutable package URL:\n  `https://share.amditis.tech/audiobud/downloads/0.4.4/AudioBud_0.4.4_x64-setup.exe`.",
+    );
+    expect(storeSubmission).toContain(
+      "Replacement SHA-256:\n  `102fcce8214292d2d6f03cd3bf766b8b96b2f934b9e9add9a524de3ae86cf5d5`.",
+    );
+    expect(storeSubmission).toContain(
+      "Candidate tag: `v0.4.4-store-candidate-cd7b3a3e256a`.",
+    );
+    expect(storeSubmission).toContain(
+      "Candidate commit: `cd7b3a3e256aae2c7ecca329733edc9690199652`.",
+    );
+    expect(storeSubmission).toContain(
+      "https://github.com/jamditis/audiobud/actions/runs/30773521899",
+    );
+    expect(storeSubmission).toContain(
       "Use the generated NSIS executable for the replacement Store submission.",
     );
     expect(storeSubmission).toContain(

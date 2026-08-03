@@ -87,11 +87,26 @@ record and host the exact Store-candidate binary verified by the workflow.
 - Replacement app type: `EXE`.
 - Architecture: `x64`.
 - Replacement installer parameters: `/S`.
-- Expected immutable package URL:
+- Immutable package URL:
   `https://share.amditis.tech/audiobud/downloads/0.4.4/AudioBud_0.4.4_x64-setup.exe`.
-- Replacement SHA-256: record the digest from the verified Store-candidate
-  artifact before hosting or submitting it.
+- Replacement SHA-256:
+  `102fcce8214292d2d6f03cd3bf766b8b96b2f934b9e9add9a524de3ae86cf5d5`.
 - Language: `English (United States)`.
+
+Verified candidate record on August 2, 2026:
+
+- Candidate tag: `v0.4.4-store-candidate-cd7b3a3e256a`.
+- Candidate commit: `cd7b3a3e256aae2c7ecca329733edc9690199652`.
+- Protected signing run:
+  `https://github.com/jamditis/audiobud/actions/runs/30773521899`.
+- The protected workflow passed the Store WebView2, Authenticode, packaged-PE,
+  silent install/update-probe/uninstall, SBOM, checksum, and provenance gates.
+- SLSA provenance and SPDX 2.3 attestations bind the NSIS digest above to the
+  candidate tag, commit, and `.github/workflows/release.yml`.
+- A full public HTTPS download from the immutable URL reproduced the same
+  SHA-256 after deployment.
+- Partner Center submission status: ready for the 0.4.4 package replacement;
+  the published listing continues to serve 0.4.1 until Microsoft certifies it.
 
 Use the generated NSIS executable for the replacement Store submission. The
 NSIS bundle type is the runtime signal that enables AudioBud's signed updater,
@@ -99,9 +114,9 @@ and the release workflow must prove that the installed candidate can initialize
 and check that feed before the artifact is accepted. After that one-time
 transition, Store users receive signed updates through AudioBud's update feed.
 
-Do not enter the expected URL in Partner Center until it serves the exact
-signed artifact whose digest was recorded. Creating or submitting the Partner
-Center update remains an explicit release action.
+Do not change the URL or replace the hosted bytes after Partner Center accepts
+the package. Creating or submitting the Partner Center update remains an
+explicit release action.
 
 ## Store candidate build
 
