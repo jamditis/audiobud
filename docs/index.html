@@ -6,7 +6,7 @@
     <title>AudioBud - private local dictation for Windows</title>
     <meta
       name="description"
-      content="AudioBud is a private, local-first Windows dictation app. Press a hotkey, speak, and paste fast speech-to-text into any focused text field."
+      content="AudioBud is a private, local-first Windows dictation app available from Microsoft Store. Press a hotkey, speak, and paste speech-to-text into any focused text field."
     />
     <link rel="canonical" href="https://audiobud.amditis.tech/" />
     <link
@@ -20,7 +20,7 @@
     />
     <meta
       property="og:description"
-      content="Talk naturally. Type instantly. Keep your audio on your machine."
+      content="Get private, local Windows dictation from Microsoft Store. Talk naturally, type instantly, and keep your audio on your machine."
     />
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://audiobud.amditis.tech/" />
@@ -41,7 +41,7 @@
     />
     <meta
       name="twitter:description"
-      content="Talk naturally. Type instantly. Keep your audio on your machine."
+      content="Get private, local Windows dictation from Microsoft Store. Talk naturally, type instantly, and keep your audio on your machine."
     />
     <meta
       name="twitter:image"
@@ -79,7 +79,7 @@
         <div class="wrap hero-grid">
           <div class="hero-copy" data-reveal>
             <p class="eyebrow">
-              <span></span>Windows x64 · Store review in progress
+              <span></span>Windows x64 · Microsoft Store approved
             </p>
             <h1 id="hero-title" tabindex="-1">
               Talk naturally.<br />
@@ -91,20 +91,27 @@
               machine.
             </p>
             <div class="actions">
-              <a class="button primary" href="#install">
+              <a
+                class="button primary"
+                href="https://github.com/jamditis/audiobud/releases/latest"
+              >
                 <svg viewBox="0 0 24 24" aria-hidden="true">
                   <path d="M12 3v12m0 0 5-5m-5 5-5-5M5 20h14" />
                 </svg>
-                Download for Windows
+                Download current release
               </a>
-              <a class="button ghost" href="#how">See how it works</a>
+              <a
+                class="button ghost"
+                href="https://apps.microsoft.com/detail/xpff8hfmd98gnd"
+                >View Microsoft Store</a
+              >
             </div>
             <div class="trust-row" aria-label="Product highlights">
               <span><i class="trust-dot"></i>Open source</span>
               <span><i class="trust-dot"></i>Offline audio</span>
               <span><i class="trust-dot"></i>No account</span>
               <span><i class="trust-dot"></i>Code-signed</span>
-              <span><i class="trust-dot"></i>Store submitted</span>
+              <span><i class="trust-dot"></i>Microsoft Store</span>
             </div>
           </div>
 
@@ -359,26 +366,25 @@
             <img src="./favicon.svg" alt="" />
           </div>
           <div class="cta-copy">
-            <p class="eyebrow">Microsoft Store review in progress</p>
-            <h2>AudioBud is waiting on Store approval.</h2>
+            <p class="eyebrow">Microsoft Store approved</p>
+            <h2>Get the current AudioBud release.</h2>
             <p>
-              The first Microsoft Store submission is in review. If approved,
-              the Store install path will become the recommended way to install
-              AudioBud for U.S. Windows users.
+              AudioBud's official Store listing is live. Its first package is
+              behind the current release, so use the latest signed GitHub
+              installer while the Store replacement completes submission.
             </p>
             <p class="install-note">
-              <strong>Current direct download:</strong> GitHub release
-              installers remain available, signed, and timestamped through
-              Microsoft Artifact Signing. SmartScreen can still show a
-              reputation warning for direct downloads while a new release builds
-              reputation. For users who can access the Store listing, that path
-              should avoid the downloaded-installer warning flow once Microsoft
-              approves the app.
-              <a href="#verify">Check the download yourself</a>.
+              <strong>Installed the first Store package?</strong> Uninstall that
+              copy in Windows Settings, then install the current NSIS setup
+              executable once. The replacement Store package uses that same
+              installer type, and later releases can arrive through AudioBud's
+              signed update feed. SmartScreen can still show a reputation
+              warning for direct downloads while a new release builds
+              reputation. <a href="#verify">Check the download yourself</a>.
             </p>
           </div>
           <div class="cta-actions">
-            <span class="store-pending">Microsoft Store review pending</span>
+            <span class="store-available">Approved by Microsoft</span>
             <!-- The href stays on the releases page so the button always
                  resolves, with no version to keep in sync here. site.js
                  upgrades it to the current installer once the release
@@ -387,12 +393,17 @@
               class="button primary"
               data-download="_x64-setup.exe"
               href="https://github.com/jamditis/audiobud/releases/latest"
-              >Download AudioBud</a
+              >Download current release</a
             >
             <a
               class="text-link"
               href="https://github.com/jamditis/audiobud/releases/latest"
               >All downloads <span aria-hidden="true">→</span></a
+            >
+            <a
+              class="text-link"
+              href="https://apps.microsoft.com/detail/xpff8hfmd98gnd"
+              >View Microsoft Store <span aria-hidden="true">→</span></a
             >
             <a
               class="text-link"
@@ -408,12 +419,11 @@
           <div class="section-head" data-reveal>
             <div>
               <p class="eyebrow">Before you install</p>
-              <h2>Direct downloads can still trigger SmartScreen.</h2>
+              <h2>Using a direct download?</h2>
             </div>
             <p>
-              AudioBud is waiting for Microsoft Store approval. Until the Store
-              path is live, here is how to confirm you have the real GitHub
-              release installer.
+              The Store listing's current replacement is in preparation. Until
+              it is published, confirm that your direct download is genuine.
             </p>
           </div>
 
@@ -526,6 +536,9 @@
           <p>Local dictation for Windows. MIT licensed.</p>
         </div>
         <nav class="footer-links" aria-label="Footer">
+          <a href="https://apps.microsoft.com/detail/xpff8hfmd98gnd"
+            >Microsoft Store</a
+          >
           <a href="./index.html#verify">Verify a download</a>
           <a href="./roadmap.html">Roadmap</a>
           <a href="./privacy.html">Privacy</a>

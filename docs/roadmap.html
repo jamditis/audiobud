@@ -85,24 +85,6 @@
             </p>
           </div>
           <div class="roadmap-grid">
-            <article class="roadmap-card" data-reveal data-reveal-delay="1">
-              <div class="roadmap-card-head">
-                <h3>v0.4.1 &mdash; release integrity</h3>
-                <span class="status-pill status-progress">in review</span>
-              </div>
-              <p>
-                Make the build pipeline test what it actually ships, publish
-                provenance you can check for every artifact, turn on auto-update
-                so a bad build can be fixed after it leaves, and carry the first
-                Microsoft Store submission through review so U.S. Windows users
-                get a cleaner install path.
-              </p>
-              <a
-                class="roadmap-link"
-                href="https://github.com/jamditis/audiobud/milestone/10"
-                >View milestone &rarr;</a
-              >
-            </article>
             <article class="roadmap-card" data-reveal>
               <div class="roadmap-card-head">
                 <h3>v0.5.0 &mdash; output routing</h3>
@@ -191,11 +173,43 @@
           <div class="section-head" data-reveal>
             <h2>What has shipped.</h2>
             <p>
-              Released builds, newest first. The full notes live in the
-              changelog.
+              Recent releases and distribution updates. The changelog has every
+              patch-level detail.
             </p>
           </div>
           <div class="roadmap-grid">
+            <article class="roadmap-card">
+              <div class="roadmap-card-head">
+                <h3>Microsoft Store</h3>
+                <span class="status-pill status-shipped">available</span>
+              </div>
+              <p>
+                AudioBud passed Microsoft Store review and its listing is live.
+                A v0.4.4 NSIS replacement is in preparation so new Store users
+                receive the current app and join AudioBud's signed update feed.
+              </p>
+              <a
+                class="roadmap-link"
+                href="https://apps.microsoft.com/detail/xpff8hfmd98gnd"
+                >View Microsoft Store &rarr;</a
+              >
+            </article>
+            <article class="roadmap-card">
+              <div class="roadmap-card-head">
+                <h3>v0.4.4</h3>
+                <span class="status-pill status-shipped">shipped</span>
+              </div>
+              <p>
+                The signed updater now uses a Windows-compatible archive format,
+                completing the end-to-end update path introduced across the 0.4
+                releases.
+              </p>
+              <a
+                class="roadmap-link"
+                href="https://github.com/jamditis/audiobud/releases/tag/v0.4.4"
+                >Release notes &rarr;</a
+              >
+            </article>
             <article class="roadmap-card">
               <div class="roadmap-card-head">
                 <h3>v0.4.0</h3>
@@ -357,6 +371,9 @@
           <p>Local dictation for Windows. MIT licensed.</p>
         </div>
         <nav class="footer-links" aria-label="Footer">
+          <a href="https://apps.microsoft.com/detail/xpff8hfmd98gnd"
+            >Microsoft Store</a
+          >
           <a href="./index.html#verify">Verify a download</a>
           <a href="./roadmap.html" aria-current="page">Roadmap</a>
           <a href="./privacy.html">Privacy</a>

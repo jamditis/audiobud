@@ -107,7 +107,7 @@ fn ensure_cli_update_supported(
     }
     if !update_channel_available {
         return Err(
-            "Automatic updates are available only for installed NSIS packages; MSI and Store packages use their own update channel"
+            "Automatic updates are available only for installed NSIS packages; MSI packages require manual installer updates"
                 .to_string(),
         );
     }
@@ -1027,7 +1027,7 @@ mod updater_gate_tests {
     }
 
     #[test]
-    fn cli_updater_rejects_msi_and_store_packages() {
+    fn cli_updater_rejects_non_nsis_packages() {
         let error = ensure_cli_update_supported(false, true, false)
             .expect_err("the NSIS feed must reject non-NSIS packages");
         assert!(error.contains("NSIS"));

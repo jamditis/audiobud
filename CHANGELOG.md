@@ -8,6 +8,19 @@ AudioBud is a detached fork of [Handy](https://github.com/cjpais/Handy) by CJ Pa
 restate Handy's own history. AudioBud versions independently of Handy, starting at
 `0.1.0`. Windows releases are code-signed beginning with `0.4.0`.
 
+## Unreleased
+
+### Added
+
+- AudioBud passed Microsoft Store certification and is available from its
+  [official Store listing](https://apps.microsoft.com/detail/xpff8hfmd98gnd).
+
+### Changed
+
+- The replacement Store package is prepared to use the signed NSIS installer so
+  new Store installs join AudioBud's signed update feed. The first Store v0.4.1
+  MSI still needs one manual transition onto the current NSIS release.
+
 ## 0.4.4 - 2026-08-01
 
 A signed updater packaging fix. The v0.4.3 feed validation downloaded and
@@ -42,8 +55,9 @@ and Linux code is inherited and untested.
 
 - A signed automatic-update feed for installed NSIS packages, an offline
   updater-signing key backup and rotation runbook, and a clean-Windows upgrade
-  test for later releases (#157-#159). MSI and Store packages remain on their
-  package-managed update paths.
+  test for later releases (#157-#159). MSI packages, including the first Store
+  package, require a manual transition to an NSIS install before joining that
+  feed.
 - A separate portable Windows installer that includes a pinned WebView2 fixed
   runtime and verifies every packaged executable signature (#39).
 - SPDX JSON release SBOMs covering the packaged binaries plus the locked Rust

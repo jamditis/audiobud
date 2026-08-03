@@ -26,7 +26,8 @@ describe("published update feed workflow", () => {
     expect(workflow).toContain("if: needs.gate.outputs.publish == 'true'");
     expect(workflow).toContain("attestations: read");
     expect(workflow).toContain("contents: write");
-    expect(releaseWorkflow).not.toContain("latest.json");
+    expect(releaseWorkflow).not.toContain("- name: Generate latest.json");
+    expect(releaseWorkflow).not.toContain("- name: Publish latest.json");
   });
 
   test("validates a candidate before promoting the live manifest", () => {

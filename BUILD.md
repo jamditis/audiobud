@@ -89,7 +89,10 @@ bun tauri dev
 bun run tauri build
 ```
 
-This compiles a release binary and generates platform-specific bundles (deb, rpm, AppImage on Linux; dmg on macOS; msi on Windows).
+This compiles a release binary and generates platform-specific bundles (deb,
+rpm, and AppImage on Linux; dmg on macOS; NSIS setup executables and MSI on
+Windows). The signed release workflow also produces a larger Windows setup with
+a fixed WebView2 runtime for offline or locked-down PCs.
 
 ## Linux Install (from source)
 

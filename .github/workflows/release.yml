@@ -10,8 +10,11 @@
 #     pushed v* tag also creates or reuses a draft GitHub release and attaches
 #     the release artifacts.
 #
-# The job can run only from main or a v* tag and uses the protected
-# artifact-signing environment for passwordless Azure authentication.
+# Normal release builds run only from main or an exact v* release tag. A Store
+# candidate may also run from an immutable, SHA-suffixed v* candidate tag. This
+# preserves the protected environment's main/v* deployment policy while
+# binding the workflow, source checkout, provenance, and operator pin to one
+# commit. Every path uses passwordless Azure authentication.
 name: Release
 
 on:
@@ -25,6 +28,11 @@ on:
         description: "Build a Microsoft Store candidate CI artifact with offline WebView2 packaging"
         type: boolean
         default: false
+      expected_commit_sha:
+        description: "Exact 40-character commit SHA required for every Store candidate"
+        type: string
+        required: false
+        default: ""
   push:
     tags:
       - "v*"
@@ -38,7 +46,15 @@ concurrency:
 jobs:
   build-windows:
     name: Build and sign Windows installers
-    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
+    if: >-
+      github.ref == 'refs/heads/main' ||
+      (
+        startsWith(github.ref, 'refs/tags/v') &&
+        (
+          !contains(github.ref_name, '-store-candidate-') ||
+          (github.event_name == 'workflow_dispatch' && inputs.store_candidate)
+        )
+      )
     environment: artifact-signing
     runs-on: windows-2025
     timeout-minutes: 90
@@ -83,12 +99,16 @@ jobs:
           VERSION=$(grep -o '"version": "[^"]*"' src-tauri/tauri.conf.json | cut -d'"' -f4)
           APP_TAG="v$VERSION"
           if [[ "${{ github.ref_type }}" == "tag" ]]; then
-            PUSHED="${{ github.ref_name }}"
-            if [[ "$PUSHED" != "$APP_TAG" ]]; then
-              echo "::error::Pushed tag '$PUSHED' does not match app version '$APP_TAG' from src-tauri/tauri.conf.json. Bump the version or push the matching tag."
-              exit 1
+            if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ inputs.store_candidate }}" == "true" ]]; then
+              TAG="$APP_TAG"
+            else
+              PUSHED="${{ github.ref_name }}"
+              if [[ "$PUSHED" != "$APP_TAG" ]]; then
+                echo "::error::Pushed tag '$PUSHED' does not match app version '$APP_TAG' from src-tauri/tauri.conf.json. Bump the version or push the matching tag."
+                exit 1
+              fi
+              TAG="$PUSHED"
             fi
-            TAG="$PUSHED"
           else
             TAG="$APP_TAG"
           fi
@@ -100,14 +120,32 @@ jobs:
         if: ${{ github.event_name == 'workflow_dispatch' }}
         shell: pwsh
         env:
+          APP_VERSION: ${{ steps.meta.outputs.version }}
+          EXPECTED_COMMIT_SHA: ${{ inputs.expected_commit_sha }}
           MAKE_RELEASE: ${{ inputs.make_release }}
+          REF_NAME: ${{ github.ref_name }}
           REF_TYPE: ${{ github.ref_type }}
         run: |
           if ($env:MAKE_RELEASE -eq "true" -and $env:STORE_CANDIDATE -eq "true") {
             throw "Store candidate artifacts cannot be published as a GitHub release"
           }
-          if ($env:REF_TYPE -eq "tag" -and $env:STORE_CANDIDATE -eq "true") {
-            throw "Store candidate artifacts must be built from main, not tag refs"
+          if ($env:STORE_CANDIDATE -eq "true") {
+            if ($env:EXPECTED_COMMIT_SHA -notmatch "^[0-9a-f]{40}$") {
+              throw "A Store candidate requires an exact lowercase 40-character expected commit SHA"
+            }
+            if ($env:EXPECTED_COMMIT_SHA -cne $env:GITHUB_SHA) {
+              throw "Store candidate expected commit $env:EXPECTED_COMMIT_SHA does not match dispatched commit $env:GITHUB_SHA"
+            }
+            if ($env:REF_TYPE -eq "tag") {
+              $shortCommit = $env:GITHUB_SHA.Substring(0, 12)
+              $expectedTag = "v$env:APP_VERSION-store-candidate-$shortCommit"
+              if ($env:REF_NAME -cne $expectedTag) {
+                throw "Store candidate tag $env:REF_NAME does not match required immutable tag $expectedTag"
+              }
+            } elseif ($env:REF_TYPE -ne "branch" -or $env:REF_NAME -cne "main") {
+              throw "Store candidates must use main or an immutable versioned candidate tag"
+            }
+            Write-Output "Store candidate source pinned to $env:GITHUB_SHA"
           }
 
       - name: Resolve package flavor
@@ -595,6 +633,7 @@ jobs:
         id: store-webview2
         shell: pwsh
         env:
+          NSIS_PATH: ${{ steps.signing-paths.outputs.nsis }}
           MSI_PATH: ${{ steps.signing-paths.outputs.msi }}
         run: |
           $signTool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" `
@@ -661,6 +700,34 @@ jobs:
             throw "Expected at least one MSI-embedded WebView2 offline installer"
           }
 
+          $sevenZip = Get-Command "7z.exe" -ErrorAction SilentlyContinue
+          $sevenZipPath = if ($sevenZip) {
+            $sevenZip.Source
+          } else {
+            Join-Path $env:ProgramFiles "7-Zip\7z.exe"
+          }
+          if (-not (Test-Path -LiteralPath $sevenZipPath -PathType Leaf)) {
+            throw "7z.exe was not found"
+          }
+          $nsisBinaryDirectory = Join-Path $env:RUNNER_TEMP `
+            "audiobud-nsis-binary-verification-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
+          if (Test-Path -LiteralPath $nsisBinaryDirectory) {
+            throw "NSIS binary verification directory already exists: $nsisBinaryDirectory"
+          }
+          New-Item -ItemType Directory -Path $nsisBinaryDirectory | Out-Null
+          & $sevenZipPath x "-o$nsisBinaryDirectory" -y $env:NSIS_PATH
+          if ($LASTEXITCODE -ne 0) {
+            throw "7z.exe failed to extract NSIS embedded binaries"
+          }
+
+          $nsisEmbeddedInstallers = @(
+            Get-ChildItem -LiteralPath $nsisBinaryDirectory -File -Recurse |
+              Where-Object { $_.Name -match "WebView2|MicrosoftEdge" -and $_.Extension -eq ".exe" }
+          )
+          if ($nsisEmbeddedInstallers.Count -lt 1) {
+            throw "Expected at least one NSIS-embedded WebView2 offline installer"
+          }
+
           $webView2PayloadDirectory = Join-Path $env:CARGO_TARGET_DIR "release\webview2-payload"
           if (Test-Path -LiteralPath $webView2PayloadDirectory) {
             Remove-Item -LiteralPath $webView2PayloadDirectory -Recurse -Force
@@ -671,6 +738,13 @@ jobs:
             Assert-MicrosoftWebView2Signature -Path $embeddedInstaller.FullName
             $destination = Join-Path $webView2PayloadDirectory `
               "msi-$index-$($embeddedInstaller.Name)"
+            Copy-Item -LiteralPath $embeddedInstaller.FullName -Destination $destination
+          }
+          for ($index = 0; $index -lt $nsisEmbeddedInstallers.Count; $index += 1) {
+            $embeddedInstaller = $nsisEmbeddedInstallers[$index]
+            Assert-MicrosoftWebView2Signature -Path $embeddedInstaller.FullName
+            $destination = Join-Path $webView2PayloadDirectory `
+              "nsis-$index-$($embeddedInstaller.Name)"
             Copy-Item -LiteralPath $embeddedInstaller.FullName -Destination $destination
           }
 
@@ -872,6 +946,7 @@ jobs:
         id: packaged-payload
         shell: pwsh
         env:
+          APP_VERSION: ${{ steps.meta.outputs.version }}
           NSIS_PATH: ${{ steps.signing-paths.outputs.nsis }}
           MSI_PATH: ${{ steps.signing-paths.outputs.msi }}
           WEBVIEW2_PAYLOAD_PATH: ${{ steps.store-webview2.outputs.path }}
@@ -1018,6 +1093,50 @@ jobs:
           Assert-AudioBudSignature -Path $nsisUninstaller
           Assert-PackagedPeSignatures -Root $msiDirectory
           Assert-PackagedPeSignatures -Root $nsisDirectory
+
+          if ($env:STORE_CANDIDATE -eq "true") {
+            $updateEndpoint = "https://github.com/jamditis/audiobud/releases/download/update-feed/latest.json"
+            $liveManifest = Invoke-RestMethod -Uri $updateEndpoint
+            try {
+              $candidateVersion = [System.Management.Automation.SemanticVersion]$env:APP_VERSION
+              $liveVersion = [System.Management.Automation.SemanticVersion]$liveManifest.version
+            } catch {
+              throw "Could not compare Store candidate and live update-feed versions: $($_.Exception.Message)"
+            }
+            if ($liveVersion -gt $candidateVersion) {
+              throw "Store candidate $env:APP_VERSION is behind live update feed $($liveManifest.version)"
+            }
+
+            $applicationHashBeforeProbe = (Get-FileHash -LiteralPath $nsisApplication -Algorithm SHA256).Hash
+            $updateProbeStdout = Join-Path $verificationRoot "store-update-probe.stdout.log"
+            $updateProbeStderr = Join-Path $verificationRoot "store-update-probe.stderr.log"
+            $updateProbe = Start-Process -FilePath $nsisApplication `
+              -ArgumentList @(
+                "--install-update",
+                "--install-update-endpoint",
+                $updateEndpoint,
+                "--start-hidden",
+                "--no-tray"
+              ) `
+              -RedirectStandardOutput $updateProbeStdout `
+              -RedirectStandardError $updateProbeStderr `
+              -PassThru
+            if (-not $updateProbe.WaitForExit(120000)) {
+              Stop-Process -Id $updateProbe.Id -Force -ErrorAction SilentlyContinue
+              Get-Content -LiteralPath $updateProbeStdout -Tail 100 -ErrorAction SilentlyContinue
+              Get-Content -LiteralPath $updateProbeStderr -Tail 100 -ErrorAction SilentlyContinue
+              throw "Store NSIS signed-update probe timed out"
+            }
+            if ($updateProbe.ExitCode -ne 0) {
+              Get-Content -LiteralPath $updateProbeStdout -Tail 100 -ErrorAction SilentlyContinue
+              Get-Content -LiteralPath $updateProbeStderr -Tail 100 -ErrorAction SilentlyContinue
+              throw "Store NSIS signed-update probe failed with exit code $($updateProbe.ExitCode)"
+            }
+            $applicationHashAfterProbe = (Get-FileHash -LiteralPath $nsisApplication -Algorithm SHA256).Hash
+            if ($applicationHashAfterProbe -ne $applicationHashBeforeProbe) {
+              throw "Store NSIS signed-update probe changed the installed application"
+            }
+          }
 
           $runtimeFiles = @(
             "msvcp140.dll",

@@ -1,10 +1,11 @@
 # Microsoft Store submission
 
-This checklist records the first AudioBud Microsoft Store submission and the
-package rules for future submissions.
+This checklist records the published AudioBud Microsoft Store listing, the
+first package checkpoint, and the servicing rules for replacement submissions.
 
-Status: submitted for Microsoft Store review on July 24, 2026. Partner Center
-shows the app as `In review` with a three-business-day review SLA.
+Status: approved and available in the Microsoft Store on August 2, 2026.
+
+Store listing: `https://apps.microsoft.com/detail/xpff8hfmd98gnd`.
 
 ## Submitted app setup
 
@@ -40,10 +41,11 @@ Use this text unless the implementation changes:
 > drivers or NT services are installed. The Windows installers support silent
 > install and uninstall.
 
-## Package values
+## Published 0.4.1 package checkpoint
 
-Use an MSI package for the first submission because Partner Center supports MSI
-silent install parameters directly.
+The first submission used an MSI because Partner Center supports MSI silent
+install parameters directly. Keep these values as an immutable record of what
+Microsoft certified and published:
 
 - Submitted package ID: `55846694`.
 - Submitted package URL:
@@ -54,21 +56,73 @@ silent install parameters directly.
 - Malware check: clean.
 - Code sign check: signed.
 - Silent install status: unknown in Partner Center, with install error code `0`.
-- Package URL rule: use a versioned, immutable HTTPS URL for the tested MSI.
+- Package URL rule: use a versioned, immutable HTTPS URL for the tested package.
 - Do not use a GitHub Actions artifact URL. Actions artifacts require
   authentication and expire.
-- Host the exact tested MSI at a durable public HTTPS URL before entering it in
-  Partner Center.
+- Host the exact tested package at a durable public HTTPS URL before entering it
+  in Partner Center.
 - Do not use a `/latest` URL.
 - App type: `MSI`.
 - Architecture: `x64`.
 - Installer parameters: `/qn /norestart`.
 - Language: `English (United States)`.
 
-For future submissions, record the servicing decision before submitting.
-Microsoft Store MSI/EXE distribution uses our hosted installer URL and the app
-or installer remains responsible for updates; MSIX is the Store path with
-built-in update delivery.
+The published 0.4.1 MSI cannot receive AudioBud's signed in-app updates because
+the app deliberately enables that channel only for NSIS installations. A Store
+update submission makes the current package available to new customers, but
+Microsoft does not automatically or manually service existing unpackaged
+MSI/EXE installations. Existing Store 0.4.1 users therefore need one manual
+transition: uninstall the 0.4.1 Store package, then install the current signed
+NSIS release to cross onto the supported channel.
+
+## Replacement servicing decision
+
+Replace the Store package with the signed Store-candidate NSIS build of the
+current AudioBud release. It uses the same installer flavor and signed update
+path as the direct release, while layering in the offline WebView2 runtime that
+the Store candidate requires. Do not substitute the normal GitHub release asset:
+record and host the exact Store-candidate binary verified by the workflow.
+
+- Replacement target version: `0.4.4`.
+- Replacement app type: `EXE`.
+- Architecture: `x64`.
+- Replacement installer parameters: `/S`.
+- Immutable package URL:
+  `https://share.amditis.tech/audiobud/downloads/0.4.4/AudioBud_0.4.4_x64-setup.exe`.
+- Replacement SHA-256:
+  `102fcce8214292d2d6f03cd3bf766b8b96b2f934b9e9add9a524de3ae86cf5d5`.
+- Language: `English (United States)`.
+
+Verified candidate record on August 2, 2026:
+
+- Candidate tag: `v0.4.4-store-candidate-cd7b3a3e256a`.
+- Candidate commit: `cd7b3a3e256aae2c7ecca329733edc9690199652`.
+- Protected signing run:
+  `https://github.com/jamditis/audiobud/actions/runs/30773521899`.
+- The protected workflow passed the Store WebView2, Authenticode, packaged-PE,
+  silent install/update-probe/uninstall, SBOM, checksum, and provenance gates.
+- SLSA provenance and SPDX 2.3 attestations bind the NSIS digest above to the
+  candidate tag, commit, and `.github/workflows/release.yml`.
+- A full public HTTPS download from the immutable URL reproduced the same
+  SHA-256 after deployment.
+- Partner Center package validation: `Passed` on August 3, 2026. Malware is
+  `Clean`, code signing is `Signed`, silent install is `Unknown`, and the
+  install error code is `0`.
+- Partner Center submission ID: `1152921505701569526`.
+- Certification status: `InReview`; Win32 certification is `InProgress`, and
+  publishing to the Win32 catalog is `NotStarted`.
+- The published listing continues to serve 0.4.1 until Microsoft certifies and
+  publishes the replacement.
+
+Use the generated NSIS executable for the replacement Store submission. The
+NSIS bundle type is the runtime signal that enables AudioBud's signed updater,
+and the release workflow must prove that the installed candidate can initialize
+and check that feed before the artifact is accepted. After that one-time
+transition, Store users receive signed updates through AudioBud's update feed.
+
+Do not change the URL or replace the hosted bytes after Partner Center accepts
+the package. Any later Partner Center replacement remains an explicit release
+action.
 
 ## Store candidate build
 
@@ -79,6 +133,34 @@ release environment, build the Store candidate installers with:
 bun run bundle:store
 ```
 
+To produce the signed candidate from a reviewed commit before merge, create an
+immutable versioned candidate tag whose suffix binds the tag to that commit,
+then dispatch the release workflow at the tag:
+
+```bash
+candidate_sha=$(git rev-parse HEAD)
+candidate_version=$(jq -r '.version' src-tauri/tauri.conf.json)
+candidate_tag="v${candidate_version}-store-candidate-${candidate_sha:0:12}"
+git tag -a "$candidate_tag" "$candidate_sha" \
+  -m "AudioBud ${candidate_version} Store candidate ${candidate_sha:0:12}"
+git push origin "refs/tags/$candidate_tag"
+gh workflow run release.yml \
+  --ref "$candidate_tag" \
+  -f make_release=false \
+  -f store_candidate=true \
+  -f expected_commit_sha="$candidate_sha"
+```
+
+The `artifact-signing` environment must remain limited to `main` and `v*` tags.
+Do not add feature branches to the environment policy. The workflow suppresses
+the candidate tag's automatic push build and accepts it only through a manual
+Store-candidate dispatch. It then requires the tag name's version and short SHA,
+the supplied 40-character SHA, and GitHub's dispatched commit to agree exactly.
+These workflow checks catch operator mistakes; the protected environment's
+deployment policy is the signing authorization boundary. Do not move, reuse, or
+delete a candidate tag after its artifact is submitted. Candidate artifacts are
+never published to a GitHub release.
+
 That command layers configs in this order:
 
 1. `src-tauri/tauri.signing.conf.json`
@@ -87,58 +169,115 @@ That command layers configs in this order:
 The order matters: the package must keep the Artifact Signing command and add
 the Store-only offline WebView2 install mode.
 
-Use the generated MSI for Partner Center. The NSIS output is retained so the
-same signing and package-verification checks keep running in the release
-workflow.
+Use the generated NSIS executable for Partner Center. The MSI output remains in
+the workflow so GitHub release compatibility and the existing package checks do
+not regress, but it is not the Store servicing package.
 
 ## Package verification
 
-Before saving the package in Partner Center:
+Before saving the replacement package in Partner Center:
 
-1. Verify the MSI Authenticode signature and timestamp.
-2. Extract the MSI payload and verify every packaged `.exe` and `.dll` has a
-   valid Authenticode signature that chains to a trusted CA.
+1. Verify the NSIS executable's Authenticode signature and timestamp.
+2. Silently install the NSIS candidate into a clean directory with `/S` and
+   verify every packaged `.exe` and `.dll` has a valid Authenticode signature
+   that chains to a trusted CA.
 3. Verify AudioBud-owned packaged files are signed by the expected publisher.
-4. For Store candidates, verify the MSI-embedded WebView2 offline installer is
-   Authenticode-signed by Microsoft and those extracted bytes are included in
+4. Extract the Store NSIS candidate and verify its embedded WebView2 offline
+   installer is Authenticode-signed by Microsoft; include those exact bytes in
    the SBOM scan payload.
-5. Run the real MSI silent install command:
+5. Run the installed candidate's `--install-update` probe against
+   `https://github.com/jamditis/audiobud/releases/download/update-feed/latest.json`
+   and require a clean exit.
+6. Launch the installed app, complete one dictation, quit, relaunch, and complete
+   another dictation. If the test machine has a virtual microphone such as
+   NVIDIA Broadcast, also verify that an unavailable or restarting virtual
+   device produces a recoverable recording error rather than terminating the
+   app.
+7. Run the real NSIS silent uninstall command:
 
    ```powershell
-   msiexec.exe /i .\AudioBud_<version>_x64_en-US.msi /qn /norestart
+   .\uninstall.exe /S
    ```
 
-6. Run the real MSI silent uninstall command:
+8. Install and uninstall on a clean Windows machine.
+9. Confirm the hosted URL downloads the same SHA-256 digest that was tested.
+10. Archive the exact submitted NSIS executable outside the 30-day CI artifact
+    retention window.
+11. Freeze that URL. Do not replace the binary behind the URL after submission.
 
-   ```powershell
-   msiexec.exe /x .\AudioBud_<version>_x64_en-US.msi /qn /norestart
-   ```
-
-7. Install and uninstall on a clean Windows machine.
-8. Confirm the hosted URL downloads the same SHA-256 digest that was tested.
-9. Archive the exact submitted MSI outside the 30-day CI artifact retention
-   window.
-10. Freeze that URL. Do not replace the binary behind the URL after submission.
+After Microsoft certifies the replacement, verify the public Store listing
+installs 0.4.4. Then install a newer test build through the signed update feed
+and confirm AudioBud reports, downloads, verifies, and applies the update.
 
 ## Listing copy
 
+The public English (United States) listing currently shows the short
+description, description, feature list, and system requirements below. The
+"What's new" text belongs to submission 2 and will not appear publicly until
+Microsoft publishes the replacement. Keep this record aligned with both the
+live listing and the active submission rather than an earlier draft.
+
+What's new in submission 2:
+
+> AudioBud 0.4.4 adds a signed in-app update channel for new Store installs and
+> completes the Windows updater path. The first Store 0.4.1 package requires one
+> manual transition before it can receive later signed updates.
+
 Short description:
 
-> Local dictation for Windows that types your speech into the app you are using.
+> Private Windows dictation: press a hotkey, speak, and paste local
+> speech-to-text into the app you already use.
 
 Description:
 
 > AudioBud is a local-first dictation app for Windows. Press a hotkey, speak,
-> and AudioBud types the transcript into the focused text field. Speech-to-text
-> runs on your device with local models. Optional post-processing stays off
-> until you enable it and configure a provider.
+> and AudioBud types the transcript into the focused text field, so you can
+> write in email, documents, chats, notes, browsers, and other desktop apps
+> without switching workflows.
 >
-> AudioBud can start and stop recording with a hotkey press, or use
-> hold-to-talk if you prefer to keep the shortcut held while speaking.
+> It is built for people who need more control than built-in voice typing:
+> configurable shortcuts, hold-to-talk or toggle recording, model choice,
+> custom vocabulary, text formatting, history, and optional auto-submit after
+> dictation.
 >
-> AudioBud includes configurable shortcuts, microphone selection, model
-> management, transcript formatting, custom words, word replacements, and
-> local personalization controls.
+> AudioBud runs speech-to-text on your computer with local transcription
+> models. Audio stays on your device unless you explicitly enable optional
+> cloud post-processing and add your own provider key. The default Windows
+> setup uses Parakeet V3 for fast local dictation, with additional model options
+> available for different language and accuracy needs.
+>
+> You can tune AudioBud for the way you write: microphone and output device
+> selection, spoken-number formatting, custom words, word replacements, recent
+> transcription history, and optional on-device personalization from your own
+> accepted suggestions. Auto-submit can press Enter after a transcription when
+> you want hands-free sending in chats, search boxes, and forms.
+>
+> Install it, choose a model, set your shortcut, and dictate into the apps you
+> already use.
+
+Published feature list:
+
+> - Dictate into any focused Windows text field with a global hotkey.
+> - Run speech-to-text locally with Parakeet, Whisper, and other model options.
+> - Keep audio on your device unless you choose optional cloud post-processing.
+> - Tune shortcuts, hold-to-talk or toggle recording, paste behavior, and audio feedback.
+> - Format spoken numbers, currency, and percentages before pasting.
+> - Review recent transcriptions, retry entries, and save useful results.
+> - Use optional auto-submit to press Enter after dictation in chats, search, and forms.
+> - Add custom words and replacements for names, jargon, and recurring mishears.
+> - Opt in to on-device learning from accepted dictation suggestions, with export and reset controls.
+
+Published system requirements:
+
+- PC, x64 processor.
+- Windows 10 or later. The web listing currently renders the Store-generated
+  text "Windows 10 version 0.0 or higher"; AudioBud does not publish `0.0` as
+  an application or OS requirement version.
+- Memory: 4 GB minimum, 8 GB recommended.
+- Graphics: no dedicated GPU required; a Vulkan- or DirectML-compatible GPU is
+  recommended.
+- Additional project requirements and installer behavior are documented in
+  [`SYSTEM_REQUIREMENTS.md`](SYSTEM_REQUIREMENTS.md).
 
 Search terms:
 
@@ -156,3 +295,9 @@ Existing assets that can seed the Store listing:
 
 Before submission, review each Store upload slot in Partner Center and generate
 replacement screenshots if any required size or aspect ratio is missing.
+
+## References
+
+- [Publish an update to an MSI/EXE app](https://learn.microsoft.com/en-us/windows/apps/publish/publish-your-app/msi/publish-update-to-your-app-on-store)
+- [Microsoft Store MSI/EXE package requirements](https://learn.microsoft.com/en-us/windows/apps/publish/publish-your-app/msi/app-package-requirements)
+- [Tauri Microsoft Store distribution](https://v2.tauri.app/distribute/microsoft-store/)
