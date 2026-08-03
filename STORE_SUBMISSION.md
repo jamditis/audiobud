@@ -105,8 +105,14 @@ Verified candidate record on August 2, 2026:
   candidate tag, commit, and `.github/workflows/release.yml`.
 - A full public HTTPS download from the immutable URL reproduced the same
   SHA-256 after deployment.
-- Partner Center submission status: ready for the 0.4.4 package replacement;
-  the published listing continues to serve 0.4.1 until Microsoft certifies it.
+- Partner Center package validation: `Passed` on August 3, 2026. Malware is
+  `Clean`, code signing is `Signed`, silent install is `Unknown`, and the
+  install error code is `0`.
+- Partner Center submission ID: `1152921505701569526`.
+- Certification status: `InReview`; Win32 certification is `InProgress`, and
+  publishing to the Win32 catalog is `NotStarted`.
+- The published listing continues to serve 0.4.1 until Microsoft certifies and
+  publishes the replacement.
 
 Use the generated NSIS executable for the replacement Store submission. The
 NSIS bundle type is the runtime signal that enables AudioBud's signed updater,
@@ -115,8 +121,8 @@ and check that feed before the artifact is accepted. After that one-time
 transition, Store users receive signed updates through AudioBud's update feed.
 
 Do not change the URL or replace the hosted bytes after Partner Center accepts
-the package. Creating or submitting the Partner Center update remains an
-explicit release action.
+the package. Any later Partner Center replacement remains an explicit release
+action.
 
 ## Store candidate build
 
@@ -205,7 +211,13 @@ and confirm AudioBud reports, downloads, verifies, and applies the update.
 
 ## Listing copy
 
-What's new in this version:
+The public English (United States) listing currently shows the short
+description, description, feature list, and system requirements below. The
+"What's new" text belongs to submission 2 and will not appear publicly until
+Microsoft publishes the replacement. Keep this record aligned with both the
+live listing and the active submission rather than an earlier draft.
+
+What's new in submission 2:
 
 > AudioBud 0.4.4 adds a signed in-app update channel for new Store installs and
 > completes the Windows updater path. The first Store 0.4.1 package requires one
@@ -213,21 +225,59 @@ What's new in this version:
 
 Short description:
 
-> Local dictation for Windows that types your speech into the app you are using.
+> Private Windows dictation: press a hotkey, speak, and paste local
+> speech-to-text into the app you already use.
 
 Description:
 
 > AudioBud is a local-first dictation app for Windows. Press a hotkey, speak,
-> and AudioBud types the transcript into the focused text field. Speech-to-text
-> runs on your device with local models. Optional post-processing stays off
-> until you enable it and configure a provider.
+> and AudioBud types the transcript into the focused text field, so you can
+> write in email, documents, chats, notes, browsers, and other desktop apps
+> without switching workflows.
 >
-> AudioBud can start and stop recording with a hotkey press, or use
-> hold-to-talk if you prefer to keep the shortcut held while speaking.
+> It is built for people who need more control than built-in voice typing:
+> configurable shortcuts, hold-to-talk or toggle recording, model choice,
+> custom vocabulary, text formatting, history, and optional auto-submit after
+> dictation.
 >
-> AudioBud includes configurable shortcuts, microphone selection, model
-> management, transcript formatting, custom words, word replacements, and
-> local personalization controls.
+> AudioBud runs speech-to-text on your computer with local transcription
+> models. Audio stays on your device unless you explicitly enable optional
+> cloud post-processing and add your own provider key. The default Windows
+> setup uses Parakeet V3 for fast local dictation, with additional model options
+> available for different language and accuracy needs.
+>
+> You can tune AudioBud for the way you write: microphone and output device
+> selection, spoken-number formatting, custom words, word replacements, recent
+> transcription history, and optional on-device personalization from your own
+> accepted suggestions. Auto-submit can press Enter after a transcription when
+> you want hands-free sending in chats, search boxes, and forms.
+>
+> Install it, choose a model, set your shortcut, and dictate into the apps you
+> already use.
+
+Published feature list:
+
+> - Dictate into any focused Windows text field with a global hotkey.
+> - Run speech-to-text locally with Parakeet, Whisper, and other model options.
+> - Keep audio on your device unless you choose optional cloud post-processing.
+> - Tune shortcuts, hold-to-talk or toggle recording, paste behavior, and audio feedback.
+> - Format spoken numbers, currency, and percentages before pasting.
+> - Review recent transcriptions, retry entries, and save useful results.
+> - Use optional auto-submit to press Enter after dictation in chats, search, and forms.
+> - Add custom words and replacements for names, jargon, and recurring mishears.
+> - Opt in to on-device learning from accepted dictation suggestions, with export and reset controls.
+
+Published system requirements:
+
+- PC, x64 processor.
+- Windows 10 or later. The web listing currently renders the Store-generated
+  text "Windows 10 version 0.0 or higher"; AudioBud does not publish `0.0` as
+  an application or OS requirement version.
+- Memory: 4 GB minimum, 8 GB recommended.
+- Graphics: no dedicated GPU required; a Vulkan- or DirectML-compatible GPU is
+  recommended.
+- Additional project requirements and installer behavior are documented in
+  [`SYSTEM_REQUIREMENTS.md`](SYSTEM_REQUIREMENTS.md).
 
 Search terms:
 
