@@ -182,7 +182,7 @@
               <p>
                 This policy covers the AudioBud desktop app, its official
                 <a href="https://apps.microsoft.com/detail/xpff8hfmd98gnd"
-                  >Microsoft Store listing</a
+                  >U.S. Microsoft Store listing</a
                 >, the GitHub repository and releases, and
                 <a href="https://audiobud.amditis.tech/"
                   >audiobud.amditis.tech</a
@@ -227,8 +227,9 @@
                 AudioBud does not send your audio to an AudioBud server. Network
                 activity is limited to actions such as downloading a model,
                 opening a project or release link, contacting a provider you
-                configured, or using an update check if a future release enables
-                that feature.
+                configured, or checking AudioBud's signed update feed. Automatic
+                update checks are enabled by default for current NSIS installs
+                and can be disabled in advanced settings.
               </p>
               <p>
                 Clipboard paste modes (Ctrl+V, Ctrl+Shift+V, and Shift+Insert)
@@ -275,12 +276,12 @@
                 Microsoft Store handles discovery and initial delivery for the
                 Store listing. GitHub handles AudioBud model downloads, direct
                 app releases, automatic update checks for installed NSIS
-                packages, and project links. The replacement Store package is an
-                NSIS install and uses that same signed GitHub update feed; the
-                first Store v0.4.1 MSI requires one manual transition to join
-                it. Microsoft and GitHub can receive normal network metadata
-                such as your IP address, request time, and browser or app
-                headers when you use their services. You can disable GitHub
+                packages, and project links. The current Store v0.4.4 package is
+                an NSIS install and uses that same signed GitHub update feed.
+                The first Store v0.4.1 MSI requires one manual transition to
+                join it. Microsoft and GitHub can receive normal network
+                metadata such as your IP address, request time, and browser or
+                app headers when you use their services. You can disable GitHub
                 update checks in advanced settings.
               </p>
             </section>
@@ -388,7 +389,7 @@
         >
         <nav class="footer-links" aria-label="Footer">
           <a href="https://apps.microsoft.com/detail/xpff8hfmd98gnd"
-            >Microsoft Store</a
+            >Microsoft Store (U.S.)</a
           >
           <a href="./index.html#verify">Verify a download</a>
           <a href="./roadmap.html">Roadmap</a>

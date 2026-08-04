@@ -1,9 +1,10 @@
 # Microsoft Store submission
 
-This checklist records the published AudioBud Microsoft Store listing, the
-first package checkpoint, and the servicing rules for replacement submissions.
+This checklist records the published AudioBud Microsoft Store listing, its
+package checkpoints, and the servicing rules for later submissions.
 
-Status: approved and available in the Microsoft Store on August 2, 2026.
+Status: approved and available in the Microsoft Store. The listing has served
+the current v0.4.4 package since August 3, 2026.
 
 Store listing: `https://apps.microsoft.com/detail/xpff8hfmd98gnd`.
 
@@ -75,13 +76,13 @@ MSI/EXE installations. Existing Store 0.4.1 users therefore need one manual
 transition: uninstall the 0.4.1 Store package, then install the current signed
 NSIS release to cross onto the supported channel.
 
-## Replacement servicing decision
+## Published 0.4.4 package checkpoint
 
-Replace the Store package with the signed Store-candidate NSIS build of the
-current AudioBud release. It uses the same installer flavor and signed update
-path as the direct release, while layering in the offline WebView2 runtime that
-the Store candidate requires. Do not substitute the normal GitHub release asset:
-record and host the exact Store-candidate binary verified by the workflow.
+Microsoft certified and published the signed Store-candidate NSIS build of
+v0.4.4. It uses the same installer flavor and signed update path as the direct
+release, while layering in the offline WebView2 runtime required for the Store
+candidate. The published bytes are the exact Store-candidate binary verified by
+the workflow, not the normal GitHub release asset.
 
 - Replacement target version: `0.4.4`.
 - Replacement app type: `EXE`.
@@ -109,16 +110,14 @@ Verified candidate record on August 2, 2026:
   `Clean`, code signing is `Signed`, silent install is `Unknown`, and the
   install error code is `0`.
 - Partner Center submission ID: `1152921505701569526`.
-- Certification status: `InReview`; Win32 certification is `InProgress`, and
-  publishing to the Win32 catalog is `NotStarted`.
-- The published listing continues to serve 0.4.1 until Microsoft certifies and
-  publishes the replacement.
+- Certification and catalog publishing: approved and complete on August 3, 2026.
+- The public listing serves v0.4.4 and publishes the submission 2 "What's new"
+  notes.
 
-Use the generated NSIS executable for the replacement Store submission. The
-NSIS bundle type is the runtime signal that enables AudioBud's signed updater,
-and the release workflow must prove that the installed candidate can initialize
-and check that feed before the artifact is accepted. After that one-time
-transition, Store users receive signed updates through AudioBud's update feed.
+The NSIS bundle type is the runtime signal that enables AudioBud's signed
+updater. The release workflow proved that the installed candidate could
+initialize and check that feed before accepting the artifact. New Store installs
+now check AudioBud's signed update feed by default.
 
 Do not change the URL or replace the hosted bytes after Partner Center accepts
 the package. Any later Partner Center replacement remains an explicit release
@@ -205,19 +204,19 @@ Before saving the replacement package in Partner Center:
     retention window.
 11. Freeze that URL. Do not replace the binary behind the URL after submission.
 
-After Microsoft certifies the replacement, verify the public Store listing
-installs 0.4.4. Then install a newer test build through the signed update feed
-and confirm AudioBud reports, downloads, verifies, and applies the update.
+Post-publication verification confirmed that the public Store listing serves
+v0.4.4 and that automatic checks against AudioBud's signed update feed are live.
+For the next release, use a Store-installed v0.4.4 copy to confirm AudioBud
+reports, downloads, verifies, and applies the update.
 
 ## Listing copy
 
-The public English (United States) listing currently shows the short
-description, description, feature list, and system requirements below. The
-"What's new" text belongs to submission 2 and will not appear publicly until
-Microsoft publishes the replacement. Keep this record aligned with both the
-live listing and the active submission rather than an earlier draft.
+The public English (United States) listing currently shows the "What's new"
+text, short description, description, feature list, and system requirements
+below. Keep this record aligned with the live listing rather than an earlier
+draft.
 
-What's new in submission 2:
+Published "What's new" for v0.4.4:
 
 > AudioBud 0.4.4 adds a signed in-app update channel for new Store installs and
 > completes the Windows updater path. The first Store 0.4.1 package requires one

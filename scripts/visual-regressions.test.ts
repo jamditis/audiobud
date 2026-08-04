@@ -7,18 +7,18 @@ const read = (path: string) => readFileSync(join(root, path), "utf8");
 const compact = (value: string) => value.replace(/\s+/g, " ");
 
 describe("visual polish regression contracts", () => {
-  it("routes the prominent website downloads through the installer status", () => {
+  it("routes the prominent website install paths through the current status", () => {
     const home = compact(read("docs/index.html"));
     const roadmap = compact(read("docs/roadmap.html"));
     const css = compact(read("docs/styles.css"));
 
     expect(home).toMatch(/class="nav-cta" href="#install"/);
     expect(home).toMatch(
-      /class="button primary" href="https:\/\/github\.com\/jamditis\/audiobud\/releases\/latest"/,
+      /class="button primary" data-download="_x64-setup\.exe" href="https:\/\/github\.com\/jamditis\/audiobud\/releases\/latest"/,
     );
     expect(roadmap).toMatch(/class="nav-cta" href="\.\/index\.html#install"/);
     expect(home).toMatch(
-      /id="install"[\s\S]*class="install-note"[\s\S]*Installed the first Store package\?[\s\S]*signed update feed[\s\S]*github\.com\/jamditis\/audiobud\/releases\/latest[\s\S]*apps\.microsoft\.com\/detail\/xpff8hfmd98gnd/,
+      /id="install"[\s\S]*class="install-note"[\s\S]*original Store MSI\?[\s\S]*signed update feed[\s\S]*github\.com\/jamditis\/audiobud\/releases\/latest[\s\S]*apps\.microsoft\.com\/detail\/xpff8hfmd98gnd/,
     );
     expect(css).toMatch(
       /@media \(max-width: 1040px\) \{[\s\S]*?\.cta-actions \{[^}]*flex-wrap: wrap;/,

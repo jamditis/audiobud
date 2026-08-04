@@ -156,7 +156,7 @@ describe("download verification guidance", () => {
     expect(script).not.toMatch(/innerHTML/);
   });
 
-  it("hands the download button the installer from that same release", () => {
+  it("hands the download buttons the installer from that same release", () => {
     // The href in the markup stays on the releases page: it can never 404 and
     // it names no version, so a release does not drag a site edit behind it.
     expect(compactHome).toMatch(
@@ -166,7 +166,7 @@ describe("download verification guidance", () => {
     // Direct-downloading the .exe hides the MSI and the notes, so the card has
     // to keep a way through to the release itself.
     expect(compactHome).toMatch(
-      /href="https:\/\/github\.com\/jamditis\/audiobud\/releases\/latest" >All downloads/,
+      /href="https:\/\/github\.com\/jamditis\/audiobud\/releases\/latest" >All direct downloads/,
     );
 
     const script = compact(read("docs/site.js"));
