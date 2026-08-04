@@ -82,7 +82,7 @@ const sitePages = [
 ];
 const footerLinks = [
   {
-    label: "Microsoft Store",
+    label: "Microsoft Store (U.S.)",
     href: "https://apps.microsoft.com/detail/xpff8hfmd98gnd",
   },
   { label: "Verify a download", href: "./index.html#verify" },
@@ -465,7 +465,7 @@ describe("Real document tag scanner", () => {
       <div data-copy="<footer><nav class='footer-links'></nav></footer>"></div>
       <!-- <footer><nav class="footer-links"><a href="./wrong.html">Wrong</a></nav></footer> -->
       <footer><nav class="footer-links">
-        <a href="https://apps.microsoft.com/detail/xpff8hfmd98gnd">Microsoft Store</a>
+        <a href="https://apps.microsoft.com/detail/xpff8hfmd98gnd">Microsoft Store (U.S.)</a>
         <a href="./index.html#verify">Verify a download</a>
         <a href="./roadmap.html">Roadmap</a>
         <a href="./privacy.html">Privacy</a>
@@ -1117,31 +1117,24 @@ describe("AudioBud public policy pages", () => {
     });
   }
 
-  it("keeps the Store approval and package refresh beside the download CTA", () => {
+  it("keeps the current Store release and updater status beside the download CTA", () => {
     const home = read("index.html");
     const homeText = readText("index.html");
 
     expect(home).toContain('class="install-note"');
-    expect(homeText).toContain("Microsoft Store approved");
+    expect(homeText).toContain("Current release on Microsoft Store");
+    expect(homeText).toContain("For U.S. users");
     expect(home).toContain(
       'href="https://apps.microsoft.com/detail/xpff8hfmd98gnd"',
     );
     expect(home).toContain(
       'href="https://github.com/jamditis/audiobud/releases/latest"',
     );
-    expect(home).toContain(
-      "<strong>Installed the first Store package?</strong>",
-    );
-    expect(homeText).toContain(
-      "Its first package is behind the current release",
-    );
-    expect(homeText).toContain(
-      "while the Store replacement completes submission",
-    );
+    expect(home).toContain("<strong>Still on the original Store MSI?</strong>");
+    expect(homeText).toContain("now delivers the current release");
     expect(homeText).toContain("AudioBud's signed update feed");
-    expect(homeText).toContain(
-      "SmartScreen can still show a reputation warning for direct downloads",
-    );
+    expect(homeText).toContain("Direct downloads remain available");
+    expect(homeText).not.toContain("replacement completes submission");
     expect(home).not.toContain("<strong>Unsigned release:</strong>");
   });
 
@@ -1171,7 +1164,9 @@ describe("AudioBud public policy pages", () => {
     }
 
     expect(roadmap).toContain("<h3>Microsoft Store</h3>");
-    expect(roadmap).toContain("v0.4.4 NSIS replacement");
+    expect(roadmap).toContain(
+      "The U.S. Microsoft Store listing now delivers v0.4.4 as a signed NSIS package",
+    );
     expect(roadmap).toContain("AudioBud's signed update feed");
     expect(roadmap).toContain("v0.5.0 &mdash; output routing");
     expect(roadmap).toContain("v0.8.0 &mdash; reliability &amp; accessibility");
@@ -1304,15 +1299,16 @@ describe("AudioBud public policy pages", () => {
     const readme = readRoot("README.md");
 
     expect(readme).toContain(
-      "approved and available in the [Microsoft Store](https://apps.microsoft.com/detail/xpff8hfmd98gnd) as of August 2, 2026",
-    );
-    expect(readme).toContain("The first Store package contains v0.4.1");
-    expect(readme).toContain(
-      "while its v0.4.4 replacement completes the Store submission process",
+      "AudioBud v0.4.4 is approved and available in the [Microsoft Store](https://apps.microsoft.com/detail/xpff8hfmd98gnd)",
     );
     expect(readme).toContain(
-      "The replacement Store package uses that same NSIS update channel",
+      "The Store now delivers the current signed NSIS package",
     );
+    expect(readme).toContain(
+      "The current Microsoft Store package uses that same NSIS update channel",
+    );
+    expect(readme).toContain("If you installed the original Store v0.4.1 MSI");
+    expect(readme).not.toContain("replacement completes the Store submission");
     expect(readme).toContain("Beginning with v0.4.0");
     expect(readme).toContain("signed and timestamped through Microsoft");
     expect(readme).toContain(

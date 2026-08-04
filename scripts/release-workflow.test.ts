@@ -565,7 +565,7 @@ describe("Windows release signing workflow", () => {
     expect(storeSubmission).toContain("App type: `MSI`.");
     expect(storeSubmission).toContain("Architecture: `x64`.");
     expect(storeSubmission).toContain(
-      "Status: approved and available in the Microsoft Store on August 2, 2026.",
+      "Status: approved and available in the Microsoft Store. The listing has served\nthe current v0.4.4 package since August 3, 2026.",
     );
     expect(storeSubmission).toContain("Submitted package ID: `55846694`.");
     expect(storeSubmission).toContain(
@@ -610,19 +610,18 @@ describe("Windows release signing workflow", () => {
       "https://github.com/jamditis/audiobud/actions/runs/30773521899",
     );
     expect(storeSubmission).toContain(
-      "Use the generated NSIS executable for the replacement Store submission.",
+      "Microsoft certified and published the signed Store-candidate NSIS build",
     );
-    expect(storeSubmission).toContain(
-      "Replace the Store package with the signed Store-candidate NSIS build",
-    );
-    expect(storeSubmission).toContain(
-      "Do not substitute the normal GitHub release asset",
-    );
+    expect(storeSubmission).toContain("The public listing serves v0.4.4");
+    expect(storeSubmission).toContain("not the normal GitHub release asset");
     expect(storeSubmission).toContain(
       "The published 0.4.1 MSI cannot receive AudioBud's signed in-app updates",
     );
-    expect(storeSubmission).toMatch(
-      /After that one-time\s+transition, Store users receive signed updates through AudioBud's update feed\./,
+    expect(storeSubmission).toContain(
+      "New Store installs\nnow check AudioBud's signed update feed by default.",
+    );
+    expect(storeSubmission).toContain(
+      "Post-publication verification confirmed that the public Store listing serves\nv0.4.4 and that automatic checks against AudioBud's signed update feed are live.",
     );
 
     const webview2Step = stepBlock("Verify Store WebView2 offline installers");

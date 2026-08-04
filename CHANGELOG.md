@@ -13,13 +13,14 @@ restate Handy's own history. AudioBud versions independently of Handy, starting 
 ### Added
 
 - AudioBud passed Microsoft Store certification and is available from its
-  [official Store listing](https://apps.microsoft.com/detail/xpff8hfmd98gnd).
+  [official Store listing](https://apps.microsoft.com/detail/xpff8hfmd98gnd),
+  which now serves v0.4.4.
 
 ### Changed
 
-- The replacement Store package is prepared to use the signed NSIS installer so
-  new Store installs join AudioBud's signed update feed. The first Store v0.4.1
-  MSI still needs one manual transition onto the current NSIS release.
+- The current Store package uses the signed NSIS installer, so new Store installs
+  check AudioBud's signed update feed by default. Anyone still running the first
+  Store v0.4.1 MSI needs one manual transition onto the current NSIS release.
 
 ## 0.4.4 - 2026-08-01
 
@@ -31,6 +32,14 @@ not extract the archive.
 
 - Package the NSIS updater with stored ZIP entries, matching the compression
   methods enabled in AudioBud's Tauri updater build (#159).
+
+### Distribution
+
+- Microsoft Store now serves v0.4.4 as a signed NSIS package. New Store installs
+  check AudioBud's signed update feed by default and can opt out in advanced
+  settings.
+- The original Store v0.4.1 MSI cannot receive in-app updates. Anyone still on
+  that package needs one manual transition to the current Store or NSIS install.
 
 ## 0.4.3 - 2026-08-01
 
