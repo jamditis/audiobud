@@ -726,6 +726,12 @@ impl ModelManager {
     }
 
     fn update_download_status(&self) -> Result<()> {
+        // Models with a live download task keep their is_downloading flag — the task
+        // owns it until it exits. Clearing it here (e.g. via delete_model during an
+        // active download) would reopen the single-flight guard.
+        let active_downloads: HashSet<String> =
+            self.cancel_flags.lock().unwrap().keys().cloned().collect();
+
         let mut models = self.available_models.lock().unwrap();
 
         for model in models.values_mut() {
@@ -749,7 +755,9 @@ impl ModelManager {
                 }
 
                 model.is_downloaded = model_path.exists() && model_path.is_dir();
-                model.is_downloading = false;
+                if !active_downloads.contains(&model.id) {
+                    model.is_downloading = false;
+                }
 
                 // Get partial file size if it exists (for the .tar.gz being downloaded)
                 if partial_path.exists() {
@@ -763,7 +771,9 @@ impl ModelManager {
                 let partial_path = self.models_dir.join(format!("{}.partial", model.filename));
 
                 model.is_downloaded = model_path.exists();
-                model.is_downloading = false;
+                if !active_downloads.contains(&model.id) {
+                    model.is_downloading = false;
+                }
 
                 // Get partial file size if it exists
                 if partial_path.exists() {
@@ -1520,7 +1530,13 @@ impl ModelManager {
                 flag.store(true, Ordering::Relaxed);
                 info!("Cancellation flag set for: {}", model_id);
             } else {
-                warn!("No active download found for: {}", model_id);
+                // A missing flag means no live download task owns this model's
+                // lifecycle — reporting success here would acknowledge a cancel
+                // that nothing will honor while the download proceeds.
+                return Err(anyhow::anyhow!(
+                    "No active download to cancel for model: {}",
+                    model_id
+                ));
             }
         }
 

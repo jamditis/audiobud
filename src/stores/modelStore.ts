@@ -43,7 +43,13 @@ function resetStallTimer(modelId: string) {
     modelId,
     setTimeout(() => {
       stallTimers.delete(modelId);
-      if (!(modelId in useModelStore.getState().downloadingModels)) return;
+      const state = useModelStore.getState();
+      if (!(modelId in state.downloadingModels)) return;
+      // At 100% the byte phase is provably done; verification and extraction
+      // emit no progress events, so a dropped phase-start event must not read
+      // as a stall.
+      const progress = state.downloadProgress[modelId];
+      if (progress && progress.percentage >= 100) return;
       // Retract the backend download too: declaring it failed while it keeps
       // writing the .partial file would corrupt a user retry. Advisory only —
       // state cleanup and the toast must not wait on it.
