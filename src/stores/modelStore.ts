@@ -548,6 +548,15 @@ export const useModelStore = create<ModelsStore>()(
             delete state.extractingModels[modelId];
             delete state.downloadProgress[modelId];
             delete state.downloadStats[modelId];
+            // The backend emits completion only after the model is installed,
+            // so mark it downloaded now. The onboarding watcher advances on
+            // is_downloaded && nothing in flight; without this it can observe
+            // the gap between clearing in-flight state and the loadModels()
+            // refresh below and abandon a successful download.
+            const model = state.models.find((m: ModelInfo) => m.id === modelId);
+            if (model) {
+              model.is_downloaded = true;
+            }
           }),
         );
         get().loadModels();
