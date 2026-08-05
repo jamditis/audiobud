@@ -800,6 +800,7 @@
     "modelLoadFailedUnknown": "不明なモデル",
     "pasteFailedTitle": "テキストの貼り付けに失敗しました",
     "pasteFailed": "アクティブなアプリケーションにテキストを貼り付けられませんでした。",
+    "transcriptionErrorTitle": "文字起こしに失敗しました",
     "transcriptionTimeoutTitle": "文字起こしがタイムアウトしました",
     "transcriptionTimeout": "エンジンが{{seconds}}秒応答せず、停止している可能性があります。この状態が続く場合はAudioBudを再起動してください。"
   },

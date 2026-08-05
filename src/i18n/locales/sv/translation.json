@@ -800,6 +800,7 @@
     "modelLoadFailedUnknown": "okänd modell",
     "pasteFailedTitle": "Det gick inte att klistra in texten",
     "pasteFailed": "Texten kunde inte klistras in i det aktiva programmet.",
+    "transcriptionErrorTitle": "Transkriptionen misslyckades",
     "transcriptionTimeoutTitle": "Transkriptionen tog för lång tid",
     "transcriptionTimeout": "Motorn svarade inte efter {{seconds}} sekunder och kan ha hängt sig. Starta om AudioBud om det fortsätter hända."
   },

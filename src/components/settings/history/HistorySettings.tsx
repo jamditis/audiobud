@@ -352,7 +352,12 @@ const HistoryEntryComponent: React.FC<HistoryEntryProps> = ({
       await retryTranscription(entry.id);
     } catch (error) {
       console.error("Failed to re-transcribe:", error);
-      toast.error(t("settings.history.retranscribeError"));
+      // The retry command rejects with the backend's specific message (e.g.
+      // the Parakeet length refusal, issue #169), so show it with the generic
+      // failure instead of a separate toast.
+      toast.error(t("settings.history.retranscribeError"), {
+        description: error instanceof Error ? error.message : String(error),
+      });
     } finally {
       setRetrying(false);
     }

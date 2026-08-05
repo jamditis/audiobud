@@ -802,6 +802,7 @@
     "modelLoadFailedUnknown": "מודל לא ידוע",
     "pasteFailedTitle": "ההדבקה נכשלה",
     "pasteFailed": "לא ניתן היה להדביק את הטקסט ביישום הפעיל.",
+    "transcriptionErrorTitle": "התמלול נכשל",
     "transcriptionTimeoutTitle": "התמלול חרג מהזמן",
     "transcriptionTimeout": "המנוע לא הגיב אחרי {{seconds}} שניות וייתכן שהוא תקוע. הפעל מחדש את AudioBud אם זה ממשיך לקרות."
   },

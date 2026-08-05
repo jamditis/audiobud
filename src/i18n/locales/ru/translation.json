@@ -804,6 +804,7 @@
     "modelLoadFailedUnknown": "неизвестная модель",
     "pasteFailedTitle": "Не удалось вставить текст",
     "pasteFailed": "Не удалось вставить текст в активное приложение.",
+    "transcriptionErrorTitle": "Не удалось выполнить транскрипцию",
     "transcriptionTimeoutTitle": "Время ожидания транскрипции истекло",
     "transcriptionTimeout": "Движок не ответил в течение {{seconds}} секунд и, возможно, завис. Перезапустите AudioBud, если это повторяется."
   },

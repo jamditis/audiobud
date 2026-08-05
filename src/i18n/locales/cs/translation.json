@@ -802,6 +802,7 @@
     "modelLoadFailedUnknown": "neznámý model",
     "pasteFailedTitle": "Vložení textu se nezdařilo",
     "pasteFailed": "Text nebylo možné vložit do aktivní aplikace.",
+    "transcriptionErrorTitle": "Přepis se nezdařil",
     "transcriptionTimeoutTitle": "Vypršel časový limit přepisu",
     "transcriptionTimeout": "Engine neodpověděl ani po {{seconds}} sekundách a možná se zasekl. Pokud se to bude opakovat, restartujte AudioBud."
   },
