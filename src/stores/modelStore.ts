@@ -4,6 +4,7 @@ import { produce } from "immer";
 import { listen } from "@tauri-apps/api/event";
 import { commands, type ModelInfo } from "@/bindings";
 import { toast } from "sonner";
+import i18n from "@/i18n";
 
 interface DownloadProgress {
   model_id: string;
@@ -17,6 +18,43 @@ interface DownloadStats {
   lastUpdate: number;
   totalDownloaded: number;
   speed: number; // MB/s
+}
+
+// If no progress event arrives while a model is downloading, the backend's
+// progress emits are being lost; surface the same error path as
+// model-download-failed instead of showing an indefinite spinner.
+const DOWNLOAD_STALL_TIMEOUT_MS = 60_000;
+
+const stallTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+function clearStallTimer(modelId: string) {
+  const timer = stallTimers.get(modelId);
+  if (timer !== undefined) {
+    clearTimeout(timer);
+    stallTimers.delete(modelId);
+  }
+}
+
+function resetStallTimer(modelId: string) {
+  clearStallTimer(modelId);
+  stallTimers.set(
+    modelId,
+    setTimeout(() => {
+      stallTimers.delete(modelId);
+      if (!(modelId in useModelStore.getState().downloadingModels)) return;
+      const message = i18n.t("onboarding.downloadFailed");
+      useModelStore.setState(
+        produce((state: ModelsStore) => {
+          delete state.downloadingModels[modelId];
+          delete state.verifyingModels[modelId];
+          delete state.downloadProgress[modelId];
+          delete state.downloadStats[modelId];
+          state.error = message;
+        }),
+      );
+      toast.error(message);
+    }, DOWNLOAD_STALL_TIMEOUT_MS),
+  );
 }
 
 // Using Record instead of Set/Map for Immer compatibility
@@ -178,11 +216,13 @@ export const useModelStore = create<ModelsStore>()(
             };
           }),
         );
+        resetStallTimer(modelId);
         const result = await commands.downloadModel(modelId);
         if (result.status !== "ok") {
           // Fallback cleanup in case the model-download-failed event was not received
           // (e.g. listener not yet registered). The event handler is a no-op if it
           // arrives after this cleanup since deleting missing keys is safe.
+          clearStallTimer(modelId);
           set(
             produce((state) => {
               delete state.downloadingModels[modelId];
@@ -195,6 +235,7 @@ export const useModelStore = create<ModelsStore>()(
       } catch {
         // model-download-failed event won't fire for JS exceptions (e.g. IPC error),
         // so clean up state here to avoid a stuck progress spinner.
+        clearStallTimer(modelId);
         set(
           produce((state) => {
             delete state.downloadingModels[modelId];
@@ -211,6 +252,7 @@ export const useModelStore = create<ModelsStore>()(
         set({ error: null });
         const result = await commands.cancelDownload(modelId);
         if (result.status === "ok") {
+          clearStallTimer(modelId);
           set(
             produce((state) => {
               delete state.downloadingModels[modelId];
@@ -281,6 +323,7 @@ export const useModelStore = create<ModelsStore>()(
       // Set up event listeners
       listen<DownloadProgress>("model-download-progress", (event) => {
         const progress = event.payload;
+        resetStallTimer(progress.model_id);
         set(
           produce((state) => {
             state.downloadProgress[progress.model_id] = progress;
@@ -326,6 +369,7 @@ export const useModelStore = create<ModelsStore>()(
 
       listen<string>("model-download-complete", (event) => {
         const modelId = event.payload;
+        clearStallTimer(modelId);
         set(
           produce((state) => {
             delete state.downloadingModels[modelId];
@@ -341,6 +385,7 @@ export const useModelStore = create<ModelsStore>()(
         "model-download-failed",
         (event) => {
           const { model_id: modelId, error } = event.payload;
+          clearStallTimer(modelId);
           set(
             produce((state) => {
               delete state.downloadingModels[modelId];
@@ -406,6 +451,7 @@ export const useModelStore = create<ModelsStore>()(
 
       listen<string>("model-download-cancelled", (event) => {
         const modelId = event.payload;
+        clearStallTimer(modelId);
         set(
           produce((state) => {
             delete state.downloadingModels[modelId];

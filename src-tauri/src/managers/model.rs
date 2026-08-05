@@ -20,6 +20,11 @@ use tauri::{AppHandle, Emitter, Manager};
 const MODEL_BASE_URL: &str =
     "https://github.com/jamditis/audiobud/releases/download/model-assets-v1";
 
+/// Consecutive progress-emit failures after which the frontend is treated as
+/// unreachable and the download is aborted, so the download UI cannot stall
+/// forever waiting for events that will never arrive.
+const MAX_CONSECUTIVE_PROGRESS_EMIT_FAILURES: u32 = 3;
+
 fn model_url(filename: &str) -> String {
     format!("{MODEL_BASE_URL}/{filename}")
 }
@@ -985,6 +990,29 @@ impl ModelManager {
         Ok(format!("{:x}", hasher.finalize()))
     }
 
+    /// Emits a download progress event, tracking consecutive failures so callers
+    /// can abort the download once the frontend is clearly unreachable.
+    fn emit_download_progress(
+        &self,
+        progress: &DownloadProgress,
+        consecutive_failures: &mut u32,
+    ) -> Result<()> {
+        match self.app_handle.emit("model-download-progress", progress) {
+            Ok(()) => {
+                *consecutive_failures = 0;
+                Ok(())
+            }
+            Err(e) => {
+                *consecutive_failures += 1;
+                warn!(
+                    "Failed to emit download progress for model {} ({} consecutive failures): {}",
+                    progress.model_id, consecutive_failures, e
+                );
+                Err(anyhow::anyhow!(e.to_string()))
+            }
+        }
+    }
+
     pub async fn download_model(&self, model_id: &str) -> Result<()> {
         let model_info = {
             let models = self.available_models.lock().unwrap();
@@ -1115,9 +1143,8 @@ impl ModelManager {
                 0.0
             },
         };
-        let _ = self
-            .app_handle
-            .emit("model-download-progress", &initial_progress);
+        let mut consecutive_emit_failures = 0u32;
+        let _ = self.emit_download_progress(&initial_progress, &mut consecutive_emit_failures);
 
         // Throttle progress events to max 10/sec (100ms intervals)
         let mut last_emit = Instant::now();
@@ -1153,7 +1180,22 @@ impl ModelManager {
                     total: total_size,
                     percentage,
                 };
-                let _ = self.app_handle.emit("model-download-progress", &progress);
+                if self
+                    .emit_download_progress(&progress, &mut consecutive_emit_failures)
+                    .is_err()
+                    && consecutive_emit_failures >= MAX_CONSECUTIVE_PROGRESS_EMIT_FAILURES
+                {
+                    // Frontend is unreachable; abort so the download UI does not
+                    // stall forever. The cleanup guard resets download state and
+                    // the command layer emits model-download-failed on this error.
+                    warn!(
+                        "Aborting download of model {}: progress events are not reaching the frontend",
+                        model_id
+                    );
+                    return Err(anyhow::anyhow!(
+                        "Download aborted: progress updates could not reach the app window. Please try again."
+                    ));
+                }
                 last_emit = Instant::now();
             }
         }
@@ -1169,9 +1211,7 @@ impl ModelManager {
                 100.0
             },
         };
-        let _ = self
-            .app_handle
-            .emit("model-download-progress", &final_progress);
+        let _ = self.emit_download_progress(&final_progress, &mut consecutive_emit_failures);
 
         file.flush()?;
         drop(file); // Ensure file is closed before moving
@@ -1292,7 +1332,12 @@ impl ModelManager {
                 extracting.remove(model_id);
             }
             // Emit extraction completed event
-            let _ = self.app_handle.emit("model-extraction-completed", model_id);
+            if let Err(e) = self.app_handle.emit("model-extraction-completed", model_id) {
+                warn!(
+                    "Failed to emit extraction completion for model {}: {}",
+                    model_id, e
+                );
+            }
 
             // Remove the downloaded tar.gz file
             let _ = fs::remove_file(&partial_path);
@@ -1315,7 +1360,21 @@ impl ModelManager {
         self.cancel_flags.lock().unwrap().remove(model_id);
 
         // Emit completion event
-        let _ = self.app_handle.emit("model-download-complete", model_id);
+        if let Err(e) = self.app_handle.emit("model-download-complete", model_id) {
+            warn!(
+                "Failed to emit download completion for model {}: {}",
+                model_id, e
+            );
+            // Without the completion event the download UI would wait forever,
+            // so emit a failure event for any surviving listener to act on.
+            let _ = self.app_handle.emit(
+                "model-download-failed",
+                &serde_json::json!({
+                    "model_id": model_id,
+                    "error": "Download completed but the app window could not be notified. Please try again."
+                }),
+            );
+        }
 
         info!(
             "Successfully downloaded model {} to {:?}",
