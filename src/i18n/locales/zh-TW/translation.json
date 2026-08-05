@@ -800,6 +800,7 @@
     "modelLoadFailedUnknown": "未知模型",
     "pasteFailedTitle": "貼上文字失敗",
     "pasteFailed": "無法將文字貼上至目前作用中的應用程式。",
+    "transcriptionErrorTitle": "轉錄失敗",
     "transcriptionTimeoutTitle": "轉錄逾時",
     "transcriptionTimeout": "引擎在 {{seconds}} 秒後仍未回應，可能已卡住。如果持續發生，請重新啟動 AudioBud。"
   },

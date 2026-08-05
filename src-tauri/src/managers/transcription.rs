@@ -1,5 +1,6 @@
 use crate::audio_toolkit::{apply_custom_words, apply_replacements, filter_transcription_output};
 use crate::managers::audio::AudioRecordingManager;
+use crate::managers::engine_limits::check_parakeet_input_length;
 use crate::managers::model::{EngineType, ModelManager};
 use crate::managers::watchdog::{run_with_watchdog, GenerationGate, WatchdogOutcome};
 use crate::settings::{
@@ -581,6 +582,21 @@ impl TranscriptionManager {
             };
 
             // take() released the slot lock — no mutex held during the engine call
+
+            // Parakeet silently drops audio past its baked positional-encoding
+            // range (issue #169); refuse over-long input with an explicit
+            // error instead, restoring the engine so it stays usable.
+            if matches!(engine, LoadedEngine::Parakeet(_)) {
+                if let Err(message) = check_parakeet_input_length(audio.len()) {
+                    if !self.engine.try_restore(engine, taken_generation) {
+                        warn!(
+                            "Engine slot changed while checking Parakeet input length; \
+                             dropping the stale engine instead of restoring it"
+                        );
+                    }
+                    return Err(anyhow::anyhow!(message));
+                }
+            }
 
             let transcribe_result = catch_unwind(AssertUnwindSafe(
                 || -> Result<transcribe_rs::TranscriptionResult> {

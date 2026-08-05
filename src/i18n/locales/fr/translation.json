@@ -800,6 +800,7 @@
     "modelLoadFailedUnknown": "modèle inconnu",
     "pasteFailedTitle": "Échec du collage du texte",
     "pasteFailed": "Le texte n'a pas pu être collé dans l'application active.",
+    "transcriptionErrorTitle": "Échec de la transcription",
     "transcriptionTimeoutTitle": "Délai de transcription dépassé",
     "transcriptionTimeout": "Le moteur n'a pas répondu après {{seconds}} secondes et semble bloqué. Redémarrez AudioBud si cela se reproduit."
   },

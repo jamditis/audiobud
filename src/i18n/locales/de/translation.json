@@ -800,6 +800,7 @@
     "modelLoadFailedUnknown": "unbekanntes Modell",
     "pasteFailedTitle": "Text konnte nicht eingefügt werden",
     "pasteFailed": "Der Text konnte nicht in die aktive Anwendung eingefügt werden.",
+    "transcriptionErrorTitle": "Transkription fehlgeschlagen",
     "transcriptionTimeoutTitle": "Zeitüberschreitung bei der Transkription",
     "transcriptionTimeout": "Die Engine hat nach {{seconds}} Sekunden nicht reagiert und hängt möglicherweise. Starte AudioBud neu, wenn das häufiger vorkommt."
   },

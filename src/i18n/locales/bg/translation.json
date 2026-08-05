@@ -800,6 +800,7 @@
     "modelLoadFailedUnknown": "неизвестен модел",
     "pasteFailedTitle": "Неуспешно поставяне на текст",
     "pasteFailed": "Текстът не можа да бъде поставен в активното приложение.",
+    "transcriptionErrorTitle": "Транскрипцията не бе успешна",
     "transcriptionTimeoutTitle": "Времето за транскрипция изтече",
     "transcriptionTimeout": "Двигателят не отговори след {{seconds}} секунди и може да е блокирал. Рестартирайте AudioBud, ако това продължава."
   },
