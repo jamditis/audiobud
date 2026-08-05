@@ -29,6 +29,13 @@ const DOWNLOAD_STALL_TIMEOUT_MS = 60_000;
 
 const stallTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
+// Model ids whose download the stall timer already declared failed. The
+// cancelled backend task resolves ok, so without this marker the original
+// downloadModel() await would report success for a download the UI already
+// failed — leaving callers such as onboarding stuck with every card
+// disabled.
+const stallFailedDownloads = new Set<string>();
+
 function clearStallTimer(modelId: string) {
   const timer = stallTimers.get(modelId);
   if (timer !== undefined) {
@@ -50,6 +57,7 @@ function resetStallTimer(modelId: string) {
       // as a stall.
       const progress = state.downloadProgress[modelId];
       if (progress && progress.percentage >= 100) return;
+      stallFailedDownloads.add(modelId);
       // Retract the backend download too: declaring it failed while it keeps
       // writing the .partial file would corrupt a user retry. Advisory only —
       // state cleanup and the toast must not wait on it.
@@ -227,6 +235,8 @@ export const useModelStore = create<ModelsStore>()(
     downloadModel: async (modelId: string) => {
       try {
         set({ error: null });
+        // A new attempt clears any stall marker a previous attempt left behind.
+        stallFailedDownloads.delete(modelId);
         set(
           produce((state) => {
             state.downloadingModels[modelId] = true;
@@ -252,6 +262,12 @@ export const useModelStore = create<ModelsStore>()(
               delete state.downloadStats[modelId];
             }),
           );
+        }
+        // The stall timer may have declared this download failed and cancelled
+        // it while the await was pending; the cancelled backend task resolves
+        // ok, so convert the result back to failure for awaiting callers.
+        if (result.status === "ok" && stallFailedDownloads.delete(modelId)) {
+          return false;
         }
         return result.status === "ok";
       } catch {
