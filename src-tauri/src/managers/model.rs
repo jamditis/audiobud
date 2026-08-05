@@ -1022,6 +1022,17 @@ impl ModelManager {
         let model_info =
             model_info.ok_or_else(|| anyhow::anyhow!("Model not found: {}", model_id))?;
 
+        // Refuse a second concurrent download of the same model: both tasks
+        // would append to the same .partial file and clobber each other's
+        // cancel flag. Fresh and resumed downloads have is_downloading = false
+        // here, so the legitimate resume flow is unaffected.
+        if model_info.is_downloading {
+            return Err(anyhow::anyhow!(
+                "Download already in progress for model: {}",
+                model_id
+            ));
+        }
+
         let url = model_info
             .url
             .ok_or_else(|| anyhow::anyhow!("No download URL for model"))?;

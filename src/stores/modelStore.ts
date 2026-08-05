@@ -44,6 +44,10 @@ function resetStallTimer(modelId: string) {
     setTimeout(() => {
       stallTimers.delete(modelId);
       if (!(modelId in useModelStore.getState().downloadingModels)) return;
+      // Retract the backend download too: declaring it failed while it keeps
+      // writing the .partial file would corrupt a user retry. Advisory only —
+      // state cleanup and the toast must not wait on it.
+      commands.cancelDownload(modelId).catch(() => {});
       const message = i18n.t("onboarding.downloadFailed");
       useModelStore.setState(
         produce((state: ModelsStore) => {
