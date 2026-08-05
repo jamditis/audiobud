@@ -33,17 +33,15 @@ const Onboarding: React.FC<OnboardingProps> = ({ onModelSelected }) => {
     if (!selectedModelId) return;
 
     const model = models.find((m) => m.id === selectedModelId);
-    const stillDownloading = selectedModelId in downloadingModels;
-    const stillVerifying = selectedModelId in verifyingModels;
-    const stillExtracting = selectedModelId in extractingModels;
+    const inFlight =
+      selectedModelId in downloadingModels ||
+      selectedModelId in verifyingModels ||
+      selectedModelId in extractingModels;
 
-    if (
-      model?.is_downloaded &&
-      !stillDownloading &&
-      !stillVerifying &&
-      !stillExtracting
-    ) {
-      // Model is ready — select it and transition
+    if (model?.is_downloaded && !inFlight) {
+      // Model is ready — select it and transition. A cancel that arrives too
+      // late to stop the pipeline lands here as well: the model completed,
+      // so onboarding proceeds with it.
       selectModel(selectedModelId).then((success) => {
         if (success) {
           onModelSelected();
@@ -52,6 +50,10 @@ const Onboarding: React.FC<OnboardingProps> = ({ onModelSelected }) => {
           setSelectedModelId(null);
         }
       });
+    } else if (!model?.is_downloaded && !inFlight) {
+      // Download ended without a usable model (cancelled or failed) — unlock
+      // the cards so another model can be picked.
+      setSelectedModelId(null);
     }
   }, [
     selectedModelId,
@@ -75,13 +77,10 @@ const Onboarding: React.FC<OnboardingProps> = ({ onModelSelected }) => {
   };
 
   const handleCancelDownload = async (modelId: string) => {
-    // Error state is set centrally by modelStore on failure. On success the
-    // downloading state is cleared there; unlock the cards here so the user
-    // can pick another model.
-    const success = await cancelDownload(modelId);
-    if (success && modelId === selectedModelId) {
-      setSelectedModelId(null);
-    }
+    // modelStore clears download state on success and on the
+    // model-download-cancelled event; the watcher above unlocks the cards
+    // once nothing is in flight for this model.
+    await cancelDownload(modelId);
   };
 
   const getModelStatus = (modelId: string): ModelCardStatus => {

@@ -1176,6 +1176,16 @@ impl ModelManager {
         file.flush()?;
         drop(file); // Ensure file is closed before moving
 
+        // Verification and extraction cannot be interrupted mid-phase, so a
+        // cancel requested after the byte loop is honored at phase boundaries
+        // instead of silently completing a download the user cancelled.
+        if cancel_flag.load(Ordering::Relaxed) {
+            info!("Download cancelled for: {} (before verification)", model_id);
+            // Keep partial file for resume functionality.
+            // Guard handles is_downloading + cancel_flags cleanup on drop.
+            return Ok(());
+        }
+
         // Verify downloaded file size matches expected size
         if total_size > 0 {
             let actual_size = partial_path.metadata()?.len();
@@ -1207,6 +1217,13 @@ impl ModelManager {
         let _ = self
             .app_handle
             .emit("model-verification-completed", model_id);
+
+        // Honor a cancel requested while the checksum was running.
+        if cancel_flag.load(Ordering::Relaxed) {
+            info!("Download cancelled for: {} (after verification)", model_id);
+            // Keep partial file for resume functionality.
+            return Ok(());
+        }
 
         // Handle directory-based models (extract tar.gz) vs file-based models
         if model_info.is_directory {
