@@ -41,8 +41,7 @@ pub(crate) struct TranscriptionTimeoutEvent {
 
 /// Payload of the `transcription-error` event, emitted when a transcription
 /// fails so the user sees why (e.g. the Parakeet engine refusing a recording
-/// that exceeds its length limit, issue #169) instead of silence. Shared with
-/// the history retry command so both paths surface the same error toast.
+/// that exceeds its length limit, issue #169) instead of silence.
 #[derive(Clone, serde::Serialize)]
 pub(crate) struct TranscriptionErrorEvent {
     pub(crate) message: String,

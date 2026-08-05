@@ -1,6 +1,4 @@
-use crate::actions::{
-    process_transcription_output, TranscriptionErrorEvent, TranscriptionTimeoutEvent,
-};
+use crate::actions::{process_transcription_output, TranscriptionTimeoutEvent};
 use crate::audio_toolkit::constants::WHISPER_SAMPLE_RATE;
 use crate::managers::{
     history::{HistoryManager, PaginatedHistory},
@@ -102,20 +100,7 @@ pub async fn retry_history_entry_transcription(
     .await
     .map_err(|e| format!("Transcription task panicked: {}", e))?
     {
-        WatchdogOutcome::Completed(result) => result.map_err(|e| {
-            // Same rationale as the timeout event below: HistorySettings only
-            // shows a generic retry-failed message for the command error, so
-            // emit the specific failure (e.g. the Parakeet length refusal,
-            // issue #169) for the error toast.
-            let message = e.to_string();
-            let _ = app.emit(
-                "transcription-error",
-                TranscriptionErrorEvent {
-                    message: message.clone(),
-                },
-            );
-            message
-        })?,
+        WatchdogOutcome::Completed(result) => result.map_err(|e| e.to_string())?,
         WatchdogOutcome::TimedOut => {
             // Emit the same event as the live pipeline so the user sees the
             // specific timeout toast (HistorySettings only shows a generic
