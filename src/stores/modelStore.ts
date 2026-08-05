@@ -20,9 +20,11 @@ interface DownloadStats {
   speed: number; // MB/s
 }
 
-// If no progress event arrives while a model is downloading, the backend's
+// If no progress event arrives during the byte-download phase, the backend's
 // progress emits are being lost; surface the same error path as
-// model-download-failed instead of showing an indefinite spinner.
+// model-download-failed instead of showing an indefinite spinner. The timer is
+// cleared once verification or extraction starts — those phases emit no
+// progress events and have their own UI states.
 const DOWNLOAD_STALL_TIMEOUT_MS = 60_000;
 
 const stallTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -374,6 +376,7 @@ export const useModelStore = create<ModelsStore>()(
           produce((state) => {
             delete state.downloadingModels[modelId];
             delete state.verifyingModels[modelId];
+            delete state.extractingModels[modelId];
             delete state.downloadProgress[modelId];
             delete state.downloadStats[modelId];
           }),
@@ -390,6 +393,7 @@ export const useModelStore = create<ModelsStore>()(
             produce((state) => {
               delete state.downloadingModels[modelId];
               delete state.verifyingModels[modelId];
+              delete state.extractingModels[modelId];
               delete state.downloadProgress[modelId];
               delete state.downloadStats[modelId];
               state.error = error;
@@ -401,6 +405,10 @@ export const useModelStore = create<ModelsStore>()(
 
       listen<string>("model-verification-started", (event) => {
         const modelId = event.payload;
+        // Byte download is done; verification and extraction emit no progress
+        // events and can exceed the stall timeout, so the timer stops here.
+        // It stays armed only if this event itself is dropped.
+        clearStallTimer(modelId);
         set(
           produce((state) => {
             state.verifyingModels[modelId] = true;
@@ -419,6 +427,8 @@ export const useModelStore = create<ModelsStore>()(
 
       listen<string>("model-extraction-started", (event) => {
         const modelId = event.payload;
+        // Same as verification: the stall timer only guards the byte stream.
+        clearStallTimer(modelId);
         set(
           produce((state) => {
             state.extractingModels[modelId] = true;
@@ -456,6 +466,7 @@ export const useModelStore = create<ModelsStore>()(
           produce((state) => {
             delete state.downloadingModels[modelId];
             delete state.verifyingModels[modelId];
+            delete state.extractingModels[modelId];
             delete state.downloadProgress[modelId];
             delete state.downloadStats[modelId];
           }),
