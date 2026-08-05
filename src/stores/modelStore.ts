@@ -134,15 +134,15 @@ export const useModelStore = create<ModelsStore>()(
           set({ models: result.data, error: null });
 
           // Sync downloading state from backend
+          const backendDownloading: Record<string, true> = {};
+          result.data
+            .filter((m) => m.is_downloading)
+            .forEach((m) => {
+              backendDownloading[m.id] = true;
+            });
+
           set(
             produce((state) => {
-              const backendDownloading: Record<string, true> = {};
-              result.data
-                .filter((m) => m.is_downloading)
-                .forEach((m) => {
-                  backendDownloading[m.id] = true;
-                });
-
               // Merge: keep frontend state if downloading, add backend state
               Object.keys(backendDownloading).forEach((id) => {
                 state.downloadingModels[id] = true;
@@ -157,6 +157,16 @@ export const useModelStore = create<ModelsStore>()(
               });
             }),
           );
+
+          // Arm a stall timer for every backend-reported download. A model
+          // rehydrated as downloading (e.g. right after a cancel the backend
+          // has not observed yet) otherwise shows a spinner with no timer to
+          // recover it if the task never emits progress again. Active
+          // downloads reset the timer on every progress event, so this is a
+          // no-op for healthy transfers.
+          Object.keys(backendDownloading).forEach((id) => {
+            resetStallTimer(id);
+          });
         } else {
           set({ error: `Failed to load models: ${result.error}` });
         }

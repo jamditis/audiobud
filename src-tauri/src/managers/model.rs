@@ -1095,8 +1095,15 @@ impl ModelManager {
             disarmed: false,
         };
 
-        // Create HTTP client with range request for resuming
-        let client = reqwest::Client::new();
+        // Create HTTP client with range request for resuming. The 60s read
+        // timeout applies per read operation (reqwest 0.12), so a genuinely
+        // stalled connection — the server accepts but stops sending bytes —
+        // surfaces as a stream error and the task exits through the error
+        // cleanup path instead of hanging on stream.next() forever. Slow but
+        // progressing downloads are unaffected.
+        let client = reqwest::Client::builder()
+            .read_timeout(Duration::from_secs(60))
+            .build()?;
         let mut request = client.get(&url);
 
         if resume_from > 0 {
