@@ -17,6 +17,7 @@ const Onboarding: React.FC<OnboardingProps> = ({ onModelSelected }) => {
     models,
     downloadModel,
     selectModel,
+    cancelDownload,
     downloadingModels,
     verifyingModels,
     extractingModels,
@@ -73,6 +74,16 @@ const Onboarding: React.FC<OnboardingProps> = ({ onModelSelected }) => {
     }
   };
 
+  const handleCancelDownload = async (modelId: string) => {
+    // Error state is set centrally by modelStore on failure. On success the
+    // downloading state is cleared there; unlock the cards here so the user
+    // can pick another model.
+    const success = await cancelDownload(modelId);
+    if (success && modelId === selectedModelId) {
+      setSelectedModelId(null);
+    }
+  };
+
   const getModelStatus = (modelId: string): ModelCardStatus => {
     if (modelId in extractingModels) return "extracting";
     if (modelId in verifyingModels) return "verifying";
@@ -111,6 +122,7 @@ const Onboarding: React.FC<OnboardingProps> = ({ onModelSelected }) => {
                 disabled={isDownloading}
                 onSelect={handleDownloadModel}
                 onDownload={handleDownloadModel}
+                onCancel={handleCancelDownload}
                 downloadProgress={getModelDownloadProgress(model.id)}
                 downloadSpeed={getModelDownloadSpeed(model.id)}
               />
@@ -131,6 +143,7 @@ const Onboarding: React.FC<OnboardingProps> = ({ onModelSelected }) => {
                 disabled={isDownloading}
                 onSelect={handleDownloadModel}
                 onDownload={handleDownloadModel}
+                onCancel={handleCancelDownload}
                 downloadProgress={getModelDownloadProgress(model.id)}
                 downloadSpeed={getModelDownloadSpeed(model.id)}
               />
