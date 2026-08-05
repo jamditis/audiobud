@@ -1022,17 +1022,6 @@ impl ModelManager {
         let model_info =
             model_info.ok_or_else(|| anyhow::anyhow!("Model not found: {}", model_id))?;
 
-        // Refuse a second concurrent download of the same model: both tasks
-        // would append to the same .partial file and clobber each other's
-        // cancel flag. Fresh and resumed downloads have is_downloading = false
-        // here, so the legitimate resume flow is unaffected.
-        if model_info.is_downloading {
-            return Err(anyhow::anyhow!(
-                "Download already in progress for model: {}",
-                model_id
-            ));
-        }
-
         let url = model_info
             .url
             .ok_or_else(|| anyhow::anyhow!("No download URL for model"))?;
@@ -1061,10 +1050,21 @@ impl ModelManager {
             0
         };
 
-        // Mark as downloading
+        // Mark as downloading, refusing a second concurrent download of the
+        // same model: check-and-set under one lock so racing calls cannot
+        // both pass. Fresh and resumed downloads have is_downloading = false
+        // here, so the legitimate resume flow is unaffected. Two concurrent
+        // tasks would append to the same .partial file and clobber each
+        // other's cancel flag.
         {
             let mut models = self.available_models.lock().unwrap();
             if let Some(model) = models.get_mut(model_id) {
+                if model.is_downloading {
+                    return Err(anyhow::anyhow!(
+                        "Download already in progress for model: {}",
+                        model_id
+                    ));
+                }
                 model.is_downloading = true;
             }
         }
@@ -1524,16 +1524,11 @@ impl ModelManager {
             }
         }
 
-        // Update state immediately for UI responsiveness
-        {
-            let mut models = self.available_models.lock().unwrap();
-            if let Some(model) = models.get_mut(model_id) {
-                model.is_downloading = false;
-            }
-        }
-
-        // Update download status to reflect current state
-        self.update_download_status()?;
+        // The download task owns is_downloading: it is cleared by the cleanup
+        // guard when the task actually observes this flag and exits. Clearing
+        // it here would let a retry start while the old task is still
+        // running, recreating the double-download race on the same .partial
+        // file.
 
         // Emit cancellation event so all UI components can clear their state
         let _ = self.app_handle.emit("model-download-cancelled", model_id);
