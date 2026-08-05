@@ -20,6 +20,11 @@ use tauri::{AppHandle, Emitter, Manager};
 const MODEL_BASE_URL: &str =
     "https://github.com/jamditis/audiobud/releases/download/model-assets-v1";
 
+/// Consecutive progress-emit failures after which the frontend is treated as
+/// unreachable and the download is aborted, so the download UI cannot stall
+/// forever waiting for events that will never arrive.
+const MAX_CONSECUTIVE_PROGRESS_EMIT_FAILURES: u32 = 3;
+
 fn model_url(filename: &str) -> String {
     format!("{MODEL_BASE_URL}/{filename}")
 }
@@ -721,6 +726,12 @@ impl ModelManager {
     }
 
     fn update_download_status(&self) -> Result<()> {
+        // Models with a live download task keep their is_downloading flag — the task
+        // owns it until it exits. Clearing it here (e.g. via delete_model during an
+        // active download) would reopen the single-flight guard.
+        let active_downloads: HashSet<String> =
+            self.cancel_flags.lock().unwrap().keys().cloned().collect();
+
         let mut models = self.available_models.lock().unwrap();
 
         for model in models.values_mut() {
@@ -744,7 +755,9 @@ impl ModelManager {
                 }
 
                 model.is_downloaded = model_path.exists() && model_path.is_dir();
-                model.is_downloading = false;
+                if !active_downloads.contains(&model.id) {
+                    model.is_downloading = false;
+                }
 
                 // Get partial file size if it exists (for the .tar.gz being downloaded)
                 if partial_path.exists() {
@@ -758,7 +771,9 @@ impl ModelManager {
                 let partial_path = self.models_dir.join(format!("{}.partial", model.filename));
 
                 model.is_downloaded = model_path.exists();
-                model.is_downloading = false;
+                if !active_downloads.contains(&model.id) {
+                    model.is_downloading = false;
+                }
 
                 // Get partial file size if it exists
                 if partial_path.exists() {
@@ -985,6 +1000,29 @@ impl ModelManager {
         Ok(format!("{:x}", hasher.finalize()))
     }
 
+    /// Emits a download progress event, tracking consecutive failures so callers
+    /// can abort the download once the frontend is clearly unreachable.
+    fn emit_download_progress(
+        &self,
+        progress: &DownloadProgress,
+        consecutive_failures: &mut u32,
+    ) -> Result<()> {
+        match self.app_handle.emit("model-download-progress", progress) {
+            Ok(()) => {
+                *consecutive_failures = 0;
+                Ok(())
+            }
+            Err(e) => {
+                *consecutive_failures += 1;
+                warn!(
+                    "Failed to emit download progress for model {} ({} consecutive failures): {}",
+                    progress.model_id, consecutive_failures, e
+                );
+                Err(anyhow::anyhow!(e.to_string()))
+            }
+        }
+    }
+
     pub async fn download_model(&self, model_id: &str) -> Result<()> {
         let model_info = {
             let models = self.available_models.lock().unwrap();
@@ -1022,18 +1060,31 @@ impl ModelManager {
             0
         };
 
-        // Mark as downloading
-        {
-            let mut models = self.available_models.lock().unwrap();
-            if let Some(model) = models.get_mut(model_id) {
-                model.is_downloading = true;
-            }
-        }
-
-        // Create cancellation flag for this download
+        // Mark as downloading and register the cancel flag in one critical
+        // section: the two form a single ownership record. Check-and-set
+        // under lock so racing calls cannot both pass. Fresh and resumed
+        // downloads have is_downloading = false here, so the legitimate
+        // resume flow is unaffected. Two concurrent tasks would append to
+        // the same .partial file and clobber each other's cancel flag. If
+        // the flag were inserted only after available_models was released,
+        // update_download_status could run in between, find no cancel flag,
+        // and clear is_downloading — reopening the single-flight guard.
+        // This is the only site that holds both locks at once, so the
+        // available_models -> cancel_flags order cannot deadlock with the
+        // sequential locking elsewhere.
         let cancel_flag = Arc::new(AtomicBool::new(false));
         {
+            let mut models = self.available_models.lock().unwrap();
             let mut flags = self.cancel_flags.lock().unwrap();
+            if let Some(model) = models.get_mut(model_id) {
+                if model.is_downloading {
+                    return Err(anyhow::anyhow!(
+                        "Download already in progress for model: {}",
+                        model_id
+                    ));
+                }
+                model.is_downloading = true;
+            }
             flags.insert(model_id.to_string(), cancel_flag.clone());
         }
 
@@ -1046,8 +1097,15 @@ impl ModelManager {
             disarmed: false,
         };
 
-        // Create HTTP client with range request for resuming
-        let client = reqwest::Client::new();
+        // Create HTTP client with range request for resuming. The 60s read
+        // timeout applies per read operation (reqwest 0.12), so a genuinely
+        // stalled connection — the server accepts but stops sending bytes —
+        // surfaces as a stream error and the task exits through the error
+        // cleanup path instead of hanging on stream.next() forever. Slow but
+        // progressing downloads are unaffected.
+        let client = reqwest::Client::builder()
+            .read_timeout(Duration::from_secs(60))
+            .build()?;
         let mut request = client.get(&url);
 
         if resume_from > 0 {
@@ -1115,9 +1173,8 @@ impl ModelManager {
                 0.0
             },
         };
-        let _ = self
-            .app_handle
-            .emit("model-download-progress", &initial_progress);
+        let mut consecutive_emit_failures = 0u32;
+        let _ = self.emit_download_progress(&initial_progress, &mut consecutive_emit_failures);
 
         // Throttle progress events to max 10/sec (100ms intervals)
         let mut last_emit = Instant::now();
@@ -1153,7 +1210,22 @@ impl ModelManager {
                     total: total_size,
                     percentage,
                 };
-                let _ = self.app_handle.emit("model-download-progress", &progress);
+                if self
+                    .emit_download_progress(&progress, &mut consecutive_emit_failures)
+                    .is_err()
+                    && consecutive_emit_failures >= MAX_CONSECUTIVE_PROGRESS_EMIT_FAILURES
+                {
+                    // Frontend is unreachable; abort so the download UI does not
+                    // stall forever. The cleanup guard resets download state and
+                    // the command layer emits model-download-failed on this error.
+                    warn!(
+                        "Aborting download of model {}: progress events are not reaching the frontend",
+                        model_id
+                    );
+                    return Err(anyhow::anyhow!(
+                        "Download aborted: progress updates could not reach the app window. Please try again."
+                    ));
+                }
                 last_emit = Instant::now();
             }
         }
@@ -1169,9 +1241,7 @@ impl ModelManager {
                 100.0
             },
         };
-        let _ = self
-            .app_handle
-            .emit("model-download-progress", &final_progress);
+        let _ = self.emit_download_progress(&final_progress, &mut consecutive_emit_failures);
 
         file.flush()?;
         drop(file); // Ensure file is closed before moving
@@ -1292,7 +1362,12 @@ impl ModelManager {
                 extracting.remove(model_id);
             }
             // Emit extraction completed event
-            let _ = self.app_handle.emit("model-extraction-completed", model_id);
+            if let Err(e) = self.app_handle.emit("model-extraction-completed", model_id) {
+                warn!(
+                    "Failed to emit extraction completion for model {}: {}",
+                    model_id, e
+                );
+            }
 
             // Remove the downloaded tar.gz file
             let _ = fs::remove_file(&partial_path);
@@ -1315,7 +1390,21 @@ impl ModelManager {
         self.cancel_flags.lock().unwrap().remove(model_id);
 
         // Emit completion event
-        let _ = self.app_handle.emit("model-download-complete", model_id);
+        if let Err(e) = self.app_handle.emit("model-download-complete", model_id) {
+            warn!(
+                "Failed to emit download completion for model {}: {}",
+                model_id, e
+            );
+            // Without the completion event the download UI would wait forever,
+            // so emit a failure event for any surviving listener to act on.
+            let _ = self.app_handle.emit(
+                "model-download-failed",
+                &serde_json::json!({
+                    "model_id": model_id,
+                    "error": "Download completed but the app window could not be notified. Please try again."
+                }),
+            );
+        }
 
         info!(
             "Successfully downloaded model {} to {:?}",
@@ -1450,20 +1539,21 @@ impl ModelManager {
                 flag.store(true, Ordering::Relaxed);
                 info!("Cancellation flag set for: {}", model_id);
             } else {
-                warn!("No active download found for: {}", model_id);
+                // A missing flag means no live download task owns this model's
+                // lifecycle — reporting success here would acknowledge a cancel
+                // that nothing will honor while the download proceeds.
+                return Err(anyhow::anyhow!(
+                    "No active download to cancel for model: {}",
+                    model_id
+                ));
             }
         }
 
-        // Update state immediately for UI responsiveness
-        {
-            let mut models = self.available_models.lock().unwrap();
-            if let Some(model) = models.get_mut(model_id) {
-                model.is_downloading = false;
-            }
-        }
-
-        // Update download status to reflect current state
-        self.update_download_status()?;
+        // The download task owns is_downloading: it is cleared by the cleanup
+        // guard when the task actually observes this flag and exits. Clearing
+        // it here would let a retry start while the old task is still
+        // running, recreating the double-download race on the same .partial
+        // file.
 
         // Emit cancellation event so all UI components can clear their state
         let _ = self.app_handle.emit("model-download-cancelled", model_id);
