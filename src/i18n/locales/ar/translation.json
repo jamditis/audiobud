@@ -810,6 +810,7 @@
     "modelLoadFailedUnknown": "نموذج غير معروف",
     "pasteFailedTitle": "فشل لصق النص",
     "pasteFailed": "تعذر لصق النص في التطبيق النشط.",
+    "transcriptionErrorTitle": "فشل التفريغ",
     "transcriptionTimeoutTitle": "انتهت مهلة التفريغ",
     "transcriptionTimeout": "لم يستجب المحرك بعد {{seconds}} ثانية وقد يكون متوقفاً. أعد تشغيل AudioBud إذا استمر هذا."
   },

@@ -39,6 +39,15 @@ pub(crate) struct TranscriptionTimeoutEvent {
     pub(crate) timeout_secs: u64,
 }
 
+/// Payload of the `transcription-error` event, emitted when a transcription
+/// fails so the user sees why (e.g. the Parakeet engine refusing a recording
+/// that exceeds its length limit, issue #169) instead of silence. Shared with
+/// the history retry command so both paths surface the same error toast.
+#[derive(Clone, serde::Serialize)]
+pub(crate) struct TranscriptionErrorEvent {
+    pub(crate) message: String,
+}
+
 /// Drop guard that notifies the [`TranscriptionCoordinator`] when the
 /// transcription pipeline finishes — whether it completes normally or panics.
 struct FinishGuard(AppHandle);
@@ -647,6 +656,10 @@ impl ShortcutAction for TranscribeAction {
                     let transcription_time = Instant::now();
                     let watchdog_timeout =
                         transcription_watchdog_timeout(sample_count, WHISPER_SAMPLE_RATE);
+                    // Set when the failure already emitted its own specific
+                    // event, so the generic `transcription-error` emit in the
+                    // Err arm below doesn't double up the toasts.
+                    let mut error_already_notified = false;
                     let transcription_result =
                         match tm.transcribe_with_watchdog(samples, watchdog_timeout) {
                             WatchdogOutcome::Completed(result) => result,
@@ -656,6 +669,7 @@ impl ShortcutAction for TranscribeAction {
                                     "transcription-timeout",
                                     TranscriptionTimeoutEvent { timeout_secs },
                                 );
+                                error_already_notified = true;
                                 Err(anyhow::anyhow!(
                                     "Transcription timed out after {}s",
                                     timeout_secs
@@ -766,6 +780,17 @@ impl ShortcutAction for TranscribeAction {
                         }
                         Err(err) => {
                             debug!("Global Shortcut Transcription error: {}", err);
+                            // Surface the failure to the user (e.g. Parakeet
+                            // refusing a recording past its length limit,
+                            // issue #169) instead of only logging it.
+                            if !error_already_notified {
+                                let _ = ah.emit(
+                                    "transcription-error",
+                                    TranscriptionErrorEvent {
+                                        message: err.to_string(),
+                                    },
+                                );
+                            }
                             // Save entry with empty text so user can retry
                             if wav_saved {
                                 if let Err(save_err) = hm.save_entry(

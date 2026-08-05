@@ -802,6 +802,7 @@
     "modelLoadFailedUnknown": "modelo desconhecido",
     "pasteFailedTitle": "Falha ao colar o texto",
     "pasteFailed": "Não foi possível colar o texto no aplicativo ativo.",
+    "transcriptionErrorTitle": "A transcrição falhou",
     "transcriptionTimeoutTitle": "Tempo esgotado na transcrição",
     "transcriptionTimeout": "O motor não respondeu após {{seconds}} segundos e pode estar travado. Reinicie o AudioBud se isso continuar acontecendo."
   },

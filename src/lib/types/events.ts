@@ -13,3 +13,7 @@ export interface RecordingErrorEvent {
 export interface TranscriptionTimeoutEvent {
   timeout_secs: number;
 }
+
+export interface TranscriptionErrorEvent {
+  message: string;
+}

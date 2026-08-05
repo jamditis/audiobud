@@ -10,6 +10,7 @@ import {
 import {
   ModelStateEvent,
   RecordingErrorEvent,
+  TranscriptionErrorEvent,
   TranscriptionTimeoutEvent,
 } from "./lib/types/events";
 import "./App.css";
@@ -183,6 +184,23 @@ function App() {
           description: t("errors.transcriptionTimeout", {
             seconds: event.payload.timeout_secs,
           }),
+        });
+      },
+    );
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, [t]);
+
+  // Listen for transcription failures (e.g. Parakeet refusing a recording
+  // past its length limit, issue #169) and show a toast. The payload carries
+  // the backend's specific explanation, shown like the model-load error.
+  useEffect(() => {
+    const unlisten = listen<TranscriptionErrorEvent>(
+      "transcription-error",
+      (event) => {
+        toast.error(t("errors.transcriptionErrorTitle"), {
+          description: event.payload.message,
         });
       },
     );

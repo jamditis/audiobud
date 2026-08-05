@@ -802,6 +802,7 @@
     "modelLoadFailedUnknown": "bilinmeyen model",
     "pasteFailedTitle": "Metin yapıştırılamadı",
     "pasteFailed": "Metin etkin uygulamaya yapıştırılamadı.",
+    "transcriptionErrorTitle": "Transkripsiyon başarısız oldu",
     "transcriptionTimeoutTitle": "Transkripsiyon zaman aşımına uğradı",
     "transcriptionTimeout": "Motor {{seconds}} saniye sonra yanıt vermedi ve takılmış olabilir. Bu durum devam ederse AudioBud'u yeniden başlatın."
   },

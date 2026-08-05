@@ -806,6 +806,7 @@
     "modelLoadFailedUnknown": "nieznany model",
     "pasteFailedTitle": "Nie udało się wkleić tekstu",
     "pasteFailed": "Nie można było wkleić tekstu do aktywnej aplikacji.",
+    "transcriptionErrorTitle": "Transkrypcja nie powiodła się",
     "transcriptionTimeoutTitle": "Przekroczono czas transkrypcji",
     "transcriptionTimeout": "Silnik nie odpowiedział przez {{seconds}} sekund i mógł się zawiesić. Uruchom AudioBud ponownie, jeśli to się powtarza."
   },

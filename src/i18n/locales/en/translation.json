@@ -802,6 +802,7 @@
     "modelLoadFailedUnknown": "unknown model",
     "pasteFailedTitle": "Failed to paste text",
     "pasteFailed": "Text could not be pasted into the active application.",
+    "transcriptionErrorTitle": "Transcription failed",
     "transcriptionTimeoutTitle": "Transcription timed out",
     "transcriptionTimeout": "The engine did not respond after {{seconds}} seconds and may be stuck. Restart AudioBud if this keeps happening."
   },
