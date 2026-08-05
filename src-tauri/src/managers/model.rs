@@ -1279,6 +1279,20 @@ impl ModelManager {
                 anyhow::anyhow!(error_msg)
             })?;
 
+            // Honor a cancel requested while the archive was being extracted —
+            // the model must not be installed after the UI acknowledged the
+            // cancel. Cleans up like the unpack-failure path, but keeps the
+            // partial file for resume.
+            if cancel_flag.load(Ordering::Relaxed) {
+                info!("Download cancelled for: {} (after extraction)", model_id);
+                let _ = fs::remove_dir_all(&temp_extract_dir);
+                {
+                    let mut extracting = self.extracting_models.lock().unwrap();
+                    extracting.remove(model_id);
+                }
+                return Ok(());
+            }
+
             // Find the actual extracted directory (archive might have a nested structure)
             let extracted_dirs: Vec<_> = fs::read_dir(&temp_extract_dir)?
                 .filter_map(|entry| entry.ok())
