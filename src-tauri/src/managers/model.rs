@@ -1022,10 +1022,21 @@ impl ModelManager {
             0
         };
 
-        // Mark as downloading
+        // Mark as downloading, refusing a second concurrent download of the
+        // same model: check-and-set under one lock so racing calls cannot
+        // both pass. Fresh and resumed downloads have is_downloading = false
+        // here, so the legitimate resume flow is unaffected. Two concurrent
+        // tasks would append to the same .partial file and clobber each
+        // other's cancel flag.
         {
             let mut models = self.available_models.lock().unwrap();
             if let Some(model) = models.get_mut(model_id) {
+                if model.is_downloading {
+                    return Err(anyhow::anyhow!(
+                        "Download already in progress for model: {}",
+                        model_id
+                    ));
+                }
                 model.is_downloading = true;
             }
         }
@@ -1181,7 +1192,14 @@ impl ModelManager {
         // instead of silently completing a download the user cancelled.
         if cancel_flag.load(Ordering::Relaxed) {
             info!("Download cancelled for: {} (before verification)", model_id);
-            // Keep partial file for resume functionality.
+            // A partial that already holds the full file cannot be
+            // range-resumed (the server answers 416 and the retry would
+            // always fail), so delete it and let the retry start fresh. An
+            // incomplete partial is kept for resume as in the byte loop.
+            if total_size > 0 && partial_path.metadata().map(|m| m.len()).unwrap_or(0) == total_size
+            {
+                let _ = fs::remove_file(&partial_path);
+            }
             // Guard handles is_downloading + cancel_flags cleanup on drop.
             return Ok(());
         }
@@ -1221,7 +1239,10 @@ impl ModelManager {
         // Honor a cancel requested while the checksum was running.
         if cancel_flag.load(Ordering::Relaxed) {
             info!("Download cancelled for: {} (after verification)", model_id);
-            // Keep partial file for resume functionality.
+            // The partial holds the full verified file, which cannot be
+            // range-resumed (the server answers 416); delete it so the retry
+            // starts fresh.
+            let _ = fs::remove_file(&partial_path);
             return Ok(());
         }
 
@@ -1281,11 +1302,13 @@ impl ModelManager {
 
             // Honor a cancel requested while the archive was being extracted —
             // the model must not be installed after the UI acknowledged the
-            // cancel. Cleans up like the unpack-failure path, but keeps the
-            // partial file for resume.
+            // cancel. Cleans up like the unpack-failure path, except the
+            // verified archive is deleted rather than kept: a complete
+            // .partial cannot be range-resumed (the server answers 416).
             if cancel_flag.load(Ordering::Relaxed) {
                 info!("Download cancelled for: {} (after extraction)", model_id);
                 let _ = fs::remove_dir_all(&temp_extract_dir);
+                let _ = fs::remove_file(&partial_path);
                 {
                     let mut extracting = self.extracting_models.lock().unwrap();
                     extracting.remove(model_id);
@@ -1485,16 +1508,11 @@ impl ModelManager {
             }
         }
 
-        // Update state immediately for UI responsiveness
-        {
-            let mut models = self.available_models.lock().unwrap();
-            if let Some(model) = models.get_mut(model_id) {
-                model.is_downloading = false;
-            }
-        }
-
-        // Update download status to reflect current state
-        self.update_download_status()?;
+        // The download task owns is_downloading: it is cleared by the cleanup
+        // guard when the task actually observes this flag and exits. Clearing
+        // it here would let a retry start while the old task is still
+        // running, recreating the double-download race on the same .partial
+        // file.
 
         // Emit cancellation event so all UI components can clear their state
         let _ = self.app_handle.emit("model-download-cancelled", model_id);
