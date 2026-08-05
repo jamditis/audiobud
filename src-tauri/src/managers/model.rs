@@ -1032,14 +1032,22 @@ impl ModelManager {
             0
         };
 
-        // Mark as downloading, refusing a second concurrent download of the
-        // same model: check-and-set under one lock so racing calls cannot
-        // both pass. Fresh and resumed downloads have is_downloading = false
-        // here, so the legitimate resume flow is unaffected. Two concurrent
-        // tasks would append to the same .partial file and clobber each
-        // other's cancel flag.
+        // Mark as downloading and register the cancel flag in one critical
+        // section: the two form a single ownership record. Check-and-set
+        // under lock so racing calls cannot both pass. Fresh and resumed
+        // downloads have is_downloading = false here, so the legitimate
+        // resume flow is unaffected. Two concurrent tasks would append to
+        // the same .partial file and clobber each other's cancel flag. If
+        // the flag were inserted only after available_models was released,
+        // update_download_status could run in between, find no cancel flag,
+        // and clear is_downloading — reopening the single-flight guard.
+        // This is the only site that holds both locks at once, so the
+        // available_models -> cancel_flags order cannot deadlock with the
+        // sequential locking elsewhere.
+        let cancel_flag = Arc::new(AtomicBool::new(false));
         {
             let mut models = self.available_models.lock().unwrap();
+            let mut flags = self.cancel_flags.lock().unwrap();
             if let Some(model) = models.get_mut(model_id) {
                 if model.is_downloading {
                     return Err(anyhow::anyhow!(
@@ -1049,12 +1057,6 @@ impl ModelManager {
                 }
                 model.is_downloading = true;
             }
-        }
-
-        // Create cancellation flag for this download
-        let cancel_flag = Arc::new(AtomicBool::new(false));
-        {
-            let mut flags = self.cancel_flags.lock().unwrap();
             flags.insert(model_id.to_string(), cancel_flag.clone());
         }
 
