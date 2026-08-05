@@ -283,8 +283,13 @@ export const useModelStore = create<ModelsStore>()(
             }),
           );
 
-          // Reload models to sync with backend state
-          await get().loadModels();
+          // No immediate loadModels() here: the backend task still owns
+          // is_downloading until it observes the cancel flag and exits, so a
+          // reload now would merge the still-active download back into
+          // downloadingModels and re-stick the spinner with no terminal event
+          // left to clear it. State was already cleared above and by the
+          // model-download-cancelled event; the next natural loadModels
+          // reconciles with backend truth.
           return true;
         } else {
           set({ error: `Failed to cancel download: ${result.error}` });
