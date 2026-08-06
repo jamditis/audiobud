@@ -67,12 +67,44 @@ pub struct DownloadProgress {
     pub percentage: f64,
 }
 
+/// Releases a worker's two-part ownership record while holding the same lock
+/// order as the claim path. Returns false when a newer worker already replaced
+/// the flag, in which case this worker must not alter the newer claim.
+fn release_download_claim(
+    available_models: &Mutex<HashMap<String, ModelInfo>>,
+    cancel_flags: &Arc<Mutex<HashMap<String, Arc<AtomicBool>>>>,
+    model_id: &str,
+    cancel_flag: &Arc<AtomicBool>,
+    completed: bool,
+) -> bool {
+    let mut models = available_models.lock().unwrap();
+    let mut flags = cancel_flags.lock().unwrap();
+    let still_owns_download = flags
+        .get(model_id)
+        .map(|flag| Arc::ptr_eq(flag, cancel_flag))
+        .unwrap_or(false);
+    if !still_owns_download {
+        return false;
+    }
+
+    if let Some(model) = models.get_mut(model_id) {
+        model.is_downloading = false;
+        if completed {
+            model.is_downloaded = true;
+            model.partial_size = 0;
+        }
+    }
+    flags.remove(model_id);
+    true
+}
+
 /// RAII guard that cleans up download state (`is_downloading` flag and cancel flag)
 /// when dropped, unless explicitly disarmed. This ensures consistent cleanup on
 /// every error path without requiring manual cleanup at each `?` or `return Err`.
 struct DownloadCleanup<'a> {
     available_models: &'a Mutex<HashMap<String, ModelInfo>>,
     cancel_flags: &'a Arc<Mutex<HashMap<String, Arc<AtomicBool>>>>,
+    cancel_flag: Arc<AtomicBool>,
     model_id: String,
     disarmed: bool,
 }
@@ -82,13 +114,13 @@ impl<'a> Drop for DownloadCleanup<'a> {
         if self.disarmed {
             return;
         }
-        {
-            let mut models = self.available_models.lock().unwrap();
-            if let Some(model) = models.get_mut(self.model_id.as_str()) {
-                model.is_downloading = false;
-            }
-        }
-        self.cancel_flags.lock().unwrap().remove(&self.model_id);
+        release_download_claim(
+            self.available_models,
+            self.cancel_flags,
+            &self.model_id,
+            &self.cancel_flag,
+            false,
+        );
     }
 }
 
@@ -724,10 +756,12 @@ impl ModelManager {
         // Models with a live download task keep their is_downloading flag — the task
         // owns it until it exits. Clearing it here (e.g. via delete_model during an
         // active download) would reopen the single-flight guard.
+        let mut models = self.available_models.lock().unwrap();
+        // Snapshot claims while still holding available_models. A new claim
+        // needs this lock first, so it cannot appear between this snapshot and
+        // the status updates below.
         let active_downloads: HashSet<String> =
             self.cancel_flags.lock().unwrap().keys().cloned().collect();
-
-        let mut models = self.available_models.lock().unwrap();
 
         for model in models.values_mut() {
             if model.is_directory {
@@ -995,6 +1029,30 @@ impl ModelManager {
         Ok(format!("{:x}", hasher.finalize()))
     }
 
+    /// Claims ownership of a model download under one critical section.
+    /// `None` means another worker already owns the same model; callers join
+    /// that operation as an idempotent success without replacing its flag.
+    fn claim_download(
+        available_models: &Mutex<HashMap<String, ModelInfo>>,
+        cancel_flags: &Arc<Mutex<HashMap<String, Arc<AtomicBool>>>>,
+        model_id: &str,
+    ) -> Result<Option<Arc<AtomicBool>>> {
+        let mut models = available_models.lock().unwrap();
+        let mut flags = cancel_flags.lock().unwrap();
+        let model = models
+            .get_mut(model_id)
+            .ok_or_else(|| anyhow::anyhow!("Model not found: {}", model_id))?;
+
+        if model.is_downloading {
+            return Ok(None);
+        }
+
+        let cancel_flag = Arc::new(AtomicBool::new(false));
+        model.is_downloading = true;
+        flags.insert(model_id.to_string(), cancel_flag.clone());
+        Ok(Some(cancel_flag))
+    }
+
     pub async fn download_model(&self, model_id: &str) -> Result<()> {
         let model_info = {
             let models = self.available_models.lock().unwrap();
@@ -1044,27 +1102,22 @@ impl ModelManager {
         // This is the only site that holds both locks at once, so the
         // available_models -> cancel_flags order cannot deadlock with the
         // sequential locking elsewhere.
-        let cancel_flag = Arc::new(AtomicBool::new(false));
-        {
-            let mut models = self.available_models.lock().unwrap();
-            let mut flags = self.cancel_flags.lock().unwrap();
-            if let Some(model) = models.get_mut(model_id) {
-                if model.is_downloading {
-                    return Err(anyhow::anyhow!(
-                        "Download already in progress for model: {}",
-                        model_id
-                    ));
-                }
-                model.is_downloading = true;
-            }
-            flags.insert(model_id.to_string(), cancel_flag.clone());
-        }
+        let Some(cancel_flag) =
+            Self::claim_download(&self.available_models, &self.cancel_flags, model_id)?
+        else {
+            info!(
+                "Download already in progress for model {}; joining existing worker",
+                model_id
+            );
+            return Ok(());
+        };
 
         // Guard ensures is_downloading and cancel_flags are cleaned up on every
         // error path. Disarmed only on success (which sets is_downloaded = true).
         let mut cleanup = DownloadCleanup {
             available_models: &self.available_models,
             cancel_flags: &self.cancel_flags,
+            cancel_flag: cancel_flag.clone(),
             model_id: model_id.to_string(),
             disarmed: false,
         };
@@ -1204,14 +1257,12 @@ impl ModelManager {
         // instead of silently completing a download the user cancelled.
         if cancel_flag.load(Ordering::Relaxed) {
             info!("Download cancelled for: {} (before verification)", model_id);
-            // A partial that already holds the full file cannot be
-            // range-resumed (the server answers 416 and the retry would
-            // always fail), so delete it and let the retry start fresh. An
-            // incomplete partial is kept for resume as in the byte loop.
-            if total_size > 0 && partial_path.metadata().map(|m| m.len()).unwrap_or(0) == total_size
-            {
-                let _ = fs::remove_file(&partial_path);
-            }
+            // The byte stream ended normally, so this partial is complete even
+            // when the server omitted Content-Length. A complete partial cannot
+            // be range-resumed (the server answers 416); remove it so a retry
+            // starts fresh. Mid-stream cancellation still keeps its resumable
+            // incomplete partial in the loop above.
+            fs::remove_file(&partial_path)?;
             // Guard handles is_downloading + cancel_flags cleanup on drop.
             return Ok(());
         }
@@ -1367,18 +1418,23 @@ impl ModelManager {
             fs::rename(&partial_path, &model_path)?;
         }
 
-        // Disarm the guard — success path does its own cleanup because it
-        // additionally sets is_downloaded = true.
-        cleanup.disarmed = true;
-        {
-            let mut models = self.available_models.lock().unwrap();
-            if let Some(model) = models.get_mut(model_id) {
-                model.is_downloading = false;
-                model.is_downloaded = true;
-                model.partial_size = 0;
-            }
+        // Success releases the same ownership record atomically and also marks
+        // the installed model available. A false result would mean the worker
+        // lost ownership unexpectedly; fail closed rather than touching a
+        // newer worker's state.
+        if !release_download_claim(
+            &self.available_models,
+            &self.cancel_flags,
+            model_id,
+            &cancel_flag,
+            true,
+        ) {
+            return Err(anyhow::anyhow!(
+                "Download ownership changed before completion for model: {}",
+                model_id
+            ));
         }
-        self.cancel_flags.lock().unwrap().remove(model_id);
+        cleanup.disarmed = true;
 
         // Emit completion event
         let _ = self.app_handle.emit("model-download-complete", model_id);
@@ -1713,5 +1769,47 @@ mod tests {
             ModelManager::verify_sha256(&missing_path, Some("anyexpectedhash"), "missing_model");
 
         assert!(result.is_err(), "missing file must return an error");
+    }
+
+    #[test]
+    fn test_duplicate_download_claim_preserves_original_worker() {
+        let mut models = HashMap::new();
+        models.insert(
+            "small".to_string(),
+            ModelInfo {
+                id: "small".to_string(),
+                name: "Whisper Small".to_string(),
+                description: "Test".to_string(),
+                filename: "ggml-small.bin".to_string(),
+                url: Some("https://example.com/model.bin".to_string()),
+                sha256: None,
+                size_mb: 100,
+                is_downloaded: false,
+                is_downloading: true,
+                partial_size: 0,
+                is_directory: false,
+                engine_type: EngineType::Whisper,
+                accuracy_score: 0.5,
+                speed_score: 0.5,
+                supports_translation: true,
+                is_recommended: false,
+                supported_languages: vec!["en".to_string()],
+                supports_language_selection: true,
+                is_custom: false,
+            },
+        );
+        let models = Mutex::new(models);
+        let original_flag = Arc::new(AtomicBool::new(false));
+        let cancel_flags = Arc::new(Mutex::new(HashMap::from([(
+            "small".to_string(),
+            original_flag.clone(),
+        )])));
+
+        let claim = ModelManager::claim_download(&models, &cancel_flags, "small").unwrap();
+
+        assert!(claim.is_none(), "a duplicate joins the live worker");
+        let stored_flag = cancel_flags.lock().unwrap().get("small").cloned().unwrap();
+        assert!(Arc::ptr_eq(&stored_flag, &original_flag));
+        assert!(models.lock().unwrap()["small"].is_downloading);
     }
 }

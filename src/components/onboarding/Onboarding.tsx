@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import type { ModelInfo } from "@/bindings";
@@ -6,6 +6,10 @@ import type { ModelCardStatus } from "./ModelCard";
 import ModelCard from "./ModelCard";
 import HandyTextLogo from "../icons/HandyTextLogo";
 import { useModelStore } from "../../stores/modelStore";
+import {
+  claimOnboardingSelection,
+  type OnboardingSelectionGuard,
+} from "./onboardingSelection";
 
 interface OnboardingProps {
   onModelSelected: () => void;
@@ -25,6 +29,7 @@ const Onboarding: React.FC<OnboardingProps> = ({ onModelSelected }) => {
     downloadStats,
   } = useModelStore();
   const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
+  const selectionGuard = useRef<OnboardingSelectionGuard>({ modelId: null });
 
   const isDownloading = selectedModelId !== null;
 
@@ -39,6 +44,10 @@ const Onboarding: React.FC<OnboardingProps> = ({ onModelSelected }) => {
       selectedModelId in extractingModels;
 
     if (model?.is_downloaded && !inFlight) {
+      if (!claimOnboardingSelection(selectionGuard.current, selectedModelId)) {
+        return;
+      }
+
       // Model is ready — select it and transition. A cancel that arrives too
       // late to stop the pipeline lands here as well: the model completed,
       // so onboarding proceeds with it.
@@ -47,12 +56,14 @@ const Onboarding: React.FC<OnboardingProps> = ({ onModelSelected }) => {
           onModelSelected();
         } else {
           toast.error(t("onboarding.errors.selectModel"));
+          selectionGuard.current.modelId = null;
           setSelectedModelId(null);
         }
       });
     } else if (!model?.is_downloaded && !inFlight) {
       // Download ended without a usable model (cancelled or failed) — unlock
       // the cards so another model can be picked.
+      selectionGuard.current.modelId = null;
       setSelectedModelId(null);
     }
   }, [
@@ -66,6 +77,7 @@ const Onboarding: React.FC<OnboardingProps> = ({ onModelSelected }) => {
   ]);
 
   const handleDownloadModel = async (modelId: string) => {
+    selectionGuard.current.modelId = null;
     setSelectedModelId(modelId);
 
     // Error toast is handled centrally by the model-download-failed event listener
