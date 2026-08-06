@@ -804,7 +804,8 @@
     "pasteFailed": "无法将文本粘贴到当前活动的应用程序中。",
     "transcriptionErrorTitle": "转录失败",
     "transcriptionTimeoutTitle": "转录超时",
-    "transcriptionTimeout": "引擎在 {{seconds}} 秒后仍无响应，可能已卡住。如果此问题持续出现，请重启 AudioBud。"
+    "transcriptionTimeout": "引擎在 {{seconds}} 秒后仍无响应，可能已卡住。如果此问题持续出现，请重启 AudioBud。",
+    "parakeetInputTooLong": "这段录音时长为 {{duration}}。Parakeet 无法转录超过约 6:30 的录音，之后的音频会在没有提示的情况下被省略。长录音请使用 Whisper 模型。"
   },
   "appLanguage": {
     "title": "应用语言",

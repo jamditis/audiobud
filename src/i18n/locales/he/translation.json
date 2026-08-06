@@ -806,7 +806,8 @@
     "pasteFailed": "לא ניתן היה להדביק את הטקסט ביישום הפעיל.",
     "transcriptionErrorTitle": "התמלול נכשל",
     "transcriptionTimeoutTitle": "התמלול חרג מהזמן",
-    "transcriptionTimeout": "המנוע לא הגיב אחרי {{seconds}} שניות וייתכן שהוא תקוע. הפעל מחדש את AudioBud אם זה ממשיך לקרות."
+    "transcriptionTimeout": "המנוע לא הגיב אחרי {{seconds}} שניות וייתכן שהוא תקוע. הפעל מחדש את AudioBud אם זה ממשיך לקרות.",
+    "parakeetInputTooLong": "אורך ההקלטה הוא {{duration}}. ‏Parakeet לא יכול לתמלל הקלטות ארוכות מכ־6:30, כי האודיו שבהמשך יושמט ללא התראה. יש להשתמש במודל Whisper להקלטות ארוכות."
   },
   "appLanguage": {
     "title": "שפת האפליקציה",

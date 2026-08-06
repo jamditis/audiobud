@@ -804,7 +804,8 @@
     "pasteFailed": "Metin etkin uygulamaya yapıştırılamadı.",
     "transcriptionErrorTitle": "Transkripsiyon başarısız oldu",
     "transcriptionTimeoutTitle": "Transkripsiyon zaman aşımına uğradı",
-    "transcriptionTimeout": "Motor {{seconds}} saniye sonra yanıt vermedi ve takılmış olabilir. Bu durum devam ederse AudioBud'u yeniden başlatın."
+    "transcriptionTimeout": "Motor {{seconds}} saniye sonra yanıt vermedi ve takılmış olabilir. Bu durum devam ederse AudioBud'u yeniden başlatın.",
+    "parakeetInputTooLong": "Bu kayıt {{duration}} uzunluğunda. Parakeet yaklaşık 6:30'dan uzun kayıtları yazıya dökemez; sonraki ses uyarı vermeden atlanır. Uzun kayıtlar için bir Whisper modeli kullanın."
   },
   "appLanguage": {
     "title": "Uygulama Dili",

@@ -23,6 +23,10 @@ import { useSettings } from "./hooks/useSettings";
 import { useSettingsStore } from "./stores/settingsStore";
 import { commands } from "@/bindings";
 import { getLanguageDirection, initializeRTL } from "@/lib/utils/rtl";
+import {
+  parakeetInputTooLongSeconds,
+  recordingDurationLabel,
+} from "@/lib/transcription-error";
 
 type OnboardingStep = "accessibility" | "model" | "done";
 const PRODUCT_NAME = "AudioBud";
@@ -199,8 +203,16 @@ function App() {
     const unlisten = listen<TranscriptionErrorEvent>(
       "transcription-error",
       (event) => {
+        const parakeetSeconds = parakeetInputTooLongSeconds(
+          event.payload.message,
+        );
         toast.error(t("errors.transcriptionErrorTitle"), {
-          description: event.payload.message,
+          description:
+            parakeetSeconds === null
+              ? event.payload.message
+              : t("errors.parakeetInputTooLong", {
+                  duration: recordingDurationLabel(parakeetSeconds),
+                }),
         });
       },
     );

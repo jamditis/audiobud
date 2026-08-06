@@ -812,7 +812,8 @@
     "pasteFailed": "تعذر لصق النص في التطبيق النشط.",
     "transcriptionErrorTitle": "فشل التفريغ",
     "transcriptionTimeoutTitle": "انتهت مهلة التفريغ",
-    "transcriptionTimeout": "لم يستجب المحرك بعد {{seconds}} ثانية وقد يكون متوقفاً. أعد تشغيل AudioBud إذا استمر هذا."
+    "transcriptionTimeout": "لم يستجب المحرك بعد {{seconds}} ثانية وقد يكون متوقفاً. أعد تشغيل AudioBud إذا استمر هذا.",
+    "parakeetInputTooLong": "مدة هذا التسجيل {{duration}}. لا يستطيع Parakeet نسخ تسجيلات أطول من نحو 6:30 لأن الصوت اللاحق سيُحذف بصمت. استخدم نموذج Whisper للتسجيلات الطويلة."
   },
   "appLanguage": {
     "title": "لغة التطبيق",

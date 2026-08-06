@@ -11,6 +11,11 @@ import {
   type HistoryUpdatePayload,
 } from "@/bindings";
 import { useOsType } from "@/hooks/useOsType";
+import {
+  parakeetInputTooLongSeconds,
+  recordingDurationLabel,
+  transcriptionTimeoutSeconds,
+} from "@/lib/transcription-error";
 import { formatDateTime } from "@/utils/dateFormat";
 import { AudioPlayer } from "../../ui/AudioPlayer";
 import { Button } from "../../ui/Button";
@@ -352,12 +357,28 @@ const HistoryEntryComponent: React.FC<HistoryEntryProps> = ({
       await retryTranscription(entry.id);
     } catch (error) {
       console.error("Failed to re-transcribe:", error);
-      // The retry command rejects with the backend's specific message (e.g.
-      // the Parakeet length refusal, issue #169), so show it with the generic
-      // failure instead of a separate toast.
-      toast.error(t("settings.history.retranscribeError"), {
-        description: error instanceof Error ? error.message : String(error),
-      });
+      const timeoutSeconds = transcriptionTimeoutSeconds(error);
+      const parakeetSeconds = parakeetInputTooLongSeconds(error);
+      if (timeoutSeconds !== null) {
+        toast.error(t("errors.transcriptionTimeoutTitle"), {
+          description: t("errors.transcriptionTimeout", {
+            seconds: timeoutSeconds,
+          }),
+        });
+      } else if (parakeetSeconds !== null) {
+        toast.error(t("settings.history.retranscribeError"), {
+          description: t("errors.parakeetInputTooLong", {
+            duration: recordingDurationLabel(parakeetSeconds),
+          }),
+        });
+      } else {
+        // The retry command rejects with the backend's specific message (e.g.
+        // the Parakeet length refusal, issue #169), so show it with the generic
+        // failure instead of a separate toast.
+        toast.error(t("settings.history.retranscribeError"), {
+          description: error instanceof Error ? error.message : String(error),
+        });
+      }
     } finally {
       setRetrying(false);
     }

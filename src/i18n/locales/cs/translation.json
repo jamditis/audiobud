@@ -806,7 +806,8 @@
     "pasteFailed": "Text nebylo možné vložit do aktivní aplikace.",
     "transcriptionErrorTitle": "Přepis se nezdařil",
     "transcriptionTimeoutTitle": "Vypršel časový limit přepisu",
-    "transcriptionTimeout": "Engine neodpověděl ani po {{seconds}} sekundách a možná se zasekl. Pokud se to bude opakovat, restartujte AudioBud."
+    "transcriptionTimeout": "Engine neodpověděl ani po {{seconds}} sekundách a možná se zasekl. Pokud se to bude opakovat, restartujte AudioBud.",
+    "parakeetInputTooLong": "Tato nahrávka má délku {{duration}}. Parakeet nedokáže přepsat nahrávky delší než přibližně 6:30, protože další zvuk by byl bez upozornění vynechán. Pro dlouhé nahrávky použijte model Whisper."
   },
   "appLanguage": {
     "title": "Jazyk aplikace",

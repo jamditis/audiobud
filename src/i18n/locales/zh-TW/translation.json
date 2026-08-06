@@ -804,7 +804,8 @@
     "pasteFailed": "無法將文字貼上至目前作用中的應用程式。",
     "transcriptionErrorTitle": "轉錄失敗",
     "transcriptionTimeoutTitle": "轉錄逾時",
-    "transcriptionTimeout": "引擎在 {{seconds}} 秒後仍未回應，可能已卡住。如果持續發生，請重新啟動 AudioBud。"
+    "transcriptionTimeout": "引擎在 {{seconds}} 秒後仍未回應，可能已卡住。如果持續發生，請重新啟動 AudioBud。",
+    "parakeetInputTooLong": "這段錄音長度為 {{duration}}。Parakeet 無法轉錄超過約 6:30 的錄音，之後的音訊會在沒有提示的情況下被省略。長錄音請使用 Whisper 模型。"
   },
   "appLanguage": {
     "title": "應用程式語言",

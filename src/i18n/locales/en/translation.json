@@ -804,7 +804,8 @@
     "pasteFailed": "Text could not be pasted into the active application.",
     "transcriptionErrorTitle": "Transcription failed",
     "transcriptionTimeoutTitle": "Transcription timed out",
-    "transcriptionTimeout": "The engine did not respond after {{seconds}} seconds and may be stuck. Restart AudioBud if this keeps happening."
+    "transcriptionTimeout": "The engine did not respond after {{seconds}} seconds and may be stuck. Restart AudioBud if this keeps happening.",
+    "parakeetInputTooLong": "This recording is {{duration}} long. Parakeet cannot transcribe recordings longer than about 6:30 because later audio would be silently omitted. Use a Whisper model for long recordings."
   },
   "appLanguage": {
     "title": "Application language",

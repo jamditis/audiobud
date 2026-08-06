@@ -1,6 +1,9 @@
 use crate::audio_toolkit::{apply_custom_words, apply_replacements, filter_transcription_output};
 use crate::managers::audio::AudioRecordingManager;
-use crate::managers::engine_limits::check_parakeet_input_length;
+use crate::managers::engine_limits::{
+    check_parakeet_input_length, MODEL_AUTO_LOAD_FAILED_ERROR, MODEL_NOT_LOADED_ERROR,
+    WEDGED_ENGINE_ERROR,
+};
 use crate::managers::model::{EngineType, ModelManager};
 use crate::managers::watchdog::{run_with_watchdog, GenerationGate, WatchdogOutcome};
 use crate::settings::{
@@ -69,9 +72,6 @@ impl Drop for LoadingGuard {
 /// Kept consistent with the `errors.transcriptionTimeout` toast copy: both
 /// point at restarting AudioBud, since retrying or switching models is
 /// refused while the engine is stuck.
-const WEDGED_ENGINE_ERROR: &str =
-    "The transcription engine is stuck from an earlier timeout. Restart AudioBud to recover.";
-
 #[derive(Clone)]
 pub struct TranscriptionManager {
     engine: Arc<GenerationGate<LoadedEngine>>,
@@ -503,7 +503,7 @@ impl TranscriptionManager {
             }
 
             if !self.engine.is_occupied() {
-                return Err(anyhow::anyhow!("Model is not loaded for transcription."));
+                return Err(anyhow::anyhow!(MODEL_NOT_LOADED_ERROR));
             }
         }
 
@@ -575,9 +575,7 @@ impl TranscriptionManager {
             let (mut engine, taken_generation) = match self.engine.take() {
                 Some(taken) => taken,
                 None => {
-                    return Err(anyhow::anyhow!(
-                        "Model failed to load after auto-load attempt. Please check your model settings."
-                    ));
+                    return Err(anyhow::anyhow!(MODEL_AUTO_LOAD_FAILED_ERROR));
                 }
             };
 
@@ -588,7 +586,12 @@ impl TranscriptionManager {
             // error instead, restoring the engine so it stays usable.
             if matches!(engine, LoadedEngine::Parakeet(_)) {
                 if let Err(message) = check_parakeet_input_length(audio.len()) {
-                    if !self.engine.try_restore(engine, taken_generation) {
+                    if self.engine.try_restore(engine, taken_generation) {
+                        // Match the successful-transcription and empty-audio
+                        // paths: a refused recording is still a completed use
+                        // of the engine for immediate-unload policy purposes.
+                        self.maybe_unload_immediately("parakeet length refusal");
+                    } else {
                         warn!(
                             "Engine slot changed while checking Parakeet input length; \
                              dropping the stale engine instead of restoring it"

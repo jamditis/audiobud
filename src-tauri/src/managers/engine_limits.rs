@@ -15,6 +15,20 @@ use crate::audio_toolkit::constants::WHISPER_SAMPLE_RATE;
 /// theoretical cutoff to leave room for mel padding.
 pub const PARAKEET_MAX_INPUT_SAMPLES: usize = 390 * 16000;
 
+/// Stable error contract parsed by the frontend so the explanation can be
+/// localized instead of displaying backend English.
+pub const PARAKEET_INPUT_TOO_LONG_PREFIX: &str = "parakeet_input_too_long:";
+
+// Shared transcription failure contracts live here rather than in
+// transcription.rs because CI replaces that manager with
+// transcription_mock.rs. Callers that compile in both modes must not import
+// definitions from the swapped implementation.
+pub(crate) const WEDGED_ENGINE_ERROR: &str =
+    "The transcription engine is stuck from an earlier timeout. Restart AudioBud to recover.";
+pub(crate) const MODEL_NOT_LOADED_ERROR: &str = "Model is not loaded for transcription.";
+pub(crate) const MODEL_AUTO_LOAD_FAILED_ERROR: &str =
+    "Model failed to load after auto-load attempt. Please check your model settings.";
+
 /// Refuses Parakeet input that would be silently truncated, so the failure
 /// surfaces to the user instead of producing an incomplete transcript that
 /// looks complete.
@@ -25,12 +39,8 @@ pub fn check_parakeet_input_length(sample_count: usize) -> Result<(), String> {
 
     let total_seconds = sample_count / WHISPER_SAMPLE_RATE as usize;
     Err(format!(
-        "This recording is {}:{:02} long. The Parakeet engine cannot transcribe \
-         recordings longer than about 6:30; audio past that point would be \
-         silently dropped from the transcript. Switch to a Whisper model for \
-         long recordings.",
-        total_seconds / 60,
-        total_seconds % 60,
+        "{}{}",
+        PARAKEET_INPUT_TOO_LONG_PREFIX, total_seconds
     ))
 }
 
@@ -52,8 +62,6 @@ mod tests {
     fn rejects_input_just_over_the_limit() {
         let message = check_parakeet_input_length(PARAKEET_MAX_INPUT_SAMPLES + 1)
             .expect_err("input past the limit must be refused");
-        assert!(message.contains("6:30"));
-        assert!(message.contains("silently dropped"));
-        assert!(message.contains("Whisper"));
+        assert_eq!(message, "parakeet_input_too_long:390");
     }
 }

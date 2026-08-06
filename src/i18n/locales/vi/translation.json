@@ -804,7 +804,8 @@
     "pasteFailed": "Không thể dán văn bản vào ứng dụng đang hoạt động.",
     "transcriptionErrorTitle": "Chuyển đổi không thành công",
     "transcriptionTimeoutTitle": "Chuyển đổi đã quá thời gian chờ",
-    "transcriptionTimeout": "Công cụ không phản hồi sau {{seconds}} giây và có thể đã bị treo. Hãy khởi động lại AudioBud nếu tình trạng này tiếp diễn."
+    "transcriptionTimeout": "Công cụ không phản hồi sau {{seconds}} giây và có thể đã bị treo. Hãy khởi động lại AudioBud nếu tình trạng này tiếp diễn.",
+    "parakeetInputTooLong": "Bản ghi này dài {{duration}}. Parakeet không thể phiên âm bản ghi dài hơn khoảng 6:30 vì phần âm thanh sau đó sẽ bị bỏ qua mà không báo trước. Hãy dùng mô hình Whisper cho bản ghi dài."
   },
   "appLanguage": {
     "title": "Ngôn ngữ ứng dụng",

@@ -804,7 +804,8 @@
     "pasteFailed": "アクティブなアプリケーションにテキストを貼り付けられませんでした。",
     "transcriptionErrorTitle": "文字起こしに失敗しました",
     "transcriptionTimeoutTitle": "文字起こしがタイムアウトしました",
-    "transcriptionTimeout": "エンジンが{{seconds}}秒応答せず、停止している可能性があります。この状態が続く場合はAudioBudを再起動してください。"
+    "transcriptionTimeout": "エンジンが{{seconds}}秒応答せず、停止している可能性があります。この状態が続く場合はAudioBudを再起動してください。",
+    "parakeetInputTooLong": "この録音の長さは{{duration}}です。Parakeetは約6分30秒を超える録音を文字起こしできず、それ以降の音声は通知なく省略されます。長い録音にはWhisperモデルを使用してください。"
   },
   "appLanguage": {
     "title": "アプリケーション言語",
