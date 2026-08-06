@@ -33,6 +33,8 @@
     "downloading": "İndiriliyor...",
     "customModelDescription": "Resmi olarak desteklenmiyor",
     "downloadFailed": "İndirme başarısız oldu. Lütfen tekrar deneyin.",
+    "cancelPending": "İndirme iptali hâlâ tamamlanıyor. Biraz sonra tekrar deneyin.",
+    "downloadNotifyFailed": "Model indirildi ancak AudioBud yenilenemedi. Devam etmek için AudioBud'ı yeniden başlatın.",
     "modelCard": {
       "accuracy": "doğruluk",
       "speed": "hız"

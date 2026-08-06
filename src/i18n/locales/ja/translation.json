@@ -33,6 +33,8 @@
     "downloading": "ダウンロード中...",
     "customModelDescription": "公式サポート対象外",
     "downloadFailed": "ダウンロードに失敗しました。もう一度お試しください。",
+    "cancelPending": "ダウンロードのキャンセル処理がまだ完了していません。少し待ってからもう一度お試しください。",
+    "downloadNotifyFailed": "モデルはダウンロードされましたが、AudioBud を更新できませんでした。続行するには AudioBud を再起動してください。",
     "modelCard": {
       "accuracy": "精度",
       "speed": "速度"

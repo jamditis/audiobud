@@ -26,6 +26,12 @@ interface DownloadStats {
 // cleared once verification or extraction starts — those phases emit no
 // progress events and have their own UI states.
 const DOWNLOAD_STALL_TIMEOUT_MS = 60_000;
+// Keep these backend lifecycle codes aligned with managers/model.rs.
+const MODEL_DOWNLOAD_ALREADY_ACTIVE = "model_download_already_active";
+const MODEL_DOWNLOAD_CANCELLING = "model_download_cancelling";
+const MODEL_DOWNLOAD_NOTIFY_FAILED = "model_download_notify_failed";
+const MODEL_DOWNLOAD_NOT_ACTIVE = "model_download_not_active";
+const MODEL_DOWNLOAD_STALLED = "model_download_stalled";
 
 const stallTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
@@ -51,6 +57,7 @@ function resetStallTimer(modelId: string) {
     setTimeout(() => {
       stallTimers.delete(modelId);
       const state = useModelStore.getState();
+      if (modelId in state.cancellingModels) return;
       if (!(modelId in state.downloadingModels)) return;
       // At 100% the byte phase is provably done; verification and extraction
       // emit no progress events, so a dropped phase-start event must not read
@@ -77,11 +84,25 @@ function resetStallTimer(modelId: string) {
   );
 }
 
+function localizedDownloadError(error: string) {
+  if (error === MODEL_DOWNLOAD_CANCELLING) {
+    return i18n.t("onboarding.cancelPending");
+  }
+  if (error === MODEL_DOWNLOAD_NOTIFY_FAILED) {
+    return i18n.t("onboarding.downloadNotifyFailed");
+  }
+  if (error === MODEL_DOWNLOAD_STALLED) {
+    return i18n.t("onboarding.downloadFailed");
+  }
+  return error;
+}
+
 // Using Record instead of Set/Map for Immer compatibility
 interface ModelsStore {
   models: ModelInfo[];
   currentModel: string;
   downloadingModels: Record<string, true>;
+  cancellingModels: Record<string, true>;
   verifyingModels: Record<string, true>;
   extractingModels: Record<string, true>;
   downloadProgress: Record<string, DownloadProgress>;
@@ -119,6 +140,7 @@ export const useModelStore = create<ModelsStore>()(
     models: [],
     currentModel: "",
     downloadingModels: {},
+    cancellingModels: {},
     verifyingModels: {},
     extractingModels: {},
     downloadProgress: {},
@@ -139,21 +161,46 @@ export const useModelStore = create<ModelsStore>()(
       try {
         const result = await commands.getAvailableModels();
         if (result.status === "ok") {
-          set({ models: result.data, error: null });
-
-          // Sync downloading state from backend
           const backendDownloading: Record<string, true> = {};
           result.data
             .filter((m) => m.is_downloading)
             .forEach((m) => {
               backendDownloading[m.id] = true;
             });
+          const retiredCancellations = Object.keys(
+            get().cancellingModels,
+          ).filter((id) => !backendDownloading[id]);
 
           set(
             produce((state) => {
+              state.models = result.data;
+              state.error = null;
+
+              // A successful cancel is acknowledged before the worker exits.
+              // Keep that tombstone authoritative while backend state is
+              // briefly stale so refreshes cannot resurrect the spinner.
+              Object.keys(state.cancellingModels).forEach((id) => {
+                delete state.downloadingModels[id];
+                delete state.verifyingModels[id];
+                delete state.extractingModels[id];
+                delete state.downloadProgress[id];
+                delete state.downloadStats[id];
+              });
+
               // Merge: keep frontend state if downloading, add backend state
               Object.keys(backendDownloading).forEach((id) => {
-                state.downloadingModels[id] = true;
+                if (!state.cancellingModels[id]) {
+                  state.downloadingModels[id] = true;
+                }
+              });
+
+              retiredCancellations.forEach((id) => {
+                delete state.cancellingModels[id];
+                delete state.downloadingModels[id];
+                delete state.verifyingModels[id];
+                delete state.extractingModels[id];
+                delete state.downloadProgress[id];
+                delete state.downloadStats[id];
               });
 
               // Remove models that backend says are NOT downloading AND
@@ -166,14 +213,25 @@ export const useModelStore = create<ModelsStore>()(
             }),
           );
 
-          // Arm a stall timer for every backend-reported download. A model
-          // rehydrated as downloading (e.g. right after a cancel the backend
-          // has not observed yet) otherwise shows a spinner with no timer to
-          // recover it if the task never emits progress again. Active
-          // downloads reset the timer on every progress event, so this is a
-          // no-op for healthy transfers.
+          retiredCancellations.forEach((id) => {
+            clearStallTimer(id);
+            stallFailedDownloads.delete(id);
+          });
+
+          // A backend-reported download does not prove which phase it is in: a
+          // fresh frontend may have missed the verification/extraction event.
+          // Only byte-progress events arm this timer. Here we merely disarm a
+          // known completed/phase-transitioned byte stream and leave any live
+          // byte timer already maintained by progress events untouched.
           Object.keys(backendDownloading).forEach((id) => {
-            resetStallTimer(id);
+            const state = get();
+            if (
+              state.verifyingModels[id] ||
+              state.extractingModels[id] ||
+              state.downloadProgress[id]?.percentage >= 100
+            ) {
+              clearStallTimer(id);
+            }
           });
         } else {
           set({ error: `Failed to load models: ${result.error}` });
@@ -235,10 +293,25 @@ export const useModelStore = create<ModelsStore>()(
     downloadModel: async (modelId: string) => {
       try {
         set({ error: null });
+        // Preserve the lifecycle owned by the active request. A duplicate
+        // caller is not a terminal event and must not clear its marker.
+        if (modelId in get().downloadingModels) {
+          return true;
+        }
+        if (modelId in get().cancellingModels) {
+          await get().loadModels();
+          if (modelId in get().cancellingModels) {
+            const message = i18n.t("onboarding.cancelPending");
+            set({ error: message });
+            toast.error(message);
+            return false;
+          }
+        }
         // A new attempt clears any stall marker a previous attempt left behind.
         stallFailedDownloads.delete(modelId);
         set(
           produce((state) => {
+            delete state.cancellingModels[modelId];
             state.downloadingModels[modelId] = true;
             state.downloadProgress[modelId] = {
               model_id: modelId,
@@ -251,13 +324,41 @@ export const useModelStore = create<ModelsStore>()(
         resetStallTimer(modelId);
         const result = await commands.downloadModel(modelId);
         if (result.status !== "ok") {
+          if (result.error === MODEL_DOWNLOAD_ALREADY_ACTIVE) {
+            // A duplicate may be rejoining a worker whose byte phase already
+            // ended. Do not let this caller's speculative timer cancel healthy
+            // verification or extraction; a later byte-progress event will
+            // re-arm the timer if the worker is still downloading bytes.
+            clearStallTimer(modelId);
+            await get().loadModels();
+            return true;
+          }
+          if (result.error === MODEL_DOWNLOAD_CANCELLING) {
+            const message = localizedDownloadError(result.error);
+            clearStallTimer(modelId);
+            set(
+              produce((state) => {
+                state.cancellingModels[modelId] = true;
+                delete state.downloadingModels[modelId];
+                delete state.verifyingModels[modelId];
+                delete state.extractingModels[modelId];
+                delete state.downloadProgress[modelId];
+                delete state.downloadStats[modelId];
+                state.error = message;
+              }),
+            );
+            return false;
+          }
           // Fallback cleanup in case the model-download-failed event was not received
           // (e.g. listener not yet registered). The event handler is a no-op if it
           // arrives after this cleanup since deleting missing keys is safe.
           clearStallTimer(modelId);
           set(
             produce((state) => {
+              delete state.cancellingModels[modelId];
               delete state.downloadingModels[modelId];
+              delete state.verifyingModels[modelId];
+              delete state.extractingModels[modelId];
               delete state.downloadProgress[modelId];
               delete state.downloadStats[modelId];
             }),
@@ -276,7 +377,10 @@ export const useModelStore = create<ModelsStore>()(
         clearStallTimer(modelId);
         set(
           produce((state) => {
+            delete state.cancellingModels[modelId];
             delete state.downloadingModels[modelId];
+            delete state.verifyingModels[modelId];
+            delete state.extractingModels[modelId];
             delete state.downloadProgress[modelId];
             delete state.downloadStats[modelId];
           }),
@@ -293,7 +397,10 @@ export const useModelStore = create<ModelsStore>()(
           clearStallTimer(modelId);
           set(
             produce((state) => {
+              state.cancellingModels[modelId] = true;
               delete state.downloadingModels[modelId];
+              delete state.verifyingModels[modelId];
+              delete state.extractingModels[modelId];
               delete state.downloadProgress[modelId];
               delete state.downloadStats[modelId];
             }),
@@ -306,6 +413,23 @@ export const useModelStore = create<ModelsStore>()(
           // left to clear it. State was already cleared above and by the
           // model-download-cancelled event; the next natural loadModels
           // reconciles with backend truth.
+          return true;
+        } else if (result.error === MODEL_DOWNLOAD_NOT_ACTIVE) {
+          // The backend has no task to cancel, so the frontend marker is stale.
+          // Clear it before reloading; loadModels intentionally preserves a
+          // marker that still has frontend progress.
+          clearStallTimer(modelId);
+          set(
+            produce((state) => {
+              delete state.cancellingModels[modelId];
+              delete state.downloadingModels[modelId];
+              delete state.verifyingModels[modelId];
+              delete state.extractingModels[modelId];
+              delete state.downloadProgress[modelId];
+              delete state.downloadStats[modelId];
+            }),
+          );
+          await get().loadModels();
           return true;
         } else {
           set({ error: `Failed to cancel download: ${result.error}` });
@@ -366,6 +490,9 @@ export const useModelStore = create<ModelsStore>()(
       // Set up event listeners
       listen<DownloadProgress>("model-download-progress", (event) => {
         const progress = event.payload;
+        if (progress.model_id in get().cancellingModels) {
+          return;
+        }
         resetStallTimer(progress.model_id);
         set(
           produce((state) => {
@@ -415,6 +542,7 @@ export const useModelStore = create<ModelsStore>()(
         clearStallTimer(modelId);
         set(
           produce((state) => {
+            delete state.cancellingModels[modelId];
             delete state.downloadingModels[modelId];
             delete state.verifyingModels[modelId];
             delete state.extractingModels[modelId];
@@ -429,18 +557,35 @@ export const useModelStore = create<ModelsStore>()(
         "model-download-failed",
         (event) => {
           const { model_id: modelId, error } = event.payload;
+          if (error === MODEL_DOWNLOAD_ALREADY_ACTIVE) {
+            // The original task still owns this model. Reconcile backend state
+            // without applying terminal cleanup from the rejected duplicate.
+            get().loadModels();
+            return;
+          }
+          const failureAlreadyReported = stallFailedDownloads.delete(modelId);
+          const message = localizedDownloadError(error);
           clearStallTimer(modelId);
           set(
             produce((state) => {
+              if (error === MODEL_DOWNLOAD_CANCELLING) {
+                state.cancellingModels[modelId] = true;
+              } else {
+                delete state.cancellingModels[modelId];
+              }
               delete state.downloadingModels[modelId];
               delete state.verifyingModels[modelId];
               delete state.extractingModels[modelId];
               delete state.downloadProgress[modelId];
               delete state.downloadStats[modelId];
-              state.error = error;
+              if (!failureAlreadyReported) {
+                state.error = message;
+              }
             }),
           );
-          toast.error(error);
+          if (!failureAlreadyReported) {
+            toast.error(message);
+          }
         },
       );
 
@@ -452,6 +597,9 @@ export const useModelStore = create<ModelsStore>()(
         clearStallTimer(modelId);
         set(
           produce((state) => {
+            if (state.cancellingModels[modelId]) {
+              return;
+            }
             state.verifyingModels[modelId] = true;
           }),
         );
@@ -472,6 +620,9 @@ export const useModelStore = create<ModelsStore>()(
         clearStallTimer(modelId);
         set(
           produce((state) => {
+            if (state.cancellingModels[modelId]) {
+              return;
+            }
             state.extractingModels[modelId] = true;
           }),
         );
@@ -505,6 +656,7 @@ export const useModelStore = create<ModelsStore>()(
         clearStallTimer(modelId);
         set(
           produce((state) => {
+            state.cancellingModels[modelId] = true;
             delete state.downloadingModels[modelId];
             delete state.verifyingModels[modelId];
             delete state.extractingModels[modelId];

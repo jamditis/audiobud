@@ -33,6 +33,8 @@
     "downloading": "Đang tải xuống...",
     "customModelDescription": "Không được hỗ trợ chính thức",
     "downloadFailed": "Tải xuống thất bại. Vui lòng thử lại.",
+    "cancelPending": "Quá trình hủy tải xuống vẫn đang hoàn tất. Hãy thử lại sau giây lát.",
+    "downloadNotifyFailed": "Mô hình đã được tải xuống nhưng AudioBud không thể làm mới. Hãy khởi động lại AudioBud để tiếp tục.",
     "modelCard": {
       "accuracy": "độ chính xác",
       "speed": "tốc độ"

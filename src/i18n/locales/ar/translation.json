@@ -33,6 +33,8 @@
     "downloading": "...جاري التنزيل",
     "customModelDescription": "غير مدعوم رسميًا",
     "downloadFailed": "فشل التنزيل. يرجى المحاولة مرة أخرى.",
+    "cancelPending": "لا يزال إلغاء التنزيل قيد الإنهاء. حاول مرة أخرى بعد قليل.",
+    "downloadNotifyFailed": "تم تنزيل النموذج، لكن تعذّر تحديث AudioBud. أعد تشغيل AudioBud للمتابعة.",
     "modelCard": {
       "accuracy": "الدقة",
       "speed": "السرعة"

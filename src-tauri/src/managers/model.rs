@@ -24,6 +24,49 @@ const MODEL_BASE_URL: &str =
 /// unreachable and the download is aborted, so the download UI cannot stall
 /// forever waiting for events that will never arrive.
 const MAX_CONSECUTIVE_PROGRESS_EMIT_FAILURES: u32 = 3;
+// Machine-readable lifecycle errors consumed by src/stores/modelStore.ts.
+const MODEL_DOWNLOAD_ALREADY_ACTIVE: &str = "model_download_already_active";
+const MODEL_DOWNLOAD_CANCELLING: &str = "model_download_cancelling";
+const MODEL_DOWNLOAD_NOTIFY_FAILED: &str = "model_download_notify_failed";
+const MODEL_DOWNLOAD_NOT_ACTIVE: &str = "model_download_not_active";
+const MODEL_DOWNLOAD_STALLED: &str = "model_download_stalled";
+
+#[derive(Debug, PartialEq, Eq)]
+enum DownloadReadDisposition {
+    Cancelled,
+    Failed(&'static str),
+    Continue,
+}
+
+fn classify_download_read(cancelled: bool, timed_out: bool) -> DownloadReadDisposition {
+    if cancelled {
+        DownloadReadDisposition::Cancelled
+    } else if timed_out {
+        DownloadReadDisposition::Failed(MODEL_DOWNLOAD_STALLED)
+    } else {
+        DownloadReadDisposition::Continue
+    }
+}
+
+fn resolve_download_read<T>(
+    model_id: &str,
+    cancel_flag: &AtomicBool,
+    result: std::result::Result<T, reqwest::Error>,
+) -> Result<Option<T>> {
+    let timed_out = result
+        .as_ref()
+        .err()
+        .map(reqwest::Error::is_timeout)
+        .unwrap_or(false);
+    match classify_download_read(cancel_flag.load(Ordering::Relaxed), timed_out) {
+        DownloadReadDisposition::Cancelled => Ok(None),
+        DownloadReadDisposition::Failed(code) => {
+            warn!("Model download read timed out for: {}", model_id);
+            Err(anyhow::anyhow!(code))
+        }
+        DownloadReadDisposition::Continue => result.map(Some).map_err(Into::into),
+    }
+}
 
 fn model_url(filename: &str) -> String {
     format!("{MODEL_BASE_URL}/{filename}")
@@ -72,12 +115,52 @@ pub struct DownloadProgress {
     pub percentage: f64,
 }
 
+/// Releases a worker's two-part ownership record while holding the same lock
+/// order as the claim path. A stale worker must never clear a newer worker's
+/// model flag or cancellation handle.
+fn release_download_claim(
+    available_models: &Mutex<HashMap<String, ModelInfo>>,
+    cancel_flags: &Arc<Mutex<HashMap<String, Arc<AtomicBool>>>>,
+    model_id: &str,
+    cancel_flag: &Arc<AtomicBool>,
+    completed: bool,
+) -> bool {
+    let mut models = available_models.lock().unwrap();
+    let mut flags = cancel_flags.lock().unwrap();
+    let still_owns_download = flags
+        .get(model_id)
+        .map(|flag| Arc::ptr_eq(flag, cancel_flag))
+        .unwrap_or(false);
+    if !still_owns_download {
+        return false;
+    }
+
+    // Completion and cancellation race at the final filesystem move. While
+    // this exact claim is still registered, cancellation wins: leave cleanup
+    // armed so it can release the claim after the caller removes the newly
+    // installed artifact.
+    if completed && cancel_flag.load(Ordering::Relaxed) {
+        return false;
+    }
+
+    if let Some(model) = models.get_mut(model_id) {
+        model.is_downloading = false;
+        if completed {
+            model.is_downloaded = true;
+            model.partial_size = 0;
+        }
+    }
+    flags.remove(model_id);
+    true
+}
+
 /// RAII guard that cleans up download state (`is_downloading` flag and cancel flag)
 /// when dropped, unless explicitly disarmed. This ensures consistent cleanup on
 /// every error path without requiring manual cleanup at each `?` or `return Err`.
 struct DownloadCleanup<'a> {
     available_models: &'a Mutex<HashMap<String, ModelInfo>>,
     cancel_flags: &'a Arc<Mutex<HashMap<String, Arc<AtomicBool>>>>,
+    cancel_flag: Arc<AtomicBool>,
     model_id: String,
     disarmed: bool,
 }
@@ -87,13 +170,13 @@ impl<'a> Drop for DownloadCleanup<'a> {
         if self.disarmed {
             return;
         }
-        {
-            let mut models = self.available_models.lock().unwrap();
-            if let Some(model) = models.get_mut(self.model_id.as_str()) {
-                model.is_downloading = false;
-            }
-        }
-        self.cancel_flags.lock().unwrap().remove(&self.model_id);
+        release_download_claim(
+            self.available_models,
+            self.cancel_flags,
+            &self.model_id,
+            &self.cancel_flag,
+            false,
+        );
     }
 }
 
@@ -729,10 +812,12 @@ impl ModelManager {
         // Models with a live download task keep their is_downloading flag — the task
         // owns it until it exits. Clearing it here (e.g. via delete_model during an
         // active download) would reopen the single-flight guard.
+        let mut models = self.available_models.lock().unwrap();
+        // Snapshot claims while holding available_models. Claims and releases
+        // take the same available_models -> cancel_flags order, so no worker
+        // can appear between this snapshot and the status updates below.
         let active_downloads: HashSet<String> =
             self.cancel_flags.lock().unwrap().keys().cloned().collect();
-
-        let mut models = self.available_models.lock().unwrap();
 
         for model in models.values_mut() {
             if model.is_directory {
@@ -1000,6 +1085,39 @@ impl ModelManager {
         Ok(format!("{:x}", hasher.finalize()))
     }
 
+    /// Claims one model download under the shared ownership lock order.
+    /// Duplicate callers are classified without replacing the active flag;
+    /// a caller arriving while cancellation is pending must not join a worker
+    /// that is about to exit.
+    fn claim_download(
+        available_models: &Mutex<HashMap<String, ModelInfo>>,
+        cancel_flags: &Arc<Mutex<HashMap<String, Arc<AtomicBool>>>>,
+        model_id: &str,
+    ) -> Result<std::result::Result<Arc<AtomicBool>, &'static str>> {
+        let mut models = available_models.lock().unwrap();
+        let mut flags = cancel_flags.lock().unwrap();
+        let model = models
+            .get_mut(model_id)
+            .ok_or_else(|| anyhow::anyhow!("Model not found: {}", model_id))?;
+
+        if model.is_downloading {
+            let cancellation_pending = flags
+                .get(model_id)
+                .map(|flag| flag.load(Ordering::Relaxed))
+                .unwrap_or(false);
+            return Ok(Err(if cancellation_pending {
+                MODEL_DOWNLOAD_CANCELLING
+            } else {
+                MODEL_DOWNLOAD_ALREADY_ACTIVE
+            }));
+        }
+
+        let cancel_flag = Arc::new(AtomicBool::new(false));
+        model.is_downloading = true;
+        flags.insert(model_id.to_string(), cancel_flag.clone());
+        Ok(Ok(cancel_flag))
+    }
+
     /// Emits a download progress event, tracking consecutive failures so callers
     /// can abort the download once the frontend is clearly unreachable.
     fn emit_download_progress(
@@ -1060,39 +1178,20 @@ impl ModelManager {
             0
         };
 
-        // Mark as downloading and register the cancel flag in one critical
-        // section: the two form a single ownership record. Check-and-set
-        // under lock so racing calls cannot both pass. Fresh and resumed
-        // downloads have is_downloading = false here, so the legitimate
-        // resume flow is unaffected. Two concurrent tasks would append to
-        // the same .partial file and clobber each other's cancel flag. If
-        // the flag were inserted only after available_models was released,
-        // update_download_status could run in between, find no cancel flag,
-        // and clear is_downloading — reopening the single-flight guard.
-        // This is the only site that holds both locks at once, so the
-        // available_models -> cancel_flags order cannot deadlock with the
-        // sequential locking elsewhere.
-        let cancel_flag = Arc::new(AtomicBool::new(false));
-        {
-            let mut models = self.available_models.lock().unwrap();
-            let mut flags = self.cancel_flags.lock().unwrap();
-            if let Some(model) = models.get_mut(model_id) {
-                if model.is_downloading {
-                    return Err(anyhow::anyhow!(
-                        "Download already in progress for model: {}",
-                        model_id
-                    ));
-                }
-                model.is_downloading = true;
-            }
-            flags.insert(model_id.to_string(), cancel_flag.clone());
-        }
+        // The model flag and cancel handle form one ownership record. Every
+        // dual-lock site uses available_models -> cancel_flags.
+        let cancel_flag =
+            match Self::claim_download(&self.available_models, &self.cancel_flags, model_id)? {
+                Ok(flag) => flag,
+                Err(code) => return Err(anyhow::anyhow!(code)),
+            };
 
         // Guard ensures is_downloading and cancel_flags are cleaned up on every
         // error path. Disarmed only on success (which sets is_downloaded = true).
         let mut cleanup = DownloadCleanup {
             available_models: &self.available_models,
             cancel_flags: &self.cancel_flags,
+            cancel_flag: cancel_flag.clone(),
             model_id: model_id.to_string(),
             disarmed: false,
         };
@@ -1112,7 +1211,12 @@ impl ModelManager {
             request = request.header("Range", format!("bytes={}-", resume_from));
         }
 
-        let mut response = request.send().await?;
+        let Some(mut response) =
+            resolve_download_read(model_id, &cancel_flag, request.send().await)?
+        else {
+            info!("Download cancelled for: {}", model_id);
+            return Ok(());
+        };
 
         // If we tried to resume but server returned 200 (not 206 Partial Content),
         // the server doesn't support range requests. Delete partial file and restart
@@ -1129,7 +1233,13 @@ impl ModelManager {
             resume_from = 0;
 
             // Restart download without range header
-            response = client.get(&url).send().await?;
+            let Some(restarted_response) =
+                resolve_download_read(model_id, &cancel_flag, client.get(&url).send().await)?
+            else {
+                info!("Download cancelled for: {}", model_id);
+                return Ok(());
+            };
+            response = restarted_response;
         }
 
         // Check for success or partial content status
@@ -1181,17 +1291,15 @@ impl ModelManager {
         let throttle_duration = Duration::from_millis(100);
 
         // Download with progress
-        while let Some(chunk) = stream.next().await {
-            // Check if download was cancelled
-            if cancel_flag.load(Ordering::Relaxed) {
+        while let Some(chunk_result) = stream.next().await {
+            let Some(chunk) = resolve_download_read(model_id, &cancel_flag, chunk_result)? else {
                 drop(file);
                 info!("Download cancelled for: {}", model_id);
-                // Keep partial file for resume functionality.
-                // Guard handles is_downloading + cancel_flags cleanup on drop.
+                // Keep partial file for resume functionality. Cancellation
+                // wins even if the pending read completed with a timeout.
+                // The guard handles lifecycle cleanup on drop.
                 return Ok(());
-            }
-
-            let chunk = chunk?;
+            };
 
             file.write_all(&chunk)?;
             downloaded += chunk.len() as u64;
@@ -1222,12 +1330,22 @@ impl ModelManager {
                         "Aborting download of model {}: progress events are not reaching the frontend",
                         model_id
                     );
-                    return Err(anyhow::anyhow!(
-                        "Download aborted: progress updates could not reach the app window. Please try again."
-                    ));
+                    return Err(anyhow::anyhow!(MODEL_DOWNLOAD_STALLED));
                 }
                 last_emit = Instant::now();
             }
+        }
+
+        // A cancellation can race with clean EOF and leave no next chunk on
+        // which to observe the flag. Do not proceed into verification then.
+        if cancel_flag.load(Ordering::Relaxed) {
+            drop(file);
+            info!("Download cancelled for: {}", model_id);
+            // EOF means this partial is complete, including when the server
+            // omitted Content-Length. A complete partial cannot be resumed
+            // safely, so a retry must start fresh.
+            fs::remove_file(&partial_path)?;
+            return Ok(());
         }
 
         // Emit final progress to ensure 100% is shown
@@ -1245,6 +1363,14 @@ impl ModelManager {
 
         file.flush()?;
         drop(file); // Ensure file is closed before moving
+
+        // Honor a cancellation that arrived after the EOF check but before
+        // verification began.
+        if cancel_flag.load(Ordering::Relaxed) {
+            info!("Download cancelled for: {} (before verification)", model_id);
+            fs::remove_file(&partial_path)?;
+            return Ok(());
+        }
 
         // Verify downloaded file size matches expected size
         if total_size > 0 {
@@ -1277,6 +1403,14 @@ impl ModelManager {
         let _ = self
             .app_handle
             .emit("model-verification-completed", model_id);
+
+        // Hashing is blocking and can outlive a cancel request. Do not install
+        // a verified model after cancellation was acknowledged.
+        if cancel_flag.load(Ordering::Relaxed) {
+            info!("Download cancelled for: {} (after verification)", model_id);
+            let _ = fs::remove_file(&partial_path);
+            return Ok(());
+        }
 
         // Handle directory-based models (extract tar.gz) vs file-based models
         if model_info.is_directory {
@@ -1332,6 +1466,17 @@ impl ModelManager {
                 anyhow::anyhow!(error_msg)
             })?;
 
+            // Extraction is another blocking phase. If cancellation arrived
+            // during it, discard both the completed archive and extracted
+            // staging directory rather than installing the model.
+            if cancel_flag.load(Ordering::Relaxed) {
+                info!("Download cancelled for: {} (after extraction)", model_id);
+                let _ = fs::remove_dir_all(&temp_extract_dir);
+                let _ = fs::remove_file(&partial_path);
+                self.extracting_models.lock().unwrap().remove(model_id);
+                return Ok(());
+            }
+
             // Find the actual extracted directory (archive might have a nested structure)
             let extracted_dirs: Vec<_> = fs::read_dir(&temp_extract_dir)?
                 .filter_map(|entry| entry.ok())
@@ -1376,18 +1521,30 @@ impl ModelManager {
             fs::rename(&partial_path, &model_path)?;
         }
 
-        // Disarm the guard — success path does its own cleanup because it
-        // additionally sets is_downloaded = true.
-        cleanup.disarmed = true;
-        {
-            let mut models = self.available_models.lock().unwrap();
-            if let Some(model) = models.get_mut(model_id) {
-                model.is_downloading = false;
-                model.is_downloaded = true;
-                model.partial_size = 0;
+        // Release the exact worker's ownership atomically. Fail closed if a
+        // newer worker somehow replaced the flag.
+        if !release_download_claim(
+            &self.available_models,
+            &self.cancel_flags,
+            model_id,
+            &cancel_flag,
+            true,
+        ) {
+            if cancel_flag.load(Ordering::Relaxed) {
+                info!("Download cancelled for: {} (during installation)", model_id);
+                if model_info.is_directory {
+                    fs::remove_dir_all(&model_path)?;
+                } else {
+                    fs::remove_file(&model_path)?;
+                }
+                return Ok(());
             }
+            return Err(anyhow::anyhow!(
+                "Download ownership changed before completion for model: {}",
+                model_id
+            ));
         }
-        self.cancel_flags.lock().unwrap().remove(model_id);
+        cleanup.disarmed = true;
 
         // Emit completion event
         if let Err(e) = self.app_handle.emit("model-download-complete", model_id) {
@@ -1401,7 +1558,7 @@ impl ModelManager {
                 "model-download-failed",
                 &serde_json::json!({
                     "model_id": model_id,
-                    "error": "Download completed but the app window could not be notified. Please try again."
+                    "error": MODEL_DOWNLOAD_NOTIFY_FAILED
                 }),
             );
         }
@@ -1542,10 +1699,7 @@ impl ModelManager {
                 // A missing flag means no live download task owns this model's
                 // lifecycle — reporting success here would acknowledge a cancel
                 // that nothing will honor while the download proceeds.
-                return Err(anyhow::anyhow!(
-                    "No active download to cancel for model: {}",
-                    model_id
-                ));
+                return Err(anyhow::anyhow!(MODEL_DOWNLOAD_NOT_ACTIVE));
             }
         }
 
@@ -1736,5 +1890,106 @@ mod tests {
             ModelManager::verify_sha256(&missing_path, Some("anyexpectedhash"), "missing_model");
 
         assert!(result.is_err(), "missing file must return an error");
+    }
+
+    #[test]
+    fn test_cancelled_read_timeout_is_not_reported_as_a_failure() {
+        assert_eq!(
+            classify_download_read(true, true),
+            DownloadReadDisposition::Cancelled,
+            "user cancellation must win when a pending read returns a timeout"
+        );
+    }
+
+    #[test]
+    fn test_read_timeout_uses_a_stable_error_code() {
+        assert_eq!(
+            classify_download_read(false, true),
+            DownloadReadDisposition::Failed(MODEL_DOWNLOAD_STALLED),
+        );
+    }
+
+    fn download_test_model() -> ModelInfo {
+        ModelInfo {
+            id: "small".to_string(),
+            name: "Whisper Small".to_string(),
+            description: "Test".to_string(),
+            filename: "ggml-small.bin".to_string(),
+            url: Some("https://example.com/model.bin".to_string()),
+            sha256: None,
+            size_mb: 100,
+            is_downloaded: false,
+            is_downloading: true,
+            partial_size: 0,
+            is_directory: false,
+            engine_type: EngineType::Whisper,
+            accuracy_score: 0.5,
+            speed_score: 0.5,
+            supports_translation: true,
+            is_recommended: false,
+            supported_languages: vec!["en".to_string()],
+            supports_language_selection: true,
+            is_custom: false,
+        }
+    }
+
+    #[test]
+    fn test_retry_during_cancellation_does_not_join_exiting_worker() {
+        let models = Mutex::new(HashMap::from([(
+            "small".to_string(),
+            download_test_model(),
+        )]));
+        let flag = Arc::new(AtomicBool::new(true));
+        let flags = Arc::new(Mutex::new(HashMap::from([("small".to_string(), flag)])));
+
+        let claim = ModelManager::claim_download(&models, &flags, "small").unwrap();
+
+        assert_eq!(claim.unwrap_err(), MODEL_DOWNLOAD_CANCELLING);
+        assert!(models.lock().unwrap()["small"].is_downloading);
+    }
+
+    #[test]
+    fn test_stale_cleanup_cannot_release_a_newer_worker() {
+        let models = Mutex::new(HashMap::from([(
+            "small".to_string(),
+            download_test_model(),
+        )]));
+        let stale_flag = Arc::new(AtomicBool::new(false));
+        let current_flag = Arc::new(AtomicBool::new(false));
+        let flags = Arc::new(Mutex::new(HashMap::from([(
+            "small".to_string(),
+            current_flag.clone(),
+        )])));
+
+        assert!(!release_download_claim(
+            &models,
+            &flags,
+            "small",
+            &stale_flag,
+            false,
+        ));
+        assert!(models.lock().unwrap()["small"].is_downloading);
+        let stored = flags.lock().unwrap()["small"].clone();
+        assert!(Arc::ptr_eq(&stored, &current_flag));
+    }
+
+    #[test]
+    fn test_completion_cannot_override_an_acknowledged_cancellation() {
+        let models = Mutex::new(HashMap::from([(
+            "small".to_string(),
+            download_test_model(),
+        )]));
+        let flag = Arc::new(AtomicBool::new(true));
+        let flags = Arc::new(Mutex::new(HashMap::from([(
+            "small".to_string(),
+            flag.clone(),
+        )])));
+
+        assert!(!release_download_claim(
+            &models, &flags, "small", &flag, true,
+        ));
+        assert!(models.lock().unwrap()["small"].is_downloading);
+        assert!(!models.lock().unwrap()["small"].is_downloaded);
+        assert!(flags.lock().unwrap().contains_key("small"));
     }
 }

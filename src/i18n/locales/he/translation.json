@@ -33,6 +33,8 @@
     "downloading": "מוריד...",
     "customModelDescription": "לא נתמך באופן רשמי",
     "downloadFailed": "ההורדה נכשלה. נסה שוב.",
+    "cancelPending": "ביטול ההורדה עדיין מסתיים. נסה שוב בעוד רגע.",
+    "downloadNotifyFailed": "המודל הורד, אך AudioBud לא הצליח להתרענן. הפעל מחדש את AudioBud כדי להמשיך.",
     "modelCard": {
       "accuracy": "דיוק",
       "speed": "מהירות"

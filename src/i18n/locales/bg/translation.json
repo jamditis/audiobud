@@ -33,6 +33,8 @@
     "downloading": "Изтегля се...",
     "customModelDescription": "Не се поддържа официално",
     "downloadFailed": "Изтеглянето не бе успешно. Опитайте отново.",
+    "cancelPending": "Отмяната на изтеглянето все още завършва. Опитайте отново след малко.",
+    "downloadNotifyFailed": "Моделът е изтеглен, но AudioBud не можа да се обнови. Рестартирайте AudioBud, за да продължите.",
     "modelCard": {
       "accuracy": "точност",
       "speed": "скорост"

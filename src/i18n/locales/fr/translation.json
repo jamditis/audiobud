@@ -33,6 +33,8 @@
     "downloading": "Téléchargement...",
     "customModelDescription": "Non officiellement pris en charge",
     "downloadFailed": "Échec du téléchargement. Veuillez réessayer.",
+    "cancelPending": "L’annulation du téléchargement est encore en cours. Réessayez dans un instant.",
+    "downloadNotifyFailed": "Le modèle a été téléchargé, mais AudioBud n’a pas pu s’actualiser. Redémarrez AudioBud pour continuer.",
     "modelCard": {
       "accuracy": "précision",
       "speed": "vitesse"

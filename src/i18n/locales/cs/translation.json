@@ -33,6 +33,8 @@
     "downloading": "Stahování...",
     "customModelDescription": "Oficiálně nepodporováno",
     "downloadFailed": "Stahování se nezdařilo. Zkuste to prosím znovu.",
+    "cancelPending": "Rušení stahování se ještě dokončuje. Zkuste to znovu za chvíli.",
+    "downloadNotifyFailed": "Model byl stažen, ale AudioBud se nepodařilo aktualizovat. Pokračujte restartováním AudioBud.",
     "modelCard": {
       "accuracy": "přesnost",
       "speed": "rychlost"
