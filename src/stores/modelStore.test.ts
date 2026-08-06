@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
-
 type CommandResult<T> =
   | { status: "ok"; data: T }
   | { status: "error"; error: string };
@@ -155,7 +154,6 @@ describe("model download lifecycle", () => {
         },
       },
     });
-
     expect(await useModelStore.getState().downloadModel("small")).toBe(true);
     expect(downloadModelCalls).toBe(0);
     expect(useModelStore.getState().downloadingModels.small).toBe(true);
