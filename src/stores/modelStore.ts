@@ -3,6 +3,7 @@ import { subscribeWithSelector } from "zustand/middleware";
 import { produce } from "immer";
 import { listen } from "@tauri-apps/api/event";
 import { commands, type ModelInfo } from "@/bindings";
+import i18n from "@/i18n";
 import { toast } from "sonner";
 
 interface DownloadProgress {
@@ -24,6 +25,7 @@ interface ModelsStore {
   models: ModelInfo[];
   currentModel: string;
   downloadingModels: Record<string, true>;
+  cancellingModels: Record<string, true>;
   verifyingModels: Record<string, true>;
   extractingModels: Record<string, true>;
   downloadProgress: Record<string, DownloadProgress>;
@@ -61,6 +63,7 @@ export const useModelStore = create<ModelsStore>()(
     models: [],
     currentModel: "",
     downloadingModels: {},
+    cancellingModels: {},
     verifyingModels: {},
     extractingModels: {},
     downloadProgress: {},
@@ -81,11 +84,15 @@ export const useModelStore = create<ModelsStore>()(
       try {
         const result = await commands.getAvailableModels();
         if (result.status === "ok") {
-          set({ models: result.data, error: null });
-
-          // Sync downloading state from backend
           set(
             produce((state) => {
+              state.models = result.data;
+              state.error = null;
+
+              // Sync downloading state from backend. A successful cancel is
+              // acknowledged before the backend worker necessarily exits, so
+              // cancellingModels temporarily masks stale is_downloading=true
+              // responses until the worker releases ownership.
               const backendDownloading: Record<string, true> = {};
               result.data
                 .filter((m) => m.is_downloading)
@@ -95,7 +102,20 @@ export const useModelStore = create<ModelsStore>()(
 
               // Merge: keep frontend state if downloading, add backend state
               Object.keys(backendDownloading).forEach((id) => {
-                state.downloadingModels[id] = true;
+                if (!state.cancellingModels[id]) {
+                  state.downloadingModels[id] = true;
+                }
+              });
+
+              // Once the backend no longer reports the worker, the cancel
+              // tombstone has served its purpose and a later retry may start.
+              Object.keys(state.cancellingModels).forEach((id) => {
+                if (!backendDownloading[id]) {
+                  delete state.cancellingModels[id];
+                  delete state.downloadingModels[id];
+                  delete state.downloadProgress[id];
+                  delete state.downloadStats[id];
+                }
               });
 
               // Remove models that backend says are NOT downloading AND
@@ -167,6 +187,30 @@ export const useModelStore = create<ModelsStore>()(
     downloadModel: async (modelId: string) => {
       try {
         set({ error: null });
+
+        // A repeated click/request joins the existing frontend operation. Do
+        // not issue a second IPC call whose "already in progress" response
+        // could be mistaken for a terminal failure and clear live state.
+        if (modelId in get().downloadingModels) {
+          return true;
+        }
+
+        // The backend still owns this model until it observes an acknowledged
+        // cancellation. Refresh once so the same retry can proceed if that
+        // worker has exited; otherwise leave the cancellation suppressed.
+        if (modelId in get().cancellingModels) {
+          await get().loadModels();
+          if (modelId in get().downloadingModels) {
+            return true;
+          }
+          if (modelId in get().cancellingModels) {
+            const message = i18n.t("onboarding.downloadFailed");
+            set({ error: message });
+            toast.error(message);
+            return false;
+          }
+        }
+
         set(
           produce((state) => {
             state.downloadingModels[modelId] = true;
@@ -213,14 +257,17 @@ export const useModelStore = create<ModelsStore>()(
         if (result.status === "ok") {
           set(
             produce((state) => {
+              state.cancellingModels[modelId] = true;
               delete state.downloadingModels[modelId];
               delete state.downloadProgress[modelId];
               delete state.downloadStats[modelId];
             }),
           );
 
-          // Reload models to sync with backend state
-          await get().loadModels();
+          // The backend task still owns is_downloading until it observes the
+          // cancel flag and exits. cancellingModels prevents any intervening
+          // loadModels call from resurrecting the spinner; the first refresh
+          // after ownership ends removes that tombstone.
           return true;
         } else {
           set({ error: `Failed to cancel download: ${result.error}` });
@@ -283,6 +330,9 @@ export const useModelStore = create<ModelsStore>()(
         const progress = event.payload;
         set(
           produce((state) => {
+            if (state.cancellingModels[progress.model_id]) {
+              return;
+            }
             state.downloadProgress[progress.model_id] = progress;
           }),
         );
@@ -291,6 +341,9 @@ export const useModelStore = create<ModelsStore>()(
         const now = Date.now();
         set(
           produce((state) => {
+            if (state.cancellingModels[progress.model_id]) {
+              return;
+            }
             const current = state.downloadStats[progress.model_id];
 
             if (!current) {
@@ -328,10 +381,20 @@ export const useModelStore = create<ModelsStore>()(
         const modelId = event.payload;
         set(
           produce((state) => {
+            delete state.cancellingModels[modelId];
             delete state.downloadingModels[modelId];
             delete state.verifyingModels[modelId];
             delete state.downloadProgress[modelId];
             delete state.downloadStats[modelId];
+            // The backend emits completion only after the model is installed,
+            // so mark it downloaded now. The onboarding watcher advances on
+            // is_downloaded && nothing in flight; without this it can observe
+            // the gap between clearing in-flight state and the loadModels()
+            // refresh below and abandon a successful download.
+            const model = state.models.find((m: ModelInfo) => m.id === modelId);
+            if (model) {
+              model.is_downloaded = true;
+            }
           }),
         );
         get().loadModels();
@@ -343,6 +406,7 @@ export const useModelStore = create<ModelsStore>()(
           const { model_id: modelId, error } = event.payload;
           set(
             produce((state) => {
+              delete state.cancellingModels[modelId];
               delete state.downloadingModels[modelId];
               delete state.verifyingModels[modelId];
               delete state.downloadProgress[modelId];
@@ -408,8 +472,10 @@ export const useModelStore = create<ModelsStore>()(
         const modelId = event.payload;
         set(
           produce((state) => {
+            state.cancellingModels[modelId] = true;
             delete state.downloadingModels[modelId];
             delete state.verifyingModels[modelId];
+            delete state.extractingModels[modelId];
             delete state.downloadProgress[modelId];
             delete state.downloadStats[modelId];
           }),

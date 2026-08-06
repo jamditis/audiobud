@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import type { ModelInfo } from "@/bindings";
@@ -6,6 +6,10 @@ import type { ModelCardStatus } from "./ModelCard";
 import ModelCard from "./ModelCard";
 import HandyTextLogo from "../icons/HandyTextLogo";
 import { useModelStore } from "../../stores/modelStore";
+import {
+  claimOnboardingSelection,
+  type OnboardingSelectionGuard,
+} from "./onboardingSelection";
 
 interface OnboardingProps {
   onModelSelected: () => void;
@@ -17,6 +21,7 @@ const Onboarding: React.FC<OnboardingProps> = ({ onModelSelected }) => {
     models,
     downloadModel,
     selectModel,
+    cancelDownload,
     downloadingModels,
     verifyingModels,
     extractingModels,
@@ -24,6 +29,7 @@ const Onboarding: React.FC<OnboardingProps> = ({ onModelSelected }) => {
     downloadStats,
   } = useModelStore();
   const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
+  const selectionGuard = useRef<OnboardingSelectionGuard>({ modelId: null });
 
   const isDownloading = selectedModelId !== null;
 
@@ -32,25 +38,33 @@ const Onboarding: React.FC<OnboardingProps> = ({ onModelSelected }) => {
     if (!selectedModelId) return;
 
     const model = models.find((m) => m.id === selectedModelId);
-    const stillDownloading = selectedModelId in downloadingModels;
-    const stillVerifying = selectedModelId in verifyingModels;
-    const stillExtracting = selectedModelId in extractingModels;
+    const inFlight =
+      selectedModelId in downloadingModels ||
+      selectedModelId in verifyingModels ||
+      selectedModelId in extractingModels;
 
-    if (
-      model?.is_downloaded &&
-      !stillDownloading &&
-      !stillVerifying &&
-      !stillExtracting
-    ) {
-      // Model is ready — select it and transition
+    if (model?.is_downloaded && !inFlight) {
+      if (!claimOnboardingSelection(selectionGuard.current, selectedModelId)) {
+        return;
+      }
+
+      // Model is ready — select it and transition. A cancel that arrives too
+      // late to stop the pipeline lands here as well: the model completed,
+      // so onboarding proceeds with it.
       selectModel(selectedModelId).then((success) => {
         if (success) {
           onModelSelected();
         } else {
           toast.error(t("onboarding.errors.selectModel"));
+          selectionGuard.current.modelId = null;
           setSelectedModelId(null);
         }
       });
+    } else if (!model?.is_downloaded && !inFlight) {
+      // Download ended without a usable model (cancelled or failed) — unlock
+      // the cards so another model can be picked.
+      selectionGuard.current.modelId = null;
+      setSelectedModelId(null);
     }
   }, [
     selectedModelId,
@@ -63,6 +77,7 @@ const Onboarding: React.FC<OnboardingProps> = ({ onModelSelected }) => {
   ]);
 
   const handleDownloadModel = async (modelId: string) => {
+    selectionGuard.current.modelId = null;
     setSelectedModelId(modelId);
 
     // Error toast is handled centrally by the model-download-failed event listener
@@ -71,6 +86,13 @@ const Onboarding: React.FC<OnboardingProps> = ({ onModelSelected }) => {
     if (!success) {
       setSelectedModelId(null);
     }
+  };
+
+  const handleCancelDownload = async (modelId: string) => {
+    // modelStore clears download state on success and on the
+    // model-download-cancelled event; the watcher above unlocks the cards
+    // once nothing is in flight for this model.
+    await cancelDownload(modelId);
   };
 
   const getModelStatus = (modelId: string): ModelCardStatus => {
@@ -111,6 +133,7 @@ const Onboarding: React.FC<OnboardingProps> = ({ onModelSelected }) => {
                 disabled={isDownloading}
                 onSelect={handleDownloadModel}
                 onDownload={handleDownloadModel}
+                onCancel={handleCancelDownload}
                 downloadProgress={getModelDownloadProgress(model.id)}
                 downloadSpeed={getModelDownloadSpeed(model.id)}
               />
@@ -131,6 +154,7 @@ const Onboarding: React.FC<OnboardingProps> = ({ onModelSelected }) => {
                 disabled={isDownloading}
                 onSelect={handleDownloadModel}
                 onDownload={handleDownloadModel}
+                onCancel={handleCancelDownload}
                 downloadProgress={getModelDownloadProgress(model.id)}
                 downloadSpeed={getModelDownloadSpeed(model.id)}
               />
