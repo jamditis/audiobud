@@ -23,6 +23,11 @@ pub const PARAKEET_INPUT_TOO_LONG_PREFIX: &str = "parakeet_input_too_long:";
 // transcription.rs because CI replaces that manager with
 // transcription_mock.rs. Callers that compile in both modes must not import
 // definitions from the swapped implementation.
+/// Error used when a transcription or model load is refused because an
+/// earlier transcription timed out and its worker still holds an engine.
+/// Kept consistent with the `errors.transcriptionTimeout` toast copy: both
+/// point at restarting AudioBud, since retrying or switching models is
+/// refused while the engine is stuck.
 pub(crate) const WEDGED_ENGINE_ERROR: &str =
     "The transcription engine is stuck from an earlier timeout. Restart AudioBud to recover.";
 pub(crate) const MODEL_NOT_LOADED_ERROR: &str = "Model is not loaded for transcription.";

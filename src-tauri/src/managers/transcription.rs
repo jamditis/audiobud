@@ -67,11 +67,6 @@ impl Drop for LoadingGuard {
     }
 }
 
-/// Error used when a transcription or model load is refused because an
-/// earlier transcription timed out and its worker still holds an engine.
-/// Kept consistent with the `errors.transcriptionTimeout` toast copy: both
-/// point at restarting AudioBud, since retrying or switching models is
-/// refused while the engine is stuck.
 #[derive(Clone)]
 pub struct TranscriptionManager {
     engine: Arc<GenerationGate<LoadedEngine>>,
