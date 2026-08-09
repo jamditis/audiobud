@@ -3,8 +3,8 @@ import { subscribeWithSelector } from "zustand/middleware";
 import { produce } from "immer";
 import { listen } from "@tauri-apps/api/event";
 import { commands, type ModelInfo } from "@/bindings";
-import { toast } from "sonner";
 import i18n from "@/i18n";
+import { toast } from "sonner";
 
 interface DownloadProgress {
   model_id: string;
@@ -31,6 +31,7 @@ const MODEL_DOWNLOAD_ALREADY_ACTIVE = "model_download_already_active";
 const MODEL_DOWNLOAD_CANCELLING = "model_download_cancelling";
 const MODEL_DOWNLOAD_NOTIFY_FAILED = "model_download_notify_failed";
 const MODEL_DOWNLOAD_NOT_ACTIVE = "model_download_not_active";
+const MODEL_DOWNLOAD_CANCEL_TOO_LATE = "model_download_cancel_too_late";
 const MODEL_DOWNLOAD_STALLED = "model_download_stalled";
 
 const stallTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -170,7 +171,6 @@ export const useModelStore = create<ModelsStore>()(
           const retiredCancellations = Object.keys(
             get().cancellingModels,
           ).filter((id) => !backendDownloading[id]);
-
           set(
             produce((state) => {
               state.models = result.data;
@@ -406,13 +406,10 @@ export const useModelStore = create<ModelsStore>()(
             }),
           );
 
-          // No immediate loadModels() here: the backend task still owns
-          // is_downloading until it observes the cancel flag and exits, so a
-          // reload now would merge the still-active download back into
-          // downloadingModels and re-stick the spinner with no terminal event
-          // left to clear it. State was already cleared above and by the
-          // model-download-cancelled event; the next natural loadModels
-          // reconciles with backend truth.
+          // The backend task still owns is_downloading until it observes the
+          // cancel flag and exits. cancellingModels prevents any intervening
+          // loadModels call from resurrecting the spinner; the first refresh
+          // after ownership ends removes that tombstone.
           return true;
         } else if (result.error === MODEL_DOWNLOAD_NOT_ACTIVE) {
           // The backend has no task to cancel, so the frontend marker is stale.
@@ -431,6 +428,12 @@ export const useModelStore = create<ModelsStore>()(
           );
           await get().loadModels();
           return true;
+        } else if (result.error === MODEL_DOWNLOAD_CANCEL_TOO_LATE) {
+          // Installation already won the backend's atomic commit race. Refresh
+          // the completed model but report that cancellation was rejected so
+          // onboarding retains the selection and advances normally.
+          await get().loadModels();
+          return false;
         } else {
           set({ error: `Failed to cancel download: ${result.error}` });
           return false;
@@ -496,6 +499,9 @@ export const useModelStore = create<ModelsStore>()(
         resetStallTimer(progress.model_id);
         set(
           produce((state) => {
+            if (state.cancellingModels[progress.model_id]) {
+              return;
+            }
             state.downloadProgress[progress.model_id] = progress;
           }),
         );
@@ -504,6 +510,9 @@ export const useModelStore = create<ModelsStore>()(
         const now = Date.now();
         set(
           produce((state) => {
+            if (state.cancellingModels[progress.model_id]) {
+              return;
+            }
             const current = state.downloadStats[progress.model_id];
 
             if (!current) {
@@ -548,6 +557,15 @@ export const useModelStore = create<ModelsStore>()(
             delete state.extractingModels[modelId];
             delete state.downloadProgress[modelId];
             delete state.downloadStats[modelId];
+            // The backend emits completion only after the model is installed,
+            // so mark it downloaded now. The onboarding watcher advances on
+            // is_downloaded && nothing in flight; without this it can observe
+            // the gap between clearing in-flight state and the loadModels()
+            // refresh below and abandon a successful download.
+            const model = state.models.find((m: ModelInfo) => m.id === modelId);
+            if (model) {
+              model.is_downloaded = true;
+            }
           }),
         );
         get().loadModels();
