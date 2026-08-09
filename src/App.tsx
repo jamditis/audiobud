@@ -10,6 +10,7 @@ import {
 import {
   ModelStateEvent,
   RecordingErrorEvent,
+  TranscriptionErrorEvent,
   TranscriptionTimeoutEvent,
 } from "./lib/types/events";
 import "./App.css";
@@ -22,6 +23,10 @@ import { useSettings } from "./hooks/useSettings";
 import { useSettingsStore } from "./stores/settingsStore";
 import { commands } from "@/bindings";
 import { getLanguageDirection, initializeRTL } from "@/lib/utils/rtl";
+import {
+  classifyTranscriptionError,
+  recordingDurationLabel,
+} from "@/lib/transcription-error";
 
 type OnboardingStep = "accessibility" | "model" | "done";
 const PRODUCT_NAME = "AudioBud";
@@ -183,6 +188,32 @@ function App() {
           description: t("errors.transcriptionTimeout", {
             seconds: event.payload.timeout_secs,
           }),
+        });
+      },
+    );
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, [t]);
+
+  // Listen for transcription failures (e.g. Parakeet refusing a recording
+  // past its length limit, issue #169) and show a toast. The payload carries
+  // the backend's specific explanation, shown like the model-load error.
+  useEffect(() => {
+    const unlisten = listen<TranscriptionErrorEvent>(
+      "transcription-error",
+      (event) => {
+        const presentation = classifyTranscriptionError(event.payload.message);
+        if (presentation.kind === "generic") {
+          console.error("Transcription failed:", event.payload.message);
+        }
+        toast.error(t("errors.transcriptionErrorTitle"), {
+          description:
+            presentation.kind === "generic"
+              ? t("errors.transcriptionErrorGeneric")
+              : t("errors.parakeetInputTooLong", {
+                  duration: recordingDurationLabel(presentation.seconds),
+                }),
         });
       },
     );

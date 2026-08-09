@@ -1,4 +1,4 @@
-use crate::actions::{process_transcription_output, TranscriptionTimeoutEvent};
+use crate::actions::process_transcription_output;
 use crate::audio_toolkit::constants::WHISPER_SAMPLE_RATE;
 use crate::managers::{
     history::{HistoryManager, PaginatedHistory},
@@ -6,7 +6,7 @@ use crate::managers::{
     watchdog::{transcription_watchdog_timeout, WatchdogOutcome},
 };
 use std::sync::Arc;
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, State};
 
 #[tauri::command]
 #[specta::specta]
@@ -102,16 +102,9 @@ pub async fn retry_history_entry_transcription(
     {
         WatchdogOutcome::Completed(result) => result.map_err(|e| e.to_string())?,
         WatchdogOutcome::TimedOut => {
-            // Emit the same event as the live pipeline so the user sees the
-            // specific timeout toast (HistorySettings only shows a generic
-            // retry-failed message for the command error), while the Err
-            // return keeps the command contract for the frontend await.
-            let _ = app.emit(
-                "transcription-timeout",
-                TranscriptionTimeoutEvent {
-                    timeout_secs: watchdog_timeout.as_secs(),
-                },
-            );
+            // Keep the timeout in the command's Result contract. HistorySettings
+            // recognizes this exact shape and renders the same localized timeout
+            // toast as the live pipeline without also receiving a duplicate event.
             return Err(format!(
                 "Transcription timed out after {}s",
                 watchdog_timeout.as_secs()

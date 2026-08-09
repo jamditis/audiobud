@@ -802,8 +802,11 @@
     "modelLoadFailedUnknown": "unbekanntes Modell",
     "pasteFailedTitle": "Text konnte nicht eingefügt werden",
     "pasteFailed": "Der Text konnte nicht in die aktive Anwendung eingefügt werden.",
+    "transcriptionErrorTitle": "Transkription fehlgeschlagen",
+    "transcriptionErrorGeneric": "Die Aufnahme konnte nicht transkribiert werden. Versuche es erneut oder wähle ein anderes Modell.",
     "transcriptionTimeoutTitle": "Zeitüberschreitung bei der Transkription",
-    "transcriptionTimeout": "Die Engine hat nach {{seconds}} Sekunden nicht reagiert und hängt möglicherweise. Starte AudioBud neu, wenn das häufiger vorkommt."
+    "transcriptionTimeout": "Die Engine hat nach {{seconds}} Sekunden nicht reagiert und hängt möglicherweise. Starte AudioBud neu, wenn das häufiger vorkommt.",
+    "parakeetInputTooLong": "Diese Aufnahme ist {{duration}} lang. Parakeet kann Aufnahmen über etwa 6:30 nicht transkribieren, da späteres Audio unbemerkt ausgelassen würde. Verwende für lange Aufnahmen ein Whisper-Modell."
   },
   "appLanguage": {
     "title": "Anwendungssprache",

@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { listen } from "@tauri-apps/api/event";
 import { commands } from "@/bindings";
+import { modelLoadingFailureMessage } from "@/lib/model-state-error";
 import { getTranslatedModelName } from "../../lib/utils/modelTranslation";
 import { useModelStore } from "../../stores/modelStore";
 import ModelStatusButton from "./ModelStatusButton";
@@ -86,7 +87,9 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({ onError }) => {
             break;
           case "loading_failed":
             setModelStatus("error");
-            setModelError(error || "Failed to load model");
+            setModelError(
+              modelLoadingFailureMessage(error, t("modelSelector.modelError")),
+            );
             setPendingModelId(null);
             break;
           case "unloaded":
@@ -138,7 +141,7 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({ onError }) => {
       modelStateUnlisten.then((fn) => fn());
       downloadCompleteUnlisten.then((fn) => fn());
     };
-  }, [selectModel]);
+  }, [selectModel, t]);
 
   const handleModelSelect = async (modelId: string) => {
     setPendingModelId(modelId);

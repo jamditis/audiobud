@@ -802,8 +802,11 @@
     "modelLoadFailedUnknown": "modèle inconnu",
     "pasteFailedTitle": "Échec du collage du texte",
     "pasteFailed": "Le texte n'a pas pu être collé dans l'application active.",
+    "transcriptionErrorTitle": "Échec de la transcription",
+    "transcriptionErrorGeneric": "L’enregistrement n’a pas pu être transcrit. Réessayez ou choisissez un autre modèle.",
     "transcriptionTimeoutTitle": "Délai de transcription dépassé",
-    "transcriptionTimeout": "Le moteur n'a pas répondu après {{seconds}} secondes et semble bloqué. Redémarrez AudioBud si cela se reproduit."
+    "transcriptionTimeout": "Le moteur n'a pas répondu après {{seconds}} secondes et semble bloqué. Redémarrez AudioBud si cela se reproduit.",
+    "parakeetInputTooLong": "Cet enregistrement dure {{duration}}. Parakeet ne peut pas transcrire les enregistrements de plus d'environ 6:30, car la suite de l'audio serait omise sans avertissement. Utilisez un modèle Whisper pour les longs enregistrements."
   },
   "appLanguage": {
     "title": "Langue de l'application",

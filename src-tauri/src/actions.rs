@@ -7,6 +7,7 @@ use crate::audio_toolkit::{
     is_no_input_device_error, strip_to_raw_text,
 };
 use crate::managers::audio::AudioRecordingManager;
+use crate::managers::engine_limits::{MODEL_AUTO_LOAD_FAILED_ERROR, WEDGED_ENGINE_ERROR};
 use crate::managers::history::HistoryManager;
 use crate::managers::transcription::TranscriptionManager;
 use crate::managers::watchdog::{transcription_watchdog_timeout, WatchdogOutcome};
@@ -37,6 +38,22 @@ struct RecordingErrorEvent {
 #[derive(Clone, serde::Serialize)]
 pub(crate) struct TranscriptionTimeoutEvent {
     pub(crate) timeout_secs: u64,
+}
+
+/// Payload of the `transcription-error` event, emitted when a transcription
+/// fails so the user sees why (e.g. the Parakeet engine refusing a recording
+/// that exceeds its length limit, issue #169) instead of silence.
+#[derive(Clone, serde::Serialize)]
+pub(crate) struct TranscriptionErrorEvent {
+    pub(crate) message: String,
+}
+
+/// Model-load failures already emit `model-state-changed/loading_failed`,
+/// which the frontend turns into a specific toast. The manager returns the
+/// auto-load sentinel only when that event was emitted; a plain missing-model
+/// sentinel can instead follow manual unload/deletion and is not suppressed.
+fn transcription_error_already_notified(message: &str) -> bool {
+    matches!(message, MODEL_AUTO_LOAD_FAILED_ERROR | WEDGED_ENGINE_ERROR)
 }
 
 /// Drop guard that notifies the [`TranscriptionCoordinator`] when the
@@ -647,6 +664,10 @@ impl ShortcutAction for TranscribeAction {
                     let transcription_time = Instant::now();
                     let watchdog_timeout =
                         transcription_watchdog_timeout(sample_count, WHISPER_SAMPLE_RATE);
+                    // Set when the failure already emitted its own specific
+                    // event, so the generic `transcription-error` emit in the
+                    // Err arm below doesn't double up the toasts.
+                    let mut error_already_notified = false;
                     let transcription_result =
                         match tm.transcribe_with_watchdog(samples, watchdog_timeout) {
                             WatchdogOutcome::Completed(result) => result,
@@ -656,6 +677,7 @@ impl ShortcutAction for TranscribeAction {
                                     "transcription-timeout",
                                     TranscriptionTimeoutEvent { timeout_secs },
                                 );
+                                error_already_notified = true;
                                 Err(anyhow::anyhow!(
                                     "Transcription timed out after {}s",
                                     timeout_secs
@@ -766,6 +788,20 @@ impl ShortcutAction for TranscribeAction {
                         }
                         Err(err) => {
                             debug!("Global Shortcut Transcription error: {}", err);
+                            // Surface the failure to the user (e.g. Parakeet
+                            // refusing a recording past its length limit,
+                            // issue #169) instead of only logging it.
+                            let error_message = err.to_string();
+                            if !error_already_notified
+                                && !transcription_error_already_notified(&error_message)
+                            {
+                                let _ = ah.emit(
+                                    "transcription-error",
+                                    TranscriptionErrorEvent {
+                                        message: error_message,
+                                    },
+                                );
+                            }
                             // Save entry with empty text so user can retry
                             if wav_saved {
                                 if let Err(save_err) = hm.save_entry(
@@ -871,7 +907,28 @@ pub static ACTION_MAP: Lazy<HashMap<String, Arc<dyn ShortcutAction>>> = Lazy::ne
 
 #[cfg(test)]
 mod tests {
-    use super::{effective_raw_output, force_english_i_casing};
+    use super::{
+        effective_raw_output, force_english_i_casing, transcription_error_already_notified,
+    };
+    use crate::managers::engine_limits::{
+        MODEL_AUTO_LOAD_FAILED_ERROR, MODEL_NOT_LOADED_ERROR, WEDGED_ENGINE_ERROR,
+    };
+
+    #[test]
+    fn suppresses_generic_toasts_for_model_failures_with_specific_events() {
+        // A missing engine can also be caused by a manual unload or active
+        // model deletion, neither of which emits `loading_failed`.
+        assert!(!transcription_error_already_notified(
+            MODEL_NOT_LOADED_ERROR
+        ));
+        assert!(transcription_error_already_notified(
+            MODEL_AUTO_LOAD_FAILED_ERROR
+        ));
+        assert!(transcription_error_already_notified(WEDGED_ENGINE_ERROR));
+        assert!(!transcription_error_already_notified(
+            "parakeet_input_too_long:391"
+        ));
+    }
 
     #[test]
     fn effective_raw_output_per_dictation_overrides_global() {

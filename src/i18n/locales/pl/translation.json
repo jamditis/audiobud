@@ -806,8 +806,11 @@
     "modelLoadFailedUnknown": "nieznany model",
     "pasteFailedTitle": "Nie udało się wkleić tekstu",
     "pasteFailed": "Nie można było wkleić tekstu do aktywnej aplikacji.",
+    "transcriptionErrorTitle": "Transkrypcja nie powiodła się",
+    "transcriptionErrorGeneric": "Nie udało się transkrybować nagrania. Spróbuj ponownie lub wybierz inny model.",
     "transcriptionTimeoutTitle": "Przekroczono czas transkrypcji",
-    "transcriptionTimeout": "Silnik nie odpowiedział przez {{seconds}} sekund i mógł się zawiesić. Uruchom AudioBud ponownie, jeśli to się powtarza."
+    "transcriptionTimeout": "Silnik nie odpowiedział przez {{seconds}} sekund i mógł się zawiesić. Uruchom AudioBud ponownie, jeśli to się powtarza.",
+    "parakeetInputTooLong": "To nagranie ma długość {{duration}}. Parakeet nie może transkrybować nagrań dłuższych niż około 6:30, ponieważ dalszy dźwięk zostałby pominięty bez ostrzeżenia. Do długich nagrań użyj modelu Whisper."
   },
   "appLanguage": {
     "title": "Język aplikacji",
