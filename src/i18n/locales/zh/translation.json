@@ -33,6 +33,8 @@
     "downloading": "下载中...",
     "customModelDescription": "非官方支持",
     "downloadFailed": "下载失败。请重试。",
+    "cancelPending": "下载取消操作仍在完成中。请稍后重试。",
+    "downloadNotifyFailed": "模型已下载，但 AudioBud 无法刷新。请重启 AudioBud 以继续。",
     "modelCard": {
       "accuracy": "准确度",
       "speed": "速度"

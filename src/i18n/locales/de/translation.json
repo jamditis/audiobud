@@ -33,6 +33,8 @@
     "downloading": "Wird heruntergeladen...",
     "customModelDescription": "Nicht offiziell unterstützt",
     "downloadFailed": "Download fehlgeschlagen. Bitte erneut versuchen.",
+    "cancelPending": "Der Abbruch des Downloads wird noch abgeschlossen. Versuche es gleich noch einmal.",
+    "downloadNotifyFailed": "Das Modell wurde heruntergeladen, aber AudioBud konnte nicht aktualisiert werden. Starte AudioBud neu, um fortzufahren.",
     "modelCard": {
       "accuracy": "Genauigkeit",
       "speed": "Geschwindigkeit"

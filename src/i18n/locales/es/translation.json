@@ -33,6 +33,8 @@
     "downloading": "Descargando...",
     "customModelDescription": "Sin soporte oficial",
     "downloadFailed": "La descarga falló. Por favor, inténtalo de nuevo.",
+    "cancelPending": "La cancelación de la descarga aún está terminando. Inténtalo de nuevo en un momento.",
+    "downloadNotifyFailed": "El modelo se descargó, pero AudioBud no pudo actualizarse. Reinicia AudioBud para continuar.",
     "modelCard": {
       "accuracy": "precisión",
       "speed": "velocidad"

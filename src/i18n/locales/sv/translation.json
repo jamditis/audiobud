@@ -33,6 +33,8 @@
     "downloading": "Laddar ner...",
     "customModelDescription": "Stöds inte officiellt",
     "downloadFailed": "Nedladdningen misslyckades. Försök igen.",
+    "cancelPending": "Nedladdningen håller fortfarande på att avbrytas. Försök igen om en stund.",
+    "downloadNotifyFailed": "Modellen hämtades, men AudioBud kunde inte uppdateras. Starta om AudioBud för att fortsätta.",
     "modelCard": {
       "accuracy": "noggrannhet",
       "speed": "hastighet"

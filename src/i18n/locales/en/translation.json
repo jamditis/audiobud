@@ -33,6 +33,8 @@
     "downloading": "Downloading...",
     "customModelDescription": "Not officially supported",
     "downloadFailed": "Download failed. Please try again.",
+    "cancelPending": "Cancellation is still finishing. Try again in a moment.",
+    "downloadNotifyFailed": "The model downloaded, but AudioBud could not refresh. Restart AudioBud to continue.",
     "modelCard": {
       "accuracy": "accuracy",
       "speed": "speed"

@@ -33,6 +33,8 @@
     "downloading": "Pobieranie...",
     "customModelDescription": "Nieoficjalnie wspierane",
     "downloadFailed": "Pobieranie nie powiodło się. Spróbuj ponownie.",
+    "cancelPending": "Anulowanie pobierania jeszcze trwa. Spróbuj ponownie za chwilę.",
+    "downloadNotifyFailed": "Model został pobrany, ale AudioBud nie mógł się odświeżyć. Uruchom ponownie AudioBud, aby kontynuować.",
     "modelCard": {
       "accuracy": "dokładność",
       "speed": "szybkość"
