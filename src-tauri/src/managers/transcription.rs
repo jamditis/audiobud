@@ -289,28 +289,26 @@ impl TranscriptionManager {
             },
         );
 
-        let model_info = self
-            .model_manager
-            .get_model_info(model_id)
-            .ok_or_else(|| anyhow::anyhow!("Model not found: {}", model_id))?;
+        let model_info = match self.model_manager.get_model_info(model_id) {
+            Some(model_info) => model_info,
+            None => {
+                let error_msg = format!("Model not found: {}", model_id);
+                let _ = self.app_handle.emit(
+                    "model-state-changed",
+                    ModelStateEvent {
+                        event_type: "loading_failed".to_string(),
+                        model_id: Some(model_id.to_string()),
+                        model_name: None,
+                        // The localized toast title is sufficient here; keep
+                        // the backend detail in the Rust error log rather than
+                        // surfacing untranslated text in the UI.
+                        error: None,
+                    },
+                );
+                return Err(anyhow::anyhow!(error_msg));
+            }
+        };
 
-        if !model_info.is_downloaded {
-            let error_msg = "Model not downloaded";
-            let _ = self.app_handle.emit(
-                "model-state-changed",
-                ModelStateEvent {
-                    event_type: "loading_failed".to_string(),
-                    model_id: Some(model_id.to_string()),
-                    model_name: Some(model_info.name.clone()),
-                    error: Some(error_msg.to_string()),
-                },
-            );
-            return Err(anyhow::anyhow!(error_msg));
-        }
-
-        let model_path = self.model_manager.get_model_path(model_id)?;
-
-        // Create appropriate engine based on model type
         let emit_loading_failed = |error_msg: &str| {
             let _ = self.app_handle.emit(
                 "model-state-changed",
@@ -323,6 +321,19 @@ impl TranscriptionManager {
             );
         };
 
+        if !model_info.is_downloaded {
+            let error_msg = "Model not downloaded";
+            emit_loading_failed(error_msg);
+            return Err(anyhow::anyhow!(error_msg));
+        }
+
+        let model_path = self.model_manager.get_model_path(model_id).map_err(|e| {
+            let error_msg = format!("Failed to resolve model path for {}: {}", model_id, e);
+            emit_loading_failed(&error_msg);
+            anyhow::anyhow!(error_msg)
+        })?;
+
+        // Create appropriate engine based on model type
         let loaded_engine = match model_info.engine_type {
             EngineType::Whisper => {
                 let engine = WhisperEngine::load(&model_path).map_err(|e| {

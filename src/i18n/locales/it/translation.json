@@ -803,6 +803,7 @@
     "pasteFailedTitle": "Impossibile incollare il testo",
     "pasteFailed": "Non è stato possibile incollare il testo nell'applicazione attiva.",
     "transcriptionErrorTitle": "Trascrizione non riuscita",
+    "transcriptionErrorGeneric": "Non è stato possibile trascrivere la registrazione. Riprova o scegli un altro modello.",
     "transcriptionTimeoutTitle": "Tempo scaduto per la trascrizione",
     "transcriptionTimeout": "Il motore non ha risposto dopo {{seconds}} secondi e potrebbe essersi bloccato. Riavvia AudioBud se il problema si ripete.",
     "parakeetInputTooLong": "Questa registrazione dura {{duration}}. Parakeet non può trascrivere registrazioni più lunghe di circa 6:30 perché l'audio successivo verrebbe omesso senza avviso. Usa un modello Whisper per le registrazioni lunghe."

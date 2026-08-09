@@ -12,6 +12,20 @@ export function parakeetInputTooLongSeconds(error: unknown): number | null {
   return match ? Number(match[1]) : null;
 }
 
+export type TranscriptionErrorPresentation =
+  | { kind: "parakeetInputTooLong"; seconds: number }
+  | { kind: "generic" };
+
+export function classifyTranscriptionError(
+  error: unknown,
+): TranscriptionErrorPresentation {
+  const parakeetSeconds = parakeetInputTooLongSeconds(error);
+
+  return parakeetSeconds === null
+    ? { kind: "generic" }
+    : { kind: "parakeetInputTooLong", seconds: parakeetSeconds };
+}
+
 export function recordingDurationLabel(totalSeconds: number): string {
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;

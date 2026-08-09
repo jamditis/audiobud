@@ -803,6 +803,7 @@
     "pasteFailedTitle": "Error al pegar el texto",
     "pasteFailed": "No se pudo pegar el texto en la aplicación activa.",
     "transcriptionErrorTitle": "La transcripción ha fallado",
+    "transcriptionErrorGeneric": "No se pudo transcribir la grabación. Inténtalo de nuevo o elige otro modelo.",
     "transcriptionTimeoutTitle": "Se agotó el tiempo de la transcripción",
     "transcriptionTimeout": "El motor no respondió después de {{seconds}} segundos y puede estar bloqueado. Reinicia AudioBud si esto sigue ocurriendo.",
     "parakeetInputTooLong": "Esta grabación dura {{duration}}. Parakeet no puede transcribir grabaciones de más de unos 6:30 porque omitiría el audio posterior sin avisar. Usa un modelo Whisper para grabaciones largas."

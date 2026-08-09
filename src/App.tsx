@@ -24,7 +24,7 @@ import { useSettingsStore } from "./stores/settingsStore";
 import { commands } from "@/bindings";
 import { getLanguageDirection, initializeRTL } from "@/lib/utils/rtl";
 import {
-  parakeetInputTooLongSeconds,
+  classifyTranscriptionError,
   recordingDurationLabel,
 } from "@/lib/transcription-error";
 
@@ -203,15 +203,16 @@ function App() {
     const unlisten = listen<TranscriptionErrorEvent>(
       "transcription-error",
       (event) => {
-        const parakeetSeconds = parakeetInputTooLongSeconds(
-          event.payload.message,
-        );
+        const presentation = classifyTranscriptionError(event.payload.message);
+        if (presentation.kind === "generic") {
+          console.error("Transcription failed:", event.payload.message);
+        }
         toast.error(t("errors.transcriptionErrorTitle"), {
           description:
-            parakeetSeconds === null
-              ? event.payload.message
+            presentation.kind === "generic"
+              ? t("errors.transcriptionErrorGeneric")
               : t("errors.parakeetInputTooLong", {
-                  duration: recordingDurationLabel(parakeetSeconds),
+                  duration: recordingDurationLabel(presentation.seconds),
                 }),
         });
       },
