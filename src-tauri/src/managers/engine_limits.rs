@@ -3,6 +3,7 @@
 //! transcription_mock.rs) still compiles and runs these tests.
 
 use crate::audio_toolkit::constants::WHISPER_SAMPLE_RATE;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 /// Maximum input length (mono 16 kHz samples) the Parakeet engines transcribe
 /// completely.
@@ -33,6 +34,35 @@ pub(crate) const WEDGED_ENGINE_ERROR: &str =
 pub(crate) const MODEL_NOT_LOADED_ERROR: &str = "Model is not loaded for transcription.";
 pub(crate) const MODEL_AUTO_LOAD_FAILED_ERROR: &str =
     "Model failed to load after auto-load attempt. Please check your model settings.";
+
+/// Tracks whether the most recent missing engine was preceded by a
+/// `model-state-changed/loading_failed` event. A missing engine can also be
+/// caused by a manual unload or active-model deletion; those paths have not
+/// already notified the user and must retain the generic transcription error.
+#[derive(Default)]
+pub(crate) struct LoadFailureNotification {
+    emitted: AtomicBool,
+}
+
+impl LoadFailureNotification {
+    pub(crate) fn clear(&self) {
+        self.emitted.store(false, Ordering::SeqCst);
+    }
+
+    pub(crate) fn record_emission(&self, emitted: bool) {
+        if emitted {
+            self.emitted.store(true, Ordering::SeqCst);
+        }
+    }
+
+    pub(crate) fn take_missing_engine_error(&self) -> &'static str {
+        if self.emitted.swap(false, Ordering::SeqCst) {
+            MODEL_AUTO_LOAD_FAILED_ERROR
+        } else {
+            MODEL_NOT_LOADED_ERROR
+        }
+    }
+}
 
 /// Refuses Parakeet input that would be silently truncated, so the failure
 /// surfaces to the user instead of producing an incomplete transcript that
@@ -68,5 +98,41 @@ mod tests {
         let message = check_parakeet_input_length(PARAKEET_MAX_INPUT_SAMPLES + 1)
             .expect_err("input past the limit must be refused");
         assert_eq!(message, "parakeet_input_too_long:390");
+    }
+
+    #[test]
+    fn only_classifies_missing_engine_as_notified_after_a_load_failure_event() {
+        let notification = LoadFailureNotification::default();
+
+        assert_eq!(
+            notification.take_missing_engine_error(),
+            MODEL_NOT_LOADED_ERROR
+        );
+
+        notification.record_emission(false);
+        assert_eq!(
+            notification.take_missing_engine_error(),
+            MODEL_NOT_LOADED_ERROR,
+            "a failed event emit must not suppress the visible error"
+        );
+
+        notification.record_emission(true);
+        assert_eq!(
+            notification.take_missing_engine_error(),
+            MODEL_AUTO_LOAD_FAILED_ERROR
+        );
+        assert_eq!(
+            notification.take_missing_engine_error(),
+            MODEL_NOT_LOADED_ERROR,
+            "the notification applies to one matching transcription failure"
+        );
+
+        notification.record_emission(true);
+        notification.clear();
+        assert_eq!(
+            notification.take_missing_engine_error(),
+            MODEL_NOT_LOADED_ERROR,
+            "a manual unload clears stale load-failure notification state"
+        );
     }
 }

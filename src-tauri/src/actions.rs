@@ -7,9 +7,7 @@ use crate::audio_toolkit::{
     is_no_input_device_error, strip_to_raw_text,
 };
 use crate::managers::audio::AudioRecordingManager;
-use crate::managers::engine_limits::{
-    MODEL_AUTO_LOAD_FAILED_ERROR, MODEL_NOT_LOADED_ERROR, WEDGED_ENGINE_ERROR,
-};
+use crate::managers::engine_limits::{MODEL_AUTO_LOAD_FAILED_ERROR, WEDGED_ENGINE_ERROR};
 use crate::managers::history::HistoryManager;
 use crate::managers::transcription::TranscriptionManager;
 use crate::managers::watchdog::{transcription_watchdog_timeout, WatchdogOutcome};
@@ -51,13 +49,11 @@ pub(crate) struct TranscriptionErrorEvent {
 }
 
 /// Model-load failures already emit `model-state-changed/loading_failed`,
-/// which the frontend turns into a specific toast. Do not follow that event
-/// with a second generic transcription-failed toast for the same root cause.
+/// which the frontend turns into a specific toast. The manager returns the
+/// auto-load sentinel only when that event was emitted; a plain missing-model
+/// sentinel can instead follow manual unload/deletion and is not suppressed.
 fn transcription_error_already_notified(message: &str) -> bool {
-    matches!(
-        message,
-        MODEL_NOT_LOADED_ERROR | MODEL_AUTO_LOAD_FAILED_ERROR | WEDGED_ENGINE_ERROR
-    )
+    matches!(message, MODEL_AUTO_LOAD_FAILED_ERROR | WEDGED_ENGINE_ERROR)
 }
 
 /// Drop guard that notifies the [`TranscriptionCoordinator`] when the
@@ -920,7 +916,11 @@ mod tests {
 
     #[test]
     fn suppresses_generic_toasts_for_model_failures_with_specific_events() {
-        assert!(transcription_error_already_notified(MODEL_NOT_LOADED_ERROR));
+        // A missing engine can also be caused by a manual unload or active
+        // model deletion, neither of which emits `loading_failed`.
+        assert!(!transcription_error_already_notified(
+            MODEL_NOT_LOADED_ERROR
+        ));
         assert!(transcription_error_already_notified(
             MODEL_AUTO_LOAD_FAILED_ERROR
         ));

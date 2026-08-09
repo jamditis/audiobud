@@ -1,8 +1,7 @@
 use crate::audio_toolkit::{apply_custom_words, apply_replacements, filter_transcription_output};
 use crate::managers::audio::AudioRecordingManager;
 use crate::managers::engine_limits::{
-    check_parakeet_input_length, MODEL_AUTO_LOAD_FAILED_ERROR, MODEL_NOT_LOADED_ERROR,
-    WEDGED_ENGINE_ERROR,
+    check_parakeet_input_length, LoadFailureNotification, WEDGED_ENGINE_ERROR,
 };
 use crate::managers::model::{EngineType, ModelManager};
 use crate::managers::watchdog::{run_with_watchdog, GenerationGate, WatchdogOutcome};
@@ -78,6 +77,7 @@ pub struct TranscriptionManager {
     watcher_handle: Arc<Mutex<Option<thread::JoinHandle<()>>>>,
     is_loading: Arc<Mutex<bool>>,
     loading_condvar: Arc<Condvar>,
+    load_failure_notification: Arc<LoadFailureNotification>,
     /// Number of transcribe calls whose watchdog fired and whose worker has
     /// not resolved yet (issue #58). While nonzero, new transcriptions and
     /// model loads are refused so retries cannot stack additional engines on
@@ -97,6 +97,7 @@ impl TranscriptionManager {
             watcher_handle: Arc::new(Mutex::new(None)),
             is_loading: Arc::new(Mutex::new(false)),
             loading_condvar: Arc::new(Condvar::new()),
+            load_failure_notification: Arc::new(LoadFailureNotification::default()),
             wedged_workers: Arc::new(AtomicUsize::new(0)),
         };
 
@@ -208,6 +209,7 @@ impl TranscriptionManager {
         // slot generation, so a transcription currently holding the engine
         // cannot restore it after this unload.
         self.engine.clear();
+        self.load_failure_notification.clear();
         {
             let mut current_model = self.current_model_id.lock().unwrap();
             *current_model = None;
@@ -260,21 +262,26 @@ impl TranscriptionManager {
     pub fn load_model(&self, model_id: &str) -> Result<()> {
         let load_start = std::time::Instant::now();
         debug!("Starting to load model: {}", model_id);
+        self.load_failure_notification.clear();
 
         // Refuse to stack another engine while a wedged transcription still
         // holds one (issue #58) — repeated retries would otherwise pile up
         // engines and exhaust VRAM/RAM. The loading_failed event surfaces the
         // refusal as the usual model-load toast.
         if self.is_wedged() {
-            let _ = self.app_handle.emit(
-                "model-state-changed",
-                ModelStateEvent {
-                    event_type: "loading_failed".to_string(),
-                    model_id: Some(model_id.to_string()),
-                    model_name: None,
-                    error: Some(WEDGED_ENGINE_ERROR.to_string()),
-                },
-            );
+            let emitted = self
+                .app_handle
+                .emit(
+                    "model-state-changed",
+                    ModelStateEvent {
+                        event_type: "loading_failed".to_string(),
+                        model_id: Some(model_id.to_string()),
+                        model_name: None,
+                        error: Some(WEDGED_ENGINE_ERROR.to_string()),
+                    },
+                )
+                .is_ok();
+            self.load_failure_notification.record_emission(emitted);
             return Err(anyhow::anyhow!(WEDGED_ENGINE_ERROR));
         }
 
@@ -293,32 +300,40 @@ impl TranscriptionManager {
             Some(model_info) => model_info,
             None => {
                 let error_msg = format!("Model not found: {}", model_id);
-                let _ = self.app_handle.emit(
-                    "model-state-changed",
-                    ModelStateEvent {
-                        event_type: "loading_failed".to_string(),
-                        model_id: Some(model_id.to_string()),
-                        model_name: None,
-                        // The localized toast title is sufficient here; keep
-                        // the backend detail in the Rust error log rather than
-                        // surfacing untranslated text in the UI.
-                        error: None,
-                    },
-                );
+                let emitted = self
+                    .app_handle
+                    .emit(
+                        "model-state-changed",
+                        ModelStateEvent {
+                            event_type: "loading_failed".to_string(),
+                            model_id: Some(model_id.to_string()),
+                            model_name: None,
+                            // The localized toast title is sufficient here; keep
+                            // the backend detail in the Rust error log rather than
+                            // surfacing untranslated text in the UI.
+                            error: None,
+                        },
+                    )
+                    .is_ok();
+                self.load_failure_notification.record_emission(emitted);
                 return Err(anyhow::anyhow!(error_msg));
             }
         };
 
         let emit_loading_failed = |error_msg: &str| {
-            let _ = self.app_handle.emit(
-                "model-state-changed",
-                ModelStateEvent {
-                    event_type: "loading_failed".to_string(),
-                    model_id: Some(model_id.to_string()),
-                    model_name: Some(model_info.name.clone()),
-                    error: Some(error_msg.to_string()),
-                },
-            );
+            let emitted = self
+                .app_handle
+                .emit(
+                    "model-state-changed",
+                    ModelStateEvent {
+                        event_type: "loading_failed".to_string(),
+                        model_id: Some(model_id.to_string()),
+                        model_name: Some(model_info.name.clone()),
+                        error: Some(error_msg.to_string()),
+                    },
+                )
+                .is_ok();
+            self.load_failure_notification.record_emission(emitted);
         };
 
         if !model_info.is_downloaded {
@@ -509,8 +524,13 @@ impl TranscriptionManager {
             }
 
             if !self.engine.is_occupied() {
-                return Err(anyhow::anyhow!(MODEL_NOT_LOADED_ERROR));
+                return Err(anyhow::anyhow!(self
+                    .load_failure_notification
+                    .take_missing_engine_error()));
             }
+            // A usable engine means any earlier load-failure notification did
+            // not cause this transcription attempt to fail.
+            self.load_failure_notification.clear();
         }
 
         // Get current settings for configuration
@@ -581,7 +601,9 @@ impl TranscriptionManager {
             let (mut engine, taken_generation) = match self.engine.take() {
                 Some(taken) => taken,
                 None => {
-                    return Err(anyhow::anyhow!(MODEL_AUTO_LOAD_FAILED_ERROR));
+                    return Err(anyhow::anyhow!(self
+                        .load_failure_notification
+                        .take_missing_engine_error()));
                 }
             };
 
