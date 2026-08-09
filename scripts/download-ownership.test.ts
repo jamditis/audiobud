@@ -65,7 +65,8 @@ describe("model download ownership", () => {
 
     expect(cancelStart).toBeGreaterThan(-1);
     expect(verificationStart).toBeGreaterThan(cancelStart);
-    expect(cancelBranch).toContain("fs::remove_file(&partial_path)");
+    expect(cancelBranch).toContain("let _ = fs::remove_file(&partial_path)");
+    expect(cancelBranch).not.toContain("fs::remove_file(&partial_path)?");
     expect(cancelBranch).not.toContain("total_size > 0");
   });
 });

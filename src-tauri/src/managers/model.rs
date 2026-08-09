@@ -1368,7 +1368,13 @@ impl ModelManager {
         // verification began.
         if cancel_flag.load(Ordering::Relaxed) {
             info!("Download cancelled for: {} (before verification)", model_id);
-            fs::remove_file(&partial_path)?;
+            // The byte stream ended normally, so this partial is complete even
+            // when the server omitted Content-Length. A complete partial cannot
+            // be range-resumed (the server answers 416); remove it so a retry
+            // starts fresh. Mid-stream cancellation still keeps its resumable
+            // incomplete partial in the loop above.
+            let _ = fs::remove_file(&partial_path);
+            // Guard handles is_downloading + cancel_flags cleanup on drop.
             return Ok(());
         }
 

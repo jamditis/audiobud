@@ -60,11 +60,6 @@ const Onboarding: React.FC<OnboardingProps> = ({ onModelSelected }) => {
           setSelectedModelId(null);
         }
       });
-    } else if (!model?.is_downloaded && !inFlight) {
-      // Download ended without a usable model (cancelled or failed) — unlock
-      // the cards so another model can be picked.
-      selectionGuard.current.modelId = null;
-      setSelectedModelId(null);
     }
   }, [
     selectedModelId,
@@ -89,10 +84,14 @@ const Onboarding: React.FC<OnboardingProps> = ({ onModelSelected }) => {
   };
 
   const handleCancelDownload = async (modelId: string) => {
-    // modelStore clears download state on success and on the
-    // model-download-cancelled event; the watcher above unlocks the cards
-    // once nothing is in flight for this model.
-    await cancelDownload(modelId);
+    // Clear the onboarding selection only when the backend accepted the cancel.
+    // The download watcher must not infer cancellation from a transient idle
+    // state: retrying a tombstoned model awaits a backend refresh before the
+    // new download is marked in flight.
+    if (await cancelDownload(modelId)) {
+      selectionGuard.current.modelId = null;
+      setSelectedModelId(null);
+    }
   };
 
   const getModelStatus = (modelId: string): ModelCardStatus => {
