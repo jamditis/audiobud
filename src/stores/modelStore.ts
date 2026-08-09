@@ -5,7 +5,6 @@ import { listen } from "@tauri-apps/api/event";
 import { commands, type ModelInfo } from "@/bindings";
 import i18n from "@/i18n";
 import { toast } from "sonner";
-import i18n from "@/i18n";
 
 interface DownloadProgress {
   model_id: string;
@@ -32,6 +31,7 @@ const MODEL_DOWNLOAD_ALREADY_ACTIVE = "model_download_already_active";
 const MODEL_DOWNLOAD_CANCELLING = "model_download_cancelling";
 const MODEL_DOWNLOAD_NOTIFY_FAILED = "model_download_notify_failed";
 const MODEL_DOWNLOAD_NOT_ACTIVE = "model_download_not_active";
+const MODEL_DOWNLOAD_CANCEL_TOO_LATE = "model_download_cancel_too_late";
 const MODEL_DOWNLOAD_STALLED = "model_download_stalled";
 
 const stallTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -428,6 +428,12 @@ export const useModelStore = create<ModelsStore>()(
           );
           await get().loadModels();
           return true;
+        } else if (result.error === MODEL_DOWNLOAD_CANCEL_TOO_LATE) {
+          // Installation already won the backend's atomic commit race. Refresh
+          // the completed model but report that cancellation was rejected so
+          // onboarding retains the selection and advances normally.
+          await get().loadModels();
+          return false;
         } else {
           set({ error: `Failed to cancel download: ${result.error}` });
           return false;

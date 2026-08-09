@@ -14,7 +14,7 @@ describe("model download ownership", () => {
     expect(helperStart).toBeGreaterThan(-1);
     expect(cleanupStart).toBeGreaterThan(-1);
     expect(managerStart).toBeGreaterThan(cleanupStart);
-    expect(cleanup).toContain("cancel_flag: Arc<AtomicBool>");
+    expect(cleanup).toContain("cancel_flag: Arc<DownloadControl>");
     expect(cleanup).toContain("release_download_claim(");
     expect(helper).toContain("let mut models = available_models.lock()");
     expect(helper).toContain("let mut flags = cancel_flags.lock()");
@@ -22,9 +22,7 @@ describe("model download ownership", () => {
   });
 
   test("successful completion uses the same atomic ownership release", () => {
-    const successStart = modelManager.indexOf(
-      "// Success releases the same ownership",
-    );
+    const successStart = modelManager.indexOf("// Successful commit releases");
     const completionEvent = modelManager.indexOf(
       "// Emit completion event",
       successStart,
@@ -68,5 +66,31 @@ describe("model download ownership", () => {
     expect(cancelBranch).toContain("let _ = fs::remove_file(&partial_path)");
     expect(cancelBranch).not.toContain("fs::remove_file(&partial_path)?");
     expect(cancelBranch).not.toContain("total_size > 0");
+  });
+
+  test("installation atomically chooses between cancellation and commit", () => {
+    expect(modelManager).toContain("struct DownloadControl");
+    expect(modelManager).toContain("fn request_cancel(&self) -> CancelRequest");
+    expect(modelManager).toContain("fn begin_commit(&self) -> bool");
+    expect(modelManager).toContain("CancelRequest::TooLate");
+
+    const directoryCommit = modelManager.indexOf(
+      "if !cancel_flag.begin_commit()",
+    );
+    const directoryRename = modelManager.indexOf(
+      "fs::rename(&source_dir, &final_model_dir)",
+    );
+    const fileCommit = modelManager.indexOf(
+      "if !cancel_flag.begin_commit()",
+      directoryCommit + 1,
+    );
+    const fileRename = modelManager.indexOf(
+      "fs::rename(&partial_path, &model_path)",
+    );
+
+    expect(directoryCommit).toBeGreaterThan(-1);
+    expect(directoryRename).toBeGreaterThan(directoryCommit);
+    expect(fileCommit).toBeGreaterThan(directoryCommit);
+    expect(fileRename).toBeGreaterThan(fileCommit);
   });
 });

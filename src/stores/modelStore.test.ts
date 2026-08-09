@@ -252,6 +252,22 @@ describe("model download lifecycle", () => {
     expect(useModelStore.getState().error).toBeNull();
   });
 
+  test("a cancel that loses the commit race preserves onboarding selection", async () => {
+    cancelDownloadResult = {
+      status: "error",
+      error: "model_download_cancel_too_late",
+    };
+    getAvailableModelsResult = {
+      status: "ok",
+      data: [{ ...model("small", false), is_downloaded: true }],
+    };
+    useModelStore.setState({ downloadingModels: { small: true } });
+
+    expect(await useModelStore.getState().cancelDownload("small")).toBe(false);
+    expect(useModelStore.getState().models[0]?.is_downloaded).toBe(true);
+    expect(useModelStore.getState().error).toBeNull();
+  });
+
   test("cancel tombstone masks stale backend state until the worker exits", async () => {
     getAvailableModelsResult = {
       status: "ok",

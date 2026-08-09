@@ -11,7 +11,7 @@ use std::fs;
 use std::fs::File;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tar::Archive;
@@ -29,7 +29,63 @@ const MODEL_DOWNLOAD_ALREADY_ACTIVE: &str = "model_download_already_active";
 const MODEL_DOWNLOAD_CANCELLING: &str = "model_download_cancelling";
 const MODEL_DOWNLOAD_NOTIFY_FAILED: &str = "model_download_notify_failed";
 const MODEL_DOWNLOAD_NOT_ACTIVE: &str = "model_download_not_active";
+const MODEL_DOWNLOAD_CANCEL_TOO_LATE: &str = "model_download_cancel_too_late";
 const MODEL_DOWNLOAD_STALLED: &str = "model_download_stalled";
+
+const DOWNLOAD_ACTIVE: u8 = 0;
+const DOWNLOAD_CANCELLED: u8 = 1;
+const DOWNLOAD_COMMITTING: u8 = 2;
+
+#[derive(Debug, PartialEq, Eq)]
+enum CancelRequest {
+    Accepted,
+    AlreadyCancelled,
+    TooLate,
+}
+
+#[derive(Debug)]
+struct DownloadControl {
+    state: AtomicU8,
+}
+
+impl DownloadControl {
+    fn new() -> Self {
+        Self {
+            state: AtomicU8::new(DOWNLOAD_ACTIVE),
+        }
+    }
+
+    fn is_cancelled(&self) -> bool {
+        self.state.load(Ordering::Acquire) == DOWNLOAD_CANCELLED
+    }
+
+    fn request_cancel(&self) -> CancelRequest {
+        match self.state.compare_exchange(
+            DOWNLOAD_ACTIVE,
+            DOWNLOAD_CANCELLED,
+            Ordering::AcqRel,
+            Ordering::Acquire,
+        ) {
+            Ok(_) => CancelRequest::Accepted,
+            Err(DOWNLOAD_CANCELLED) => CancelRequest::AlreadyCancelled,
+            Err(DOWNLOAD_COMMITTING) => CancelRequest::TooLate,
+            Err(state) => unreachable!("unexpected download state: {state}"),
+        }
+    }
+
+    fn begin_commit(&self) -> bool {
+        match self.state.compare_exchange(
+            DOWNLOAD_ACTIVE,
+            DOWNLOAD_COMMITTING,
+            Ordering::AcqRel,
+            Ordering::Acquire,
+        ) {
+            Ok(_) | Err(DOWNLOAD_COMMITTING) => true,
+            Err(DOWNLOAD_CANCELLED) => false,
+            Err(state) => unreachable!("unexpected download state: {state}"),
+        }
+    }
+}
 
 #[derive(Debug, PartialEq, Eq)]
 enum DownloadReadDisposition {
@@ -50,7 +106,7 @@ fn classify_download_read(cancelled: bool, timed_out: bool) -> DownloadReadDispo
 
 fn resolve_download_read<T>(
     model_id: &str,
-    cancel_flag: &AtomicBool,
+    cancel_flag: &DownloadControl,
     result: std::result::Result<T, reqwest::Error>,
 ) -> Result<Option<T>> {
     let timed_out = result
@@ -58,7 +114,7 @@ fn resolve_download_read<T>(
         .err()
         .map(reqwest::Error::is_timeout)
         .unwrap_or(false);
-    match classify_download_read(cancel_flag.load(Ordering::Relaxed), timed_out) {
+    match classify_download_read(cancel_flag.is_cancelled(), timed_out) {
         DownloadReadDisposition::Cancelled => Ok(None),
         DownloadReadDisposition::Failed(code) => {
             warn!("Model download read timed out for: {}", model_id);
@@ -120,9 +176,9 @@ pub struct DownloadProgress {
 /// model flag or cancellation handle.
 fn release_download_claim(
     available_models: &Mutex<HashMap<String, ModelInfo>>,
-    cancel_flags: &Arc<Mutex<HashMap<String, Arc<AtomicBool>>>>,
+    cancel_flags: &Arc<Mutex<HashMap<String, Arc<DownloadControl>>>>,
     model_id: &str,
-    cancel_flag: &Arc<AtomicBool>,
+    cancel_flag: &Arc<DownloadControl>,
     completed: bool,
 ) -> bool {
     let mut models = available_models.lock().unwrap();
@@ -139,7 +195,7 @@ fn release_download_claim(
     // this exact claim is still registered, cancellation wins: leave cleanup
     // armed so it can release the claim after the caller removes the newly
     // installed artifact.
-    if completed && cancel_flag.load(Ordering::Relaxed) {
+    if completed && cancel_flag.is_cancelled() {
         return false;
     }
 
@@ -159,8 +215,8 @@ fn release_download_claim(
 /// every error path without requiring manual cleanup at each `?` or `return Err`.
 struct DownloadCleanup<'a> {
     available_models: &'a Mutex<HashMap<String, ModelInfo>>,
-    cancel_flags: &'a Arc<Mutex<HashMap<String, Arc<AtomicBool>>>>,
-    cancel_flag: Arc<AtomicBool>,
+    cancel_flags: &'a Arc<Mutex<HashMap<String, Arc<DownloadControl>>>>,
+    cancel_flag: Arc<DownloadControl>,
     model_id: String,
     disarmed: bool,
 }
@@ -184,7 +240,7 @@ pub struct ModelManager {
     app_handle: AppHandle,
     models_dir: PathBuf,
     available_models: Mutex<HashMap<String, ModelInfo>>,
-    cancel_flags: Arc<Mutex<HashMap<String, Arc<AtomicBool>>>>,
+    cancel_flags: Arc<Mutex<HashMap<String, Arc<DownloadControl>>>>,
     extracting_models: Arc<Mutex<HashSet<String>>>,
 }
 
@@ -1091,9 +1147,9 @@ impl ModelManager {
     /// that is about to exit.
     fn claim_download(
         available_models: &Mutex<HashMap<String, ModelInfo>>,
-        cancel_flags: &Arc<Mutex<HashMap<String, Arc<AtomicBool>>>>,
+        cancel_flags: &Arc<Mutex<HashMap<String, Arc<DownloadControl>>>>,
         model_id: &str,
-    ) -> Result<std::result::Result<Arc<AtomicBool>, &'static str>> {
+    ) -> Result<std::result::Result<Arc<DownloadControl>, &'static str>> {
         let mut models = available_models.lock().unwrap();
         let mut flags = cancel_flags.lock().unwrap();
         let model = models
@@ -1103,7 +1159,7 @@ impl ModelManager {
         if model.is_downloading {
             let cancellation_pending = flags
                 .get(model_id)
-                .map(|flag| flag.load(Ordering::Relaxed))
+                .map(|flag| flag.is_cancelled())
                 .unwrap_or(false);
             return Ok(Err(if cancellation_pending {
                 MODEL_DOWNLOAD_CANCELLING
@@ -1112,7 +1168,7 @@ impl ModelManager {
             }));
         }
 
-        let cancel_flag = Arc::new(AtomicBool::new(false));
+        let cancel_flag = Arc::new(DownloadControl::new());
         model.is_downloading = true;
         flags.insert(model_id.to_string(), cancel_flag.clone());
         Ok(Ok(cancel_flag))
@@ -1338,7 +1394,7 @@ impl ModelManager {
 
         // A cancellation can race with clean EOF and leave no next chunk on
         // which to observe the flag. Do not proceed into verification then.
-        if cancel_flag.load(Ordering::Relaxed) {
+        if cancel_flag.is_cancelled() {
             drop(file);
             info!("Download cancelled for: {}", model_id);
             // EOF means this partial is complete, including when the server
@@ -1366,7 +1422,7 @@ impl ModelManager {
 
         // Honor a cancellation that arrived after the EOF check but before
         // verification began.
-        if cancel_flag.load(Ordering::Relaxed) {
+        if cancel_flag.is_cancelled() {
             info!("Download cancelled for: {} (before verification)", model_id);
             // The byte stream ended normally, so this partial is complete even
             // when the server omitted Content-Length. A complete partial cannot
@@ -1412,7 +1468,7 @@ impl ModelManager {
 
         // Hashing is blocking and can outlive a cancel request. Do not install
         // a verified model after cancellation was acknowledged.
-        if cancel_flag.load(Ordering::Relaxed) {
+        if cancel_flag.is_cancelled() {
             info!("Download cancelled for: {} (after verification)", model_id);
             let _ = fs::remove_file(&partial_path);
             return Ok(());
@@ -1472,10 +1528,11 @@ impl ModelManager {
                 anyhow::anyhow!(error_msg)
             })?;
 
-            // Extraction is another blocking phase. If cancellation arrived
-            // during it, discard both the completed archive and extracted
-            // staging directory rather than installing the model.
-            if cancel_flag.load(Ordering::Relaxed) {
+            // Atomically choose the winner before the first irreversible
+            // installation step. A cancellation acknowledged before this CAS
+            // wins and must leave no installed model; once commit wins, later
+            // cancel requests are rejected instead of falsely acknowledged.
+            if !cancel_flag.begin_commit() {
                 info!("Download cancelled for: {} (after extraction)", model_id);
                 let _ = fs::remove_dir_all(&temp_extract_dir);
                 let _ = fs::remove_file(&partial_path);
@@ -1523,12 +1580,17 @@ impl ModelManager {
             // Remove the downloaded tar.gz file
             let _ = fs::remove_file(&partial_path);
         } else {
+            if !cancel_flag.begin_commit() {
+                info!("Download cancelled for: {} (before installation)", model_id);
+                let _ = fs::remove_file(&partial_path);
+                return Ok(());
+            }
             // Move partial file to final location for file-based models
             fs::rename(&partial_path, &model_path)?;
         }
 
-        // Release the exact worker's ownership atomically. Fail closed if a
-        // newer worker somehow replaced the flag.
+        // Successful commit releases the exact worker's ownership atomically.
+        // Fail closed if a newer worker somehow replaced the control record.
         if !release_download_claim(
             &self.available_models,
             &self.cancel_flags,
@@ -1536,7 +1598,7 @@ impl ModelManager {
             &cancel_flag,
             true,
         ) {
-            if cancel_flag.load(Ordering::Relaxed) {
+            if cancel_flag.is_cancelled() {
                 info!("Download cancelled for: {} (during installation)", model_id);
                 if model_info.is_directory {
                     fs::remove_dir_all(&model_path)?;
@@ -1695,17 +1757,38 @@ impl ModelManager {
     pub fn cancel_download(&self, model_id: &str) -> Result<()> {
         debug!("ModelManager: cancel_download called for: {}", model_id);
 
-        // Set the cancellation flag to stop the download loop
-        {
+        let request = {
+            // Match claim/release lock order so completion and a late cancel
+            // observe one coherent lifecycle record.
+            let models = self.available_models.lock().unwrap();
             let flags = self.cancel_flags.lock().unwrap();
             if let Some(flag) = flags.get(model_id) {
-                flag.store(true, Ordering::Relaxed);
-                info!("Cancellation flag set for: {}", model_id);
+                flag.request_cancel()
+            } else if models
+                .get(model_id)
+                .map(|model| model.is_downloaded)
+                .unwrap_or(false)
+            {
+                // Commit already released its control record. Treat this the
+                // same as losing the commit CAS so the UI keeps its selection.
+                CancelRequest::TooLate
             } else {
                 // A missing flag means no live download task owns this model's
                 // lifecycle — reporting success here would acknowledge a cancel
                 // that nothing will honor while the download proceeds.
                 return Err(anyhow::anyhow!(MODEL_DOWNLOAD_NOT_ACTIVE));
+            }
+        };
+
+        match request {
+            CancelRequest::Accepted => {
+                info!("Cancellation accepted for: {}", model_id);
+            }
+            CancelRequest::AlreadyCancelled => {
+                info!("Cancellation already pending for: {}", model_id);
+            }
+            CancelRequest::TooLate => {
+                return Err(anyhow::anyhow!(MODEL_DOWNLOAD_CANCEL_TOO_LATE));
             }
         }
 
@@ -1945,7 +2028,8 @@ mod tests {
             "small".to_string(),
             download_test_model(),
         )]));
-        let flag = Arc::new(AtomicBool::new(true));
+        let flag = Arc::new(DownloadControl::new());
+        assert_eq!(flag.request_cancel(), CancelRequest::Accepted);
         let flags = Arc::new(Mutex::new(HashMap::from([("small".to_string(), flag)])));
 
         let claim = ModelManager::claim_download(&models, &flags, "small").unwrap();
@@ -1960,8 +2044,8 @@ mod tests {
             "small".to_string(),
             download_test_model(),
         )]));
-        let stale_flag = Arc::new(AtomicBool::new(false));
-        let current_flag = Arc::new(AtomicBool::new(false));
+        let stale_flag = Arc::new(DownloadControl::new());
+        let current_flag = Arc::new(DownloadControl::new());
         let flags = Arc::new(Mutex::new(HashMap::from([(
             "small".to_string(),
             current_flag.clone(),
@@ -1985,7 +2069,8 @@ mod tests {
             "small".to_string(),
             download_test_model(),
         )]));
-        let flag = Arc::new(AtomicBool::new(true));
+        let flag = Arc::new(DownloadControl::new());
+        assert_eq!(flag.request_cancel(), CancelRequest::Accepted);
         let flags = Arc::new(Mutex::new(HashMap::from([(
             "small".to_string(),
             flag.clone(),
@@ -1997,5 +2082,31 @@ mod tests {
         assert!(models.lock().unwrap()["small"].is_downloading);
         assert!(!models.lock().unwrap()["small"].is_downloaded);
         assert!(flags.lock().unwrap().contains_key("small"));
+    }
+
+    #[test]
+    fn test_acknowledged_cancel_wins_before_commit() {
+        let control = DownloadControl::new();
+
+        assert_eq!(control.request_cancel(), CancelRequest::Accepted);
+        assert!(!control.begin_commit());
+        assert!(control.is_cancelled());
+    }
+
+    #[test]
+    fn test_commit_rejects_a_late_cancel() {
+        let control = DownloadControl::new();
+
+        assert!(control.begin_commit());
+        assert_eq!(control.request_cancel(), CancelRequest::TooLate);
+        assert!(!control.is_cancelled());
+    }
+
+    #[test]
+    fn test_repeated_cancel_is_idempotently_acknowledged() {
+        let control = DownloadControl::new();
+
+        assert_eq!(control.request_cancel(), CancelRequest::Accepted);
+        assert_eq!(control.request_cancel(), CancelRequest::AlreadyCancelled);
     }
 }
