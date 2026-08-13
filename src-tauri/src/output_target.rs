@@ -45,9 +45,12 @@ pub enum Resolved {
     /// Deliver to this target: `Foreground` normally, `Pinned` when a live
     /// window is locked.
     Deliver(OutputTarget),
-    /// The locked window had closed, so the lock was dropped. Deliver to the
-    /// foreground and surface the "lock lost" notice once; the lock is now
-    /// cleared, so the next resolve is a plain `Deliver(Foreground)`.
+    /// The locked window had closed, so the lock was dropped. Do NOT fall back
+    /// to the foreground: pasting the transcript into whatever app now holds
+    /// focus is the exact leak target-locking exists to prevent (#120). The
+    /// caller must SUPPRESS this paste and surface the "lock lost" notice once,
+    /// then let the user re-lock or re-dictate. The lock is already cleared
+    /// here, so the next resolve is a plain `Deliver(Foreground)`.
     LockLost,
 }
 
@@ -62,18 +65,18 @@ impl PinnedTarget {
     /// and return the target now in force. Locking again re-pins to the new
     /// window, so a second lock is also how you retarget.
     pub fn lock_to(&self, window: WindowHandle) -> OutputTarget {
-        *self.0.lock().unwrap() = Some(window);
+        *self.guard() = Some(window);
         OutputTarget::Pinned(window)
     }
 
     /// Clear any lock and return to foreground delivery.
     pub fn unlock(&self) {
-        *self.0.lock().unwrap() = None;
+        *self.guard() = None;
     }
 
     /// Whether a window is currently locked.
     pub fn is_locked(&self) -> bool {
-        self.0.lock().unwrap().is_some()
+        self.guard().is_some()
     }
 
     /// Resolve the target for the paste about to fire.
@@ -90,7 +93,7 @@ impl PinnedTarget {
     /// that paste path must itself tolerate an activation that fails rather than
     /// assume the handle is good.
     pub fn resolve(&self, is_alive: impl FnOnce(WindowHandle) -> bool) -> Resolved {
-        let mut guard = self.0.lock().unwrap();
+        let mut guard = self.guard();
         match *guard {
             None => Resolved::Deliver(OutputTarget::Foreground),
             Some(window) => {
@@ -102,6 +105,18 @@ impl PinnedTarget {
                 }
             }
         }
+    }
+
+    /// Borrow the lock, recovering the guard if a previous holder panicked.
+    /// The mutex only guards a `Copy` `Option<WindowHandle>` with no
+    /// cross-field invariant, so a poisoned guard's value is always consistent.
+    /// Recovering it keeps one panic in an `is_alive` callback from poisoning
+    /// the mutex and bricking every later paste with a panic on `unwrap`
+    /// (AGENTS.md: avoid unwrap in production).
+    fn guard(&self) -> std::sync::MutexGuard<'_, Option<WindowHandle>> {
+        self.0
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 }
 
@@ -158,6 +173,27 @@ mod tests {
     }
 
     #[test]
+    fn poisoned_lock_recovers_instead_of_bricking() {
+        use std::panic::{catch_unwind, AssertUnwindSafe};
+        let t = PinnedTarget::default();
+        t.lock_to(WindowHandle(5));
+        // An is_alive callback that unwinds while resolve holds the guard
+        // poisons the mutex. Recovery must let later calls proceed rather than
+        // panic on every subsequent lock.
+        let blew_up = catch_unwind(AssertUnwindSafe(|| {
+            t.resolve(|_| panic!("is_alive blew up"));
+        }));
+        assert!(blew_up.is_err());
+        // The lock is still readable and the pinned window survived the panic;
+        // a normal resolve now succeeds instead of panicking on a poisoned lock.
+        assert!(t.is_locked());
+        assert_eq!(
+            t.resolve(|_| true),
+            Resolved::Deliver(OutputTarget::Pinned(WindowHandle(5)))
+        );
+    }
+
+    #[test]
     fn re_locking_replaces_the_previous_window() {
         let t = PinnedTarget::default();
         t.lock_to(WindowHandle(1));
@@ -166,6 +202,9 @@ mod tests {
             OutputTarget::Pinned(WindowHandle(2))
         );
         let resolved = t.resolve(|_| true);
-        assert_eq!(resolved, Resolved::Deliver(OutputTarget::Pinned(WindowHandle(2))));
+        assert_eq!(
+            resolved,
+            Resolved::Deliver(OutputTarget::Pinned(WindowHandle(2)))
+        );
     }
 }
