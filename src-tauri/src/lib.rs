@@ -17,6 +17,7 @@ mod helpers;
 mod input;
 mod llm_client;
 mod managers;
+mod output_target;
 mod overlay;
 pub mod portable;
 mod settings;
@@ -478,6 +479,11 @@ fn initialize_core_logic(app_handle: &AppHandle) {
     // Track the tray's logical state so event-driven menu rebuilds below can keep the
     // recording/transcribing menu instead of forcing Idle.
     app_handle.manage(tray::CurrentTrayState::new());
+
+    // Output target lock for #120. Starts unlocked (foreground delivery); the
+    // paste path reads this at send time. The tray/shortcut toggle and the
+    // Windows focus-borrow that consume it are the next child of epic #119.
+    app_handle.manage(output_target::PinnedTarget::default());
 
     // Initialize tray menu with idle state
     utils::update_tray_menu(app_handle, &utils::TrayIconState::Idle, None);
