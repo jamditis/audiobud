@@ -1,0 +1,135 @@
+import { describe, it, expect } from "bun:test";
+import {
+  deriveIndicator,
+  resolveTargetName,
+  truncateName,
+  MAX_TARGET_NAME_LENGTH,
+  type LockSnapshot,
+} from "./output-target-indicator";
+
+// The indicator core maps a lock snapshot to the single view-model the recording
+// overlay, the tray, and settings all render. What matters is not line coverage
+// but the contract that lets those surfaces never disagree: the same precedence,
+// the same truncation, and a tone that stays quiet for a live lock the user
+// chose and only rises when the lock has gone stale.
+
+describe("resolveTargetName", () => {
+  it("prefers the app name over the window title", () => {
+    expect(resolveTargetName("Terminal", "zsh - 80x24")).toBe("Terminal");
+  });
+
+  it("falls back to the title when no app name is present", () => {
+    expect(resolveTargetName(undefined, "Untitled document")).toBe(
+      "Untitled document",
+    );
+  });
+
+  it("falls back to the title when the app name is blank", () => {
+    expect(resolveTargetName("   ", "Notepad")).toBe("Notepad");
+  });
+
+  it("resolves to empty when neither name is known", () => {
+    expect(resolveTargetName(undefined, undefined)).toBe("");
+  });
+
+  it("collapses whitespace so a multi-line title is one clean line", () => {
+    expect(resolveTargetName(undefined, "Draft\n  second line\treview")).toBe(
+      "Draft second line review",
+    );
+  });
+});
+
+describe("truncateName", () => {
+  it("leaves a name within the ceiling unchanged", () => {
+    const name = "Terminal";
+    expect(truncateName(name, 32)).toBe(name);
+  });
+
+  it("leaves a name exactly at the ceiling unchanged", () => {
+    const name = "x".repeat(10);
+    expect(truncateName(name, 10)).toBe(name);
+  });
+
+  it("truncates one past the ceiling and appends an ASCII marker", () => {
+    const result = truncateName("x".repeat(11), 10);
+    expect(result).toBe("xxxxxxx...");
+    expect(Array.from(result).length).toBe(10);
+  });
+
+  it("never splits an astral character when truncating", () => {
+    // "grinning face" is one code point but two UTF-16 units. Counting code
+    // points keeps the truncation from leaving a broken surrogate half.
+    const result = truncateName("\u{1F600}".repeat(40), 10);
+    expect(Array.from(result).length).toBe(10);
+    expect(result.endsWith("...")).toBe(true);
+    expect(result.slice(0, result.length - 3)).toBe("\u{1F600}".repeat(7));
+  });
+
+  it("hard-slices with no marker when the ceiling has no room for one", () => {
+    expect(truncateName("abcdef", 2)).toBe("ab");
+  });
+});
+
+describe("deriveIndicator", () => {
+  it("hides the indicator when the target is unlocked", () => {
+    const view = deriveIndicator({ kind: "unlocked" });
+    expect(view.visible).toBe(false);
+    expect(view.status).toBe("hidden");
+    expect(view.targetName).toBe("");
+    expect(view.tone).toBe("quiet");
+    expect(view.showUnlock).toBe(false);
+  });
+
+  it("shows a quiet, unlockable indicator while locked", () => {
+    const view = deriveIndicator({ kind: "locked", app: "Terminal" });
+    expect(view.visible).toBe(true);
+    expect(view.status).toBe("locked");
+    expect(view.targetName).toBe("Terminal");
+    expect(view.tone).toBe("quiet");
+    expect(view.showUnlock).toBe(true);
+  });
+
+  it("still offers an unlock when a live lock has no known name", () => {
+    // A visible-but-nameless lock leaves targetName empty for the surface to
+    // fill with its own localized fallback; the unlock affordance stays.
+    const view = deriveIndicator({ kind: "locked" });
+    expect(view.visible).toBe(true);
+    expect(view.status).toBe("locked");
+    expect(view.targetName).toBe("");
+    expect(view.showUnlock).toBe(true);
+  });
+
+  it("raises the tone and keeps the last name when the lock goes stale", () => {
+    const view = deriveIndicator({ kind: "lost", app: "Terminal" });
+    expect(view.visible).toBe(true);
+    expect(view.status).toBe("stale");
+    expect(view.targetName).toBe("Terminal");
+    expect(view.tone).toBe("attention");
+    expect(view.showUnlock).toBe(true);
+  });
+
+  it("truncates a long target name by default", () => {
+    const long = "A very long window title that will not fit on one short line";
+    const view = deriveIndicator({ kind: "locked", title: long });
+    expect(Array.from(view.targetName).length).toBe(MAX_TARGET_NAME_LENGTH);
+    expect(view.targetName.endsWith("...")).toBe(true);
+  });
+
+  it("honors a roomier truncation ceiling for a surface that has space", () => {
+    const long = "A very long window title that will not fit on one short line";
+    const view = deriveIndicator(
+      { kind: "locked", title: long },
+      { maxNameLength: 80 },
+    );
+    expect(view.targetName).toBe(long);
+  });
+
+  it("applies app-over-title precedence through the full derivation", () => {
+    const snapshot: LockSnapshot = {
+      kind: "locked",
+      app: "Terminal",
+      title: "zsh - 80x24",
+    };
+    expect(deriveIndicator(snapshot).targetName).toBe("Terminal");
+  });
+});
