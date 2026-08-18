@@ -829,6 +829,15 @@ impl ShortcutAction for TranscribeAction {
                                     // completed transcript. A recovery entry is starred so even a
                                     // zero history limit cannot immediately trim it. The text row
                                     // remains useful when the concurrent WAV write failed.
+                                    let recovery_processed_text =
+                                        if effective_raw || recovery_text == transcription {
+                                            processed.post_processed_text
+                                        } else {
+                                            // Deterministic transforms such as Chinese-script
+                                            // conversion can change final_text even when requested LLM
+                                            // post-processing fails and leaves post_processed_text empty.
+                                            Some(recovery_text.clone())
+                                        };
                                     let primary_text = if effective_raw {
                                         recovery_text
                                     } else {
@@ -839,7 +848,7 @@ impl ShortcutAction for TranscribeAction {
                                         primary_text,
                                         post_process,
                                         effective_raw,
-                                        processed.post_processed_text,
+                                        recovery_processed_text,
                                         processed.post_process_prompt,
                                     ) {
                                         error!(
