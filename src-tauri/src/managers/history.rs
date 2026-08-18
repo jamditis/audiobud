@@ -280,7 +280,7 @@ impl HistoryManager {
             post_processed_text,
             post_process_prompt,
             true,
-            false,
+            true,
         )
     }
 
