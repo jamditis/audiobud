@@ -1,7 +1,6 @@
 use crate::actions::ACTION_MAP;
 use crate::managers::audio::AudioRecordingManager;
 use log::{debug, error, warn};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Sender};
 use std::sync::Arc;
 use std::thread;
@@ -22,6 +21,7 @@ enum Command {
         recording_was_active: bool,
     },
     ProcessingFinished,
+    DeliveryDrained,
 }
 
 /// Pipeline lifecycle, owned exclusively by the coordinator thread.
@@ -36,7 +36,6 @@ enum Stage {
 /// the async transcribe-paste pipeline.
 pub struct TranscriptionCoordinator {
     tx: Sender<Command>,
-    busy: Arc<AtomicBool>,
 }
 
 pub fn is_transcribe_binding(id: &str) -> bool {
@@ -46,8 +45,6 @@ pub fn is_transcribe_binding(id: &str) -> bool {
 impl TranscriptionCoordinator {
     pub fn new(app: AppHandle) -> Self {
         let (tx, rx) = mpsc::channel();
-        let busy = Arc::new(AtomicBool::new(false));
-        let busy_for_thread = Arc::clone(&busy);
 
         thread::spawn(move || {
             let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -103,17 +100,23 @@ impl TranscriptionCoordinator {
                                 && (recording_was_active || matches!(stage, Stage::Recording(_)))
                             {
                                 stage = Stage::Idle;
-                                busy_for_thread.store(false, Ordering::Release);
                             }
                         }
                         Command::ProcessingFinished => {
                             stage = Stage::Idle;
-                            busy_for_thread.store(false, Ordering::Release);
                             // A fast paste can drain before its async pipeline drops the
                             // finish guard. Perform the deferred cleanup here, before this
                             // coordinator can start a newer recording.
                             crate::actions::clear_transcript_ui_if_delivery_idle(&app);
                         }
+                        Command::DeliveryDrained => match &stage {
+                            Stage::Idle => {
+                                crate::actions::clear_transcript_ui_if_delivery_idle(&app)
+                            }
+                            Stage::Recording(_) | Stage::Processing => debug!(
+                                "Delivery queue drained while transcription is active; deferring UI cleanup"
+                            ),
+                        },
                     }
                 }
                 debug!("Transcription coordinator exited");
@@ -123,7 +126,7 @@ impl TranscriptionCoordinator {
             }
         });
 
-        Self { tx, busy }
+        Self { tx }
     }
 
     /// Send a keyboard/signal input event for a transcribe binding.
@@ -162,17 +165,20 @@ impl TranscriptionCoordinator {
     }
 
     pub fn notify_processing_finished(&self) {
-        // Publish the idle transition before sending the coordinator command so
-        // a delivery that finishes afterward can clear its own UI. The command
-        // performs deferred cleanup when a fast delivery finished first.
-        self.busy.store(false, Ordering::Release);
         if self.tx.send(Command::ProcessingFinished).is_err() {
             warn!("Transcription coordinator channel closed");
         }
     }
 
-    pub fn is_busy(&self) -> bool {
-        self.busy.load(Ordering::Acquire)
+    /// Serialize a drained delivery queue with hotkey input and pipeline state.
+    /// Returns false only when the coordinator can no longer perform cleanup.
+    pub fn notify_delivery_drained(&self) -> bool {
+        if self.tx.send(Command::DeliveryDrained).is_err() {
+            warn!("Transcription coordinator channel closed");
+            false
+        } else {
+            true
+        }
     }
 }
 
@@ -187,11 +193,6 @@ fn start(app: &AppHandle, stage: &mut Stage, binding_id: &str, hotkey_string: &s
         .is_some_and(|a| a.is_recording())
     {
         *stage = Stage::Recording(binding_id.to_string());
-        // The action has already updated the overlay and tray. Publish busy
-        // only after recording really started, so failed starts stay idle.
-        if let Some(coordinator) = app.try_state::<TranscriptionCoordinator>() {
-            coordinator.busy.store(true, Ordering::Release);
-        }
     } else {
         debug!("Start for '{binding_id}' did not begin recording; staying idle");
     }

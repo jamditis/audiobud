@@ -125,12 +125,16 @@ fn finish_transcript_delivery(app: AppHandle) {
 
     if let Some(text) = next {
         schedule_transcript_delivery(app, text);
-    } else if app
-        .try_state::<TranscriptionCoordinator>()
-        .is_some_and(|coordinator| coordinator.is_busy())
-    {
-        debug!("Delivery queue drained while transcription is active; deferring UI cleanup");
     } else {
+        // Put drain and hotkey events on the same serialized command stream.
+        // Whichever arrives first is fully handled before the other can update
+        // pipeline state or UI, so an older delivery cannot clear newer UI.
+        if app
+            .try_state::<TranscriptionCoordinator>()
+            .is_some_and(|coordinator| coordinator.notify_delivery_drained())
+        {
+            return;
+        }
         clear_transcript_ui_if_delivery_idle(&app);
     }
 }
