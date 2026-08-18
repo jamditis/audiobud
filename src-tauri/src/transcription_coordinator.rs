@@ -1,6 +1,7 @@
 use crate::actions::ACTION_MAP;
 use crate::managers::audio::AudioRecordingManager;
 use log::{debug, error, warn};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Sender};
 use std::sync::Arc;
 use std::thread;
@@ -35,6 +36,7 @@ enum Stage {
 /// the async transcribe-paste pipeline.
 pub struct TranscriptionCoordinator {
     tx: Sender<Command>,
+    busy: Arc<AtomicBool>,
 }
 
 pub fn is_transcribe_binding(id: &str) -> bool {
@@ -44,6 +46,8 @@ pub fn is_transcribe_binding(id: &str) -> bool {
 impl TranscriptionCoordinator {
     pub fn new(app: AppHandle) -> Self {
         let (tx, rx) = mpsc::channel();
+        let busy = Arc::new(AtomicBool::new(false));
+        let busy_for_thread = Arc::clone(&busy);
 
         thread::spawn(move || {
             let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -99,10 +103,12 @@ impl TranscriptionCoordinator {
                                 && (recording_was_active || matches!(stage, Stage::Recording(_)))
                             {
                                 stage = Stage::Idle;
+                                busy_for_thread.store(false, Ordering::Release);
                             }
                         }
                         Command::ProcessingFinished => {
                             stage = Stage::Idle;
+                            busy_for_thread.store(false, Ordering::Release);
                         }
                     }
                 }
@@ -113,7 +119,7 @@ impl TranscriptionCoordinator {
             }
         });
 
-        Self { tx }
+        Self { tx, busy }
     }
 
     /// Send a keyboard/signal input event for a transcribe binding.
@@ -152,9 +158,18 @@ impl TranscriptionCoordinator {
     }
 
     pub fn notify_processing_finished(&self) {
+        // Delivery runs after the async transcription task returns. Publish the
+        // idle transition before sending the coordinator command so a delivery
+        // that drains immediately can clear its own UI. A newer recording sets
+        // this flag back to true when its start succeeds.
+        self.busy.store(false, Ordering::Release);
         if self.tx.send(Command::ProcessingFinished).is_err() {
             warn!("Transcription coordinator channel closed");
         }
+    }
+
+    pub fn is_busy(&self) -> bool {
+        self.busy.load(Ordering::Acquire)
     }
 }
 
@@ -169,6 +184,11 @@ fn start(app: &AppHandle, stage: &mut Stage, binding_id: &str, hotkey_string: &s
         .is_some_and(|a| a.is_recording())
     {
         *stage = Stage::Recording(binding_id.to_string());
+        // The action has already updated the overlay and tray. Publish busy
+        // only after recording really started, so failed starts stay idle.
+        if let Some(coordinator) = app.try_state::<TranscriptionCoordinator>() {
+            coordinator.busy.store(true, Ordering::Release);
+        }
     } else {
         debug!("Start for '{binding_id}' did not begin recording; staying idle");
     }

@@ -125,6 +125,11 @@ fn finish_transcript_delivery(app: AppHandle) {
 
     if let Some(text) = next {
         schedule_transcript_delivery(app, text);
+    } else if app
+        .try_state::<TranscriptionCoordinator>()
+        .is_some_and(|coordinator| coordinator.is_busy())
+    {
+        debug!("Delivery queue drained while a newer transcription is active; keeping its UI");
     } else {
         utils::hide_recording_overlay(&app);
         change_tray_icon(&app, TrayIconState::Idle);
