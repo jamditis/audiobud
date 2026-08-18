@@ -109,6 +109,10 @@ impl TranscriptionCoordinator {
                         Command::ProcessingFinished => {
                             stage = Stage::Idle;
                             busy_for_thread.store(false, Ordering::Release);
+                            // A fast paste can drain before its async pipeline drops the
+                            // finish guard. Perform the deferred cleanup here, before this
+                            // coordinator can start a newer recording.
+                            crate::actions::clear_transcript_ui_if_delivery_idle(&app);
                         }
                     }
                 }
@@ -158,10 +162,9 @@ impl TranscriptionCoordinator {
     }
 
     pub fn notify_processing_finished(&self) {
-        // Delivery runs after the async transcription task returns. Publish the
-        // idle transition before sending the coordinator command so a delivery
-        // that drains immediately can clear its own UI. A newer recording sets
-        // this flag back to true when its start succeeds.
+        // Publish the idle transition before sending the coordinator command so
+        // a delivery that finishes afterward can clear its own UI. The command
+        // performs deferred cleanup when a fast delivery finished first.
         self.busy.store(false, Ordering::Release);
         if self.tx.send(Command::ProcessingFinished).is_err() {
             warn!("Transcription coordinator channel closed");

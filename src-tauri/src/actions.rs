@@ -129,10 +129,23 @@ fn finish_transcript_delivery(app: AppHandle) {
         .try_state::<TranscriptionCoordinator>()
         .is_some_and(|coordinator| coordinator.is_busy())
     {
-        debug!("Delivery queue drained while a newer transcription is active; keeping its UI");
+        debug!("Delivery queue drained while transcription is active; deferring UI cleanup");
     } else {
-        utils::hide_recording_overlay(&app);
-        change_tray_icon(&app, TrayIconState::Idle);
+        clear_transcript_ui_if_delivery_idle(&app);
+    }
+}
+
+/// Clear transcript UI only after both the processing pipeline and delivery
+/// worker have released their work. The coordinator calls this when processing
+/// finishes to cover the case where a fast paste drained the queue first.
+pub(crate) fn clear_transcript_ui_if_delivery_idle(app: &AppHandle) {
+    let delivery_is_idle = app
+        .try_state::<DeliveryQueue>()
+        .map_or(true, |queue| queue.is_idle());
+
+    if delivery_is_idle {
+        utils::hide_recording_overlay(app);
+        change_tray_icon(app, TrayIconState::Idle);
     }
 }
 

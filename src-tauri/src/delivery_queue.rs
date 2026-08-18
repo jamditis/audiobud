@@ -74,6 +74,11 @@ impl DeliveryQueue {
         }
     }
 
+    pub fn is_idle(&self) -> bool {
+        let state = self.guard();
+        !state.in_flight && state.pending.is_empty()
+    }
+
     fn guard(&self) -> MutexGuard<'_, QueueState> {
         self.state
             .lock()
@@ -130,5 +135,19 @@ mod tests {
             queue.enqueue("later".to_owned()),
             EnqueueResult::Start("later".to_owned())
         );
+    }
+
+    #[test]
+    fn idle_state_tracks_delivery_lifecycle() {
+        let queue = DeliveryQueue::with_capacity(2);
+
+        assert!(queue.is_idle());
+        assert!(matches!(
+            queue.enqueue("first".to_owned()),
+            EnqueueResult::Start(_)
+        ));
+        assert!(!queue.is_idle());
+        assert_eq!(queue.finish_and_take_next(), None);
+        assert!(queue.is_idle());
     }
 }
