@@ -28,6 +28,7 @@ mod transcription_coordinator;
 mod tray;
 mod tray_i18n;
 mod utils;
+mod window_picker;
 
 pub use cli::CliArgs;
 #[cfg(any(debug_assertions, test))]
