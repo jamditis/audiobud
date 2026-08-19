@@ -6,6 +6,7 @@ use crate::audio_toolkit::{
     apply_spoken_punctuation, format_numbers, is_microphone_access_denied,
     is_no_input_device_error, strip_to_raw_text,
 };
+use crate::delivery_queue::{DeliveryQueue, EnqueueResult};
 use crate::managers::audio::AudioRecordingManager;
 use crate::managers::engine_limits::{MODEL_AUTO_LOAD_FAILED_ERROR, WEDGED_ENGINE_ERROR};
 use crate::managers::history::HistoryManager;
@@ -64,6 +65,91 @@ impl Drop for FinishGuard {
         if let Some(c) = self.0.try_state::<TranscriptionCoordinator>() {
             c.notify_processing_finished();
         }
+    }
+}
+
+/// Enqueue a finished transcript and return it only when the bounded queue
+/// cannot accept it. Callers must persist that returned text before dropping
+/// their last copy.
+fn enqueue_transcript_delivery(app: AppHandle, text: String) -> Option<String> {
+    let Some(queue) = app.try_state::<DeliveryQueue>() else {
+        error!("Delivery queue is not initialized");
+        let _ = app.emit("paste-error", ());
+        utils::hide_recording_overlay(&app);
+        change_tray_icon(&app, TrayIconState::Idle);
+        return Some(text);
+    };
+
+    match queue.enqueue(text) {
+        EnqueueResult::Start(text) => {
+            schedule_transcript_delivery(app, text);
+            None
+        }
+        EnqueueResult::Queued => {
+            debug!("Transcript queued for delivery");
+            None
+        }
+        EnqueueResult::Full(text) => {
+            error!("Delivery queue is full; transcript was not pasted");
+            let _ = app.emit("paste-error", ());
+            Some(text)
+        }
+    }
+}
+
+fn schedule_transcript_delivery(app: AppHandle, text: String) {
+    let app_for_delivery = app.clone();
+    let scheduled = app.run_on_main_thread(move || {
+        let paste_time = Instant::now();
+        match utils::paste(text, app_for_delivery.clone()) {
+            Ok(()) => debug!("Text pasted successfully in {:?}", paste_time.elapsed()),
+            Err(error) => {
+                error!("Failed to paste transcription: {}", error);
+                let _ = app_for_delivery.emit("paste-error", ());
+            }
+        }
+        finish_transcript_delivery(app_for_delivery);
+    });
+
+    if let Err(error) = scheduled {
+        error!("Failed to run paste on main thread: {:?}", error);
+        let _ = app.emit("paste-error", ());
+        finish_transcript_delivery(app);
+    }
+}
+
+fn finish_transcript_delivery(app: AppHandle) {
+    let next = app
+        .try_state::<DeliveryQueue>()
+        .and_then(|queue| queue.finish_and_take_next());
+
+    if let Some(text) = next {
+        schedule_transcript_delivery(app, text);
+    } else {
+        // Put drain and hotkey events on the same serialized command stream.
+        // Whichever arrives first is fully handled before the other can update
+        // pipeline state or UI, so an older delivery cannot clear newer UI.
+        if app
+            .try_state::<TranscriptionCoordinator>()
+            .is_some_and(|coordinator| coordinator.notify_delivery_drained())
+        {
+            return;
+        }
+        clear_transcript_ui_if_delivery_idle(&app);
+    }
+}
+
+/// Clear transcript UI only after both the processing pipeline and delivery
+/// worker have released their work. The coordinator calls this when processing
+/// finishes to cover the case where a fast paste drained the queue first.
+pub(crate) fn clear_transcript_ui_if_delivery_idle(app: &AppHandle) {
+    let delivery_is_idle = app
+        .try_state::<DeliveryQueue>()
+        .is_none_or(|queue| queue.is_idle());
+
+    if delivery_is_idle {
+        utils::hide_recording_overlay(app);
+        change_tray_icon(app, TrayIconState::Idle);
     }
 }
 
@@ -736,54 +822,83 @@ impl ShortcutAction for TranscribeAction {
                             )
                             .await;
 
-                            // Save to history if WAV was saved. In raw mode the emitted (raw) text
-                            // is the entry's primary text so history shows and copies what the user
-                            // actually received; other modes keep the verbatim transcription as
-                            // primary and store any LLM-processed variant separately.
-                            if wav_saved {
-                                let primary_text = if effective_raw {
-                                    processed.final_text.clone()
-                                } else {
-                                    transcription
-                                };
-                                if let Err(err) = hm.save_entry(
-                                    file_name,
-                                    primary_text,
-                                    post_process,
-                                    effective_raw,
-                                    processed.post_processed_text.clone(),
-                                    processed.post_process_prompt.clone(),
-                                ) {
-                                    error!("Failed to save history entry: {}", err);
-                                }
-                            }
-
                             if processed.final_text.is_empty() {
+                                if wav_saved {
+                                    if let Err(err) = hm.save_entry(
+                                        file_name,
+                                        if effective_raw {
+                                            processed.final_text
+                                        } else {
+                                            transcription
+                                        },
+                                        post_process,
+                                        effective_raw,
+                                        processed.post_processed_text,
+                                        processed.post_process_prompt,
+                                    ) {
+                                        error!("Failed to save history entry: {}", err);
+                                    }
+                                }
                                 utils::hide_recording_overlay(&ah);
                                 change_tray_icon(&ah, TrayIconState::Idle);
                             } else {
-                                let ah_clone = ah.clone();
-                                let paste_time = Instant::now();
                                 let final_text = processed.final_text;
-                                ah.run_on_main_thread(move || {
-                                    match utils::paste(final_text, ah_clone.clone()) {
-                                        Ok(()) => debug!(
-                                            "Text pasted successfully in {:?}",
-                                            paste_time.elapsed()
-                                        ),
-                                        Err(e) => {
-                                            error!("Failed to paste transcription: {}", e);
-                                            let _ = ah_clone.emit("paste-error", ());
-                                        }
+                                let overflow =
+                                    enqueue_transcript_delivery(ah.clone(), final_text.clone());
+
+                                if let Some(recovery_text) = overflow {
+                                    // Queue saturation must not destroy the only copy of a
+                                    // completed transcript. A recovery entry is starred so even a
+                                    // zero history limit cannot immediately trim it. The text row
+                                    // remains useful when the concurrent WAV write failed.
+                                    let recovery_processed_text =
+                                        if effective_raw || recovery_text == transcription {
+                                            processed.post_processed_text
+                                        } else {
+                                            // Deterministic transforms such as Chinese-script
+                                            // conversion can change final_text even when requested LLM
+                                            // post-processing fails and leaves post_processed_text empty.
+                                            Some(recovery_text.clone())
+                                        };
+                                    let primary_text = if effective_raw {
+                                        recovery_text
+                                    } else {
+                                        transcription
+                                    };
+                                    if let Err(err) = hm.save_delivery_recovery(
+                                        file_name,
+                                        primary_text,
+                                        post_process,
+                                        effective_raw,
+                                        recovery_processed_text,
+                                        processed.post_process_prompt,
+                                    ) {
+                                        error!(
+                                            "Failed to preserve queue overflow in history: {}",
+                                            err
+                                        );
                                     }
-                                    utils::hide_recording_overlay(&ah_clone);
-                                    change_tray_icon(&ah_clone, TrayIconState::Idle);
-                                })
-                                .unwrap_or_else(|e| {
-                                    error!("Failed to run paste on main thread: {:?}", e);
-                                    utils::hide_recording_overlay(&ah);
-                                    change_tray_icon(&ah, TrayIconState::Idle);
-                                });
+                                } else if wav_saved {
+                                    // In raw mode the emitted (raw) text is the entry's primary
+                                    // text so history shows and copies what the user actually
+                                    // received; other modes keep the verbatim transcription as
+                                    // primary and store any LLM-processed variant separately.
+                                    let primary_text = if effective_raw {
+                                        final_text
+                                    } else {
+                                        transcription
+                                    };
+                                    if let Err(err) = hm.save_entry(
+                                        file_name,
+                                        primary_text,
+                                        post_process,
+                                        effective_raw,
+                                        processed.post_processed_text,
+                                        processed.post_process_prompt,
+                                    ) {
+                                        error!("Failed to save history entry: {}", err);
+                                    }
+                                }
                             }
                         }
                         Err(err) => {

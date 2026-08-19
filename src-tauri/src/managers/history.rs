@@ -245,6 +245,57 @@ impl HistoryManager {
         post_processed_text: Option<String>,
         post_process_prompt: Option<String>,
     ) -> Result<HistoryEntry> {
+        self.insert_entry(
+            file_name,
+            transcription_text,
+            post_process_requested,
+            raw_requested,
+            post_processed_text,
+            post_process_prompt,
+            false,
+            true,
+        )
+    }
+
+    /// Persist exact output that could not enter the bounded delivery queue.
+    ///
+    /// Recovery rows are starred so count-based cleanup cannot immediately
+    /// remove the user's only copy. The audio file may be unavailable when its
+    /// concurrent write failed; the transcript remains visible and copyable in
+    /// History either way.
+    pub fn save_delivery_recovery(
+        &self,
+        file_name: String,
+        transcription_text: String,
+        post_process_requested: bool,
+        raw_requested: bool,
+        post_processed_text: Option<String>,
+        post_process_prompt: Option<String>,
+    ) -> Result<HistoryEntry> {
+        self.insert_entry(
+            file_name,
+            transcription_text,
+            post_process_requested,
+            raw_requested,
+            post_processed_text,
+            post_process_prompt,
+            true,
+            true,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn insert_entry(
+        &self,
+        file_name: String,
+        transcription_text: String,
+        post_process_requested: bool,
+        raw_requested: bool,
+        post_processed_text: Option<String>,
+        post_process_prompt: Option<String>,
+        saved: bool,
+        cleanup: bool,
+    ) -> Result<HistoryEntry> {
         let timestamp = Utc::now().timestamp();
         let title = self.format_timestamp_title(timestamp);
 
@@ -264,7 +315,7 @@ impl HistoryManager {
             params![
                 &file_name,
                 timestamp,
-                false,
+                saved,
                 &title,
                 &transcription_text,
                 &post_processed_text,
@@ -278,7 +329,7 @@ impl HistoryManager {
             id: conn.last_insert_rowid(),
             file_name,
             timestamp,
-            saved: false,
+            saved,
             title,
             transcription_text,
             post_processed_text,
@@ -289,7 +340,9 @@ impl HistoryManager {
 
         debug!("Saved history entry with id {}", entry.id);
 
-        self.cleanup_old_entries()?;
+        if cleanup {
+            self.cleanup_old_entries()?;
+        }
 
         // Emit typed event for real-time frontend updates
         if let Err(e) = (HistoryUpdatePayload::Added {

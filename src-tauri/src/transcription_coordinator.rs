@@ -21,6 +21,7 @@ enum Command {
         recording_was_active: bool,
     },
     ProcessingFinished,
+    DeliveryDrained,
 }
 
 /// Pipeline lifecycle, owned exclusively by the coordinator thread.
@@ -103,7 +104,19 @@ impl TranscriptionCoordinator {
                         }
                         Command::ProcessingFinished => {
                             stage = Stage::Idle;
+                            // A fast paste can drain before its async pipeline drops the
+                            // finish guard. Perform the deferred cleanup here, before this
+                            // coordinator can start a newer recording.
+                            crate::actions::clear_transcript_ui_if_delivery_idle(&app);
                         }
+                        Command::DeliveryDrained => match &stage {
+                            Stage::Idle => {
+                                crate::actions::clear_transcript_ui_if_delivery_idle(&app)
+                            }
+                            Stage::Recording(_) | Stage::Processing => debug!(
+                                "Delivery queue drained while transcription is active; deferring UI cleanup"
+                            ),
+                        },
                     }
                 }
                 debug!("Transcription coordinator exited");
@@ -154,6 +167,17 @@ impl TranscriptionCoordinator {
     pub fn notify_processing_finished(&self) {
         if self.tx.send(Command::ProcessingFinished).is_err() {
             warn!("Transcription coordinator channel closed");
+        }
+    }
+
+    /// Serialize a drained delivery queue with hotkey input and pipeline state.
+    /// Returns false only when the coordinator can no longer perform cleanup.
+    pub fn notify_delivery_drained(&self) -> bool {
+        if self.tx.send(Command::DeliveryDrained).is_err() {
+            warn!("Transcription coordinator channel closed");
+            false
+        } else {
+            true
         }
     }
 }

@@ -11,6 +11,7 @@ import {
   type HistoryUpdatePayload,
 } from "@/bindings";
 import { useOsType } from "@/hooks/useOsType";
+import { historyEntryText } from "@/lib/history-entry-text";
 import {
   parakeetInputTooLongSeconds,
   recordingDurationLabel,
@@ -269,7 +270,7 @@ export const HistorySettings: React.FC = () => {
               key={entry.id}
               entry={entry}
               onToggleSaved={() => toggleSaved(entry.id)}
-              onCopyText={() => copyToClipboard(entry.transcription_text)}
+              onCopyText={() => copyToClipboard(historyEntryText(entry))}
               getAudioUrl={getAudioUrl}
               deleteAudio={deleteAudioEntry}
               retryTranscription={retryHistoryEntry}
@@ -325,7 +326,8 @@ const HistoryEntryComponent: React.FC<HistoryEntryProps> = ({
   const [showCopied, setShowCopied] = useState(false);
   const [retrying, setRetrying] = useState(false);
 
-  const hasTranscription = entry.transcription_text.trim().length > 0;
+  const deliveredText = historyEntryText(entry);
+  const hasTranscription = deliveredText.trim().length > 0;
 
   const handleLoadAudio = useCallback(
     () => getAudioUrl(entry.file_name),
@@ -465,7 +467,7 @@ const HistoryEntryComponent: React.FC<HistoryEntryProps> = ({
         {retrying
           ? t("settings.history.transcribing")
           : hasTranscription
-            ? entry.transcription_text
+            ? deliveredText
             : t("settings.history.transcriptionFailed")}
       </p>
 

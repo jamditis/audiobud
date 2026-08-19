@@ -13,6 +13,7 @@ mod clipboard_snapshot;
 #[allow(dead_code)]
 mod command;
 mod commands;
+mod delivery_queue;
 mod helpers;
 mod input;
 mod llm_client;
@@ -484,6 +485,7 @@ fn initialize_core_logic(app_handle: &AppHandle) {
     // paste path reads this at send time. The tray/shortcut toggle and the
     // Windows focus-borrow that consume it are the next child of epic #119.
     app_handle.manage(output_target::PinnedTarget::default());
+    app_handle.manage(delivery_queue::DeliveryQueue::default());
 
     // Initialize tray menu with idle state
     utils::update_tray_menu(app_handle, &utils::TrayIconState::Idle, None);
