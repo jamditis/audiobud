@@ -145,7 +145,7 @@ fn finish_transcript_delivery(app: AppHandle) {
 pub(crate) fn clear_transcript_ui_if_delivery_idle(app: &AppHandle) {
     let delivery_is_idle = app
         .try_state::<DeliveryQueue>()
-        .map_or(true, |queue| queue.is_idle());
+        .is_none_or(|queue| queue.is_idle());
 
     if delivery_is_idle {
         utils::hide_recording_overlay(app);
