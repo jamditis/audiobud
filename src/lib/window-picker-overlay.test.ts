@@ -23,7 +23,10 @@ const rows: readonly PickerWindow[] = [
   { handle: "30", label: "Code: window-picker-overlay.ts" },
 ];
 
-const at = (highlighted: number): PickerState => ({ windows: rows, highlighted });
+const at = (highlighted: number): PickerState => ({
+  windows: rows,
+  highlighted,
+});
 
 describe("createPickerState", () => {
   it("highlights the first row so a promoted repeat-pick is one confirm", () => {
