@@ -124,7 +124,10 @@ mod tests {
         assert!(with_global_on.effective_raw());
         assert!(!with_global_off.effective_raw());
         // The stored value is what the accessor returns, not a re-resolution.
-        assert_eq!(with_global_on.effective_raw(), with_global_on.effective_raw());
+        assert_eq!(
+            with_global_on.effective_raw(),
+            with_global_on.effective_raw()
+        );
     }
 
     // The per-dictation intent is carried verbatim, the way history retry replays it.
