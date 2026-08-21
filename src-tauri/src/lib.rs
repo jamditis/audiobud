@@ -14,6 +14,7 @@ mod clipboard_snapshot;
 mod command;
 mod commands;
 mod delivery_queue;
+mod dictation_context;
 mod helpers;
 mod input;
 mod llm_client;
