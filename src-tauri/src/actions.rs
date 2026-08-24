@@ -524,13 +524,6 @@ pub(crate) async fn process_transcription_output(
         // only way to dictate anything with a "?" or a "$25" in it. Both stay behind their own
         // setting: format_raw_output turns raw formatting on at all, and format_numbers keeps
         // meaning the same thing here as it does on the normal path.
-        //
-        // Order matters, and not in the way it first reads. Numbers must run BEFORE spoken
-        // punctuation, because format_numbers rebuilds the text with split_whitespace() and
-        // rejoins on single spaces -- so any line break already in the string is silently
-        // flattened. Punctuation is what creates those breaks ("new line", "new paragraph"),
-        // so running it first means every dictated break is destroyed by the pass after it.
-        // Swapping these two lines to the more natural-looking order reintroduces that.
         if settings.format_raw_output {
             if settings.format_numbers {
                 final_text = format_numbers(&final_text);
