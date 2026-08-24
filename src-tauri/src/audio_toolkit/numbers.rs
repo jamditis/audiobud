@@ -397,9 +397,30 @@ fn is_ordinal_word(word: &str) -> bool {
     )
 }
 
-/// Rewrites spelled-out English numbers in `text` into digits and symbols. See the module docs
-/// for the precision rules and known limitations.
+/// Rewrites spelled-out English numbers in `text` into digits and symbols. Existing LF and CRLF
+/// line endings are preserved, and number groups never cross them. See the module docs for the
+/// precision rules and known limitations.
 pub fn format_numbers(text: &str) -> String {
+    let mut formatted = String::with_capacity(text.len());
+
+    for segment in text.split_inclusive('\n') {
+        let (line, ending) = if let Some(line) = segment.strip_suffix("\r\n") {
+            (line, "\r\n")
+        } else if let Some(line) = segment.strip_suffix('\n') {
+            (line, "\n")
+        } else {
+            (segment, "")
+        };
+        formatted.push_str(&format_number_line(line));
+        formatted.push_str(ending);
+    }
+
+    formatted
+}
+
+/// Formats one line. Keeping line boundaries outside the token stream prevents whitespace
+/// tokenization from flattening dictated or engine-provided structure.
+fn format_number_line(text: &str) -> String {
     let tokens = tokenize(text);
     let mut out: Vec<String> = Vec::new();
     let mut i = 0;
@@ -778,6 +799,17 @@ mod tests {
             "twenty-something people"
         );
         assert_eq!(format_numbers(""), "");
+    }
+
+    #[test]
+    fn preserves_line_endings_between_formatted_numbers() {
+        assert_eq!(format_numbers("twenty five\nfifty percent"), "25\n50%");
+        assert_eq!(format_numbers("twenty\nfive"), "20\n5");
+        assert_eq!(format_numbers("twenty\nfive\r\n"), "20\n5\r\n");
+        assert_eq!(
+            format_numbers("one hundred\r\n\r\ntwo dollars"),
+            "100\r\n\r\n$2"
+        );
     }
 
     #[test]
