@@ -4,8 +4,9 @@ use serde::{Deserialize, Deserializer, Serialize};
 use specta::Type;
 use std::collections::HashMap;
 use std::fmt;
+use std::sync::{Arc, RwLock};
 use tauri::{AppHandle, Emitter};
-use tauri_plugin_store::StoreExt;
+use tauri_plugin_store::{Store, StoreExt};
 
 pub const APPLE_INTELLIGENCE_PROVIDER_ID: &str = "apple_intelligence";
 pub const APPLE_INTELLIGENCE_DEFAULT_MODEL_ID: &str = "Apple Intelligence";
@@ -1057,11 +1058,141 @@ impl AppSettings {
     }
 }
 
+/// Process-wide cache of the deserialized [`AppSettings`].
+///
+/// Before this existed, every one of the ~130 `get_settings` call sites re-opened
+/// the Tauri store and re-deserialized the whole settings object, including on the
+/// paste hot path (issue #166). Reads now hit the cache; the only invalidation
+/// point is [`write_settings`], which is the single funnel every mutation in the
+/// app already goes through, so the cache cannot drift from the persisted store.
+pub(crate) struct SettingsCache {
+    inner: RwLock<Option<AppSettings>>,
+}
+
+impl SettingsCache {
+    pub(crate) const fn new() -> Self {
+        Self {
+            inner: RwLock::new(None),
+        }
+    }
+
+    /// Return the cached settings, loading (and caching) them with `load` on a miss.
+    ///
+    /// `load` runs without the lock held: it touches the filesystem, and holding a
+    /// write lock across that would serialize every reader behind disk I/O. A
+    /// concurrent miss can therefore run `load` twice; both produce the same value,
+    /// so the last write wins harmlessly.
+    pub(crate) fn get_or_load(&self, load: impl FnOnce() -> AppSettings) -> AppSettings {
+        if let Some(cached) = self.peek() {
+            return cached;
+        }
+        let loaded = load();
+        self.store(&loaded);
+        loaded
+    }
+
+    pub(crate) fn peek(&self) -> Option<AppSettings> {
+        self.inner
+            .read()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clone()
+    }
+
+    pub(crate) fn store(&self, settings: &AppSettings) {
+        *self
+            .inner
+            .write()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(settings.clone());
+    }
+
+    pub(crate) fn invalidate(&self) {
+        *self
+            .inner
+            .write()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) = None;
+    }
+}
+
+static SETTINGS_CACHE: SettingsCache = SettingsCache::new();
+
+/// Open the settings store, logging instead of aborting the process when it
+/// cannot be initialized. Callers fall back to defaults; an unwritable store
+/// costs persistence for the session, which beats killing a running dictation
+/// app mid-session (issue #166).
+fn settings_store(app: &AppHandle) -> Option<Arc<Store<tauri::Wry>>> {
+    match app.store(crate::portable::store_path(SETTINGS_STORE_PATH)) {
+        Ok(store) => Some(store),
+        Err(e) => {
+            warn!("Failed to initialize the settings store: {e}");
+            None
+        }
+    }
+}
+
+/// Apply a JSON value to a single [`AppSettings`] field, addressed by its
+/// serialized key.
+///
+/// This is the typed core of the generic settings mutator that replaced ~33
+/// near-identical `change_*_setting` commands (issue #166). Patching through
+/// `serde_json` rather than a hand-written match means the stored shape is the
+/// authority: an unknown key or a value of the wrong type is rejected here
+/// rather than silently coerced, and adding a field to `AppSettings` makes it
+/// settable with no extra command, no `collect_commands!` entry, and no new
+/// branch in this function.
+pub fn apply_setting_value(
+    settings: &mut AppSettings,
+    key: &str,
+    value: serde_json::Value,
+) -> Result<(), String> {
+    let mut object = match serde_json::to_value(&*settings) {
+        Ok(serde_json::Value::Object(map)) => map,
+        Ok(_) => return Err("Settings did not serialize to a JSON object".to_string()),
+        Err(e) => return Err(format!("Failed to serialize settings: {e}")),
+    };
+
+    if !object.contains_key(key) {
+        return Err(format!("Unknown setting '{key}'"));
+    }
+    object.insert(key.to_string(), value);
+
+    let updated: AppSettings = serde_json::from_value(serde_json::Value::Object(object))
+        .map_err(|e| format!("Invalid value for setting '{key}': {e}"))?;
+
+    let previous = std::mem::replace(settings, updated);
+    normalize_after_change(settings, key, &previous);
+    Ok(())
+}
+
+/// Keep fields that are derived from the changed one consistent.
+///
+/// These are the adjustments the hand-written commands made around their one
+/// assignment; they live here so the generic mutator reproduces them exactly.
+fn normalize_after_change(settings: &mut AppSettings, key: &str, previous: &AppSettings) {
+    if key == "overlay_position" {
+        // Keep the restore slot (read by the tray show/hide toggle) in sync so it
+        // always holds the most recent visible placement. Choosing Top/Bottom
+        // records it; hiding via the dropdown ("none") remembers the outgoing
+        // placement, so a dropdown-hide followed by a tray-show restores the
+        // position the user last picked instead of an older value or the default.
+        if settings.overlay_position != OverlayPosition::None {
+            settings.overlay_restore_position = Some(settings.overlay_position);
+        } else if previous.overlay_position != OverlayPosition::None {
+            settings.overlay_restore_position = Some(previous.overlay_position);
+        }
+        // Picking a coarse position (or hiding the overlay) supersedes any fine
+        // grid/drag placement from #9, so clear it and fall back to the centered
+        // Top/Bottom default.
+        settings.overlay_custom_position = None;
+    }
+}
+
 pub fn load_or_create_app_settings(app: &AppHandle) -> AppSettings {
     // Initialize store
-    let store = app
-        .store(crate::portable::store_path(SETTINGS_STORE_PATH))
-        .expect("Failed to initialize store");
+    let Some(store) = settings_store(app) else {
+        let defaults = get_default_settings();
+        SETTINGS_CACHE.store(&defaults);
+        return defaults;
+    };
 
     let mut settings = if let Some(settings_value) = store.get("settings") {
         // Parse the entire settings object
@@ -1125,13 +1256,23 @@ pub fn load_or_create_app_settings(app: &AppHandle) -> AppSettings {
         debug!("Configured signed update checks for the v0.4.2 package migration: {enabled}");
     }
 
+    SETTINGS_CACHE.store(&settings);
     settings
 }
 
+/// Read the settings, from the in-process cache when it is warm.
+///
+/// The store is only touched on a cold cache; every mutation funnels through
+/// [`write_settings`], which refreshes the cache, so callers still observe their
+/// own writes.
 pub fn get_settings(app: &AppHandle) -> AppSettings {
-    let store = app
-        .store(crate::portable::store_path(SETTINGS_STORE_PATH))
-        .expect("Failed to initialize store");
+    SETTINGS_CACHE.get_or_load(|| read_settings_from_store(app))
+}
+
+fn read_settings_from_store(app: &AppHandle) -> AppSettings {
+    let Some(store) = settings_store(app) else {
+        return get_default_settings();
+    };
 
     let mut settings = if let Some(settings_value) = store.get("settings") {
         serde_json::from_value::<AppSettings>(settings_value).unwrap_or_else(|_| {
@@ -1153,11 +1294,16 @@ pub fn get_settings(app: &AppHandle) -> AppSettings {
 }
 
 pub fn write_settings(app: &AppHandle, settings: AppSettings) {
-    let store = app
-        .store(crate::portable::store_path(SETTINGS_STORE_PATH))
-        .expect("Failed to initialize store");
+    let Some(store) = settings_store(app) else {
+        // The store is unavailable, so the new value cannot be persisted. Drop
+        // the cache rather than caching an unpersisted value, so the next read
+        // reflects whatever is actually on disk.
+        SETTINGS_CACHE.invalidate();
+        return;
+    };
 
     store.set("settings", serde_json::to_value(&settings).unwrap());
+    SETTINGS_CACHE.store(&settings);
 }
 
 pub fn get_bindings(app: &AppHandle) -> HashMap<String, ShortcutBinding> {
@@ -1187,6 +1333,227 @@ pub fn get_recording_retention_period(app: &AppHandle) -> RecordingRetentionPeri
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
+
+    /// The exact shape a released build persists, reduced to the fields that
+    /// have no serde default. Anything added to `AppSettings` after this must
+    /// stay optional, or an existing install fails to load its settings.
+    fn legacy_stored_settings() -> serde_json::Value {
+        json!({
+            "bindings": {
+                "transcribe": {
+                    "id": "transcribe",
+                    "name": "Transcribe",
+                    "description": "Converts your speech into text.",
+                    "default_binding": "ctrl+alt+space",
+                    "current_binding": "ctrl+alt+f1"
+                }
+            },
+            "push_to_talk": true,
+            "audio_feedback": true,
+            "external_script_path": null
+        })
+    }
+
+    #[test]
+    fn stored_settings_survive_a_round_trip_unchanged() {
+        // The generic mutator patches settings as JSON, so the serialized shape
+        // is now load-bearing: serialize -> deserialize -> serialize must be a
+        // fixed point, or a write could silently rewrite unrelated fields.
+        let settings = get_default_settings();
+        let serialized = serde_json::to_value(&settings).expect("settings serialize");
+        let reloaded: AppSettings =
+            serde_json::from_value(serialized.clone()).expect("settings deserialize");
+        let reserialized = serde_json::to_value(&reloaded).expect("settings re-serialize");
+
+        assert_eq!(serialized, reserialized);
+    }
+
+    #[test]
+    fn settings_from_an_older_install_load_with_defaults_filled_in() {
+        let settings: AppSettings =
+            serde_json::from_value(legacy_stored_settings()).expect("legacy settings deserialize");
+
+        // The persisted values survive...
+        assert!(settings.push_to_talk);
+        assert!(settings.audio_feedback);
+        assert_eq!(
+            settings.bindings["transcribe"].current_binding,
+            "ctrl+alt+f1"
+        );
+        // ...and everything added since gets its default rather than failing the load.
+        assert_eq!(settings.selected_language, default_selected_language());
+        assert_eq!(settings.paste_method, PasteMethod::default());
+        assert!(settings.format_numbers);
+        assert!(!settings.personalization.enabled);
+    }
+
+    #[test]
+    fn settings_written_by_a_newer_install_still_load() {
+        // Downgrades happen (a bad release, a portable copy). Unknown keys must
+        // be ignored, not fail the whole load back to defaults.
+        let mut stored = legacy_stored_settings();
+        stored["setting_from_the_future"] = json!("surprise");
+
+        let settings: AppSettings =
+            serde_json::from_value(stored).expect("forward-compatible settings deserialize");
+        assert!(settings.push_to_talk);
+    }
+
+    #[test]
+    fn legacy_numeric_log_levels_still_migrate() {
+        // Releases before the string encoding stored log_level as 1-5.
+        let mut stored = legacy_stored_settings();
+        stored["log_level"] = json!(4);
+
+        let settings: AppSettings =
+            serde_json::from_value(stored).expect("numeric log level deserializes");
+        assert_eq!(settings.log_level, LogLevel::Warn);
+        assert_eq!(
+            serde_json::to_value(settings.log_level).unwrap(),
+            json!("warn"),
+            "a migrated level is rewritten in the current string encoding"
+        );
+    }
+
+    #[test]
+    fn generic_mutator_round_trips_a_value() {
+        let mut settings = get_default_settings();
+
+        apply_setting_value(&mut settings, "push_to_talk", json!(true)).expect("bool applies");
+        apply_setting_value(&mut settings, "paste_delay_ms", json!(250)).expect("number applies");
+        apply_setting_value(&mut settings, "selected_language", json!("de"))
+            .expect("string applies");
+        apply_setting_value(&mut settings, "custom_words", json!(["AudioBud", "Tauri"]))
+            .expect("list applies");
+        apply_setting_value(&mut settings, "paste_method", json!("shift_insert"))
+            .expect("enum applies");
+        apply_setting_value(&mut settings, "external_script_path", json!(null))
+            .expect("null applies to an Option field");
+
+        assert!(settings.push_to_talk);
+        assert_eq!(settings.paste_delay_ms, 250);
+        assert_eq!(settings.selected_language, "de");
+        assert_eq!(settings.custom_words, vec!["AudioBud", "Tauri"]);
+        assert_eq!(settings.paste_method, PasteMethod::ShiftInsert);
+        assert_eq!(settings.external_script_path, None);
+    }
+
+    #[test]
+    fn generic_mutator_leaves_every_other_field_untouched() {
+        let mut settings = get_default_settings();
+        let before = serde_json::to_value(&settings).unwrap();
+
+        apply_setting_value(&mut settings, "audio_feedback_volume", json!(0.25))
+            .expect("volume applies");
+
+        let after = serde_json::to_value(&settings).unwrap();
+        let (before, after) = (
+            before.as_object().unwrap().clone(),
+            after.as_object().unwrap().clone(),
+        );
+        assert_eq!(before.len(), after.len());
+        for (key, value) in &before {
+            if key == "audio_feedback_volume" {
+                continue;
+            }
+            assert_eq!(Some(value), after.get(key), "field '{key}' changed");
+        }
+    }
+
+    #[test]
+    fn generic_mutator_rejects_unknown_keys_and_wrong_types() {
+        let mut settings = get_default_settings();
+
+        let error = apply_setting_value(&mut settings, "not_a_setting", json!(true))
+            .expect_err("unknown key is rejected");
+        assert!(error.contains("not_a_setting"), "{error}");
+
+        let error = apply_setting_value(&mut settings, "push_to_talk", json!("yes"))
+            .expect_err("wrong type is rejected");
+        assert!(error.contains("push_to_talk"), "{error}");
+        assert!(
+            !settings.push_to_talk,
+            "a rejected patch must not partially apply"
+        );
+    }
+
+    #[test]
+    fn changing_the_overlay_position_keeps_the_derived_fields_in_sync() {
+        let mut settings = get_default_settings();
+        settings.overlay_position = OverlayPosition::Top;
+        settings.overlay_custom_position = Some(OverlayCustomPosition {
+            anchor: OverlayAnchor::TopLeft,
+            dx: 4.0,
+            dy: 8.0,
+        });
+
+        // Hiding remembers the outgoing placement for the tray show/hide toggle
+        // and drops the fine grid placement.
+        apply_setting_value(&mut settings, "overlay_position", json!("none")).expect("applies");
+        assert_eq!(settings.overlay_position, OverlayPosition::None);
+        assert_eq!(
+            settings.overlay_restore_position,
+            Some(OverlayPosition::Top)
+        );
+        assert!(settings.overlay_custom_position.is_none());
+
+        // Choosing a visible placement records it as the restore point.
+        apply_setting_value(&mut settings, "overlay_position", json!("bottom")).expect("applies");
+        assert_eq!(
+            settings.overlay_restore_position,
+            Some(OverlayPosition::Bottom)
+        );
+    }
+
+    #[test]
+    fn cache_loads_once_and_serves_later_reads() {
+        let cache = SettingsCache::new();
+        let mut loads = 0;
+
+        let first = cache.get_or_load(|| {
+            loads += 1;
+            get_default_settings()
+        });
+        let second = cache.get_or_load(|| {
+            loads += 1;
+            get_default_settings()
+        });
+
+        assert_eq!(loads, 1, "a warm cache must not re-read the store");
+        assert_eq!(first.push_to_talk, second.push_to_talk);
+    }
+
+    #[test]
+    fn writing_settings_refreshes_the_cache() {
+        let cache = SettingsCache::new();
+        cache.get_or_load(get_default_settings);
+
+        let mut updated = get_default_settings();
+        apply_setting_value(&mut updated, "push_to_talk", json!(true)).expect("applies");
+        cache.store(&updated);
+
+        let observed = cache.get_or_load(|| panic!("cache must serve the value just written"));
+        assert!(
+            observed.push_to_talk,
+            "a reader must observe the value just written"
+        );
+    }
+
+    #[test]
+    fn invalidating_the_cache_forces_a_reload() {
+        let cache = SettingsCache::new();
+        cache.get_or_load(get_default_settings);
+        cache.invalidate();
+        assert!(cache.peek().is_none());
+
+        let mut reloaded = 0;
+        cache.get_or_load(|| {
+            reloaded += 1;
+            get_default_settings()
+        });
+        assert_eq!(reloaded, 1, "an invalidated cache re-reads the store");
+    }
 
     #[test]
     fn default_settings_disable_auto_submit() {
