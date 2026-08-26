@@ -15,7 +15,8 @@
     "outputMode": "מצב פלט",
     "formatted": "מעוצב",
     "rawTranscript": "תמלול גולמי",
-    "lockToWindow": "נעילה לחלון"
+    "lockToWindow": "נעילה לחלון",
+    "sendToWindowOnce": "שליחה לחלון פעם אחת"
   },
   "sidebar": {
     "navLabel": "מדורי ההגדרות",
@@ -200,6 +201,10 @@
           "toggle_target_lock": {
             "name": "קיצור לנעילה לחלון",
             "description": "קיצור המקלדת ששולח את הטקסט שלך לחלון אחד עד שתבטל את הנעילה."
+          },
+          "pick_output_window": {
+            "name": "קיצור לשליחה לחלון",
+            "description": "קיצור המקלדת שבוחר חלון לטקסט הבא בלבד."
           }
         },
         "errors": {
@@ -817,7 +822,11 @@
     "transcriptionErrorGeneric": "לא ניתן היה לתמלל את ההקלטה. נסו שוב או בחרו מודל אחר.",
     "transcriptionTimeoutTitle": "התמלול חרג מהזמן",
     "transcriptionTimeout": "המנוע לא הגיב אחרי {{seconds}} שניות וייתכן שהוא תקוע. הפעל מחדש את AudioBud אם זה ממשיך לקרות.",
-    "parakeetInputTooLong": "אורך ההקלטה הוא {{duration}}. ‏Parakeet לא יכול לתמלל הקלטות ארוכות מכ־6:30, כי האודיו שבהמשך יושמט ללא התראה. יש להשתמש במודל Whisper להקלטות ארוכות."
+    "parakeetInputTooLong": "אורך ההקלטה הוא {{duration}}. ‏Parakeet לא יכול לתמלל הקלטות ארוכות מכ־6:30, כי האודיו שבהמשך יושמט ללא התראה. יש להשתמש במודל Whisper להקלטות ארוכות.",
+    "windowPickLostTitle": "החלון שנבחר נעלם",
+    "windowPickLost": "החלון שבחרת סגור. AudioBud לא הדביק את הטקסט. בחר חלון שוב.",
+    "pickerOpenTitle": "בורר החלונות פתוח",
+    "pickerOpen": "AudioBud לא הדביק את הטקסט הזה כי בורר החלונות היה פתוח. בחר חלון והכתב שוב."
   },
   "appLanguage": {
     "title": "שפת האפליקציה",
@@ -830,6 +839,15 @@
     "cancel": "בטל הקלטה",
     "raw": "גולמי",
     "rawHint": "מצב תמלול גולמי"
+  },
+  "windowPicker": {
+    "title": "שליחה לחלון",
+    "hint": "בחר חלון לטקסט הבא. לחץ F לחלון הנוכחי, Esc לביטול.",
+    "refused": "החלון הזה נעלם. בחר חלון אחר.",
+    "loading": "מחפש חלונות...",
+    "empty": "אין חלונות זמינים.",
+    "useForeground": "שימוש בחלון הנוכחי",
+    "cancel": "ביטול"
   },
   "critters": {
     "frog": "צפרדע"

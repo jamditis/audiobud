@@ -962,6 +962,20 @@ async exportPersonalization() : Promise<Result<boolean, string>> {
 }
 },
 /**
+ * The rows the picker should render, remembered pick first. An empty list is a
+ * normal answer, not an error: the overlay shows its empty state.
+ */
+async listPickerWindows() : Promise<PickerWindow[]> {
+    return await TAURI_INVOKE("list_picker_windows");
+},
+/**
+ * Report the gesture that ended the pick and arm what it asked for. The picker
+ * window closes either way, so the overlay does not have to close itself.
+ */
+async resolveWindowPick(gesture: PickerGesture) : Promise<PickArmed> {
+    return await TAURI_INVOKE("resolve_window_pick", { gesture });
+},
+/**
  * Stub implementation for non-macOS platforms
  * Always returns false since laptop detection is macOS-specific
  */
@@ -1116,6 +1130,36 @@ learned_replacements?: WordReplacement[];
  * Mined suggestions the user dismissed, so they are never surfaced again.
  */
 dismissed_suggestions?: string[] }
+/**
+ * What one resolved pick armed, for the log line and the overlay's reply.
+ */
+export type PickArmed =
+/**
+ * The next transcript goes to this window, once.
+ */
+{ kind: "window" } |
+/**
+ * The next transcript follows the foreground, as usual.
+ */
+{ kind: "foreground" } |
+/**
+ * Nothing was armed: the user dismissed, or the chosen window was already
+ * gone. Either way no paste is redirected.
+ */
+{ kind: "cancelled" }
+/**
+ * The overlay's terminal gesture as it arrives over the Tauri boundary. The
+ * tag and its lowercase variant names mirror the frontend `PickerGesture`
+ * (`src/lib/window-picker-overlay.ts`) one-to-one, so the two halves share a
+ * single vocabulary and the mapping below is the only translation step.
+ */
+export type PickerGesture = { kind: "chose"; handle: string } | { kind: "foreground" } | { kind: "dismiss" }
+/**
+ * One row as the overlay renders it: the opaque handle and the label the
+ * backend already composed ([`WindowCandidate::label`]). The frontend never
+ * recomputes the label, so the row text and its source cannot drift.
+ */
+export type PickerWindow = { handle: string; label: string }
 export type PostProcessProvider = { id: string; label: string; base_url: string; allow_base_url_edit?: boolean; models_endpoint?: string | null; supports_structured_output?: boolean }
 export type RecordingRetentionPeriod = "never" | "preserve_limit" | "days_3" | "weeks_2" | "months_3"
 export type SecretMap = Partial<{ [key in string]: string }>

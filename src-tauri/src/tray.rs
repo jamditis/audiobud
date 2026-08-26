@@ -278,6 +278,19 @@ pub fn update_tray_menu(app: &AppHandle, state: &TrayIconState, locale: Option<&
     )
     .expect("failed to create target-lock toggle item");
 
+    // One-shot window picker (#124), Windows-only for now (#119). A plain item,
+    // not a checkmark: it opens the picker for the next transcript and arms no
+    // lasting state, so there is nothing to show as on or off.
+    #[cfg(target_os = "windows")]
+    let pick_output_window_i = MenuItem::with_id(
+        app,
+        "pick_output_window",
+        &strings.send_to_window_once,
+        true,
+        None::<&str>,
+    )
+    .expect("failed to create window-picker item");
+
     // Output-mode submenu: switch dictation between a formatted transcript (punctuation, casing,
     // and digit/currency number formatting) and a raw transcript (verbatim, lowercased). The two
     // items act as radio buttons over the `raw_output` setting; the checked one is derived fresh on
@@ -352,6 +365,8 @@ pub fn update_tray_menu(app: &AppHandle, state: &TrayIconState, locale: Option<&
             ];
             #[cfg(target_os = "windows")]
             items.push(&toggle_target_lock_i);
+            #[cfg(target_os = "windows")]
+            items.push(&pick_output_window_i);
             items.extend([
                 &separators[4] as &dyn tauri::menu::IsMenuItem<tauri::Wry>,
                 &settings_i,

@@ -786,13 +786,7 @@ fn deliver_to_target(
         .lock()
         .map_err(|e| format!("Failed to lock Enigo: {}", e))?;
 
-    let hold = FocusHold::new(
-        app_handle,
-        match delivery {
-            Delivery::Foreground => None,
-            Delivery::Pinned(identity) => Some(identity),
-        },
-    );
+    let hold = FocusHold::new(app_handle, delivery);
 
     // The paste itself, unchanged whichever window it lands in. A pinned target
     // runs it inside a focus borrow; `hold.ensure()` re-checks the target at
@@ -847,14 +841,15 @@ fn deliver_to_target(
         Delivery::Foreground => deliver(&mut enigo),
         // Borrowing focus for a delivery that sends nothing would take the
         // user's window away from them for no reason at all.
-        Delivery::Pinned(_) if !delivery_sends_input(paste_method, settings.auto_submit) => {
+        Delivery::Pinned(_, _) if !delivery_sends_input(paste_method, settings.auto_submit) => {
             deliver(&mut enigo)
         }
-        Delivery::Pinned(identity) => {
-            match target_backend::borrow_focus(app_handle, identity, || deliver(&mut enigo)) {
+        Delivery::Pinned(identity, source) => {
+            match target_backend::borrow_focus(app_handle, identity, source, || deliver(&mut enigo))
+            {
                 Ok(Borrowed::Delivered(result)) => result,
                 // The window died between resolving it and activating it, so
-                // nothing was typed and the lock is already dropped.
+                // nothing was typed and the pick or lock is already cleaned up.
                 Ok(Borrowed::Suppressed) => {
                     return Ok(false);
                 }

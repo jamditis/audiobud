@@ -389,6 +389,11 @@ fn initialize_core_logic(app_handle: &AppHandle) {
             "copy_last_transcript" => {
                 tray::copy_last_transcript(app);
             }
+            // One-shot window picker (#124). Opens the picker for the next
+            // dictation only; it arms no lasting lock.
+            "pick_output_window" => {
+                window_picker::backend::open_picker(app);
+            }
             "unload_model" => {
                 let transcription_manager = app.state::<Arc<TranscriptionManager>>();
                 if !transcription_manager.is_model_loaded() {
@@ -497,6 +502,12 @@ fn initialize_core_logic(app_handle: &AppHandle) {
     // dictation reads it once, at recording start, into its DictationContext;
     // the paste then delivers to that captured target (#160).
     app_handle.manage(output_target::PinnedTarget::default());
+    // One-shot window picker state (#124): the rows currently on offer, the
+    // pick waiting to route a single transcript, and the remembered pick the
+    // picker floats to the top next time.
+    app_handle.manage(window_picker::PickerSession::default());
+    app_handle.manage(window_picker::PendingPick::default());
+    app_handle.manage(window_picker::LastPick::default());
     // Hand-off of in-flight dictation contexts from recording start to stop.
     app_handle.manage(dictation_context::ActiveDictations::default());
     let delivery_queue: delivery_queue::DeliveryQueue = delivery_queue::DeliveryQueue::default();
@@ -683,6 +694,8 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::personalization::update_learned_words,
             commands::personalization::reset_personalization,
             commands::personalization::export_personalization,
+            commands::window_picker::list_picker_windows,
+            commands::window_picker::resolve_window_pick,
             helpers::clamshell::is_laptop,
         ])
         .events(collect_events![managers::history::HistoryUpdatePayload,])
@@ -892,6 +905,17 @@ pub fn run(cli_args: CliArgs) {
         })
         .on_window_event(|window, event| match event {
             tauri::WindowEvent::CloseRequested { api, .. } => {
+                // The one-shot picker (#124) is transient: it exists for one
+                // pick and must actually go when it closes. Hiding it like the
+                // settings window would leave it registered and reading as
+                // open, which holds off every later paste. Closing it from
+                // outside -- Alt+F4, the window menu -- is a dismissal, so the
+                // offer and any armed route go with it.
+                if window.label() == window_picker::backend::PICKER_WINDOW {
+                    window_picker::backend::abandon_pick(window.app_handle());
+                    return;
+                }
+
                 api.prevent_close();
                 let _res = window.hide();
 
@@ -911,6 +935,17 @@ pub fn run(cli_args: CliArgs) {
                     }
                     // No tray: keep the dock icon visible so the user can reopen
                 }
+            }
+            // Whatever destroyed the picker -- our own close, a close request, or
+            // the window manager -- the offer must not outlive its window: a
+            // session left standing reads as a pick in progress and withholds
+            // every later transcript. Clearing it here is idempotent, and the
+            // armed route is deliberately left alone, because a pick that WAS
+            // made destroys this window on its way to the paste path.
+            tauri::WindowEvent::Destroyed
+                if window.label() == window_picker::backend::PICKER_WINDOW =>
+            {
+                window_picker::backend::forget_offer(window.app_handle());
             }
             tauri::WindowEvent::ThemeChanged(theme) => {
                 log::info!("Theme changed to: {:?}", theme);

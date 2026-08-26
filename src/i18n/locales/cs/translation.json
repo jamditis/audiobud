@@ -15,7 +15,8 @@
     "outputMode": "Režim výstupu",
     "formatted": "Formátováno",
     "rawTranscript": "Surový přepis",
-    "lockToWindow": "Uzamknout na okno"
+    "lockToWindow": "Uzamknout na okno",
+    "sendToWindowOnce": "Odeslat do okna jednou"
   },
   "sidebar": {
     "navLabel": "Sekce nastavení",
@@ -200,6 +201,10 @@
           "toggle_target_lock": {
             "name": "Zkratka pro uzamknutí na okno",
             "description": "Klávesová zkratka, která posílá váš text do jednoho okna, dokud jej neodemknete."
+          },
+          "pick_output_window": {
+            "name": "Zkratka pro odeslání do okna",
+            "description": "Klávesová zkratka, která vybere okno jen pro váš další text."
           }
         },
         "errors": {
@@ -817,7 +822,11 @@
     "transcriptionErrorGeneric": "Nahrávku se nepodařilo přepsat. Zkuste to znovu nebo vyberte jiný model.",
     "transcriptionTimeoutTitle": "Vypršel časový limit přepisu",
     "transcriptionTimeout": "Engine neodpověděl ani po {{seconds}} sekundách a možná se zasekl. Pokud se to bude opakovat, restartujte AudioBud.",
-    "parakeetInputTooLong": "Tato nahrávka má délku {{duration}}. Parakeet nedokáže přepsat nahrávky delší než přibližně 6:30, protože další zvuk by byl bez upozornění vynechán. Pro dlouhé nahrávky použijte model Whisper."
+    "parakeetInputTooLong": "Tato nahrávka má délku {{duration}}. Parakeet nedokáže přepsat nahrávky delší než přibližně 6:30, protože další zvuk by byl bez upozornění vynechán. Pro dlouhé nahrávky použijte model Whisper.",
+    "windowPickLostTitle": "Vybrané okno zmizelo",
+    "windowPickLost": "Vybrané okno je zavřené. AudioBud text nevložil. Vyberte okno znovu.",
+    "pickerOpenTitle": "Výběr okna je otevřený",
+    "pickerOpen": "AudioBud tento text nevložil, protože byl otevřený výběr oken. Vyberte okno a diktujte znovu."
   },
   "appLanguage": {
     "title": "Jazyk aplikace",
@@ -830,6 +839,15 @@
     "cancel": "Zrušit nahrávání",
     "raw": "RAW",
     "rawHint": "Režim surového přepisu"
+  },
+  "windowPicker": {
+    "title": "Odeslat do okna",
+    "hint": "Vyberte okno pro svůj další text. Stiskněte F pro aktuální okno, Esc pro zrušení.",
+    "refused": "Toto okno už neexistuje. Vyberte jiné.",
+    "loading": "Hledání oken...",
+    "empty": "Žádná okna nejsou k dispozici.",
+    "useForeground": "Použít aktuální okno",
+    "cancel": "Zrušit"
   },
   "critters": {
     "frog": "Žába"

@@ -15,7 +15,8 @@
     "outputMode": "Çıktı modu",
     "formatted": "Biçimlendirilmiş",
     "rawTranscript": "Ham transkript",
-    "lockToWindow": "Pencereye kilitle"
+    "lockToWindow": "Pencereye kilitle",
+    "sendToWindowOnce": "Bir kez pencereye gönder"
   },
   "sidebar": {
     "navLabel": "Ayar bölümleri",
@@ -200,6 +201,10 @@
           "toggle_target_lock": {
             "name": "Pencereye kilitleme kısayolu",
             "description": "Kilidi açana kadar metninizi tek bir pencereye gönderen klavye kısayolu."
+          },
+          "pick_output_window": {
+            "name": "Pencereye gönderme kısayolu",
+            "description": "Yalnızca sonraki metniniz için bir pencere seçen klavye kısayolu."
           }
         },
         "errors": {
@@ -815,7 +820,11 @@
     "transcriptionErrorGeneric": "Kayıt yazıya dökülemedi. Tekrar deneyin veya farklı bir model seçin.",
     "transcriptionTimeoutTitle": "Transkripsiyon zaman aşımına uğradı",
     "transcriptionTimeout": "Motor {{seconds}} saniye sonra yanıt vermedi ve takılmış olabilir. Bu durum devam ederse AudioBud'u yeniden başlatın.",
-    "parakeetInputTooLong": "Bu kayıt {{duration}} uzunluğunda. Parakeet yaklaşık 6:30'dan uzun kayıtları yazıya dökemez; sonraki ses uyarı vermeden atlanır. Uzun kayıtlar için bir Whisper modeli kullanın."
+    "parakeetInputTooLong": "Bu kayıt {{duration}} uzunluğunda. Parakeet yaklaşık 6:30'dan uzun kayıtları yazıya dökemez; sonraki ses uyarı vermeden atlanır. Uzun kayıtlar için bir Whisper modeli kullanın.",
+    "windowPickLostTitle": "Seçilen pencere kayboldu",
+    "windowPickLost": "Seçtiğiniz pencere kapalı. AudioBud metni yapıştırmadı. Yeniden bir pencere seçin.",
+    "pickerOpenTitle": "Pencere seçici açık",
+    "pickerOpen": "Pencere seçici açık olduğu için AudioBud bu metni yapıştırmadı. Bir pencere seçin ve yeniden dikte edin."
   },
   "appLanguage": {
     "title": "Uygulama Dili",
@@ -828,6 +837,15 @@
     "cancel": "Kaydı iptal et",
     "raw": "HAM",
     "rawHint": "Ham transkript modu"
+  },
+  "windowPicker": {
+    "title": "Pencereye gönder",
+    "hint": "Sonraki metniniz için bir pencere seçin. Geçerli pencere için F, iptal için Esc tuşuna basın.",
+    "refused": "O pencere kayboldu. Başka bir tane seçin.",
+    "loading": "Pencereler aranıyor...",
+    "empty": "Kullanılabilir pencere yok.",
+    "useForeground": "Geçerli pencereyi kullan",
+    "cancel": "İptal"
   },
   "critters": {
     "frog": "Kurbağa"

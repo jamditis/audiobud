@@ -15,7 +15,8 @@
     "outputMode": "Chế độ đầu ra",
     "formatted": "Đã định dạng",
     "rawTranscript": "Văn bản thô",
-    "lockToWindow": "Khóa vào cửa sổ"
+    "lockToWindow": "Khóa vào cửa sổ",
+    "sendToWindowOnce": "Gửi tới cửa sổ một lần"
   },
   "sidebar": {
     "navLabel": "Các mục cài đặt",
@@ -200,6 +201,10 @@
           "toggle_target_lock": {
             "name": "Phím tắt khóa vào cửa sổ",
             "description": "Phím tắt gửi văn bản của bạn đến một cửa sổ cho đến khi bạn mở khóa."
+          },
+          "pick_output_window": {
+            "name": "Phím tắt gửi tới cửa sổ",
+            "description": "Phím tắt chọn cửa sổ chỉ cho văn bản tiếp theo của bạn."
           }
         },
         "errors": {
@@ -815,7 +820,11 @@
     "transcriptionErrorGeneric": "Không thể chuyển đổi bản ghi âm thành văn bản. Hãy thử lại hoặc chọn một mô hình khác.",
     "transcriptionTimeoutTitle": "Chuyển đổi đã quá thời gian chờ",
     "transcriptionTimeout": "Công cụ không phản hồi sau {{seconds}} giây và có thể đã bị treo. Hãy khởi động lại AudioBud nếu tình trạng này tiếp diễn.",
-    "parakeetInputTooLong": "Bản ghi này dài {{duration}}. Parakeet không thể phiên âm bản ghi dài hơn khoảng 6:30 vì phần âm thanh sau đó sẽ bị bỏ qua mà không báo trước. Hãy dùng mô hình Whisper cho bản ghi dài."
+    "parakeetInputTooLong": "Bản ghi này dài {{duration}}. Parakeet không thể phiên âm bản ghi dài hơn khoảng 6:30 vì phần âm thanh sau đó sẽ bị bỏ qua mà không báo trước. Hãy dùng mô hình Whisper cho bản ghi dài.",
+    "windowPickLostTitle": "Cửa sổ đã chọn không còn",
+    "windowPickLost": "Cửa sổ bạn chọn đã đóng. AudioBud không dán văn bản. Hãy chọn lại một cửa sổ.",
+    "pickerOpenTitle": "Trình chọn cửa sổ đang mở",
+    "pickerOpen": "AudioBud không dán văn bản này vì trình chọn cửa sổ đang mở. Hãy chọn cửa sổ rồi đọc lại."
   },
   "appLanguage": {
     "title": "Ngôn ngữ ứng dụng",
@@ -828,6 +837,15 @@
     "cancel": "Hủy ghi âm",
     "raw": "THÔ",
     "rawHint": "Chế độ văn bản thô"
+  },
+  "windowPicker": {
+    "title": "Gửi tới cửa sổ",
+    "hint": "Chọn cửa sổ cho văn bản tiếp theo. Nhấn F để dùng cửa sổ hiện tại, Esc để hủy.",
+    "refused": "Cửa sổ đó không còn. Hãy chọn cửa sổ khác.",
+    "loading": "Đang tìm cửa sổ...",
+    "empty": "Không có cửa sổ nào.",
+    "useForeground": "Dùng cửa sổ hiện tại",
+    "cancel": "Hủy"
   },
   "critters": {
     "frog": "Ếch"

@@ -161,6 +161,7 @@ impl ActiveDictations {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::output_target::backend::DeliverySource;
     use crate::output_target::{class_fingerprint, PinnedTarget, WindowHandle, WindowIdentity};
 
     /// A captured window: handle `h`, owned by process `pid` / thread `tid`.
@@ -225,8 +226,16 @@ mod tests {
     #[test]
     fn delivery_target_is_captured_with_its_identity() {
         let window = win(42, 100, 200);
-        let ctx = DictationContext::capture(false, false, false, Delivery::Pinned(window));
-        assert_eq!(ctx.delivery_target(), Delivery::Pinned(window));
+        let ctx = DictationContext::capture(
+            false,
+            false,
+            false,
+            Delivery::Pinned(window, DeliverySource::Lock),
+        );
+        assert_eq!(
+            ctx.delivery_target(),
+            Delivery::Pinned(window, DeliverySource::Lock)
+        );
 
         let fg = DictationContext::capture(false, false, false, Delivery::Foreground);
         assert_eq!(fg.delivery_target(), Delivery::Foreground);
@@ -241,16 +250,27 @@ mod tests {
         let lock = PinnedTarget::default();
         let started_with = win(42, 100, 200);
         lock.lock_to(started_with);
-        let ctx = DictationContext::capture(false, false, false, Delivery::Pinned(started_with));
+        let ctx = DictationContext::capture(
+            false,
+            false,
+            false,
+            Delivery::Pinned(started_with, DeliverySource::Lock),
+        );
 
         // Released mid-dictation.
         lock.unlock();
-        assert_eq!(ctx.delivery_target(), Delivery::Pinned(started_with));
+        assert_eq!(
+            ctx.delivery_target(),
+            Delivery::Pinned(started_with, DeliverySource::Lock)
+        );
 
         // Re-pointed at another window mid-dictation: that governs the NEXT
         // dictation, not this one.
         lock.lock_to(win(7, 500, 600));
-        assert_eq!(ctx.delivery_target(), Delivery::Pinned(started_with));
+        assert_eq!(
+            ctx.delivery_target(),
+            Delivery::Pinned(started_with, DeliverySource::Lock)
+        );
     }
 
     fn ctx(raw: bool) -> DictationContext {
