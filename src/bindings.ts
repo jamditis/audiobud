@@ -1086,6 +1086,19 @@ export type OverlayAnchor = "topleft" | "topcenter" | "topright" | "middleleft" 
 export type OverlayCustomPosition = { anchor: OverlayAnchor; dx: number; dy: number }
 export type OverlayPosition = "none" | "top" | "bottom"
 export type PaginatedHistory = { entries: HistoryEntry[]; has_more: boolean }
+/**
+ * How a finished transcript gets delivered to the target application.
+ *
+ * `None` and `ExternalScript` never touch a window: `None` is a no-op, and
+ * `ExternalScript` hands the transcript to an arbitrary program on `argv[1]`
+ * (`clipboard::paste_via_external_script`). The other four -- `Direct` via
+ * `enigo.text()`, and `CtrlV` / `CtrlShiftV` / `ShiftInsert` via synthesized
+ * keystrokes -- all resolve to `SendInput`-style injection against the
+ * foreground window's input queue, so they only land correctly when that
+ * window is focused. See [`PasteMethod::requires_focus`] for the capability
+ * this drives (issue #162): target-lock (#120) is meaningless for a method
+ * that has no window to lock.
+ */
 export type PasteMethod = "ctrl_v" | "direct" | "none" | "shift_insert" | "ctrl_shift_v" | "external_script"
 export type PermissionAccess = "allowed" | "denied" | "unknown"
 /**
