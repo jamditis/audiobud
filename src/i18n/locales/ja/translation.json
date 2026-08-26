@@ -834,7 +834,11 @@
     "windowPickLostTitle": "選んだウィンドウがありません",
     "windowPickLost": "選んだウィンドウは閉じています。AudioBud はテキストを貼り付けませんでした。もう一度ウィンドウを選んでください。",
     "pickerOpenTitle": "ウィンドウ選択が開いています",
-    "pickerOpen": "ウィンドウ選択が開いていたため、AudioBud はこのテキストを貼り付けませんでした。ウィンドウを選んでからもう一度話してください。"
+    "pickerOpen": "ウィンドウ選択が開いていたため、AudioBud はこのテキストを貼り付けませんでした。ウィンドウを選んでからもう一度話してください。",
+    "transcriptDeliveredTitle": "貼り付け完了",
+    "transcriptDelivered": "テキストは{{window}}に貼り付けられました。",
+    "transcriptDeliveredUnknown": "テキストはロックされたウィンドウに貼り付けられました。",
+    "transcriptDeliveredUnknownPick": "テキストは選択したウィンドウに貼り付けられました。"
   },
   "appLanguage": {
     "title": "アプリケーション言語",
@@ -851,7 +855,11 @@
     "lockedToHint": "ディクテーションは {{target}} にロックされています。クリックしてロック解除。",
     "lockedToUnknown": "ロックされたウィンドウ",
     "lockStale": "ロックが失われました",
-    "lockStaleHint": "ロックされたウィンドウが閉じられました。クリックして閉じる。"
+    "lockStaleHint": "ロックされたウィンドウが閉じられました。クリックして閉じる。",
+    "delivered": "送信先: {{target}}",
+    "deliveredHint": "テキストは{{target}}に貼り付けられました。",
+    "deliveredUnknown": "送信済み",
+    "deliveredUnknownHint": "テキストが貼り付けられました。"
   },
   "windowPicker": {
     "title": "ウィンドウに送る",
