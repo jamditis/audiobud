@@ -75,15 +75,20 @@ pub fn get_log_dir_path(app: AppHandle) -> Result<String, String> {
 pub fn set_log_level(app: AppHandle, level: LogLevel) -> Result<(), String> {
     let tauri_log_level: tauri_plugin_log::LogLevel = level.into();
     let log_level: log::Level = tauri_log_level.into();
+
+    let mut settings = get_settings(&app);
+    settings.log_level = level;
+    // Persist before touching the runtime filter: on a store failure the
+    // frontend rolls back its optimistic value, so the live log level must
+    // not have changed either, or the session would keep filtering at the
+    // new level with nothing to show for it on the next read.
+    write_settings(&app, settings)?;
+
     // Update the file log level atomic so the filter picks up the new level
     crate::FILE_LOG_LEVEL.store(
         log_level.to_level_filter() as u8,
         std::sync::atomic::Ordering::Relaxed,
     );
-
-    let mut settings = get_settings(&app);
-    settings.log_level = level;
-    write_settings(&app, settings);
 
     Ok(())
 }
