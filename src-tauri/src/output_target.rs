@@ -119,6 +119,64 @@ pub fn accept_capture(
     }
 }
 
+/// Whether `class_name` is one of the Windows shell surfaces rather than an
+/// application window.
+///
+/// The tray menu is the reason this exists: while the menu item's callback runs,
+/// the shell's taskbar owns the foreground, so a plain foreground capture would
+/// pin dictation to the taskbar. These are the shell's own top-level classes;
+/// UWP application windows (`ApplicationFrameWindow`) are deliberately NOT here,
+/// because those are real targets a user can dictate into.
+pub fn is_shell_window(class_name: &str) -> bool {
+    matches!(
+        class_name,
+        "Shell_TrayWnd"
+            | "Shell_SecondaryTrayWnd"
+            | "NotifyIconOverflowWindow"
+            | "TopLevelWindowForOverflowXamlIsland"
+            | "Progman"
+            | "WorkerW"
+            | "ForegroundStaging"
+            | "MultitaskingViewFrame"
+    )
+}
+
+/// What a backend reports about one window, so the eligibility rules below stay
+/// testable without a window system.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct WindowFacts<'a> {
+    pub identity: WindowIdentity,
+    /// The window class, used to spot shell surfaces.
+    pub class_name: &'a str,
+    /// Whether the window has a title at all. An untitled top-level window is
+    /// almost always a helper window, not something a user dictates into.
+    pub has_title: bool,
+    pub visible: bool,
+}
+
+/// Whether a window may be locked onto or offered by the picker: visible,
+/// titled, not AudioBud's own (#164), and not a shell surface.
+pub fn is_eligible_target(facts: &WindowFacts, own_process_id: u32) -> bool {
+    facts.visible
+        && facts.has_title
+        && !is_own_window(facts.identity, own_process_id)
+        && !is_shell_window(facts.class_name)
+}
+
+/// Where a lock request came from, which decides how hard the backend looks for
+/// a target.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CaptureSource {
+    /// The global shortcut. The user pressed it while looking at the window they
+    /// mean, so the foreground window is the answer or there is none: guessing
+    /// at another window would pin dictation somewhere never asked for.
+    Shortcut,
+    /// The tray menu. Opening the menu takes the foreground away from the user's
+    /// window, so the foreground cannot be trusted here and the backend falls
+    /// back to the top window the user could have been working in.
+    TrayMenu,
+}
+
 /// What one press of the lock toggle did, for the notice the caller shows.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum LockToggle {
@@ -208,6 +266,24 @@ impl PinnedTarget {
     /// Clear any lock and return to foreground delivery.
     pub fn unlock(&self) {
         *self.guard() = None;
+    }
+
+    /// Release the lock only if it still points at `expected`, and report
+    /// whether it did.
+    ///
+    /// A delivery that discovers its target has died must not clear whatever
+    /// lock is held by then: a user can unlock and re-lock to another window
+    /// while a paste is still running, and blindly clearing would silently drop
+    /// that new lock. Comparing first keeps a stale delivery from speaking for
+    /// the current one.
+    pub fn unlock_if(&self, expected: WindowIdentity) -> bool {
+        let mut guard = self.guard();
+        if *guard == Some(expected) {
+            *guard = None;
+            true
+        } else {
+            false
+        }
     }
 
     /// Whether a window is currently locked.
@@ -436,6 +512,80 @@ mod tests {
         let other = win(1, 5, 7);
         assert!(!is_own_window(other, 4242));
         assert_eq!(accept_capture(other, 4242), Ok(other));
+    }
+
+    #[test]
+    fn a_stale_delivery_cannot_clear_a_newer_lock() {
+        // A paste to the first window is still running when the user re-locks
+        // to another. The first window then dies: clearing the lock blindly
+        // would drop the lock the user can see and is still using.
+        let t = PinnedTarget::default();
+        let first = win(1, 10, 20);
+        let second = win(2, 30, 40);
+        t.lock_to(first);
+        t.lock_to(second);
+
+        assert!(!t.unlock_if(first));
+        assert_eq!(t.locked(), Some(second));
+
+        // The current target still clears normally.
+        assert!(t.unlock_if(second));
+        assert!(!t.is_locked());
+        // And clearing an already-empty lock reports that it did nothing.
+        assert!(!t.unlock_if(second));
+    }
+
+    #[test]
+    fn shell_surfaces_are_not_lock_targets() {
+        // The taskbar owns the foreground while a tray menu click is handled,
+        // so locking from the tray would otherwise pin dictation to it.
+        assert!(is_shell_window("Shell_TrayWnd"));
+        assert!(is_shell_window("Shell_SecondaryTrayWnd"));
+        assert!(is_shell_window("Progman"));
+        assert!(is_shell_window("WorkerW"));
+        // Real application windows, including UWP frames, must stay eligible.
+        assert!(!is_shell_window("ApplicationFrameWindow"));
+        assert!(!is_shell_window("CASCADIA_HOSTING_WINDOW_CLASS"));
+        assert!(!is_shell_window("Chrome_WidgetWin_1"));
+    }
+
+    fn facts(identity: WindowIdentity, class_name: &str) -> WindowFacts<'_> {
+        WindowFacts {
+            identity,
+            class_name,
+            has_title: true,
+            visible: true,
+        }
+    }
+
+    #[test]
+    fn an_ordinary_window_is_an_eligible_target() {
+        let other = win(1, 5, 7);
+        assert!(is_eligible_target(
+            &facts(other, "Chrome_WidgetWin_1"),
+            4242
+        ));
+    }
+
+    #[test]
+    fn hidden_untitled_own_and_shell_windows_are_not_eligible() {
+        let other = win(1, 5, 7);
+        let own = win(2, 4242, 7);
+
+        let hidden = WindowFacts {
+            visible: false,
+            ..facts(other, "Chrome_WidgetWin_1")
+        };
+        assert!(!is_eligible_target(&hidden, 4242));
+
+        let untitled = WindowFacts {
+            has_title: false,
+            ..facts(other, "Chrome_WidgetWin_1")
+        };
+        assert!(!is_eligible_target(&untitled, 4242));
+
+        assert!(!is_eligible_target(&facts(own, "Chrome_WidgetWin_1"), 4242));
+        assert!(!is_eligible_target(&facts(other, "Shell_TrayWnd"), 4242));
     }
 
     #[test]

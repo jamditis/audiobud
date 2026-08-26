@@ -15,7 +15,7 @@
     "outputMode": "وضع الإخراج",
     "formatted": "منسّق",
     "rawTranscript": "نص خام",
-    "lockToWindow": "قفل على النافذة"
+    "lockToWindow": "تثبيت على نافذة"
   },
   "sidebar": {
     "navLabel": "أقسام الإعدادات",
@@ -196,6 +196,10 @@
           "transcribe_raw": {
             "name": "مفتاح النص الخام",
             "description": "مفتاح اختصار مخصص يفرّغ الصوت إلى نص خام بأحرف صغيرة وبدون علامات ترقيم، لهذه الإملاءة فقط."
+          },
+          "toggle_target_lock": {
+            "name": "اختصار التثبيت على نافذة",
+            "description": "اختصار لوحة المفاتيح الذي يرسل نصك إلى نافذة واحدة حتى تلغي التثبيت."
           }
         },
         "errors": {
@@ -820,8 +824,8 @@
     "modelLoadFailedUnknown": "نموذج غير معروف",
     "pasteFailedTitle": "فشل لصق النص",
     "pasteFailed": "تعذر لصق النص في التطبيق النشط.",
-    "targetLockLostTitle": "النافذة المقفلة اختفت",
-    "targetLockLost": "النافذة التي قفلتها مغلقة. لم يلصق AudioBud النص. اقفل نافذة مرة أخرى.",
+    "targetLockLostTitle": "النافذة المثبتة لم تعد موجودة",
+    "targetLockLost": "النافذة التي ثبّتها مغلقة. لم يلصق AudioBud النص. ثبّت نافذة مرة أخرى.",
     "transcriptionErrorTitle": "فشل التفريغ",
     "transcriptionErrorGeneric": "تعذر نسخ التسجيل. حاول مرة أخرى أو اختر نموذجًا مختلفًا.",
     "transcriptionTimeoutTitle": "انتهت مهلة التفريغ",

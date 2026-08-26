@@ -196,6 +196,10 @@
           "transcribe_raw": {
             "name": "Phím tắt văn bản thô",
             "description": "Phím tắt riêng để chuyển đổi thành văn bản thô, chữ thường, không dấu câu, chỉ áp dụng cho lần đọc này."
+          },
+          "toggle_target_lock": {
+            "name": "Phím tắt khóa vào cửa sổ",
+            "description": "Phím tắt gửi văn bản của bạn đến một cửa sổ cho đến khi bạn mở khóa."
           }
         },
         "errors": {
@@ -812,8 +816,8 @@
     "modelLoadFailedUnknown": "mô hình không xác định",
     "pasteFailedTitle": "Không thể dán văn bản",
     "pasteFailed": "Không thể dán văn bản vào ứng dụng đang hoạt động.",
-    "targetLockLostTitle": "Cửa sổ đã khóa biến mất",
-    "targetLockLost": "Cửa sổ bạn đã khóa đã đóng. AudioBud không dán văn bản. Hãy khóa một cửa sổ khác.",
+    "targetLockLostTitle": "Cửa sổ đã khóa không còn nữa",
+    "targetLockLost": "Cửa sổ bạn đã khóa đã đóng. AudioBud không dán văn bản. Hãy khóa lại một cửa sổ.",
     "transcriptionErrorTitle": "Chuyển đổi không thành công",
     "transcriptionErrorGeneric": "Không thể chuyển đổi bản ghi âm thành văn bản. Hãy thử lại hoặc chọn một mô hình khác.",
     "transcriptionTimeoutTitle": "Chuyển đổi đã quá thời gian chờ",

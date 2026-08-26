@@ -15,7 +15,7 @@
     "outputMode": "Modalità di output",
     "formatted": "Formattato",
     "rawTranscript": "Trascrizione grezza",
-    "lockToWindow": "Blocca sulla finestra"
+    "lockToWindow": "Blocca su una finestra"
   },
   "sidebar": {
     "navLabel": "Sezioni delle impostazioni",
@@ -196,6 +196,10 @@
           "transcribe_raw": {
             "name": "Tasto per la trascrizione grezza",
             "description": "Un tasto di scelta rapida dedicato che trascrive in testo grezzo, in minuscolo e senza punteggiatura, solo per questa dettatura."
+          },
+          "toggle_target_lock": {
+            "name": "Scorciatoia per bloccare su una finestra",
+            "description": "La scorciatoia da tastiera che invia il testo a una sola finestra finché non la sblocchi."
           }
         },
         "errors": {
@@ -812,7 +816,7 @@
     "modelLoadFailedUnknown": "modello sconosciuto",
     "pasteFailedTitle": "Impossibile incollare il testo",
     "pasteFailed": "Non è stato possibile incollare il testo nell'applicazione attiva.",
-    "targetLockLostTitle": "La finestra bloccata è scomparsa",
+    "targetLockLostTitle": "La finestra bloccata non esiste più",
     "targetLockLost": "La finestra che hai bloccato è chiusa. AudioBud non ha incollato il testo. Blocca di nuovo una finestra.",
     "transcriptionErrorTitle": "Trascrizione non riuscita",
     "transcriptionErrorGeneric": "Non è stato possibile trascrivere la registrazione. Riprova o scegli un altro modello.",

@@ -425,7 +425,7 @@ mod windows_image {
         buffer.reserve_exact(buffer_len - BITMAPV5HEADER_LEN);
         let row_len = image.width * 4;
         for row in image.bytes.chunks_exact(row_len).rev() {
-            for pixel in row.chunks_exact(4) {
+            for pixel in row.as_chunks::<4>().0 {
                 buffer.extend_from_slice(&[pixel[2], pixel[1], pixel[0], pixel[3]]);
             }
         }
@@ -949,8 +949,10 @@ mod tests {
         assert_eq!(&buf[16..20], &1i32.to_le_bytes());
 
         let units: Vec<u16> = buf[20..]
-            .chunks_exact(2)
-            .map(|c| u16::from_le_bytes([c[0], c[1]]))
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|c| u16::from_le_bytes(*c))
             .collect();
         let mut expected: Vec<u16> = "C:\\a.txt".encode_utf16().collect();
         expected.push(0); // path terminator
@@ -974,8 +976,10 @@ mod tests {
 
         let buf = super::windows_files::hdrop_buffer(std::slice::from_ref(&path));
         let units: Vec<u16> = buf[20..]
-            .chunks_exact(2)
-            .map(|c| u16::from_le_bytes([c[0], c[1]]))
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|c| u16::from_le_bytes(*c))
             .collect();
         let mut expected = wide.clone();
         expected.push(0);

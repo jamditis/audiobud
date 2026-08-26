@@ -15,7 +15,7 @@
     "outputMode": "Tryb wyjścia",
     "formatted": "Sformatowany",
     "rawTranscript": "Surowa transkrypcja",
-    "lockToWindow": "Zablokuj na oknie"
+    "lockToWindow": "Przypnij do okna"
   },
   "sidebar": {
     "navLabel": "Sekcje ustawień",
@@ -196,6 +196,10 @@
           "transcribe_raw": {
             "name": "Skrót surowej transkrypcji",
             "description": "Dedykowany skrót klawiszowy, który tylko dla tego dyktowania zapisuje transkrypcję jako surowy tekst, małymi literami i bez interpunkcji."
+          },
+          "toggle_target_lock": {
+            "name": "Skrót przypięcia do okna",
+            "description": "Skrót klawiszowy, który wysyła tekst do jednego okna, dopóki go nie odepniesz."
           }
         },
         "errors": {
@@ -816,8 +820,8 @@
     "modelLoadFailedUnknown": "nieznany model",
     "pasteFailedTitle": "Nie udało się wkleić tekstu",
     "pasteFailed": "Nie można było wkleić tekstu do aktywnej aplikacji.",
-    "targetLockLostTitle": "Zablokowane okno zniknęło",
-    "targetLockLost": "Okno, które zablokowałeś, jest zamknięte. AudioBud nie wkleił tekstu. Zablokuj okno ponownie.",
+    "targetLockLostTitle": "Przypiętego okna już nie ma",
+    "targetLockLost": "Przypięte okno jest zamknięte. AudioBud nie wkleił tekstu. Przypnij okno ponownie.",
     "transcriptionErrorTitle": "Transkrypcja nie powiodła się",
     "transcriptionErrorGeneric": "Nie udało się transkrybować nagrania. Spróbuj ponownie lub wybierz inny model.",
     "transcriptionTimeoutTitle": "Przekroczono czas transkrypcji",

@@ -15,7 +15,7 @@
     "outputMode": "Modo de salida",
     "formatted": "Con formato",
     "rawTranscript": "Transcripción sin formato",
-    "lockToWindow": "Bloquear a ventana"
+    "lockToWindow": "Fijar a una ventana"
   },
   "sidebar": {
     "navLabel": "Secciones de configuración",
@@ -196,6 +196,10 @@
           "transcribe_raw": {
             "name": "Tecla de transcripción sin formato",
             "description": "Una tecla de acceso rápido dedicada que transcribe a texto sin formato, en minúsculas y sin puntuación, solo para ese dictado."
+          },
+          "toggle_target_lock": {
+            "name": "Atajo para fijar a una ventana",
+            "description": "El atajo de teclado que envía tu texto a una sola ventana hasta que la sueltes."
           }
         },
         "errors": {
@@ -812,8 +816,8 @@
     "modelLoadFailedUnknown": "modelo desconocido",
     "pasteFailedTitle": "Error al pegar el texto",
     "pasteFailed": "No se pudo pegar el texto en la aplicación activa.",
-    "targetLockLostTitle": "La ventana bloqueada desapareció",
-    "targetLockLost": "La ventana que bloqueaste está cerrada. AudioBud no pegó el texto. Bloquea una ventana de nuevo.",
+    "targetLockLostTitle": "La ventana fijada ya no existe",
+    "targetLockLost": "La ventana que fijaste está cerrada. AudioBud no pegó el texto. Fija una ventana de nuevo.",
     "transcriptionErrorTitle": "La transcripción ha fallado",
     "transcriptionErrorGeneric": "No se pudo transcribir la grabación. Inténtalo de nuevo o elige otro modelo.",
     "transcriptionTimeoutTitle": "Se agotó el tiempo de la transcripción",

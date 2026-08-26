@@ -15,7 +15,7 @@
     "outputMode": "Modo de saída",
     "formatted": "Formatado",
     "rawTranscript": "Transcrição bruta",
-    "lockToWindow": "Bloquear na janela"
+    "lockToWindow": "Fixar em uma janela"
   },
   "sidebar": {
     "navLabel": "Seções de configurações",
@@ -196,6 +196,10 @@
           "transcribe_raw": {
             "name": "Tecla de transcrição bruta",
             "description": "Uma tecla de atalho dedicada que transcreve em texto bruto, em minúsculas e sem pontuação, apenas para este ditado."
+          },
+          "toggle_target_lock": {
+            "name": "Atalho para fixar em uma janela",
+            "description": "O atalho de teclado que envia seu texto para uma única janela até você liberá-la."
           }
         },
         "errors": {
@@ -812,8 +816,8 @@
     "modelLoadFailedUnknown": "modelo desconhecido",
     "pasteFailedTitle": "Falha ao colar o texto",
     "pasteFailed": "Não foi possível colar o texto no aplicativo ativo.",
-    "targetLockLostTitle": "A janela bloqueada desapareceu",
-    "targetLockLost": "A janela que você bloqueou está fechada. O AudioBud não colou o texto. Bloqueie uma janela novamente.",
+    "targetLockLostTitle": "A janela fixada não existe mais",
+    "targetLockLost": "A janela que você fixou está fechada. O AudioBud não colou o texto. Fixe uma janela novamente.",
     "transcriptionErrorTitle": "A transcrição falhou",
     "transcriptionErrorGeneric": "Não foi possível transcrever a gravação. Tente novamente ou escolha outro modelo.",
     "transcriptionTimeoutTitle": "Tempo esgotado na transcrição",

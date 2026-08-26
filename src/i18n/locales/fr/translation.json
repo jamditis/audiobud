@@ -15,7 +15,7 @@
     "outputMode": "Mode de sortie",
     "formatted": "Formaté",
     "rawTranscript": "Transcription brute",
-    "lockToWindow": "Verrouiller sur la fenêtre"
+    "lockToWindow": "Épingler à une fenêtre"
   },
   "sidebar": {
     "navLabel": "Sections des paramètres",
@@ -196,6 +196,10 @@
           "transcribe_raw": {
             "name": "Raccourci de transcription brute",
             "description": "Un raccourci dédié qui transcrit en texte brut, en minuscules et sans ponctuation, pour cette dictée uniquement."
+          },
+          "toggle_target_lock": {
+            "name": "Raccourci d'épinglage à une fenêtre",
+            "description": "Le raccourci clavier qui envoie votre texte vers une seule fenêtre jusqu'à ce que vous la libériez."
           }
         },
         "errors": {
@@ -812,8 +816,8 @@
     "modelLoadFailedUnknown": "modèle inconnu",
     "pasteFailedTitle": "Échec du collage du texte",
     "pasteFailed": "Le texte n'a pas pu être collé dans l'application active.",
-    "targetLockLostTitle": "La fenêtre verrouillée a disparu",
-    "targetLockLost": "La fenêtre que vous avez verrouillée est fermée. AudioBud n'a pas collé le texte. Verrouillez une fenêtre à nouveau.",
+    "targetLockLostTitle": "La fenêtre épinglée a disparu",
+    "targetLockLost": "La fenêtre que vous avez épinglée est fermée. AudioBud n'a pas collé le texte. Épinglez à nouveau une fenêtre.",
     "transcriptionErrorTitle": "Échec de la transcription",
     "transcriptionErrorGeneric": "L’enregistrement n’a pas pu être transcrit. Réessayez ou choisissez un autre modèle.",
     "transcriptionTimeoutTitle": "Délai de transcription dépassé",
