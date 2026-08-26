@@ -761,6 +761,24 @@ pub(crate) fn requires_focus_for_delivery(paste_method: PasteMethod, auto_submit
     paste_method.requires_focus() || should_send_auto_submit(auto_submit, paste_method)
 }
 
+/// Whether a successful delivery actually put the transcript's text in the
+/// pinned window, and so is safe to announce as a confirmed destination
+/// (#165 review round 2).
+///
+/// This is narrower than [`requires_focus_for_delivery`], which only asks
+/// whether *some* keystroke in the delivery needs a focused window --
+/// `ExternalScript` with auto-submit on passes that check purely because the
+/// trailing Enter needs to land on the pinned window, and `deliver_to_target`
+/// is right to borrow focus for it. But the transcript text itself was still
+/// handed to a script that decides for itself where its own output goes, so
+/// a successful script exit is never proof the pinned window received the
+/// text, with auto-submit on or off. `ExternalScript` is excluded outright,
+/// independent of `requires_focus_for_delivery`'s answer.
+pub(crate) fn delivery_is_directed_at_target(paste_method: PasteMethod, auto_submit: bool) -> bool {
+    paste_method != PasteMethod::ExternalScript
+        && requires_focus_for_delivery(paste_method, auto_submit)
+}
+
 /// Whether the transcript is also copied to the clipboard.
 ///
 /// `delivered` is deliberately ignored: this setting is about the clipboard, so
@@ -943,6 +961,28 @@ pub fn paste(text: String, app_handle: AppHandle, context: DictationContext) -> 
     } else {
         Ok(())
     };
+
+    // Positive confirmation naming the window the text went to (#165). Only a
+    // pinned delivery gets this -- a plain foreground paste lands wherever the
+    // user is already looking, so it needs no announcement -- and only when
+    // `delivery_is_directed_at_target` says the delivery actually put the text
+    // in that window: an `ExternalScript` delivery hands the text to a script
+    // that decides for itself where its own output goes, so a successful
+    // script exit is never proof of delivery, whether or not auto-submit's
+    // trailing Enter needed to borrow focus toward the target (#279 review
+    // round 2). Checked after `copied`, not before: a transcript that reached
+    // the target but lost a concurrent clipboard-copy race must not show both
+    // "Delivered" and the `paste-error` a failed `copied` triggers below --
+    // the delivery is still reported truthfully by `outcome?`, but this
+    // confirmation is withheld for that one race rather than contradicting it.
+    if delivered
+        && copied.is_ok()
+        && delivery_is_directed_at_target(settings.paste_method, settings.auto_submit)
+    {
+        if let Some(Delivery::Pinned(identity, source)) = delivery {
+            target_backend::announce_delivered(&app_handle, identity, source);
+        }
+    }
 
     // The delivery failure is reported after the copy has been made, and takes
     // precedence over a copy that also failed: it is the one the user is waiting
@@ -1157,5 +1197,45 @@ mod tests {
             assert!(requires_focus_for_delivery(method, true));
             assert!(requires_focus_for_delivery(method, false));
         }
+    }
+
+    #[test]
+    fn external_script_is_never_directed_at_the_target_even_with_auto_submit() {
+        // requires_focus_for_delivery is true here (the trailing Enter needs
+        // focus), but the script still decides for itself where the
+        // transcript's text goes -- so, unlike requires_focus_for_delivery,
+        // delivery_is_directed_at_target must stay false regardless of
+        // auto-submit (#279 review round 2).
+        assert!(requires_focus_for_delivery(
+            PasteMethod::ExternalScript,
+            true
+        ));
+        assert!(!delivery_is_directed_at_target(
+            PasteMethod::ExternalScript,
+            true
+        ));
+        assert!(!delivery_is_directed_at_target(
+            PasteMethod::ExternalScript,
+            false
+        ));
+    }
+
+    #[test]
+    fn focus_requiring_methods_are_directed_at_the_target() {
+        for method in [
+            PasteMethod::Direct,
+            PasteMethod::CtrlV,
+            PasteMethod::CtrlShiftV,
+            PasteMethod::ShiftInsert,
+        ] {
+            assert!(delivery_is_directed_at_target(method, true));
+            assert!(delivery_is_directed_at_target(method, false));
+        }
+    }
+
+    #[test]
+    fn none_delivery_is_never_directed_at_the_target() {
+        assert!(!delivery_is_directed_at_target(PasteMethod::None, true));
+        assert!(!delivery_is_directed_at_target(PasteMethod::None, false));
     }
 }

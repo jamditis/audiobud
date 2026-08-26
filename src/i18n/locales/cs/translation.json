@@ -836,7 +836,11 @@
     "windowPickLostTitle": "Vybrané okno zmizelo",
     "windowPickLost": "Vybrané okno je zavřené. AudioBud text nevložil. Vyberte okno znovu.",
     "pickerOpenTitle": "Výběr okna je otevřený",
-    "pickerOpen": "AudioBud tento text nevložil, protože byl otevřený výběr oken. Vyberte okno a diktujte znovu."
+    "pickerOpen": "AudioBud tento text nevložil, protože byl otevřený výběr oken. Vyberte okno a diktujte znovu.",
+    "transcriptDeliveredTitle": "Doručeno",
+    "transcriptDelivered": "Text byl vložen do {{window}}.",
+    "transcriptDeliveredUnknown": "Text byl vložen do uzamčeného okna.",
+    "transcriptDeliveredUnknownPick": "Text byl vložen do vybraného okna."
   },
   "appLanguage": {
     "title": "Jazyk aplikace",
@@ -853,7 +857,11 @@
     "lockedToHint": "Diktát je zamčen na {{target}}. Kliknutím odemkněte.",
     "lockedToUnknown": "zamčené okno",
     "lockStale": "Zámek ztracen",
-    "lockStaleHint": "Zamčené okno bylo zavřeno. Kliknutím zavřete."
+    "lockStaleHint": "Zamčené okno bylo zavřeno. Kliknutím zavřete.",
+    "delivered": "Odesláno: {{target}}",
+    "deliveredHint": "Text byl vložen do {{target}}.",
+    "deliveredUnknown": "Odesláno",
+    "deliveredUnknownHint": "Text byl vložen."
   },
   "windowPicker": {
     "title": "Odeslat do okna",
