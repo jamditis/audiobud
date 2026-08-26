@@ -632,6 +632,12 @@ const SETTINGS_WITH_DEDICATED_COMMANDS: &[&str] = &[
     // (`update_overlay_position`); a bare write through the generic mutator
     // would change the stored placement without moving anything on screen.
     "overlay_custom_position",
+    // Bookkeeping for the tray hide/show toggle (`toggle_overlay_visibility`)
+    // and `normalize_after_change`, which are the only writers that should
+    // decide what a future "show" restores to. A generic write here would
+    // change that restore target without touching the visible overlay,
+    // exactly like `overlay_custom_position` above.
+    "overlay_restore_position",
 ];
 
 /// Persist one setting and run whatever its change implies.
@@ -1233,11 +1239,15 @@ mod tests {
         // `set_overlay_anchor`/`reset_overlay_position` keep `overlay_position`
         // in sync with `overlay_custom_position` and call
         // `update_overlay_position` to actually move the window. A generic
-        // write would persist a placement the overlay never moves to.
-        assert!(
-            SETTINGS_WITH_DEDICATED_COMMANDS.contains(&"overlay_custom_position"),
-            "'overlay_custom_position' must stay reachable only through set_overlay_anchor/reset_overlay_position"
-        );
+        // write would persist a placement the overlay never moves to. Its
+        // restore companion is bookkeeping for the same hide/show toggle and
+        // must stay off the generic path for the same reason.
+        for key in ["overlay_custom_position", "overlay_restore_position"] {
+            assert!(
+                SETTINGS_WITH_DEDICATED_COMMANDS.contains(&key),
+                "'{key}' must stay reachable only through the commands that apply its runtime effect"
+            );
+        }
     }
 
     #[test]
