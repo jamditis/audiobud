@@ -20,7 +20,7 @@ const LEARNED_WORDS_CAP: usize = 500;
 pub fn update_personalization_enabled(app: AppHandle, enabled: bool) -> Result<(), String> {
     let mut settings = crate::settings::get_settings(&app);
     settings.personalization.enabled = enabled;
-    crate::settings::write_settings(&app, settings);
+    crate::settings::write_settings(&app, settings)?;
     Ok(())
 }
 
@@ -95,7 +95,7 @@ pub fn accept_word_suggestion(app: AppHandle, word: String) -> Result<(), String
         personalization.learned_words.push(trimmed.to_string());
     }
 
-    crate::settings::write_settings(&app, settings);
+    crate::settings::write_settings(&app, settings)?;
     Ok(())
 }
 
@@ -121,7 +121,7 @@ pub fn dismiss_word_suggestion(app: AppHandle, word: String) -> Result<(), Strin
             .push(trimmed.to_string());
     }
 
-    crate::settings::write_settings(&app, settings);
+    crate::settings::write_settings(&app, settings)?;
     Ok(())
 }
 
@@ -131,7 +131,7 @@ pub fn dismiss_word_suggestion(app: AppHandle, word: String) -> Result<(), Strin
 pub fn update_learned_words(app: AppHandle, words: Vec<String>) -> Result<(), String> {
     let mut settings = crate::settings::get_settings(&app);
     settings.personalization.learned_words = words;
-    crate::settings::write_settings(&app, settings);
+    crate::settings::write_settings(&app, settings)?;
     Ok(())
 }
 
@@ -148,7 +148,7 @@ pub fn reset_personalization(app: AppHandle) -> Result<(), String> {
         enabled: was_enabled,
         ..Default::default()
     };
-    crate::settings::write_settings(&app, settings);
+    crate::settings::write_settings(&app, settings)?;
     Ok(())
 }
 

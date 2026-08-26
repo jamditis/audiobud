@@ -49,7 +49,9 @@ pub fn init_shortcuts(app: &AppHandle) {
                 // Update settings to persist the fallback so we don't retry HandyKeys on next launch
                 let mut settings = settings::get_settings(app);
                 settings.keyboard_implementation = KeyboardImplementation::Tauri;
-                settings::write_settings(app, settings);
+                if let Err(e) = settings::write_settings(app, settings) {
+                    warn!("Failed to persist the handy-keys fallback: {e}");
+                }
 
                 tauri_impl::init_shortcuts(app);
             }
@@ -151,7 +153,7 @@ pub fn change_binding(
         if let Some(mut b) = settings.bindings.get(&id).cloned() {
             b.current_binding = binding;
             settings.bindings.insert(id.clone(), b.clone());
-            settings::write_settings(&app, settings);
+            settings::write_settings(&app, settings)?;
             return Ok(BindingResponse {
                 success: true,
                 binding: Some(b.clone()),
@@ -192,7 +194,7 @@ pub fn change_binding(
     settings.bindings.insert(id, updated_binding.clone());
 
     // Save the settings
-    settings::write_settings(&app, settings);
+    settings::write_settings(&app, settings)?;
 
     // Return the updated binding
     Ok(BindingResponse {
@@ -281,7 +283,7 @@ pub fn change_keyboard_implementation_setting(
     // Update the setting
     let mut settings = settings::get_settings(&app);
     settings.keyboard_implementation = new_impl;
-    settings::write_settings(&app, settings);
+    settings::write_settings(&app, settings)?;
 
     // Initialize new implementation if needed (HandyKeys needs state)
     if new_impl == KeyboardImplementation::HandyKeys && initialize_handy_keys_with_rollback(&app)? {
@@ -448,7 +450,9 @@ fn register_all_shortcuts_for_implementation(
 
     // Persist any newly back-filled or reset bindings.
     if settings_dirty {
-        settings::write_settings(app, current_settings);
+        if let Err(e) = settings::write_settings(app, current_settings) {
+            warn!("Failed to persist back-filled/reset bindings: {e}");
+        }
     }
 
     reset_bindings
@@ -465,7 +469,11 @@ fn initialize_handy_keys_with_rollback(app: &AppHandle) -> Result<bool, String> 
         // Rollback to Tauri
         let mut settings = settings::get_settings(app);
         settings.keyboard_implementation = KeyboardImplementation::Tauri;
-        settings::write_settings(app, settings);
+        // The init failure below is what the caller needs to see; log a
+        // failed revert rather than replacing that error with this one.
+        if let Err(revert_err) = settings::write_settings(app, settings) {
+            warn!("Failed to persist the Tauri rollback: {revert_err}");
+        }
         tauri_impl::init_shortcuts(app);
         return Err(format!(
             "Failed to initialize HandyKeys: {}. Reverted to Tauri.",
@@ -619,6 +627,11 @@ const SETTINGS_WITH_DEDICATED_COMMANDS: &[&str] = &[
     "personalization",
     "paste_method",
     "external_script_path",
+    // `set_overlay_anchor`/`reset_overlay_position` keep this in sync with the
+    // coarse `overlay_position` and actually move the overlay window
+    // (`update_overlay_position`); a bare write through the generic mutator
+    // would change the stored placement without moving anything on screen.
+    "overlay_custom_position",
 ];
 
 /// Persist one setting and run whatever its change implies.
@@ -634,7 +647,11 @@ pub(crate) fn apply_setting_change(
 ) -> Result<(), String> {
     let mut settings = settings::get_settings(app);
     settings::apply_setting_value(&mut settings, key, value.clone())?;
-    settings::write_settings(app, settings.clone());
+    // Propagate a write failure before running any effect, so a save that
+    // didn't persist is never followed by a change that behaves as if it did
+    // (and the frontend's rollback+toast path sees the failure instead of a
+    // false confirmation).
+    settings::write_settings(app, settings.clone())?;
     run_setting_effects(app, key, &settings, &value);
     Ok(())
 }
@@ -677,7 +694,7 @@ pub fn toggle_overlay_visibility(app: AppHandle) -> Result<(), String> {
         settings.overlay_restore_position = Some(settings.overlay_position);
         settings.overlay_position = OverlayPosition::None;
     }
-    settings::write_settings(&app, settings);
+    settings::write_settings(&app, settings)?;
 
     // Update overlay position without recreating window
     crate::utils::update_overlay_position(&app);
@@ -727,7 +744,7 @@ pub fn set_overlay_anchor(app: AppHandle, anchor: String) -> Result<(), String> 
             _ => OverlayPosition::Bottom,
         };
     }
-    settings::write_settings(&app, settings);
+    settings::write_settings(&app, settings)?;
 
     crate::utils::update_overlay_position(&app);
 
@@ -750,7 +767,7 @@ pub fn reset_overlay_position(app: AppHandle) -> Result<(), String> {
     if settings.overlay_position != OverlayPosition::None {
         settings.overlay_position = OverlayPosition::Bottom;
     }
-    settings::write_settings(&app, settings);
+    settings::write_settings(&app, settings)?;
 
     crate::utils::update_overlay_position(&app);
 
@@ -927,7 +944,7 @@ pub fn change_post_process_base_url_setting(
     }
 
     provider.base_url = base_url;
-    settings::write_settings(&app, settings);
+    settings::write_settings(&app, settings)?;
     Ok(())
 }
 
@@ -956,7 +973,7 @@ pub fn change_post_process_api_key_setting(
     let mut settings = settings::get_settings(&app);
     validate_provider_exists(&settings, &provider_id)?;
     settings.post_process_api_keys.insert(provider_id, api_key);
-    settings::write_settings(&app, settings);
+    settings::write_settings(&app, settings)?;
     Ok(())
 }
 
@@ -970,7 +987,7 @@ pub fn change_post_process_model_setting(
     let mut settings = settings::get_settings(&app);
     validate_provider_exists(&settings, &provider_id)?;
     settings.post_process_models.insert(provider_id, model);
-    settings::write_settings(&app, settings);
+    settings::write_settings(&app, settings)?;
     Ok(())
 }
 
@@ -980,7 +997,7 @@ pub fn set_post_process_provider(app: AppHandle, provider_id: String) -> Result<
     let mut settings = settings::get_settings(&app);
     validate_provider_exists(&settings, &provider_id)?;
     settings.post_process_provider_id = provider_id;
-    settings::write_settings(&app, settings);
+    settings::write_settings(&app, settings)?;
     Ok(())
 }
 
@@ -1003,7 +1020,7 @@ pub fn add_post_process_prompt(
     };
 
     settings.post_process_prompts.push(new_prompt.clone());
-    settings::write_settings(&app, settings);
+    settings::write_settings(&app, settings)?;
 
     Ok(new_prompt)
 }
@@ -1025,7 +1042,7 @@ pub fn update_post_process_prompt(
     {
         existing_prompt.name = name;
         existing_prompt.prompt = prompt;
-        settings::write_settings(&app, settings);
+        settings::write_settings(&app, settings)?;
         Ok(())
     } else {
         Err(format!("Prompt with id '{}' not found", id))
@@ -1056,7 +1073,7 @@ pub fn delete_post_process_prompt(app: AppHandle, id: String) -> Result<(), Stri
             settings.post_process_prompts.first().map(|p| p.id.clone());
     }
 
-    settings::write_settings(&app, settings);
+    settings::write_settings(&app, settings)?;
     Ok(())
 }
 
@@ -1116,7 +1133,7 @@ pub fn set_post_process_selected_prompt(app: AppHandle, id: String) -> Result<()
     }
 
     settings.post_process_selected_prompt_id = Some(id);
-    settings::write_settings(&app, settings);
+    settings::write_settings(&app, settings)?;
     Ok(())
 }
 
@@ -1209,6 +1226,18 @@ mod tests {
                 "'{key}' must stay confirmation-gated, not reachable via update_setting"
             );
         }
+    }
+
+    #[test]
+    fn the_generic_command_refuses_overlay_custom_position() {
+        // `set_overlay_anchor`/`reset_overlay_position` keep `overlay_position`
+        // in sync with `overlay_custom_position` and call
+        // `update_overlay_position` to actually move the window. A generic
+        // write would persist a placement the overlay never moves to.
+        assert!(
+            SETTINGS_WITH_DEDICATED_COMMANDS.contains(&"overlay_custom_position"),
+            "'overlay_custom_position' must stay reachable only through set_overlay_anchor/reset_overlay_position"
+        );
     }
 
     #[test]

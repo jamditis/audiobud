@@ -1107,11 +1107,39 @@ impl SettingsCache {
             .clone()
     }
 
+    /// Unconditionally overwrite the cached value. Production code always
+    /// goes through `write_through` (a write plus a publish, atomically) or
+    /// `fill_if_empty` (a loader's best-effort fill); this raw setter is kept
+    /// for the cache-only tests below that need to seed a starting value.
+    #[cfg(test)]
     pub(crate) fn store(&self, settings: &AppSettings) {
         *self
             .inner
             .write()
             .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(settings.clone());
+    }
+
+    /// Publish `settings` to the cache only if nothing is cached yet.
+    ///
+    /// For a cold-cache *loader* (`get_settings`, `load_or_create_app_settings`):
+    /// the loader reads the store without holding any lock, so a concurrent
+    /// `write_through` can persist and publish a newer value while the loader
+    /// is still mid-read. An unconditional `store` after that would clobber
+    /// the newer value with the loader's now-stale read, and a later
+    /// read-modify-write would then serialize that stale snapshot back over
+    /// the store, silently erasing the write that already landed. Checking
+    /// emptiness under the same write lock `write_through` uses makes the two
+    /// mutually exclusive: whichever finishes last either wins the empty slot
+    /// or finds it already filled and no-ops, so a loader can never overwrite
+    /// a write that beat it to the cache.
+    pub(crate) fn fill_if_empty(&self, settings: &AppSettings) {
+        let mut guard = self
+            .inner
+            .write()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if guard.is_none() {
+            *guard = Some(settings.clone());
+        }
     }
 
     /// Run `persist` (the store write) and publish `settings` to the cache as
@@ -1289,7 +1317,11 @@ pub fn load_or_create_app_settings(app: &AppHandle) -> AppSettings {
         debug!("Configured signed update checks for the v0.4.2 package migration: {enabled}");
     }
 
-    SETTINGS_CACHE.store(&settings);
+    // A loader's read isn't lock-protected, so a concurrent `write_settings`
+    // may have already published a newer value while this function was
+    // still reading the store: fill only if the slot is still empty, so
+    // that write is never clobbered (see `SettingsCache::fill_if_empty`).
+    SETTINGS_CACHE.fill_if_empty(&settings);
     settings
 }
 
@@ -1310,7 +1342,10 @@ pub fn get_settings(app: &AppHandle) -> AppSettings {
         return get_default_settings();
     };
     let settings = read_settings_from_open_store(&store);
-    SETTINGS_CACHE.store(&settings);
+    // Same race as `load_or_create_app_settings`: only fill an empty slot so
+    // a concurrent write that already published wins instead of being
+    // overwritten by this read's stale snapshot.
+    SETTINGS_CACHE.fill_if_empty(&settings);
     settings
 }
 
@@ -1334,13 +1369,22 @@ fn read_settings_from_open_store(store: &Store<tauri::Wry>) -> AppSettings {
     settings
 }
 
-pub fn write_settings(app: &AppHandle, settings: AppSettings) {
+/// Persist `settings`, returning `Err` when the store could not be written.
+///
+/// A caller that surfaces this to the user (`update_setting` and the other
+/// `#[tauri::command]`s that call this directly) must propagate it *before*
+/// running any side effect, so the frontend's rollback+toast path never
+/// confirms a save that didn't happen. A caller with nowhere to report to
+/// (a background manager, an event handler) should log it instead of
+/// discarding it silently — never `unwrap`/panic on it, since an unwritable
+/// store is a real, recoverable condition (issue #166).
+pub fn write_settings(app: &AppHandle, settings: AppSettings) -> Result<(), String> {
     let Some(store) = settings_store(app) else {
         // The store is unavailable, so the new value cannot be persisted. Drop
         // the cache rather than caching an unpersisted value, so the next read
         // reflects whatever is actually on disk.
         SETTINGS_CACHE.invalidate();
-        return;
+        return Err("Settings store is unavailable; the change was not saved".to_string());
     };
 
     // The store write and the cache publish happen together under the
@@ -1353,6 +1397,7 @@ pub fn write_settings(app: &AppHandle, settings: AppSettings) {
         || store.set("settings", serde_json::to_value(&settings).unwrap()),
         &settings,
     );
+    Ok(())
 }
 
 pub fn get_bindings(app: &AppHandle) -> HashMap<String, ShortcutBinding> {
@@ -1649,6 +1694,65 @@ mod tests {
             cached.push_to_talk,
             last == 'A',
             "the cache must match whichever writer persisted last"
+        );
+    }
+
+    #[test]
+    fn fill_if_empty_never_overwrites_an_existing_value() {
+        let cache = SettingsCache::new();
+        let mut written = get_default_settings();
+        apply_setting_value(&mut written, "push_to_talk", json!(true)).expect("applies");
+        cache.write_through(|| {}, &written);
+
+        // A loader that read the store before the write above landed must not
+        // clobber it just because its own read finishes later.
+        let mut stale_read = get_default_settings();
+        apply_setting_value(&mut stale_read, "push_to_talk", json!(false)).expect("applies");
+        cache.fill_if_empty(&stale_read);
+
+        let cached = cache.peek().expect("write_through populated the cache");
+        assert!(
+            cached.push_to_talk,
+            "fill_if_empty must not overwrite a value already published by write_through"
+        );
+    }
+
+    #[test]
+    fn a_racing_loader_never_beats_a_concurrent_write() {
+        // Models the loader-vs-writer race from the settings refactor
+        // (issue #166): `load_or_create_app_settings`/`get_settings` read the
+        // store without holding the cache lock, so a concurrent
+        // `write_settings` can persist and publish a newer value while the
+        // loader is still reading. The loader must never be able to publish
+        // its now-stale snapshot over that newer value.
+        let cache = Arc::new(SettingsCache::new());
+
+        let mut written = get_default_settings();
+        apply_setting_value(&mut written, "push_to_talk", json!(true)).expect("applies");
+        let mut stale_read = get_default_settings();
+        apply_setting_value(&mut stale_read, "push_to_talk", json!(false)).expect("applies");
+
+        let writer = {
+            let cache = Arc::clone(&cache);
+            let written = written.clone();
+            std::thread::spawn(move || cache.write_through(|| {}, &written))
+        };
+        writer.join().unwrap();
+
+        // The loader's "read" is modeled as already stale by the time it
+        // reaches the cache, which is exactly the case `fill_if_empty` must
+        // guard: the slot is no longer empty, so the loader's publish is a
+        // no-op instead of overwriting the write that already landed.
+        let loader = {
+            let cache = Arc::clone(&cache);
+            std::thread::spawn(move || cache.fill_if_empty(&stale_read))
+        };
+        loader.join().unwrap();
+
+        let cached = cache.peek().expect("a write populated the cache");
+        assert!(
+            cached.push_to_talk,
+            "a loader's stale read must never overwrite a write that already published"
         );
     }
 
