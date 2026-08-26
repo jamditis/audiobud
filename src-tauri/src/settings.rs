@@ -897,6 +897,20 @@ pub fn get_default_settings() -> AppSettings {
         },
     );
 
+    // Target lock (#120): pin dictation to one window. Windows-only for now
+    // (#119), so other platforms get no binding rather than a dead shortcut.
+    #[cfg(target_os = "windows")]
+    bindings.insert(
+        "toggle_target_lock".to_string(),
+        ShortcutBinding {
+            id: "toggle_target_lock".to_string(),
+            name: "Lock to window".to_string(),
+            description: "Sends your text to one window until you unlock it.".to_string(),
+            default_binding: "ctrl+alt+l".to_string(),
+            current_binding: "ctrl+alt+l".to_string(),
+        },
+    );
+
     bindings.insert(
         "cancel".to_string(),
         ShortcutBinding {

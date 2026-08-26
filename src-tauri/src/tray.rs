@@ -264,6 +264,20 @@ pub fn update_tray_menu(app: &AppHandle, state: &TrayIconState, locale: Option<&
     )
     .expect("failed to create show-overlay toggle item");
 
+    // Target lock (#120), Windows-only for now (#119). Checked while a window is
+    // locked; the `toggle:` handler in lib.rs flips it and rebuilds the menu.
+    #[cfg(target_os = "windows")]
+    let toggle_target_lock_i = CheckMenuItem::with_id(
+        app,
+        "toggle:target_lock",
+        &strings.lock_to_window,
+        true,
+        app.try_state::<crate::output_target::PinnedTarget>()
+            .is_some_and(|lock| lock.is_locked()),
+        None::<&str>,
+    )
+    .expect("failed to create target-lock toggle item");
+
     // Output-mode submenu: switch dictation between a formatted transcript (punctuation, casing,
     // and digit/currency number formatting) and a raw transcript (verbatim, lowercased). The two
     // items act as radio buttons over the `raw_output` setting; the checked one is derived fresh on
@@ -315,31 +329,38 @@ pub fn update_tray_menu(app: &AppHandle, state: &TrayIconState, locale: Option<&
             )
             .expect("failed to create menu")
         }
-        TrayIconState::Idle => Menu::with_items(
-            app,
-            &[
+        TrayIconState::Idle => {
+            // Built as a list rather than one array literal because the
+            // target-lock toggle is Windows-only. Separators are bound to
+            // locals so they outlive the borrows collected here.
+            let separators: Vec<_> = (0..6).map(|_| separator()).collect();
+            let mut items: Vec<&dyn tauri::menu::IsMenuItem<tauri::Wry>> = vec![
                 &version_i,
-                &separator(),
+                &separators[0],
                 &copy_last_transcript_i,
-                &separator(),
+                &separators[1],
                 &model_submenu,
                 &unload_model_i,
-                &separator(),
+                &separators[2],
                 &output_mode_submenu,
-                &separator(),
+                &separators[3],
                 &toggle_ptt_i,
                 &toggle_mute_i,
                 &toggle_space_i,
                 &toggle_auto_submit_i,
                 &toggle_overlay_i,
-                &separator(),
+            ];
+            #[cfg(target_os = "windows")]
+            items.push(&toggle_target_lock_i);
+            items.extend([
+                &separators[4] as &dyn tauri::menu::IsMenuItem<tauri::Wry>,
                 &settings_i,
                 &check_updates_i,
-                &separator(),
+                &separators[5],
                 &quit_i,
-            ],
-        )
-        .expect("failed to create menu"),
+            ]);
+            Menu::with_items(app, &items).expect("failed to create menu")
+        }
     };
 
     let tray = app.state::<TrayIcon>();

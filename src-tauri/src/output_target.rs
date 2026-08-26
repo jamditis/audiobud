@@ -7,16 +7,20 @@
 //! locked handle is held in Tauri-managed state ([`PinnedTarget`]) alongside
 //! `EnigoState`, and the paste path reads it at send time.
 //!
-//! This module is the platform-independent core: the lock/unlock state machine
-//! and the closed-window failsafe. Realizing a pinned target is a focus-borrow
-//! in the paste path (save foreground, activate the pinned window, paste,
-//! restore) and is Windows-only for now; that half is the next child of the
-//! epic (#119) and is where [`PinnedTarget::resolve`] gets its first caller.
+//! This module is the platform-independent core: the lock/unlock state machine,
+//! the closed-window failsafe, the window-identity check that rejects a recycled
+//! handle (#254), and the self-window exclusion (#164). [`backend`] holds the
+//! platform half: capturing the foreground window and the focus-borrow paste
+//! (save foreground, activate the pinned window, paste, restore), which is
+//! Windows-only for now (#119).
 //!
-//! Until that caller lands, the API is exercised only by the unit tests below,
-//! so the module allows dead_code; drop the allow when the paste path wires in.
+//! Parts of the API are used only by the picker (#124), which lands later, so
+//! the module allows dead_code.
 #![allow(dead_code)]
 
+pub mod backend;
+
+use std::fmt;
 use std::sync::Mutex;
 
 /// A captured native window handle. On Windows this holds an `HWND` as the
@@ -25,6 +29,104 @@ use std::sync::Mutex;
 /// once a backend exists.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct WindowHandle(pub isize);
+
+/// A window plus the identity it had when it was captured.
+///
+/// The bare handle is not enough to recognize a window later: Windows reuses
+/// `HWND` values, so a destroyed window's handle can be handed to an unrelated
+/// new window and still pass `IsWindow` (#254). Recording the owning process and
+/// thread at capture time lets [`identity_is_alive`] tell "still the window the
+/// user chose" from "a different window wearing the same handle". A window keeps
+/// its owning thread for its whole life, so both fields are stable while the
+/// window exists.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct WindowIdentity {
+    pub handle: WindowHandle,
+    pub process_id: u32,
+    pub thread_id: u32,
+}
+
+/// Why a window could not be captured for locking.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CaptureError {
+    /// No window held the foreground, or it disappeared while being read.
+    NoForegroundWindow,
+    /// The foreground window is one of AudioBud's own (#164). Locking onto
+    /// AudioBud would send every later transcript into the settings window or
+    /// the overlay instead of the user's app.
+    OwnWindow,
+    /// This platform has no window-targeting backend yet (#119).
+    Unsupported,
+}
+
+impl fmt::Display for CaptureError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            CaptureError::NoForegroundWindow => write!(f, "no foreground window to lock onto"),
+            CaptureError::OwnWindow => write!(f, "the focused window belongs to AudioBud"),
+            CaptureError::Unsupported => {
+                write!(f, "window targeting is not supported on this platform")
+            }
+        }
+    }
+}
+
+/// Whether a locked window is still the same window.
+///
+/// `probe` reports the process and thread that own `locked.handle` right now, or
+/// `None` if no window has that handle any more (on Windows,
+/// `GetWindowThreadProcessId`, which returns 0 for a dead handle). A handle the
+/// OS has recycled reads as a different owner and so is NOT alive: the caller
+/// then drops the lock and suppresses the paste rather than typing a transcript
+/// into a window the user never chose (#254).
+///
+/// This is the one identity check for the whole subsystem; the one-shot picker
+/// (#124) re-validates its chosen handle through it too.
+pub fn identity_is_alive(
+    locked: WindowIdentity,
+    probe: impl FnOnce(WindowHandle) -> Option<(u32, u32)>,
+) -> bool {
+    match probe(locked.handle) {
+        Some((process_id, thread_id)) => {
+            process_id == locked.process_id && thread_id == locked.thread_id
+        }
+        None => false,
+    }
+}
+
+/// Whether `candidate` is one of AudioBud's own windows (#164).
+///
+/// Both the settings window and the recording overlay belong to this process, so
+/// the owning process id is the whole test -- no window title or class matching
+/// is needed, and it holds for every window the app may add later.
+pub fn is_own_window(candidate: WindowIdentity, own_process_id: u32) -> bool {
+    candidate.process_id == own_process_id
+}
+
+/// Accept a freshly captured window as a lock target, or reject AudioBud's own
+/// (#164). Shared by the target lock and the picker (#124) so neither can offer
+/// the app's own windows.
+pub fn accept_capture(
+    candidate: WindowIdentity,
+    own_process_id: u32,
+) -> Result<WindowIdentity, CaptureError> {
+    if is_own_window(candidate, own_process_id) {
+        Err(CaptureError::OwnWindow)
+    } else {
+        Ok(candidate)
+    }
+}
+
+/// What one press of the lock toggle did, for the notice the caller shows.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LockToggle {
+    /// Delivery is now pinned to this window.
+    Locked(WindowIdentity),
+    /// The lock was released; delivery follows the foreground again.
+    Unlocked,
+    /// Nothing was captured, so the app stays unlocked.
+    NotLocked(CaptureError),
+}
 
 /// Where the paste about to fire should be delivered.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -58,15 +160,15 @@ pub enum Resolved {
 /// reads it at send time to resolve the [`OutputTarget`]. `None` means no lock
 /// is held and delivery follows the foreground.
 #[derive(Default)]
-pub struct PinnedTarget(pub Mutex<Option<WindowHandle>>);
+pub struct PinnedTarget(pub Mutex<Option<WindowIdentity>>);
 
 impl PinnedTarget {
     /// Lock delivery to `window` -- the one focused at the moment of locking --
     /// and return the target now in force. Locking again re-pins to the new
     /// window, so a second lock is also how you retarget.
-    pub fn lock_to(&self, window: WindowHandle) -> OutputTarget {
+    pub fn lock_to(&self, window: WindowIdentity) -> OutputTarget {
         *self.guard() = Some(window);
-        OutputTarget::Pinned(window)
+        OutputTarget::Pinned(window.handle)
     }
 
     /// Clear any lock and return to foreground delivery.
@@ -79,10 +181,41 @@ impl PinnedTarget {
         self.guard().is_some()
     }
 
+    /// The locked window, if any.
+    pub fn locked(&self) -> Option<WindowIdentity> {
+        *self.guard()
+    }
+
+    /// One press of the lock toggle: release an existing lock, or capture a new
+    /// target with `capture` (on Windows, the foreground window).
+    ///
+    /// The lock is held across `capture` so two fast presses cannot interleave
+    /// into a lock the user did not ask for. A failed capture leaves the app
+    /// unlocked -- it never falls back to a stale target.
+    pub fn toggle(
+        &self,
+        capture: impl FnOnce() -> Result<WindowIdentity, CaptureError>,
+    ) -> LockToggle {
+        let mut guard = self.guard();
+        if guard.is_some() {
+            *guard = None;
+            return LockToggle::Unlocked;
+        }
+        match capture() {
+            Ok(window) => {
+                *guard = Some(window);
+                LockToggle::Locked(window)
+            }
+            Err(error) => LockToggle::NotLocked(error),
+        }
+    }
+
     /// Resolve the target for the paste about to fire.
     ///
-    /// `is_alive` reports whether the locked window still exists (on Windows,
-    /// `IsWindow(hwnd)`). It is not consulted when nothing is locked. If the
+    /// `is_alive` reports whether the locked window is still the same window
+    /// (on Windows, [`backend::window_is_alive`], which re-checks the captured
+    /// process and thread so a recycled handle reads as gone -- #254). It is not
+    /// consulted when nothing is locked. If the
     /// locked window has gone, this FAILS SAFE: it drops the lock and returns
     /// [`Resolved::LockLost`] rather than borrowing focus to a handle the OS may
     /// have recycled -- a transcript landing in the wrong app is the exact
@@ -92,13 +225,13 @@ impl PinnedTarget {
     /// between this call and the focus-borrow that acts on a `Pinned` result, so
     /// that paste path must itself tolerate an activation that fails rather than
     /// assume the handle is good.
-    pub fn resolve(&self, is_alive: impl FnOnce(WindowHandle) -> bool) -> Resolved {
+    pub fn resolve(&self, is_alive: impl FnOnce(WindowIdentity) -> bool) -> Resolved {
         let mut guard = self.guard();
         match *guard {
             None => Resolved::Deliver(OutputTarget::Foreground),
             Some(window) => {
                 if is_alive(window) {
-                    Resolved::Deliver(OutputTarget::Pinned(window))
+                    Resolved::Deliver(OutputTarget::Pinned(window.handle))
                 } else {
                     *guard = None;
                     Resolved::LockLost
@@ -108,12 +241,12 @@ impl PinnedTarget {
     }
 
     /// Borrow the lock, recovering the guard if a previous holder panicked.
-    /// The mutex only guards a `Copy` `Option<WindowHandle>` with no
+    /// The mutex only guards a `Copy` `Option<WindowIdentity>` with no
     /// cross-field invariant, so a poisoned guard's value is always consistent.
     /// Recovering it keeps one panic in an `is_alive` callback from poisoning
     /// the mutex and bricking every later paste with a panic on `unwrap`
     /// (AGENTS.md: avoid unwrap in production).
-    fn guard(&self) -> std::sync::MutexGuard<'_, Option<WindowHandle>> {
+    fn guard(&self) -> std::sync::MutexGuard<'_, Option<WindowIdentity>> {
         self.0
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
@@ -123,6 +256,15 @@ impl PinnedTarget {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A captured window: handle `h`, owned by process `pid` / thread `tid`.
+    fn win(h: isize, pid: u32, tid: u32) -> WindowIdentity {
+        WindowIdentity {
+            handle: WindowHandle(h),
+            process_id: pid,
+            thread_id: tid,
+        }
+    }
 
     #[test]
     fn default_is_foreground_and_unlocked() {
@@ -136,14 +278,15 @@ mod tests {
     #[test]
     fn lock_pins_the_given_window() {
         let t = PinnedTarget::default();
-        let w = WindowHandle(42);
-        assert_eq!(t.lock_to(w), OutputTarget::Pinned(w));
+        let w = win(42, 100, 200);
+        assert_eq!(t.lock_to(w), OutputTarget::Pinned(w.handle));
         assert!(t.is_locked());
-        let resolved = t.resolve(|h| {
-            assert_eq!(h, w);
+        assert_eq!(t.locked(), Some(w));
+        let resolved = t.resolve(|locked| {
+            assert_eq!(locked, w);
             true
         });
-        assert_eq!(resolved, Resolved::Deliver(OutputTarget::Pinned(w)));
+        assert_eq!(resolved, Resolved::Deliver(OutputTarget::Pinned(w.handle)));
         // Resolving a live target must NOT clear the lock.
         assert!(t.is_locked());
     }
@@ -151,7 +294,7 @@ mod tests {
     #[test]
     fn unlock_returns_to_foreground() {
         let t = PinnedTarget::default();
-        t.lock_to(WindowHandle(7));
+        t.lock_to(win(7, 1, 2));
         t.unlock();
         assert!(!t.is_locked());
         let resolved = t.resolve(|_| true);
@@ -161,7 +304,7 @@ mod tests {
     #[test]
     fn dead_target_fails_safe_and_drops_the_lock() {
         let t = PinnedTarget::default();
-        t.lock_to(WindowHandle(99));
+        t.lock_to(win(99, 1, 2));
         // Locked window has closed: resolve must fail safe and report LockLost
         // so the caller can surface the notice once.
         assert_eq!(t.resolve(|_| false), Resolved::LockLost);
@@ -176,7 +319,8 @@ mod tests {
     fn poisoned_lock_recovers_instead_of_bricking() {
         use std::panic::{catch_unwind, AssertUnwindSafe};
         let t = PinnedTarget::default();
-        t.lock_to(WindowHandle(5));
+        let w = win(5, 1, 2);
+        t.lock_to(w);
         // An is_alive callback that unwinds while resolve holds the guard
         // poisons the mutex. Recovery must let later calls proceed rather than
         // panic on every subsequent lock.
@@ -189,22 +333,102 @@ mod tests {
         assert!(t.is_locked());
         assert_eq!(
             t.resolve(|_| true),
-            Resolved::Deliver(OutputTarget::Pinned(WindowHandle(5)))
+            Resolved::Deliver(OutputTarget::Pinned(w.handle))
         );
     }
 
     #[test]
     fn re_locking_replaces_the_previous_window() {
         let t = PinnedTarget::default();
-        t.lock_to(WindowHandle(1));
-        assert_eq!(
-            t.lock_to(WindowHandle(2)),
-            OutputTarget::Pinned(WindowHandle(2))
-        );
+        t.lock_to(win(1, 1, 1));
+        let second = win(2, 2, 2);
+        assert_eq!(t.lock_to(second), OutputTarget::Pinned(second.handle));
         let resolved = t.resolve(|_| true);
         assert_eq!(
             resolved,
-            Resolved::Deliver(OutputTarget::Pinned(WindowHandle(2)))
+            Resolved::Deliver(OutputTarget::Pinned(second.handle))
+        );
+    }
+
+    #[test]
+    fn a_window_that_kept_its_owner_is_alive() {
+        let locked = win(42, 100, 200);
+        assert!(identity_is_alive(locked, |h| {
+            assert_eq!(h, locked.handle);
+            Some((100, 200))
+        }));
+    }
+
+    #[test]
+    fn a_recycled_handle_is_not_alive() {
+        // The handle exists again, but it belongs to another process now: the
+        // OS handed the number to an unrelated window (#254). Bare IsWindow
+        // would say "alive" here and leak the transcript into that window.
+        let locked = win(42, 100, 200);
+        assert!(!identity_is_alive(locked, |_| Some((999, 200))));
+        // Same process, different thread: another window of the same app.
+        assert!(!identity_is_alive(locked, |_| Some((100, 999))));
+    }
+
+    #[test]
+    fn a_gone_handle_is_not_alive() {
+        let locked = win(42, 100, 200);
+        assert!(!identity_is_alive(locked, |_| None));
+    }
+
+    #[test]
+    fn resolve_drops_a_lock_whose_handle_was_recycled() {
+        // The whole point of carrying identity: the end-to-end path from a
+        // recycled handle to a suppressed paste.
+        let t = PinnedTarget::default();
+        let locked = win(42, 100, 200);
+        t.lock_to(locked);
+        let resolved = t.resolve(|w| identity_is_alive(w, |_| Some((999, 200))));
+        assert_eq!(resolved, Resolved::LockLost);
+        assert!(!t.is_locked());
+    }
+
+    #[test]
+    fn capture_rejects_audiobuds_own_windows() {
+        // Launching a second instance focuses the settings window (#164). A
+        // capture must refuse it instead of locking onto AudioBud itself.
+        let own = win(1, 4242, 7);
+        assert!(is_own_window(own, 4242));
+        assert_eq!(accept_capture(own, 4242), Err(CaptureError::OwnWindow));
+    }
+
+    #[test]
+    fn capture_accepts_another_applications_window() {
+        let other = win(1, 5, 7);
+        assert!(!is_own_window(other, 4242));
+        assert_eq!(accept_capture(other, 4242), Ok(other));
+    }
+
+    #[test]
+    fn toggle_locks_then_unlocks() {
+        let t = PinnedTarget::default();
+        let w = win(11, 1, 2);
+        assert_eq!(t.toggle(|| Ok(w)), LockToggle::Locked(w));
+        assert!(t.is_locked());
+        // The second press releases; capture must not even run.
+        assert_eq!(
+            t.toggle(|| panic!("captured while already locked")),
+            LockToggle::Unlocked
+        );
+        assert!(!t.is_locked());
+    }
+
+    #[test]
+    fn a_failed_capture_leaves_the_app_unlocked() {
+        let t = PinnedTarget::default();
+        assert_eq!(
+            t.toggle(|| Err(CaptureError::OwnWindow)),
+            LockToggle::NotLocked(CaptureError::OwnWindow)
+        );
+        assert!(!t.is_locked());
+        assert_eq!(
+            t.resolve(|_| panic!("is_alive called with no lock")),
+            Resolved::Deliver(OutputTarget::Foreground)
         );
     }
 }

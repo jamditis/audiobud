@@ -2,6 +2,7 @@
 use crate::clipboard_snapshot::ClipboardBackend;
 use crate::clipboard_snapshot::{self, ArboardBackend, ClipboardContent, ClipboardHistory};
 use crate::input::{self, EnigoState};
+use crate::output_target::{backend as target_backend, OutputTarget};
 #[cfg(target_os = "linux")]
 use crate::settings::TypingTool;
 use crate::settings::{get_settings, AutoSubmitKey, ClipboardHandling, PasteMethod};
@@ -698,6 +699,13 @@ pub fn paste(text: String, app_handle: AppHandle) -> Result<(), String> {
         paste_method, paste_delay_ms
     );
 
+    // Where this transcript goes: the foreground window, or the window the user
+    // locked (#120). A lock whose window has closed suppresses the paste rather
+    // than sending it to whatever inherited focus.
+    let Some(target) = target_backend::resolve_paste_target(&app_handle) else {
+        return Ok(());
+    };
+
     // Get the managed Enigo instance
     let enigo_state = app_handle
         .try_state::<EnigoState>()
@@ -707,42 +715,49 @@ pub fn paste(text: String, app_handle: AppHandle) -> Result<(), String> {
         .lock()
         .map_err(|e| format!("Failed to lock Enigo: {}", e))?;
 
-    // Perform the paste operation
-    match paste_method {
-        PasteMethod::None => {
-            info!("PasteMethod::None selected - skipping paste action");
+    // The paste itself, unchanged whichever window it lands in. A pinned target
+    // runs it inside a focus borrow, so the clipboard write, the paste keystroke
+    // and the auto-submit key all reach the same window.
+    let deliver = |enigo: &mut Enigo| -> Result<(), String> {
+        match paste_method {
+            PasteMethod::None => {
+                info!("PasteMethod::None selected - skipping paste action");
+            }
+            PasteMethod::Direct => {
+                paste_direct(
+                    enigo,
+                    &text,
+                    #[cfg(target_os = "linux")]
+                    settings.typing_tool,
+                )?;
+            }
+            PasteMethod::CtrlV | PasteMethod::CtrlShiftV | PasteMethod::ShiftInsert => {
+                paste_via_clipboard(enigo, &text, &app_handle, &paste_method, paste_delay_ms)?
+            }
+            PasteMethod::ExternalScript => {
+                let script_path = settings
+                    .external_script_path
+                    .as_ref()
+                    .filter(|p| !p.is_empty())
+                    .ok_or("External script path is not configured")?;
+                paste_via_external_script(&text, script_path)?;
+            }
         }
-        PasteMethod::Direct => {
-            paste_direct(
-                &mut enigo,
-                &text,
-                #[cfg(target_os = "linux")]
-                settings.typing_tool,
-            )?;
-        }
-        PasteMethod::CtrlV | PasteMethod::CtrlShiftV | PasteMethod::ShiftInsert => {
-            paste_via_clipboard(
-                &mut enigo,
-                &text,
-                &app_handle,
-                &paste_method,
-                paste_delay_ms,
-            )?
-        }
-        PasteMethod::ExternalScript => {
-            let script_path = settings
-                .external_script_path
-                .as_ref()
-                .filter(|p| !p.is_empty())
-                .ok_or("External script path is not configured")?;
-            paste_via_external_script(&text, script_path)?;
-        }
-    }
 
-    if should_send_auto_submit(settings.auto_submit, paste_method) {
-        std::thread::sleep(Duration::from_millis(50));
-        send_return_key(&mut enigo, settings.auto_submit_key)?;
-    }
+        if should_send_auto_submit(settings.auto_submit, paste_method) {
+            std::thread::sleep(Duration::from_millis(50));
+            send_return_key(enigo, settings.auto_submit_key)?;
+        }
+
+        Ok(())
+    };
+
+    match target {
+        OutputTarget::Foreground => deliver(&mut enigo),
+        OutputTarget::Pinned(window) => {
+            target_backend::borrow_focus(window, || deliver(&mut enigo))?
+        }
+    }?;
 
     // After pasting, optionally copy to clipboard based on settings
     if settings.clipboard_handling == ClipboardHandling::CopyToClipboard {

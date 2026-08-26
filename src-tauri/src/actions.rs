@@ -955,6 +955,23 @@ impl ShortcutAction for CancelAction {
     }
 }
 
+// Target-lock toggle (#120). Pressing locks delivery to the window focused at
+// that moment; pressing again releases it. Windows-only for now (#119), so the
+// binding is registered only there.
+#[cfg(target_os = "windows")]
+struct ToggleTargetLockAction;
+
+#[cfg(target_os = "windows")]
+impl ShortcutAction for ToggleTargetLockAction {
+    fn start(&self, app: &AppHandle, _binding_id: &str, _shortcut_str: &str) {
+        crate::output_target::backend::toggle_target_lock(app);
+    }
+
+    fn stop(&self, _app: &AppHandle, _binding_id: &str, _shortcut_str: &str) {
+        // The lock flips on press; the release does nothing.
+    }
+}
+
 // Test Action
 struct TestAction;
 
@@ -1005,6 +1022,11 @@ pub static ACTION_MAP: Lazy<HashMap<String, Arc<dyn ShortcutAction>>> = Lazy::ne
     map.insert(
         "cancel".to_string(),
         Arc::new(CancelAction) as Arc<dyn ShortcutAction>,
+    );
+    #[cfg(target_os = "windows")]
+    map.insert(
+        "toggle_target_lock".to_string(),
+        Arc::new(ToggleTargetLockAction) as Arc<dyn ShortcutAction>,
     );
     map.insert(
         "test".to_string(),

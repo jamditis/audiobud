@@ -97,6 +97,11 @@ windows = { version = "0.61.3", features = [
   "Win32_System_Variant",
   "Win32_Foundation",
   "Win32_UI_WindowsAndMessaging",
+  # AttachThreadInput and GetCurrentThreadId, for the focus borrow (issue #163).
+  # SetForegroundWindow is refused unless the caller meets a foreground-change
+  # condition, which a global hotkey handled off the main thread does not.
+  # Both live here, not in Win32_UI_Input_KeyboardAndMouse, in windows 0.61.
+  "Win32_System_Threading",
 ] }
 winreg = "0.55"
 clipboard-win = "5.4"

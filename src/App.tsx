@@ -178,6 +178,20 @@ function App() {
     };
   }, [t]);
 
+  // Listen for a dropped target lock (issue #120). The locked window closed, so
+  // the backend suppressed the paste rather than send the transcript to whatever
+  // now holds focus. The lock is already released when this fires.
+  useEffect(() => {
+    const unlisten = listen("target-lock-lost", () => {
+      toast.warning(t("errors.targetLockLostTitle"), {
+        description: t("errors.targetLockLost"),
+      });
+    });
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, [t]);
+
   // Listen for transcription watchdog timeouts (wedged engine, issue #58)
   // and show a toast. The Rust side has already recovered the overlay/tray.
   useEffect(() => {

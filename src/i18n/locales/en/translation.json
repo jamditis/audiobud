@@ -14,7 +14,8 @@
     "showOverlay": "Show overlay",
     "outputMode": "Output mode",
     "formatted": "Formatted",
-    "rawTranscript": "Raw transcript"
+    "rawTranscript": "Raw transcript",
+    "lockToWindow": "Lock to window"
   },
   "sidebar": {
     "navLabel": "Settings sections",
@@ -802,6 +803,8 @@
     "modelLoadFailedUnknown": "unknown model",
     "pasteFailedTitle": "Failed to paste text",
     "pasteFailed": "Text could not be pasted into the active application.",
+    "targetLockLostTitle": "Locked window is gone",
+    "targetLockLost": "The window you locked is closed. AudioBud did not paste the text. Lock a window again.",
     "transcriptionErrorTitle": "Transcription failed",
     "transcriptionErrorGeneric": "The recording could not be transcribed. Try again or choose a different model.",
     "transcriptionTimeoutTitle": "Transcription timed out",

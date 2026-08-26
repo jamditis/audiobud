@@ -465,6 +465,13 @@ fn initialize_core_logic(app_handle: &AppHandle) {
                         !current.format_numbers,
                     ),
                     "overlay_visible" => shortcut::toggle_overlay_visibility(app.clone()),
+                    // Target lock (#120). It is not a persisted setting, so it
+                    // does not route through a settings command; the toggle
+                    // rebuilds the tray itself.
+                    "target_lock" => {
+                        output_target::backend::toggle_target_lock(app);
+                        return;
+                    }
                     other => {
                         log::warn!("Unknown tray toggle: {}", other);
                         return;
