@@ -197,6 +197,10 @@
           "transcribe_raw": {
             "name": "Tecla de transcripción sin formato",
             "description": "Una tecla de acceso rápido dedicada que transcribe a texto sin formato, en minúsculas y sin puntuación, solo para ese dictado."
+          },
+          "toggle_target_lock": {
+            "name": "Atajo para fijar a una ventana",
+            "description": "El atajo de teclado que envía tu texto a una sola ventana hasta que la sueltes."
           }
         },
         "errors": {

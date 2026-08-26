@@ -24,6 +24,30 @@ enum SavedClipboard {
     TextOnly(String),
 }
 
+/// Why one delivery stopped early.
+#[derive(Debug, PartialEq, Eq)]
+enum DeliveryError {
+    /// The target window went away, or refused to take focus, so no further
+    /// keystrokes were sent. Nothing is wrong with the transcript itself, so
+    /// whatever does not depend on a window -- the clipboard copy -- still
+    /// applies (#120).
+    Suppressed(String),
+    /// The paste machinery failed and the user should be told.
+    Failed(String),
+}
+
+impl From<String> for DeliveryError {
+    fn from(error: String) -> Self {
+        DeliveryError::Failed(error)
+    }
+}
+
+impl From<&str> for DeliveryError {
+    fn from(error: &str) -> Self {
+        DeliveryError::Failed(error.to_string())
+    }
+}
+
 /// Pastes text using the clipboard: saves current content, writes text, sends paste keystroke, restores clipboard.
 fn paste_via_clipboard(
     enigo: &mut Enigo,
@@ -32,7 +56,7 @@ fn paste_via_clipboard(
     paste_method: &PasteMethod,
     paste_delay_ms: u64,
     hold: &FocusHold,
-) -> Result<(), String> {
+) -> Result<(), DeliveryError> {
     let clipboard = app_handle.clipboard();
 
     // Save the full clipboard before overwriting it with the transcript.
@@ -81,9 +105,10 @@ fn paste_via_clipboard(
 
     // The clipboard write and the delay above give focus time to move, so the
     // target is re-checked here, immediately before the keystroke (#120).
-    let pasted = hold
-        .ensure()
-        .and_then(|()| send_paste_key_combo(enigo, paste_method));
+    let pasted = match hold.ensure() {
+        Ok(()) => send_paste_key_combo(enigo, paste_method).map_err(DeliveryError::Failed),
+        Err(reason) => Err(DeliveryError::Suppressed(reason)),
+    };
 
     std::thread::sleep(std::time::Duration::from_millis(50));
 
@@ -741,13 +766,13 @@ fn deliver_to_target(
     // runs it inside a focus borrow; `hold.ensure()` re-checks the target at
     // every keystroke boundary, because focus can move during the writes and
     // waits in between.
-    let deliver = |enigo: &mut Enigo| -> Result<(), String> {
+    let deliver = |enigo: &mut Enigo| -> Result<(), DeliveryError> {
         match paste_method {
             PasteMethod::None => {
                 info!("PasteMethod::None selected - skipping paste action");
             }
             PasteMethod::Direct => {
-                hold.ensure()?;
+                hold.ensure().map_err(DeliveryError::Suppressed)?;
                 paste_direct(
                     enigo,
                     text,
@@ -779,26 +804,48 @@ fn deliver_to_target(
 
         if should_send_auto_submit(settings.auto_submit, paste_method) {
             std::thread::sleep(Duration::from_millis(50));
-            hold.ensure()?;
+            hold.ensure().map_err(DeliveryError::Suppressed)?;
             send_return_key(enigo, settings.auto_submit_key)?;
         }
 
         Ok(())
     };
 
-    match delivery {
-        Delivery::Foreground => deliver(&mut enigo)?,
+    let outcome = match delivery {
+        Delivery::Foreground => deliver(&mut enigo),
         Delivery::Pinned(identity) => {
-            match target_backend::borrow_focus(app_handle, identity, || deliver(&mut enigo))? {
-                Borrowed::Delivered(result) => result?,
+            match target_backend::borrow_focus(app_handle, identity, || deliver(&mut enigo)) {
+                Ok(Borrowed::Delivered(result)) => result,
                 // The window died between resolving it and activating it, so
                 // nothing was typed and the lock is already dropped.
-                Borrowed::Suppressed => return Ok(false),
+                Ok(Borrowed::Suppressed) => {
+                    return Ok(false);
+                }
+                // The target refused to come forward, so nothing was typed
+                // either: a suppressed delivery, not a broken paste.
+                Err(reason) => Err(DeliveryError::Suppressed(reason)),
             }
         }
-    }
+    };
 
-    Ok(true)
+    delivery_outcome(outcome)
+}
+
+/// Turn one delivery's result into "was it delivered", or a real error.
+///
+/// A suppressed delivery is not an error: the target window was lost, nothing
+/// was typed anywhere, and the user has already been told the lock is gone.
+/// Reporting it as a failure would abandon the rest of the paste path, and with
+/// it the clipboard copy that is the transcript's last refuge (#120).
+fn delivery_outcome(outcome: Result<(), DeliveryError>) -> Result<bool, String> {
+    match outcome {
+        Ok(()) => Ok(true),
+        Err(DeliveryError::Suppressed(reason)) => {
+            warn!("Delivery to the locked window stopped: {}", reason);
+            Ok(false)
+        }
+        Err(DeliveryError::Failed(error)) => Err(error),
+    }
 }
 
 pub fn paste(text: String, app_handle: AppHandle) -> Result<(), String> {
@@ -846,6 +893,24 @@ mod tests {
     fn auto_submit_requires_setting_enabled() {
         assert!(!should_send_auto_submit(false, PasteMethod::CtrlV));
         assert!(!should_send_auto_submit(false, PasteMethod::Direct));
+    }
+
+    #[test]
+    fn a_lost_target_is_not_a_paste_failure() {
+        // Losing the target mid-delivery must not abort the rest of the paste
+        // path: the clipboard copy below is the transcript's last refuge, and
+        // the user has already seen the "lock lost" notice.
+        let suppressed = delivery_outcome(Err(DeliveryError::Suppressed(
+            "the locked window closed during delivery".to_string(),
+        )));
+        assert_eq!(suppressed, Ok(false));
+    }
+
+    #[test]
+    fn a_broken_paste_is_still_reported() {
+        let failed = delivery_outcome(Err(DeliveryError::Failed("enigo exploded".to_string())));
+        assert_eq!(failed, Err("enigo exploded".to_string()));
+        assert_eq!(delivery_outcome(Ok(())), Ok(true));
     }
 
     #[test]

@@ -474,7 +474,10 @@ fn initialize_core_logic(app_handle: &AppHandle) {
                     // does not route through a settings command; the toggle
                     // rebuilds the tray itself.
                     "target_lock" => {
-                        output_target::backend::toggle_target_lock(app);
+                        output_target::backend::toggle_target_lock(
+                            app,
+                            output_target::CaptureSource::TrayMenu,
+                        );
                         return;
                     }
                     other => {

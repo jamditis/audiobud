@@ -197,6 +197,10 @@
           "transcribe_raw": {
             "name": "Raw transcript hotkey",
             "description": "A dedicated hotkey that transcribes to raw, lowercased, unpunctuated text for this dictation only."
+          },
+          "toggle_target_lock": {
+            "name": "Lock to window shortcut",
+            "description": "The keyboard shortcut that sends your text to one window until you unlock it."
           }
         },
         "errors": {

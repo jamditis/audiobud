@@ -197,6 +197,10 @@
           "transcribe_raw": {
             "name": "Skrót surowej transkrypcji",
             "description": "Dedykowany skrót klawiszowy, który tylko dla tego dyktowania zapisuje transkrypcję jako surowy tekst, małymi literami i bez interpunkcji."
+          },
+          "toggle_target_lock": {
+            "name": "Skrót przypięcia do okna",
+            "description": "Skrót klawiszowy, który wysyła tekst do jednego okna, dopóki go nie odepniesz."
           }
         },
         "errors": {

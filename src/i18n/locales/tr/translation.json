@@ -197,6 +197,10 @@
           "transcribe_raw": {
             "name": "Ham transkript kısayolu",
             "description": "Yalnızca o dikte için ham, küçük harfli ve noktalama işaretsiz metne dönüştüren özel bir kısayol tuşu."
+          },
+          "toggle_target_lock": {
+            "name": "Pencereye kilitleme kısayolu",
+            "description": "Kilidi açana kadar metninizi tek bir pencereye gönderen klavye kısayolu."
           }
         },
         "errors": {

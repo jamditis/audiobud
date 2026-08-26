@@ -197,6 +197,10 @@
           "transcribe_raw": {
             "name": "Klávesa pro surový přepis",
             "description": "Vyhrazená klávesová zkratka, která pouze pro tento jeden diktát přepíše text jako surový – malými písmeny a bez interpunkce."
+          },
+          "toggle_target_lock": {
+            "name": "Zkratka pro uzamknutí na okno",
+            "description": "Klávesová zkratka, která posílá váš text do jednoho okna, dokud jej neodemknete."
           }
         },
         "errors": {

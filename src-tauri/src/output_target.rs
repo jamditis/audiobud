@@ -161,6 +161,20 @@ pub fn is_eligible_target(facts: &WindowFacts, own_process_id: u32) -> bool {
         && !is_shell_window(facts.class_name)
 }
 
+/// Where a lock request came from, which decides how hard the backend looks for
+/// a target.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CaptureSource {
+    /// The global shortcut. The user pressed it while looking at the window they
+    /// mean, so the foreground window is the answer or there is none: guessing
+    /// at another window would pin dictation somewhere never asked for.
+    Shortcut,
+    /// The tray menu. Opening the menu takes the foreground away from the user's
+    /// window, so the foreground cannot be trusted here and the backend falls
+    /// back to the top window the user could have been working in.
+    TrayMenu,
+}
+
 /// What one press of the lock toggle did, for the notice the caller shows.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum LockToggle {
@@ -218,6 +232,24 @@ impl PinnedTarget {
     /// Clear any lock and return to foreground delivery.
     pub fn unlock(&self) {
         *self.guard() = None;
+    }
+
+    /// Release the lock only if it still points at `expected`, and report
+    /// whether it did.
+    ///
+    /// A delivery that discovers its target has died must not clear whatever
+    /// lock is held by then: a user can unlock and re-lock to another window
+    /// while a paste is still running, and blindly clearing would silently drop
+    /// that new lock. Comparing first keeps a stale delivery from speaking for
+    /// the current one.
+    pub fn unlock_if(&self, expected: WindowIdentity) -> bool {
+        let mut guard = self.guard();
+        if *guard == Some(expected) {
+            *guard = None;
+            true
+        } else {
+            false
+        }
     }
 
     /// Whether a window is currently locked.
@@ -446,6 +478,27 @@ mod tests {
         let other = win(1, 5, 7);
         assert!(!is_own_window(other, 4242));
         assert_eq!(accept_capture(other, 4242), Ok(other));
+    }
+
+    #[test]
+    fn a_stale_delivery_cannot_clear_a_newer_lock() {
+        // A paste to the first window is still running when the user re-locks
+        // to another. The first window then dies: clearing the lock blindly
+        // would drop the lock the user can see and is still using.
+        let t = PinnedTarget::default();
+        let first = win(1, 10, 20);
+        let second = win(2, 30, 40);
+        t.lock_to(first);
+        t.lock_to(second);
+
+        assert!(!t.unlock_if(first));
+        assert_eq!(t.locked(), Some(second));
+
+        // The current target still clears normally.
+        assert!(t.unlock_if(second));
+        assert!(!t.is_locked());
+        // And clearing an already-empty lock reports that it did nothing.
+        assert!(!t.unlock_if(second));
     }
 
     #[test]

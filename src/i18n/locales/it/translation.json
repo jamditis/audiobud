@@ -197,6 +197,10 @@
           "transcribe_raw": {
             "name": "Tasto per la trascrizione grezza",
             "description": "Un tasto di scelta rapida dedicato che trascrive in testo grezzo, in minuscolo e senza punteggiatura, solo per questa dettatura."
+          },
+          "toggle_target_lock": {
+            "name": "Scorciatoia per bloccare su una finestra",
+            "description": "La scorciatoia da tastiera che invia il testo a una sola finestra finché non la sblocchi."
           }
         },
         "errors": {
