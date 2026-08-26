@@ -460,36 +460,33 @@ fn initialize_core_logic(app_handle: &AppHandle) {
                 // which rebuilds the tray so the checkmark follows the active mode.
                 let mode = id.strip_prefix("output_mode:").unwrap();
                 let raw = mode == "raw";
-                if let Err(e) = shortcut::change_raw_output_setting(app.clone(), raw) {
+                if let Err(e) =
+                    shortcut::apply_setting_change(app, "raw_output", serde_json::json!(raw))
+                {
                     log::error!("Failed to switch output mode via tray: {}", e);
                 }
             }
             id if id.starts_with("toggle:") => {
                 let key = id.strip_prefix("toggle:").unwrap();
                 let current = settings::get_settings(app);
-                // Route tray toggles through the same setting commands the settings
-                // window uses, so there is a single mutation path. Each command emits
-                // "settings-changed", which rebuilds the tray (listener below) and
-                // refreshes the settings window.
+                // Route tray toggles through the same mutation path the settings
+                // window uses, so both surfaces persist a setting identically and
+                // run the same side effects. Each of these emits "settings-changed",
+                // which rebuilds the tray (listener below) and refreshes the
+                // settings window.
+                let flip = |setting: &str, value: bool| {
+                    shortcut::apply_setting_change(app, setting, serde_json::json!(value))
+                };
                 let result = match key {
-                    "push_to_talk" => {
-                        shortcut::change_ptt_setting(app.clone(), !current.push_to_talk)
+                    "push_to_talk" => flip("push_to_talk", !current.push_to_talk),
+                    "mute_while_recording" => {
+                        flip("mute_while_recording", !current.mute_while_recording)
                     }
-                    "mute_while_recording" => shortcut::change_mute_while_recording_setting(
-                        app.clone(),
-                        !current.mute_while_recording,
-                    ),
-                    "append_trailing_space" => shortcut::change_append_trailing_space_setting(
-                        app.clone(),
-                        !current.append_trailing_space,
-                    ),
-                    "auto_submit" => {
-                        shortcut::change_auto_submit_setting(app.clone(), !current.auto_submit)
+                    "append_trailing_space" => {
+                        flip("append_trailing_space", !current.append_trailing_space)
                     }
-                    "format_numbers" => shortcut::change_format_numbers_setting(
-                        app.clone(),
-                        !current.format_numbers,
-                    ),
+                    "auto_submit" => flip("auto_submit", !current.auto_submit),
+                    "format_numbers" => flip("format_numbers", !current.format_numbers),
                     "overlay_visible" => shortcut::toggle_overlay_visibility(app.clone()),
                     // Target lock (#120). It is not a persisted setting, so it
                     // does not route through a settings command; the toggle
@@ -620,31 +617,13 @@ fn specta_builder() -> Builder<tauri::Wry> {
     Builder::<tauri::Wry>::new()
         .commands(collect_commands![
             shortcut::change_binding,
+            shortcut::update_setting,
             shortcut::reset_binding,
-            shortcut::change_ptt_setting,
-            shortcut::change_audio_feedback_setting,
-            shortcut::change_audio_feedback_volume_setting,
-            shortcut::change_sound_theme_setting,
-            shortcut::change_start_hidden_setting,
-            shortcut::change_autostart_setting,
-            shortcut::change_translate_to_english_setting,
-            shortcut::change_selected_language_setting,
-            shortcut::change_overlay_position_setting,
             shortcut::set_overlay_anchor,
             shortcut::reset_overlay_position,
-            shortcut::change_debug_mode_setting,
-            shortcut::change_word_correction_threshold_setting,
-            shortcut::change_extra_recording_buffer_setting,
-            shortcut::change_paste_delay_ms_setting,
             shortcut::change_paste_method_setting,
             shortcut::get_available_typing_tools,
-            shortcut::change_typing_tool_setting,
             shortcut::change_external_script_path_setting,
-            shortcut::change_clipboard_handling_setting,
-            shortcut::change_auto_submit_setting,
-            shortcut::change_auto_submit_key_setting,
-            shortcut::change_post_process_enabled_setting,
-            shortcut::change_experimental_enabled_setting,
             shortcut::change_post_process_base_url_setting,
             shortcut::change_post_process_api_key_setting,
             shortcut::change_post_process_model_setting,
@@ -654,24 +633,10 @@ fn specta_builder() -> Builder<tauri::Wry> {
             shortcut::update_post_process_prompt,
             shortcut::delete_post_process_prompt,
             shortcut::set_post_process_selected_prompt,
-            shortcut::update_custom_words,
             shortcut::suspend_binding,
             shortcut::resume_binding,
-            shortcut::change_mute_while_recording_setting,
-            shortcut::change_append_trailing_space_setting,
-            shortcut::change_raw_output_setting,
-            shortcut::change_format_numbers_setting,
-            shortcut::change_format_raw_output_setting,
-            shortcut::update_word_replacements,
-            shortcut::change_lazy_stream_close_setting,
-            shortcut::change_app_language_setting,
-            shortcut::change_update_checks_setting,
             shortcut::change_keyboard_implementation_setting,
             shortcut::get_keyboard_implementation,
-            shortcut::change_show_tray_icon_setting,
-            shortcut::change_whisper_accelerator_setting,
-            shortcut::change_ort_accelerator_setting,
-            shortcut::change_whisper_gpu_device,
             shortcut::get_available_accelerators,
             shortcut::handy_keys::start_handy_keys_recording,
             shortcut::handy_keys::stop_handy_keys_recording,

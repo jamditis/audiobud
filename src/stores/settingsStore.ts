@@ -4,9 +4,7 @@ import { listen } from "@tauri-apps/api/event";
 import type {
   AppSettings as Settings,
   AudioDevice,
-  WhisperAcceleratorSetting,
-  OrtAcceleratorSetting,
-  WordReplacement,
+  ModelUnloadTimeout,
 } from "@/bindings";
 import { commands } from "@/bindings";
 import { toast } from "sonner";
@@ -97,22 +95,28 @@ const DEFAULT_AUDIO_DEVICE: AudioDevice = {
   is_default: true,
 };
 
+// One backend command now persists any plain `AppSettings` field: it takes the
+// field name and the JSON encoding of the new value, and type-checks the value
+// against the real Rust field (issue #166). Settings whose backend work is more
+// than a write — a device switch, a confirmation dialog, a manager call — keep
+// their own command below.
+const persistSetting =
+  <K extends keyof Settings>(key: K) =>
+  (value: Settings[K]) =>
+    commands.updateSetting(key as string, JSON.stringify(value ?? null));
+
 const settingUpdaters: {
   [K in keyof Settings]?: (value: Settings[K]) => Promise<unknown>;
 } = {
   always_on_microphone: (value) =>
     commands.updateMicrophoneMode(value as boolean),
-  audio_feedback: (value) =>
-    commands.changeAudioFeedbackSetting(value as boolean),
-  audio_feedback_volume: (value) =>
-    commands.changeAudioFeedbackVolumeSetting(value as number),
-  sound_theme: (value) => commands.changeSoundThemeSetting(value as string),
-  start_hidden: (value) => commands.changeStartHiddenSetting(value as boolean),
-  autostart_enabled: (value) =>
-    commands.changeAutostartSetting(value as boolean),
-  update_checks_enabled: (value) =>
-    commands.changeUpdateChecksSetting(value as boolean),
-  push_to_talk: (value) => commands.changePttSetting(value as boolean),
+  audio_feedback: persistSetting("audio_feedback"),
+  audio_feedback_volume: persistSetting("audio_feedback_volume"),
+  sound_theme: persistSetting("sound_theme"),
+  start_hidden: persistSetting("start_hidden"),
+  autostart_enabled: persistSetting("autostart_enabled"),
+  update_checks_enabled: persistSetting("update_checks_enabled"),
+  push_to_talk: persistSetting("push_to_talk"),
   selected_microphone: (value) =>
     commands.setSelectedMicrophone(
       (value as string) === "Default" || value === null
@@ -131,61 +135,44 @@ const settingUpdaters: {
     ),
   recording_retention_period: (value) =>
     commands.updateRecordingRetentionPeriod(value as string),
-  translate_to_english: (value) =>
-    commands.changeTranslateToEnglishSetting(value as boolean),
-  selected_language: (value) =>
-    commands.changeSelectedLanguageSetting(value as string),
-  overlay_position: (value) =>
-    commands.changeOverlayPositionSetting(value as string),
-  debug_mode: (value) => commands.changeDebugModeSetting(value as boolean),
-  custom_words: (value) => commands.updateCustomWords(value as string[]),
-  word_replacements: (value) =>
-    commands.updateWordReplacements(value as WordReplacement[]),
-  word_correction_threshold: (value) =>
-    commands.changeWordCorrectionThresholdSetting(value as number),
-  paste_delay_ms: (value) =>
-    commands.changePasteDelayMsSetting(value as number),
+  translate_to_english: persistSetting("translate_to_english"),
+  selected_language: persistSetting("selected_language"),
+  overlay_position: persistSetting("overlay_position"),
+  debug_mode: persistSetting("debug_mode"),
+  custom_words: persistSetting("custom_words"),
+  word_replacements: persistSetting("word_replacements"),
+  word_correction_threshold: persistSetting("word_correction_threshold"),
+  paste_delay_ms: persistSetting("paste_delay_ms"),
+  // Keeps its own command: selecting the external-script method prompts for
+  // confirmation before anything is written.
   paste_method: (value) => commands.changePasteMethodSetting(value as string),
-  typing_tool: (value) => commands.changeTypingToolSetting(value as string),
+  typing_tool: persistSetting("typing_tool"),
+  // Keeps its own command for the same confirmation prompt.
   external_script_path: (value) =>
     commands.changeExternalScriptPathSetting(value as string | null),
-  clipboard_handling: (value) =>
-    commands.changeClipboardHandlingSetting(value as string),
-  auto_submit: (value) => commands.changeAutoSubmitSetting(value as boolean),
-  auto_submit_key: (value) =>
-    commands.changeAutoSubmitKeySetting(value as string),
+  clipboard_handling: persistSetting("clipboard_handling"),
+  auto_submit: persistSetting("auto_submit"),
+  auto_submit_key: persistSetting("auto_submit_key"),
   history_limit: (value) => commands.updateHistoryLimit(value as number),
-  post_process_enabled: (value) =>
-    commands.changePostProcessEnabledSetting(value as boolean),
+  post_process_enabled: persistSetting("post_process_enabled"),
   post_process_selected_prompt_id: (value) =>
     commands.setPostProcessSelectedPrompt(value as string),
-  mute_while_recording: (value) =>
-    commands.changeMuteWhileRecordingSetting(value as boolean),
-  append_trailing_space: (value) =>
-    commands.changeAppendTrailingSpaceSetting(value as boolean),
-  raw_output: (value) => commands.changeRawOutputSetting(value as boolean),
-  format_numbers: (value) =>
-    commands.changeFormatNumbersSetting(value as boolean),
-  format_raw_output: (value) =>
-    commands.changeFormatRawOutputSetting(value as boolean),
+  mute_while_recording: persistSetting("mute_while_recording"),
+  append_trailing_space: persistSetting("append_trailing_space"),
+  raw_output: persistSetting("raw_output"),
+  format_numbers: persistSetting("format_numbers"),
+  format_raw_output: persistSetting("format_raw_output"),
   log_level: (value) => commands.setLogLevel(value as any),
-  app_language: (value) => commands.changeAppLanguageSetting(value as string),
-  experimental_enabled: (value) =>
-    commands.changeExperimentalEnabledSetting(value as boolean),
-  lazy_stream_close: (value) =>
-    commands.changeLazyStreamCloseSetting(value as boolean),
-  show_tray_icon: (value) =>
-    commands.changeShowTrayIconSetting(value as boolean),
-  whisper_accelerator: (value) =>
-    commands.changeWhisperAcceleratorSetting(
-      value as WhisperAcceleratorSetting,
-    ),
-  ort_accelerator: (value) =>
-    commands.changeOrtAcceleratorSetting(value as OrtAcceleratorSetting),
-  whisper_gpu_device: (value) =>
-    commands.changeWhisperGpuDevice(value as number),
-  extra_recording_buffer_ms: (value) =>
-    commands.changeExtraRecordingBufferSetting(value as number),
+  app_language: persistSetting("app_language"),
+  experimental_enabled: persistSetting("experimental_enabled"),
+  lazy_stream_close: persistSetting("lazy_stream_close"),
+  show_tray_icon: persistSetting("show_tray_icon"),
+  whisper_accelerator: persistSetting("whisper_accelerator"),
+  ort_accelerator: persistSetting("ort_accelerator"),
+  whisper_gpu_device: persistSetting("whisper_gpu_device"),
+  extra_recording_buffer_ms: persistSetting("extra_recording_buffer_ms"),
+  model_unload_timeout: (value) =>
+    commands.setModelUnloadTimeout(value as ModelUnloadTimeout),
 };
 
 export const useSettingsStore = create<SettingsStore>()(

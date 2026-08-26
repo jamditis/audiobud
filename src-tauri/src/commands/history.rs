@@ -158,7 +158,7 @@ pub async fn update_history_limit(
     let mut settings = crate::settings::get_settings(&app);
     settings.history_limit = limit;
     let retention_period = settings.recording_retention_period;
-    crate::settings::write_settings(&app, settings);
+    crate::settings::write_settings(&app, settings)?;
 
     history_manager.on_history_settings_changed(retention_period, limit);
 
@@ -186,7 +186,7 @@ pub async fn update_recording_retention_period(
     let mut settings = crate::settings::get_settings(&app);
     settings.recording_retention_period = retention_period;
     let history_limit = settings.history_limit;
-    crate::settings::write_settings(&app, settings);
+    crate::settings::write_settings(&app, settings)?;
 
     history_manager.on_history_settings_changed(retention_period, history_limit);
 

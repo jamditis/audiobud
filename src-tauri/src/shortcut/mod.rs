@@ -24,9 +24,8 @@ use crate::output_target;
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
 use crate::settings::APPLE_INTELLIGENCE_DEFAULT_MODEL_ID;
 use crate::settings::{
-    self, get_settings, AutoSubmitKey, ClipboardHandling, KeyboardImplementation, LLMPrompt,
-    OverlayAnchor, OverlayCustomPosition, OverlayPosition, PasteMethod, ShortcutBinding,
-    SoundTheme, TypingTool, APPLE_INTELLIGENCE_PROVIDER_ID,
+    self, get_settings, KeyboardImplementation, LLMPrompt, OverlayAnchor, OverlayCustomPosition,
+    OverlayPosition, PasteMethod, ShortcutBinding, APPLE_INTELLIGENCE_PROVIDER_ID,
 };
 use crate::tray;
 
@@ -50,7 +49,9 @@ pub fn init_shortcuts(app: &AppHandle) {
                 // Update settings to persist the fallback so we don't retry HandyKeys on next launch
                 let mut settings = settings::get_settings(app);
                 settings.keyboard_implementation = KeyboardImplementation::Tauri;
-                settings::write_settings(app, settings);
+                if let Err(e) = settings::write_settings(app, settings) {
+                    warn!("Failed to persist the handy-keys fallback: {e}");
+                }
 
                 tauri_impl::init_shortcuts(app);
             }
@@ -152,7 +153,7 @@ pub fn change_binding(
         if let Some(mut b) = settings.bindings.get(&id).cloned() {
             b.current_binding = binding;
             settings.bindings.insert(id.clone(), b.clone());
-            settings::write_settings(&app, settings);
+            settings::write_settings(&app, settings)?;
             return Ok(BindingResponse {
                 success: true,
                 binding: Some(b.clone()),
@@ -161,13 +162,9 @@ pub fn change_binding(
         }
     }
 
-    // Unregister the existing binding
-    if let Err(e) = unregister_shortcut(&app, binding_to_modify.clone()) {
-        let error_msg = format!("Failed to unregister shortcut: {}", e);
-        error!("change_binding error: {}", error_msg);
-    }
-
     // Validate the new shortcut for the current keyboard implementation
+    // before touching anything else, so a bad shortcut string never
+    // unregisters the existing (valid) binding for nothing.
     if let Err(e) = validate_shortcut_for_implementation(&binding, settings.keyboard_implementation)
     {
         warn!("change_binding validation error: {}", e);
@@ -175,25 +172,58 @@ pub fn change_binding(
     }
 
     // Create an updated binding
-    let mut updated_binding = binding_to_modify;
+    let mut updated_binding = binding_to_modify.clone();
     updated_binding.current_binding = binding;
+
+    // Update the binding in the settings and persist BEFORE touching live
+    // registrations: on a store failure the frontend rolls back its
+    // optimistic value, so the shortcut actually registered must still be
+    // the old one too, or the UI would show the old binding while the app
+    // keeps using the unsaved new one until restart.
+    settings
+        .bindings
+        .insert(id.clone(), updated_binding.clone());
+    settings::write_settings(&app, settings)?;
+
+    // Unregister the existing binding
+    if let Err(e) = unregister_shortcut(&app, binding_to_modify.clone()) {
+        let error_msg = format!("Failed to unregister shortcut: {}", e);
+        error!("change_binding error: {}", error_msg);
+    }
 
     // Register the new binding
     if let Err(e) = register_shortcut(&app, updated_binding.clone()) {
         let error_msg = format!("Failed to register shortcut: {}", e);
         error!("change_binding error: {}", error_msg);
+
+        // The new binding is already persisted+cached at this point, but the
+        // OS refused to register it (e.g. owned by another app), so the live
+        // shortcut is unregistered rather than the old one. Roll back both
+        // the store and the live registration so the store, cache, live
+        // registration, and this response all agree on the old binding —
+        // otherwise the frontend would show the old binding as active (this
+        // response's success:false leaves its optimistic update rolled back)
+        // while the persisted/cached settings still hold the new one.
+        let mut rollback_settings = settings::get_settings(&app);
+        rollback_settings
+            .bindings
+            .insert(id, binding_to_modify.clone());
+        if let Err(revert_err) = settings::write_settings(&app, rollback_settings) {
+            warn!(
+                "Failed to revert binding '{}' after a registration failure: {revert_err}",
+                binding_to_modify.id
+            );
+        }
+        if let Err(reregister_err) = register_shortcut(&app, binding_to_modify) {
+            error!("Failed to re-register the old binding during rollback: {reregister_err}");
+        }
+
         return Ok(BindingResponse {
             success: false,
             binding: None,
             error: Some(error_msg),
         });
     }
-
-    // Update the binding in the settings
-    settings.bindings.insert(id, updated_binding.clone());
-
-    // Save the settings
-    settings::write_settings(&app, settings);
 
     // Return the updated binding
     Ok(BindingResponse {
@@ -276,13 +306,17 @@ pub fn change_keyboard_implementation_setting(
         current_impl, new_impl
     );
 
+    // Persist the new implementation before touching any registrations. If
+    // this fails (e.g. the settings store is unavailable), returning here
+    // leaves the current implementation's shortcuts registered instead of
+    // unregistering them first and then failing with none registered until
+    // restart.
+    let mut settings = current_settings;
+    settings.keyboard_implementation = new_impl;
+    settings::write_settings(&app, settings)?;
+
     // Unregister all shortcuts from the current implementation
     unregister_all_shortcuts(&app, current_impl);
-
-    // Update the setting
-    let mut settings = settings::get_settings(&app);
-    settings.keyboard_implementation = new_impl;
-    settings::write_settings(&app, settings);
 
     // Initialize new implementation if needed (HandyKeys needs state)
     if new_impl == KeyboardImplementation::HandyKeys && initialize_handy_keys_with_rollback(&app)? {
@@ -449,7 +483,9 @@ fn register_all_shortcuts_for_implementation(
 
     // Persist any newly back-filled or reset bindings.
     if settings_dirty {
-        settings::write_settings(app, current_settings);
+        if let Err(e) = settings::write_settings(app, current_settings) {
+            warn!("Failed to persist back-filled/reset bindings: {e}");
+        }
     }
 
     reset_bindings
@@ -466,7 +502,11 @@ fn initialize_handy_keys_with_rollback(app: &AppHandle) -> Result<bool, String> 
         // Rollback to Tauri
         let mut settings = settings::get_settings(app);
         settings.keyboard_implementation = KeyboardImplementation::Tauri;
-        settings::write_settings(app, settings);
+        // The init failure below is what the caller needs to see; log a
+        // failed revert rather than replacing that error with this one.
+        if let Err(revert_err) = settings::write_settings(app, settings) {
+            warn!("Failed to persist the Tauri rollback: {revert_err}");
+        }
         tauri_impl::init_shortcuts(app);
         return Err(format!(
             "Failed to initialize HandyKeys: {}. Reverted to Tauri.",
@@ -482,117 +522,200 @@ fn initialize_handy_keys_with_rollback(app: &AppHandle) -> Result<bool, String> 
 // General Settings Commands
 // ============================================================================
 
-#[tauri::command]
-#[specta::specta]
-pub fn change_ptt_setting(app: AppHandle, enabled: bool) -> Result<(), String> {
-    let mut settings = settings::get_settings(&app);
-    settings.push_to_talk = enabled;
-    settings::write_settings(&app, settings);
-    let _ = app.emit(
-        "settings-changed",
-        serde_json::json!({ "setting": "push_to_talk", "value": enabled }),
-    );
-    Ok(())
+/// Work a setting change implies beyond persisting the new value.
+///
+/// Split out from the code that runs it so the mapping is a plain, testable
+/// table: before issue #166 each of these lived inside its own `change_*_setting`
+/// command, where the only way to check that (say) changing the paste method
+/// still drops a meaningless target-lock was to run the app.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum SettingEffect {
+    /// Tell the settings window and the tray about the new value.
+    EmitChanged,
+    /// Register or unregister the OS autostart entry.
+    ApplyAutostart,
+    /// Move the overlay window to match the new placement.
+    UpdateOverlayPosition,
+    /// Show or hide the tray icon.
+    SetTrayVisibility,
+    /// Rebuild the tray menu (its labels are localized).
+    RefreshTrayMenu,
+    /// Re-apply accelerator globals and unload the model so it reloads on the
+    /// new backend.
+    ReloadAccelerator,
+    /// Register or unregister the post-processing shortcut.
+    SyncPostProcessShortcut,
+    /// Drop an active target-lock that delivery can no longer use (#162).
+    ClearTargetLockIfFocusFree,
 }
 
-#[tauri::command]
-#[specta::specta]
-pub fn change_audio_feedback_setting(app: AppHandle, enabled: bool) -> Result<(), String> {
-    let mut settings = settings::get_settings(&app);
-    settings.audio_feedback = enabled;
-    settings::write_settings(&app, settings);
-    Ok(())
-}
-
-#[tauri::command]
-#[specta::specta]
-pub fn change_audio_feedback_volume_setting(app: AppHandle, volume: f32) -> Result<(), String> {
-    let mut settings = settings::get_settings(&app);
-    settings.audio_feedback_volume = volume;
-    settings::write_settings(&app, settings);
-    Ok(())
-}
-
-#[tauri::command]
-#[specta::specta]
-pub fn change_sound_theme_setting(app: AppHandle, theme: String) -> Result<(), String> {
-    let mut settings = settings::get_settings(&app);
-    let parsed = match theme.as_str() {
-        "marimba" => SoundTheme::Marimba,
-        "pop" => SoundTheme::Pop,
-        "custom" => SoundTheme::Custom,
-        other => {
-            warn!("Invalid sound theme '{}', defaulting to marimba", other);
-            SoundTheme::Marimba
-        }
-    };
-    settings.sound_theme = parsed;
-    settings::write_settings(&app, settings);
-    Ok(())
-}
-
-#[tauri::command]
-#[specta::specta]
-pub fn change_translate_to_english_setting(app: AppHandle, enabled: bool) -> Result<(), String> {
-    let mut settings = settings::get_settings(&app);
-    settings.translate_to_english = enabled;
-    settings::write_settings(&app, settings);
-    Ok(())
-}
-
-#[tauri::command]
-#[specta::specta]
-pub fn change_selected_language_setting(app: AppHandle, language: String) -> Result<(), String> {
-    let mut settings = settings::get_settings(&app);
-    settings.selected_language = language;
-    settings::write_settings(&app, settings);
-    Ok(())
-}
-
-#[tauri::command]
-#[specta::specta]
-pub fn change_overlay_position_setting(app: AppHandle, position: String) -> Result<(), String> {
-    let mut settings = settings::get_settings(&app);
-    let parsed = match position.as_str() {
-        "none" => OverlayPosition::None,
-        "top" => OverlayPosition::Top,
-        "bottom" => OverlayPosition::Bottom,
-        other => {
-            warn!("Invalid overlay position '{}', defaulting to bottom", other);
-            OverlayPosition::Bottom
-        }
-    };
-    // Keep the restore slot (read by the tray show/hide toggle) in sync so it
-    // always holds the most recent visible placement. Choosing Top/Bottom here
-    // records it; hiding via the dropdown ("none") remembers the outgoing
-    // placement, so a dropdown-hide followed by a tray-show restores the
-    // position the user last picked instead of an older value or the default.
-    if parsed != OverlayPosition::None {
-        settings.overlay_restore_position = Some(parsed);
-    } else if settings.overlay_position != OverlayPosition::None {
-        settings.overlay_restore_position = Some(settings.overlay_position);
+/// What each setting requires beyond the write itself. Settings with no entry
+/// need nothing but persistence, which is the majority of them.
+pub(crate) fn effects_for_setting(key: &str) -> &'static [SettingEffect] {
+    use SettingEffect::*;
+    match key {
+        "autostart_enabled" => &[ApplyAutostart, EmitChanged],
+        "overlay_position" => &[UpdateOverlayPosition, EmitChanged],
+        // Both of these decide whether delivery still targets a focused window,
+        // so either one changing can strand a target-lock (#162).
+        "auto_submit" => &[ClearTargetLockIfFocusFree, EmitChanged],
+        "paste_method" => &[ClearTargetLockIfFocusFree],
+        "post_process_enabled" => &[SyncPostProcessShortcut],
+        "app_language" => &[RefreshTrayMenu],
+        "show_tray_icon" => &[SetTrayVisibility],
+        "whisper_accelerator" | "ort_accelerator" | "whisper_gpu_device" => &[ReloadAccelerator],
+        "push_to_talk"
+        | "start_hidden"
+        | "update_checks_enabled"
+        | "debug_mode"
+        | "mute_while_recording"
+        | "append_trailing_space"
+        | "raw_output"
+        | "format_numbers"
+        | "format_raw_output" => &[EmitChanged],
+        _ => &[],
     }
-    settings.overlay_position = parsed;
-    // Picking a coarse position (or hiding the overlay) supersedes any fine
-    // grid/drag placement from #9, so clear it and fall back to the centered
-    // Top/Bottom default.
-    settings.overlay_custom_position = None;
-    settings::write_settings(&app, settings);
+}
 
-    // Update overlay position without recreating window
-    crate::utils::update_overlay_position(&app);
+fn run_setting_effects(
+    app: &AppHandle,
+    key: &str,
+    settings: &settings::AppSettings,
+    value: &serde_json::Value,
+) {
+    for effect in effects_for_setting(key) {
+        match effect {
+            SettingEffect::EmitChanged => {
+                let _ = app.emit(
+                    "settings-changed",
+                    serde_json::json!({ "setting": key, "value": value }),
+                );
+            }
+            SettingEffect::ApplyAutostart => {
+                let autostart_manager = app.autolaunch();
+                let _ = if settings.autostart_enabled {
+                    autostart_manager.enable()
+                } else {
+                    autostart_manager.disable()
+                };
+            }
+            SettingEffect::UpdateOverlayPosition => {
+                // Moves the existing window rather than recreating it.
+                crate::utils::update_overlay_position(app);
+            }
+            SettingEffect::SetTrayVisibility => {
+                tray::set_tray_visibility(app, settings.show_tray_icon);
+            }
+            SettingEffect::RefreshTrayMenu => {
+                tray::update_tray_menu(
+                    app,
+                    &tray::TrayIconState::Idle,
+                    Some(&settings.app_language),
+                );
+            }
+            SettingEffect::ReloadAccelerator => reload_accelerator(app),
+            SettingEffect::SyncPostProcessShortcut => {
+                if let Some(binding) = settings
+                    .bindings
+                    .get("transcribe_with_post_process")
+                    .cloned()
+                {
+                    let _ = if settings.post_process_enabled {
+                        register_shortcut(app, binding)
+                    } else {
+                        unregister_shortcut(app, binding)
+                    };
+                }
+            }
+            SettingEffect::ClearTargetLockIfFocusFree => {
+                clear_target_lock_if_focus_free(app, settings.paste_method, settings.auto_submit)
+            }
+        }
+    }
+}
 
-    // Notify the settings window and the tray show-overlay quick-toggle (issue
-    // #12) so both surfaces reflect the new visibility/position.
-    let _ = app.emit(
-        "settings-changed",
-        serde_json::json!({
-            "setting": "overlay_position",
-            "value": position
-        }),
-    );
+/// Settings whose change is more than a value write, and whose own command does
+/// work this path cannot: re-registering shortcuts, switching the active model,
+/// reconfiguring a device, re-initializing the logger. Routing them through the
+/// generic mutator would persist the value and skip that work, leaving the app
+/// out of step with its own settings.
+const SETTINGS_WITH_DEDICATED_COMMANDS: &[&str] = &[
+    "bindings",
+    "selected_model",
+    "keyboard_implementation",
+    "log_level",
+    "selected_microphone",
+    "clamshell_microphone",
+    "selected_output_device",
+    "always_on_microphone",
+    "history_limit",
+    "recording_retention_period",
+    "model_unload_timeout",
+    "post_process_provider_id",
+    "post_process_providers",
+    "post_process_api_keys",
+    "post_process_models",
+    "post_process_prompts",
+    "post_process_selected_prompt_id",
+    "personalization",
+    "paste_method",
+    "external_script_path",
+    // `set_overlay_anchor`/`reset_overlay_position` keep this in sync with the
+    // coarse `overlay_position` and actually move the overlay window
+    // (`update_overlay_position`); a bare write through the generic mutator
+    // would change the stored placement without moving anything on screen.
+    "overlay_custom_position",
+    // Bookkeeping for the tray hide/show toggle (`toggle_overlay_visibility`)
+    // and `normalize_after_change`, which are the only writers that should
+    // decide what a future "show" restores to. A generic write here would
+    // change that restore target without touching the visible overlay,
+    // exactly like `overlay_custom_position` above.
+    "overlay_restore_position",
+];
 
+/// Persist one setting and run whatever its change implies.
+///
+/// The single mutation path for simple settings, shared by the generic command,
+/// the tray quick-toggles, and the two commands that must prompt before writing.
+/// Effects run after the write so anything they trigger (a tray rebuild, an
+/// overlay move, a target-lock release) already observes the new value.
+pub(crate) fn apply_setting_change(
+    app: &AppHandle,
+    key: &str,
+    value: serde_json::Value,
+) -> Result<(), String> {
+    let mut settings = settings::get_settings(app);
+    settings::apply_setting_value(&mut settings, key, value.clone())?;
+    // Propagate a write failure before running any effect, so a save that
+    // didn't persist is never followed by a change that behaves as if it did
+    // (and the frontend's rollback+toast path sees the failure instead of a
+    // false confirmation).
+    settings::write_settings(app, settings.clone())?;
+    run_setting_effects(app, key, &settings, &value);
     Ok(())
+}
+
+/// Persist a single setting, addressed by the field name in the stored settings
+/// object, with `value` as its JSON encoding.
+///
+/// Replaces ~33 near-identical `change_*_setting` commands (issue #166). The
+/// value arrives as a JSON string rather than a typed argument because one
+/// command has to carry every setting's type; `apply_setting_value` then
+/// type-checks it against the real `AppSettings` field, so a wrong type or an
+/// unknown key is an error instead of a silent no-op. Settings that need to
+/// prompt the user first (`paste_method`, `external_script_path`) or that live
+/// outside `AppSettings` keep their own commands.
+#[tauri::command]
+#[specta::specta]
+pub fn update_setting(app: AppHandle, key: String, value: String) -> Result<(), String> {
+    if SETTINGS_WITH_DEDICATED_COMMANDS.contains(&key.as_str()) {
+        return Err(format!(
+            "Setting '{key}' must be changed through its own command"
+        ));
+    }
+    let value: serde_json::Value = serde_json::from_str(&value)
+        .map_err(|e| format!("Setting '{key}' was not given a valid JSON value: {e}"))?;
+    apply_setting_change(&app, &key, value)
 }
 
 /// Toggle the recording overlay between hidden and visible for the tray
@@ -610,7 +733,7 @@ pub fn toggle_overlay_visibility(app: AppHandle) -> Result<(), String> {
         settings.overlay_restore_position = Some(settings.overlay_position);
         settings.overlay_position = OverlayPosition::None;
     }
-    settings::write_settings(&app, settings);
+    settings::write_settings(&app, settings)?;
 
     // Update overlay position without recreating window
     crate::utils::update_overlay_position(&app);
@@ -660,7 +783,7 @@ pub fn set_overlay_anchor(app: AppHandle, anchor: String) -> Result<(), String> 
             _ => OverlayPosition::Bottom,
         };
     }
-    settings::write_settings(&app, settings);
+    settings::write_settings(&app, settings)?;
 
     crate::utils::update_overlay_position(&app);
 
@@ -683,132 +806,10 @@ pub fn reset_overlay_position(app: AppHandle) -> Result<(), String> {
     if settings.overlay_position != OverlayPosition::None {
         settings.overlay_position = OverlayPosition::Bottom;
     }
-    settings::write_settings(&app, settings);
+    settings::write_settings(&app, settings)?;
 
     crate::utils::update_overlay_position(&app);
 
-    Ok(())
-}
-
-#[tauri::command]
-#[specta::specta]
-pub fn change_debug_mode_setting(app: AppHandle, enabled: bool) -> Result<(), String> {
-    let mut settings = settings::get_settings(&app);
-    settings.debug_mode = enabled;
-    settings::write_settings(&app, settings);
-
-    // Emit event to notify frontend of debug mode change
-    let _ = app.emit(
-        "settings-changed",
-        serde_json::json!({
-            "setting": "debug_mode",
-            "value": enabled
-        }),
-    );
-
-    Ok(())
-}
-
-#[tauri::command]
-#[specta::specta]
-pub fn change_start_hidden_setting(app: AppHandle, enabled: bool) -> Result<(), String> {
-    let mut settings = settings::get_settings(&app);
-    settings.start_hidden = enabled;
-    settings::write_settings(&app, settings);
-
-    // Notify frontend
-    let _ = app.emit(
-        "settings-changed",
-        serde_json::json!({
-            "setting": "start_hidden",
-            "value": enabled
-        }),
-    );
-
-    Ok(())
-}
-
-#[tauri::command]
-#[specta::specta]
-pub fn change_autostart_setting(app: AppHandle, enabled: bool) -> Result<(), String> {
-    let mut settings = settings::get_settings(&app);
-    settings.autostart_enabled = enabled;
-    settings::write_settings(&app, settings);
-
-    // Apply the autostart setting immediately
-    let autostart_manager = app.autolaunch();
-    if enabled {
-        let _ = autostart_manager.enable();
-    } else {
-        let _ = autostart_manager.disable();
-    }
-
-    // Notify frontend
-    let _ = app.emit(
-        "settings-changed",
-        serde_json::json!({
-            "setting": "autostart_enabled",
-            "value": enabled
-        }),
-    );
-
-    Ok(())
-}
-
-#[tauri::command]
-#[specta::specta]
-pub fn change_update_checks_setting(app: AppHandle, enabled: bool) -> Result<(), String> {
-    let mut settings = settings::get_settings(&app);
-    settings.update_checks_enabled = enabled;
-    settings::write_settings(&app, settings);
-
-    let _ = app.emit(
-        "settings-changed",
-        serde_json::json!({
-            "setting": "update_checks_enabled",
-            "value": enabled
-        }),
-    );
-
-    Ok(())
-}
-
-#[tauri::command]
-#[specta::specta]
-pub fn update_custom_words(app: AppHandle, words: Vec<String>) -> Result<(), String> {
-    let mut settings = settings::get_settings(&app);
-    settings.custom_words = words;
-    settings::write_settings(&app, settings);
-    Ok(())
-}
-
-#[tauri::command]
-#[specta::specta]
-pub fn change_word_correction_threshold_setting(
-    app: AppHandle,
-    threshold: f64,
-) -> Result<(), String> {
-    let mut settings = settings::get_settings(&app);
-    settings.word_correction_threshold = threshold;
-    settings::write_settings(&app, settings);
-    Ok(())
-}
-
-#[tauri::command]
-#[specta::specta]
-pub fn change_extra_recording_buffer_setting(app: AppHandle, ms: u64) -> Result<(), String> {
-    let mut settings = settings::get_settings(&app);
-    settings.extra_recording_buffer_ms = ms;
-    settings::write_settings(&app, settings);
-    Ok(())
-}
-
-#[tauri::command]
-#[specta::specta]
-pub fn change_paste_delay_ms_setting(app: AppHandle, ms: u64) -> Result<(), String> {
-    let mut settings = settings::get_settings(&app);
-    settings.paste_delay_ms = ms;
-    settings::write_settings(&app, settings);
     Ok(())
 }
 
@@ -908,11 +909,13 @@ pub async fn change_paste_method_setting(app: AppHandle, method: String) -> Resu
             );
         }
     }
-    let mut settings = settings::get_settings(&app);
-    clear_target_lock_if_focus_free(&app, parsed, settings.auto_submit);
-    settings.paste_method = parsed;
-    settings::write_settings(&app, settings);
-    Ok(())
+    // Shared path with the generic mutator, so the target-lock check that
+    // `effects_for_setting("paste_method")` declares runs here too.
+    apply_setting_change(
+        &app,
+        "paste_method",
+        serde_json::to_value(parsed).map_err(|e| e.to_string())?,
+    )
 }
 
 #[tauri::command]
@@ -926,27 +929,6 @@ pub fn get_available_typing_tools() -> Vec<String> {
     {
         vec!["auto".to_string()]
     }
-}
-
-#[tauri::command]
-#[specta::specta]
-pub fn change_typing_tool_setting(app: AppHandle, tool: String) -> Result<(), String> {
-    let mut settings = settings::get_settings(&app);
-    let parsed = match tool.as_str() {
-        "auto" => TypingTool::Auto,
-        "wtype" => TypingTool::Wtype,
-        "kwtype" => TypingTool::Kwtype,
-        "dotool" => TypingTool::Dotool,
-        "ydotool" => TypingTool::Ydotool,
-        "xdotool" => TypingTool::Xdotool,
-        other => {
-            warn!("Invalid typing tool '{}', defaulting to auto", other);
-            TypingTool::Auto
-        }
-    };
-    settings.typing_tool = parsed;
-    settings::write_settings(&app, settings);
-    Ok(())
 }
 
 #[tauri::command]
@@ -969,101 +951,11 @@ pub async fn change_external_script_path_setting(
             return Err("External-script path was not set (confirmation declined)".to_string());
         }
     }
-    let mut settings = settings::get_settings(&app);
-    settings.external_script_path = path;
-    settings::write_settings(&app, settings);
-    Ok(())
-}
-
-#[tauri::command]
-#[specta::specta]
-pub fn change_clipboard_handling_setting(app: AppHandle, handling: String) -> Result<(), String> {
-    let mut settings = settings::get_settings(&app);
-    let parsed = match handling.as_str() {
-        "dont_modify" => ClipboardHandling::DontModify,
-        "copy_to_clipboard" => ClipboardHandling::CopyToClipboard,
-        other => {
-            warn!(
-                "Invalid clipboard handling '{}', defaulting to dont_modify",
-                other
-            );
-            ClipboardHandling::DontModify
-        }
-    };
-    settings.clipboard_handling = parsed;
-    settings::write_settings(&app, settings);
-    Ok(())
-}
-
-#[tauri::command]
-#[specta::specta]
-pub fn change_auto_submit_setting(app: AppHandle, enabled: bool) -> Result<(), String> {
-    let mut settings = settings::get_settings(&app);
-    clear_target_lock_if_focus_free(&app, settings.paste_method, enabled);
-    settings.auto_submit = enabled;
-    settings::write_settings(&app, settings);
-
-    // The settings window and the tray auto-submit quick-toggle (issue #12)
-    // share this command; emit so both refresh after a change from either.
-    let _ = app.emit(
-        "settings-changed",
-        serde_json::json!({
-            "setting": "auto_submit",
-            "value": enabled
-        }),
-    );
-
-    Ok(())
-}
-
-#[tauri::command]
-#[specta::specta]
-pub fn change_auto_submit_key_setting(app: AppHandle, key: String) -> Result<(), String> {
-    let mut settings = settings::get_settings(&app);
-    let parsed = match key.as_str() {
-        "enter" => AutoSubmitKey::Enter,
-        "ctrl_enter" => AutoSubmitKey::CtrlEnter,
-        "cmd_enter" => AutoSubmitKey::CmdEnter,
-        other => {
-            warn!("Invalid auto submit key '{}', defaulting to enter", other);
-            AutoSubmitKey::Enter
-        }
-    };
-    settings.auto_submit_key = parsed;
-    settings::write_settings(&app, settings);
-    Ok(())
-}
-
-#[tauri::command]
-#[specta::specta]
-pub fn change_post_process_enabled_setting(app: AppHandle, enabled: bool) -> Result<(), String> {
-    let mut settings = settings::get_settings(&app);
-    settings.post_process_enabled = enabled;
-    settings::write_settings(&app, settings.clone());
-
-    // Register or unregister the post-processing shortcut
-    if let Some(binding) = settings
-        .bindings
-        .get("transcribe_with_post_process")
-        .cloned()
-    {
-        if enabled {
-            let _ = register_shortcut(&app, binding);
-        } else {
-            let _ = unregister_shortcut(&app, binding);
-        }
-    }
-
-    Ok(())
-}
-
-#[tauri::command]
-#[specta::specta]
-pub fn change_experimental_enabled_setting(app: AppHandle, enabled: bool) -> Result<(), String> {
-    let mut settings = settings::get_settings(&app);
-    settings.experimental_enabled = enabled;
-    settings::write_settings(&app, settings);
-    Ok(())
+    apply_setting_change(
+        &app,
+        "external_script_path",
+        serde_json::to_value(path).map_err(|e| e.to_string())?,
+    )
 }
 
 #[tauri::command]
@@ -1091,7 +983,7 @@ pub fn change_post_process_base_url_setting(
     }
 
     provider.base_url = base_url;
-    settings::write_settings(&app, settings);
+    settings::write_settings(&app, settings)?;
     Ok(())
 }
 
@@ -1120,7 +1012,7 @@ pub fn change_post_process_api_key_setting(
     let mut settings = settings::get_settings(&app);
     validate_provider_exists(&settings, &provider_id)?;
     settings.post_process_api_keys.insert(provider_id, api_key);
-    settings::write_settings(&app, settings);
+    settings::write_settings(&app, settings)?;
     Ok(())
 }
 
@@ -1134,7 +1026,7 @@ pub fn change_post_process_model_setting(
     let mut settings = settings::get_settings(&app);
     validate_provider_exists(&settings, &provider_id)?;
     settings.post_process_models.insert(provider_id, model);
-    settings::write_settings(&app, settings);
+    settings::write_settings(&app, settings)?;
     Ok(())
 }
 
@@ -1144,7 +1036,7 @@ pub fn set_post_process_provider(app: AppHandle, provider_id: String) -> Result<
     let mut settings = settings::get_settings(&app);
     validate_provider_exists(&settings, &provider_id)?;
     settings.post_process_provider_id = provider_id;
-    settings::write_settings(&app, settings);
+    settings::write_settings(&app, settings)?;
     Ok(())
 }
 
@@ -1167,7 +1059,7 @@ pub fn add_post_process_prompt(
     };
 
     settings.post_process_prompts.push(new_prompt.clone());
-    settings::write_settings(&app, settings);
+    settings::write_settings(&app, settings)?;
 
     Ok(new_prompt)
 }
@@ -1189,7 +1081,7 @@ pub fn update_post_process_prompt(
     {
         existing_prompt.name = name;
         existing_prompt.prompt = prompt;
-        settings::write_settings(&app, settings);
+        settings::write_settings(&app, settings)?;
         Ok(())
     } else {
         Err(format!("Prompt with id '{}' not found", id))
@@ -1220,7 +1112,7 @@ pub fn delete_post_process_prompt(app: AppHandle, id: String) -> Result<(), Stri
             settings.post_process_prompts.first().map(|p| p.id.clone());
     }
 
-    settings::write_settings(&app, settings);
+    settings::write_settings(&app, settings)?;
     Ok(())
 }
 
@@ -1280,128 +1172,13 @@ pub fn set_post_process_selected_prompt(app: AppHandle, id: String) -> Result<()
     }
 
     settings.post_process_selected_prompt_id = Some(id);
-    settings::write_settings(&app, settings);
+    settings::write_settings(&app, settings)?;
     Ok(())
 }
 
-#[tauri::command]
-#[specta::specta]
-pub fn change_mute_while_recording_setting(app: AppHandle, enabled: bool) -> Result<(), String> {
-    let mut settings = settings::get_settings(&app);
-    settings.mute_while_recording = enabled;
-    settings::write_settings(&app, settings);
-    let _ = app.emit(
-        "settings-changed",
-        serde_json::json!({ "setting": "mute_while_recording", "value": enabled }),
-    );
-    Ok(())
-}
-
-#[tauri::command]
-#[specta::specta]
-pub fn change_append_trailing_space_setting(app: AppHandle, enabled: bool) -> Result<(), String> {
-    let mut settings = settings::get_settings(&app);
-    settings.append_trailing_space = enabled;
-    settings::write_settings(&app, settings);
-    let _ = app.emit(
-        "settings-changed",
-        serde_json::json!({ "setting": "append_trailing_space", "value": enabled }),
-    );
-    Ok(())
-}
-
-#[tauri::command]
-#[specta::specta]
-pub fn change_raw_output_setting(app: AppHandle, enabled: bool) -> Result<(), String> {
-    let mut settings = settings::get_settings(&app);
-    settings.raw_output = enabled;
-    settings::write_settings(&app, settings);
-    // Emitted so the tray "Output mode" items and the settings window reflect the switch between
-    // raw and formatted transcripts immediately.
-    let _ = app.emit(
-        "settings-changed",
-        serde_json::json!({ "setting": "raw_output", "value": enabled }),
-    );
-    Ok(())
-}
-
-#[tauri::command]
-#[specta::specta]
-pub fn change_format_numbers_setting(app: AppHandle, enabled: bool) -> Result<(), String> {
-    let mut settings = settings::get_settings(&app);
-    settings.format_numbers = enabled;
-    settings::write_settings(&app, settings);
-    let _ = app.emit(
-        "settings-changed",
-        serde_json::json!({ "setting": "format_numbers", "value": enabled }),
-    );
-    Ok(())
-}
-
-#[tauri::command]
-#[specta::specta]
-pub fn change_format_raw_output_setting(app: AppHandle, enabled: bool) -> Result<(), String> {
-    let mut settings = settings::get_settings(&app);
-    settings.format_raw_output = enabled;
-    settings::write_settings(&app, settings);
-    let _ = app.emit(
-        "settings-changed",
-        serde_json::json!({ "setting": "format_raw_output", "value": enabled }),
-    );
-    Ok(())
-}
-
-#[tauri::command]
-#[specta::specta]
-pub fn update_word_replacements(
-    app: AppHandle,
-    replacements: Vec<crate::settings::WordReplacement>,
-) -> Result<(), String> {
-    let mut settings = settings::get_settings(&app);
-    settings.word_replacements = replacements;
-    settings::write_settings(&app, settings);
-    Ok(())
-}
-
-#[tauri::command]
-#[specta::specta]
-pub fn change_lazy_stream_close_setting(app: AppHandle, enabled: bool) -> Result<(), String> {
-    let mut settings = settings::get_settings(&app);
-    settings.lazy_stream_close = enabled;
-    settings::write_settings(&app, settings);
-    Ok(())
-}
-
-#[tauri::command]
-#[specta::specta]
-pub fn change_app_language_setting(app: AppHandle, language: String) -> Result<(), String> {
-    let mut settings = settings::get_settings(&app);
-    settings.app_language = language.clone();
-    settings::write_settings(&app, settings);
-
-    // Refresh the tray menu with the new language
-    tray::update_tray_menu(&app, &tray::TrayIconState::Idle, Some(&language));
-
-    Ok(())
-}
-
-#[tauri::command]
-#[specta::specta]
-pub fn change_show_tray_icon_setting(app: AppHandle, enabled: bool) -> Result<(), String> {
-    let mut settings = settings::get_settings(&app);
-    settings.show_tray_icon = enabled;
-    settings::write_settings(&app, settings);
-
-    // Apply change immediately
-    tray::set_tray_visibility(&app, enabled);
-
-    Ok(())
-}
-
-/// Save accelerator settings, re-apply globals, and unload the model so it
-/// reloads with the new backend on next transcription.
-fn apply_and_reload_accelerator(app: &AppHandle, s: settings::AppSettings) {
-    settings::write_settings(app, s);
+/// Re-apply the accelerator globals and unload the model so it reloads with the
+/// new backend on the next transcription. Runs after the setting is persisted.
+fn reload_accelerator(app: &AppHandle) {
     crate::managers::transcription::apply_accelerator_settings(app);
 
     let tm = app.state::<std::sync::Arc<crate::managers::transcription::TranscriptionManager>>();
@@ -1410,39 +1187,6 @@ fn apply_and_reload_accelerator(app: &AppHandle, s: settings::AppSettings) {
             log::warn!("Failed to unload model after accelerator change: {e}");
         }
     }
-}
-
-#[tauri::command]
-#[specta::specta]
-pub fn change_whisper_accelerator_setting(
-    app: AppHandle,
-    accelerator: settings::WhisperAcceleratorSetting,
-) -> Result<(), String> {
-    let mut s = settings::get_settings(&app);
-    s.whisper_accelerator = accelerator;
-    apply_and_reload_accelerator(&app, s);
-    Ok(())
-}
-
-#[tauri::command]
-#[specta::specta]
-pub fn change_ort_accelerator_setting(
-    app: AppHandle,
-    accelerator: settings::OrtAcceleratorSetting,
-) -> Result<(), String> {
-    let mut s = settings::get_settings(&app);
-    s.ort_accelerator = accelerator;
-    apply_and_reload_accelerator(&app, s);
-    Ok(())
-}
-
-#[tauri::command]
-#[specta::specta]
-pub fn change_whisper_gpu_device(app: AppHandle, device: i32) -> Result<(), String> {
-    let mut s = settings::get_settings(&app);
-    s.whisper_gpu_device = device;
-    apply_and_reload_accelerator(&app, s);
-    Ok(())
 }
 
 /// Return which accelerators and GPU devices are available for this build.
@@ -1471,6 +1215,132 @@ mod tests {
         assert!(external_script_path_requires_confirmation(&Some(
             "C:\\tools\\paste.exe".to_string()
         )));
+    }
+
+    #[test]
+    fn every_setting_reserved_for_its_own_command_still_exists() {
+        // A renamed or removed field would otherwise leave a dead entry here and
+        // silently reopen the generic path for something that needs more than a
+        // write.
+        let settings = serde_json::to_value(settings::get_default_settings()).unwrap();
+        let settings = settings.as_object().expect("settings are a JSON object");
+        for key in SETTINGS_WITH_DEDICATED_COMMANDS {
+            assert!(
+                settings.contains_key(*key),
+                "'{key}' is reserved but is not a setting"
+            );
+        }
+    }
+
+    #[test]
+    fn the_generic_command_refuses_settings_that_need_their_own() {
+        // The guard is the only thing standing between the generic mutator and a
+        // write that skips re-registering a shortcut or reconfiguring a device.
+        assert!(SETTINGS_WITH_DEDICATED_COMMANDS.contains(&"bindings"));
+        assert!(SETTINGS_WITH_DEDICATED_COMMANDS.contains(&"selected_model"));
+        // ...but never for a setting the effect table already handles and that
+        // has no confirmation prompt of its own.
+        for key in ["auto_submit", "post_process_enabled"] {
+            assert!(
+                !SETTINGS_WITH_DEDICATED_COMMANDS.contains(&key),
+                "'{key}' is handled by the effect table and must stay writable"
+            );
+        }
+    }
+
+    #[test]
+    fn the_generic_command_refuses_confirmation_gated_settings() {
+        // `paste_method` and `external_script_path` must go through
+        // `change_paste_method_setting` / `change_external_script_path_setting`
+        // so selecting the external-script paste method (and the program it
+        // will run) always passes through the native confirmation dialog.
+        // Reaching them through the generic `update_setting` would let a
+        // renderer arm command execution without ever prompting the user.
+        // `update_setting`'s guard check runs before it touches its `AppHandle`
+        // argument, so exercise the same `.contains` check the command makes
+        // rather than constructing a real `AppHandle` in a unit test.
+        for key in ["paste_method", "external_script_path"] {
+            assert!(
+                SETTINGS_WITH_DEDICATED_COMMANDS.contains(&key),
+                "'{key}' must stay confirmation-gated, not reachable via update_setting"
+            );
+        }
+    }
+
+    #[test]
+    fn the_generic_command_refuses_overlay_custom_position() {
+        // `set_overlay_anchor`/`reset_overlay_position` keep `overlay_position`
+        // in sync with `overlay_custom_position` and call
+        // `update_overlay_position` to actually move the window. A generic
+        // write would persist a placement the overlay never moves to. Its
+        // restore companion is bookkeeping for the same hide/show toggle and
+        // must stay off the generic path for the same reason.
+        for key in ["overlay_custom_position", "overlay_restore_position"] {
+            assert!(
+                SETTINGS_WITH_DEDICATED_COMMANDS.contains(&key),
+                "'{key}' must stay reachable only through the commands that apply its runtime effect"
+            );
+        }
+    }
+
+    #[test]
+    fn delivery_settings_still_clear_a_stranded_target_lock() {
+        // Both settings decide whether delivery targets a focused window, so
+        // both must keep dropping a lock that can no longer be used (#162).
+        // Collapsing their commands into the generic mutator moved this from
+        // two hand-written call sites into the effect table.
+        for key in ["paste_method", "auto_submit"] {
+            assert!(
+                effects_for_setting(key).contains(&SettingEffect::ClearTargetLockIfFocusFree),
+                "changing '{key}' must re-check the target-lock"
+            );
+        }
+    }
+
+    #[test]
+    fn auto_submit_still_notifies_its_two_surfaces() {
+        // The settings window and the tray quick-toggle (#12) share this
+        // setting, so a change from either has to be broadcast.
+        assert!(effects_for_setting("auto_submit").contains(&SettingEffect::EmitChanged));
+    }
+
+    #[test]
+    fn settings_with_side_effects_keep_them() {
+        let expectations: &[(&str, SettingEffect)] = &[
+            ("autostart_enabled", SettingEffect::ApplyAutostart),
+            ("overlay_position", SettingEffect::UpdateOverlayPosition),
+            ("show_tray_icon", SettingEffect::SetTrayVisibility),
+            ("app_language", SettingEffect::RefreshTrayMenu),
+            ("whisper_accelerator", SettingEffect::ReloadAccelerator),
+            ("ort_accelerator", SettingEffect::ReloadAccelerator),
+            ("whisper_gpu_device", SettingEffect::ReloadAccelerator),
+            (
+                "post_process_enabled",
+                SettingEffect::SyncPostProcessShortcut,
+            ),
+            ("raw_output", SettingEffect::EmitChanged),
+        ];
+        for (key, effect) in expectations {
+            assert!(
+                effects_for_setting(key).contains(effect),
+                "changing '{key}' must still run {effect:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn plain_settings_need_nothing_but_the_write() {
+        for key in [
+            "audio_feedback_volume",
+            "selected_language",
+            "custom_words",
+            "typing_tool",
+        ] {
+            assert!(
+                effects_for_setting(key).is_empty(),
+                "unexpected effect for '{key}'"
+            );
+        }
     }
 
     #[test]

@@ -51,16 +51,21 @@ pub async fn delete_model(
     transcription_manager: State<'_, Arc<TranscriptionManager>>,
     model_id: String,
 ) -> Result<(), String> {
-    // If deleting the active model, unload it and clear the setting
+    // If deleting the active model, clear the setting and unload it
     let settings = get_settings(&app_handle);
     if settings.selected_model == model_id {
+        // Persist before unloading: on a store failure this returns before
+        // the model is torn down, so settings and the live loaded model
+        // stay in agreement (both still point at the model being deleted)
+        // instead of the model being unloaded from memory while settings
+        // still claim it's selected.
+        let mut settings = get_settings(&app_handle);
+        settings.selected_model = String::new();
+        write_settings(&app_handle, settings)?;
+
         transcription_manager
             .unload_model()
             .map_err(|e| format!("Failed to unload model: {}", e))?;
-
-        let mut settings = get_settings(&app_handle);
-        settings.selected_model = String::new();
-        write_settings(&app_handle, settings);
     }
 
     model_manager
@@ -120,7 +125,7 @@ pub fn switch_active_model(app: &AppHandle, model_id: &str) -> Result<(), String
         settings.selected_language = "auto".to_string();
     }
 
-    write_settings(app, settings);
+    write_settings(app, settings)?;
 
     // Skip eager loading if unload is set to "Immediately" — the model
     // will be loaded on-demand during the next transcription.
@@ -147,7 +152,14 @@ pub fn switch_active_model(app: &AppHandle, model_id: &str) -> Result<(), String
     if let Err(e) = transcription_manager.load_model(model_id) {
         let mut settings = get_settings(app);
         settings.selected_model = old_model;
-        write_settings(app, settings);
+        // Best-effort revert: the load failure below is the error that
+        // matters to the caller, so a failure to persist the revert is
+        // logged rather than replacing it — the cache was still invalidated
+        // by `write_settings`, so the next read retries the store instead of
+        // being stuck on the model selection that just failed to load.
+        if let Err(revert_err) = write_settings(app, settings) {
+            log::warn!("Failed to revert selected_model after a load failure: {revert_err}");
+        }
         return Err(e.to_string());
     }
 

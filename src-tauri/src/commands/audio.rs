@@ -155,7 +155,7 @@ pub fn update_microphone_mode(app: AppHandle, always_on: bool) -> Result<(), Str
     // Update settings
     let mut settings = get_settings(&app);
     settings.always_on_microphone = always_on;
-    write_settings(&app, settings);
+    write_settings(&app, settings)?;
 
     // Update the audio manager mode
     let rm = app.state::<Arc<AudioRecordingManager>>();
@@ -217,7 +217,7 @@ pub fn set_selected_microphone(app: AppHandle, device_name: String) -> Result<()
     } else {
         Some(device_name)
     };
-    write_settings(&app, settings);
+    write_settings(&app, settings)?;
 
     // Update the audio manager to use the new device
     let rm = app.state::<Arc<AudioRecordingManager>>();
@@ -266,7 +266,7 @@ pub fn set_selected_output_device(app: AppHandle, device_name: String) -> Result
     } else {
         Some(device_name)
     };
-    write_settings(&app, settings);
+    write_settings(&app, settings)?;
     Ok(())
 }
 
@@ -302,7 +302,7 @@ pub fn set_clamshell_microphone(app: AppHandle, device_name: String) -> Result<(
     } else {
         Some(device_name)
     };
-    write_settings(&app, settings);
+    write_settings(&app, settings)?;
     Ok(())
 }
 
