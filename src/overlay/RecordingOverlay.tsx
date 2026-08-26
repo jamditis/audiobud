@@ -10,7 +10,7 @@ import { useOutputTargetLock } from "@/hooks/useOutputTargetLock";
 import i18n, { syncLanguageFromSettings } from "@/i18n";
 import {
   formatDeliveredWindowName,
-  truncateName,
+  truncateMiddle,
 } from "@/lib/output-target-indicator";
 import { MIC_LEVEL_EVENT, bandsToAmplitude } from "@/lib/mic-level";
 import { getLanguageDirection } from "@/lib/utils/rtl";
@@ -37,14 +37,18 @@ const RecordingOverlay: React.FC = () => {
   const [isRaw, setIsRaw] = useState(false);
   const [levels, setLevels] = useState<number[]>(Array(16).fill(0));
   const smoothedLevelsRef = useRef<number[]>(Array(16).fill(0));
-  // Delivered-transcript confirmation (#165): the resolved window name, or ""
-  // when a delivery happened but neither label lookup resolved one, or `null`
-  // when there is nothing to show. Read through refs (not this state) inside
-  // the event listeners below, which are set up once and would otherwise see
-  // a stale closure.
-  const [deliveryConfirmation, setDeliveryConfirmation] = useState<
-    string | null
-  >(null);
+  // Delivered-transcript confirmation (#165). `full` is the untruncated
+  // name for the hint (a tooltip has room for the whole thing); `compact` is
+  // a middle-truncated form for the chip's own label, which does not -- see
+  // `truncateMiddle`. Both are "" when a delivery happened but neither label
+  // lookup resolved a name; `null` when there is nothing to show. State (not
+  // refs) is read only from the render below; the event listeners read the
+  // *ref* siblings further down, since they are set up once and would
+  // otherwise see a stale closure.
+  const [deliveryConfirmation, setDeliveryConfirmation] = useState<{
+    full: string;
+    compact: string;
+  } | null>(null);
   const confirmationActiveRef = useRef(false);
   const pendingHideRef = useRef(false);
   const confirmationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
@@ -119,16 +123,23 @@ const RecordingOverlay: React.FC = () => {
       // issue #274 rather than solved narrowly here.
       const unlistenDelivered = await events.transcriptDeliveredEvent.listen(
         (event) => {
-          const name = truncateName(
-            formatDeliveredWindowName(
-              event.payload.app ?? undefined,
-              event.payload.title ?? undefined,
-            ),
-            OVERLAY_TARGET_NAME_MAX_LENGTH,
+          const fullName = formatDeliveredWindowName(
+            event.payload.app ?? undefined,
+            event.payload.title ?? undefined,
           );
+          // Middle-truncated, not `truncateName`'s head-only form (#279
+          // review round 4): `formatDeliveredWindowName`'s "title — app"
+          // combination commonly shares a long prefix between two windows of
+          // the same app ("Google Docs - A" vs "Google Docs - B"), and a
+          // head-only cut collapses both to the same compact label -- the
+          // opposite of what a confirmation naming *which* window is for. The
+          // tail is wider than truncateMiddle's own default so it reliably
+          // covers the whole "— app" suffix plus a little of the title right
+          // before it, which is where a distinguishing word most often sits.
+          const compactName = truncateMiddle(fullName, 6, 10);
           confirmationActiveRef.current = true;
           pendingHideRef.current = false;
-          setDeliveryConfirmation(name);
+          setDeliveryConfirmation({ full: fullName, compact: compactName });
           setIsVisible(true);
           if (confirmationTimeoutRef.current) {
             clearTimeout(confirmationTimeoutRef.current);
@@ -223,13 +234,17 @@ const RecordingOverlay: React.FC = () => {
           <span
             className="delivered-indicator"
             title={
-              deliveryConfirmation.length > 0
-                ? t("overlay.deliveredHint", { target: deliveryConfirmation })
+              // The hint gets the full, untruncated name (#279 review round
+              // 4) -- a tooltip has the room the compact chip label does not.
+              deliveryConfirmation.full.length > 0
+                ? t("overlay.deliveredHint", {
+                    target: deliveryConfirmation.full,
+                  })
                 : t("overlay.deliveredUnknownHint")
             }
           >
-            {deliveryConfirmation.length > 0
-              ? t("overlay.delivered", { target: deliveryConfirmation })
+            {deliveryConfirmation.compact.length > 0
+              ? t("overlay.delivered", { target: deliveryConfirmation.compact })
               : t("overlay.deliveredUnknown")}
           </span>
         ) : (

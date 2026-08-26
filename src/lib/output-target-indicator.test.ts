@@ -3,6 +3,7 @@ import {
   deriveIndicator,
   formatDeliveredWindowName,
   resolveTargetName,
+  truncateMiddle,
   truncateName,
   MAX_TARGET_NAME_LENGTH,
   type LockSnapshot,
@@ -100,6 +101,54 @@ describe("truncateName", () => {
 
   it("hard-slices with no marker when the ceiling has no room for one", () => {
     expect(truncateName("abcdef", 2)).toBe("ab");
+  });
+});
+
+describe("truncateMiddle", () => {
+  it("leaves a name within the budget unchanged", () => {
+    expect(truncateMiddle("Terminal")).toBe("Terminal");
+  });
+
+  it("keeps two same-prefix names distinguishable", () => {
+    // The scenario the confirmation chip exists to avoid (#279 review round
+    // 4): two windows sharing everything but their tail must not truncate to
+    // the same compact string the way a head-only truncation would.
+    const a = truncateMiddle("Google Docs - A", 6, 5);
+    const b = truncateMiddle("Google Docs - B", 6, 5);
+    expect(a).not.toBe(b);
+  });
+
+  it("keeps two same-prefix delivered-window names distinguishable with the overlay's own budget", () => {
+    // The overlay's chip uses a wider tail than the generic default so a
+    // formatDeliveredWindowName "title — app" string's distinguishing suffix
+    // survives even with a short app name appended after it.
+    const a = truncateMiddle(
+      formatDeliveredWindowName("Chrome", "Google Docs - A"),
+      6,
+      10,
+    );
+    const b = truncateMiddle(
+      formatDeliveredWindowName("Chrome", "Google Docs - B"),
+      6,
+      10,
+    );
+    expect(a).not.toBe(b);
+  });
+
+  it("keeps the requested number of code points on each end", () => {
+    const result = truncateMiddle("abcdefghijklmnopqrstuvwxyz", 6, 5);
+    expect(result).toBe("abcdef...vwxyz");
+  });
+
+  it("never splits an astral character when truncating", () => {
+    const result = truncateMiddle("\u{1F600}".repeat(40), 2, 2);
+    expect(result.startsWith("\u{1F600}\u{1F600}")).toBe(true);
+    expect(result.endsWith("\u{1F600}\u{1F600}")).toBe(true);
+    expect(result).toBe("\u{1F600}\u{1F600}...\u{1F600}\u{1F600}");
+  });
+
+  it("supports a zero-length tail for a head-only compact form", () => {
+    expect(truncateMiddle("abcdefghij", 4, 0)).toBe("abcd...");
   });
 });
 

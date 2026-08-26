@@ -160,6 +160,32 @@ export function truncateName(
 }
 
 /**
+ * Truncate a name for a compact display by keeping both ends and eliding the
+ * middle, rather than cutting off the tail the way `truncateName` does (#279
+ * review round 4). `truncateName` is right for a lock indicator badge, where
+ * names rarely share a prefix; it is wrong for `formatDeliveredWindowName`'s
+ * "title — app" combination, where two windows of the same app commonly do
+ * share one ("Google Docs - A" vs "Google Docs - B") -- a head-only
+ * truncation collapses both to the same compact string and defeats the
+ * point of a confirmation that is supposed to say which window received the
+ * text. Keeping a slice of both ends preserves whatever part actually
+ * differs, wherever it falls.
+ */
+export function truncateMiddle(
+  name: string,
+  headLength: number = 6,
+  tailLength: number = 5,
+): string {
+  const points = Array.from(name);
+  const max = headLength + tailLength + TRUNCATION_MARKER.length;
+  if (points.length <= max) return name;
+  const head = points.slice(0, headLength).join("");
+  const tail =
+    tailLength > 0 ? points.slice(points.length - tailLength).join("") : "";
+  return `${head}${TRUNCATION_MARKER}${tail}`;
+}
+
+/**
  * Map a lock snapshot to the indicator view-model. This is the whole contract:
  * hidden when unlocked, a quiet named indicator while locked, and a louder one
  * holding the last known name when the lock went stale. Every surface derives

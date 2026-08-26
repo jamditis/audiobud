@@ -184,7 +184,7 @@
 .delivered-indicator {
   flex-shrink: 1;
   min-width: 0;
-  max-width: 110px;
+  max-width: 128px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
