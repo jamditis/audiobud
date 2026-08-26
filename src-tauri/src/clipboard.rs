@@ -3,7 +3,9 @@ use crate::clipboard_snapshot::ClipboardBackend;
 use crate::clipboard_snapshot::{self, ArboardBackend, ClipboardContent, ClipboardHistory};
 use crate::dictation_context::DictationContext;
 use crate::input::{self, EnigoState};
-use crate::output_target::backend::{self as target_backend, Borrowed, Delivery, FocusHold};
+use crate::output_target::backend::{
+    self as target_backend, Borrowed, Delivery, FocusHold, FocusLost,
+};
 #[cfg(target_os = "linux")]
 use crate::settings::TypingTool;
 use crate::settings::{get_settings, AppSettings, AutoSubmitKey, ClipboardHandling, PasteMethod};
@@ -28,10 +30,10 @@ enum SavedClipboard {
 /// Why one delivery stopped early.
 #[derive(Debug, PartialEq, Eq)]
 enum DeliveryError {
-    /// The target window went away, or refused to take focus, so no further
-    /// keystrokes were sent. Nothing is wrong with the transcript itself, so
-    /// whatever does not depend on a window -- the clipboard copy -- still
-    /// applies (#120).
+    /// The target window went away, so no further keystrokes were sent and the
+    /// user has already been told the lock is gone. Nothing is wrong with the
+    /// transcript itself, so whatever does not depend on a window -- the
+    /// clipboard copy -- still applies (#120).
     Suppressed(String),
     /// The paste machinery failed and the user should be told.
     Failed(String),
@@ -46,6 +48,20 @@ impl From<String> for DeliveryError {
 impl From<&str> for DeliveryError {
     fn from(error: &str) -> Self {
         DeliveryError::Failed(error.to_string())
+    }
+}
+
+impl From<FocusLost> for DeliveryError {
+    /// A window that has gone is a settled outcome the user was already told
+    /// about, so the delivery is merely suppressed. A window that is still there
+    /// but will not come forward is a failure: saying nothing would drop the
+    /// transcript in silence, and with `ClipboardHandling::DontModify` there is
+    /// no copy left behind to recover it from (#120).
+    fn from(lost: FocusLost) -> Self {
+        match lost {
+            FocusLost::TargetGone => DeliveryError::Suppressed(lost.to_string()),
+            FocusLost::ActivationRefused(reason) => DeliveryError::Failed(reason),
+        }
     }
 }
 
@@ -108,7 +124,7 @@ fn paste_via_clipboard(
     // target is re-checked here, immediately before the keystroke (#120).
     let pasted = match hold.ensure() {
         Ok(()) => send_paste_key_combo(enigo, paste_method).map_err(DeliveryError::Failed),
-        Err(reason) => Err(DeliveryError::Suppressed(reason)),
+        Err(lost) => Err(lost.into()),
     };
 
     std::thread::sleep(std::time::Duration::from_millis(50));
@@ -731,6 +747,21 @@ fn should_copy_to_clipboard(handling: ClipboardHandling, delivered: bool) -> boo
     handling == ClipboardHandling::CopyToClipboard
 }
 
+/// Whether this delivery sends any input to a window, and so needs one to hold
+/// focus.
+///
+/// `PasteMethod::None` types nothing and suppresses auto-submit with it, so a
+/// pinned delivery would otherwise steal the user's focus, wait, and hand it
+/// back having done nothing. The auto-submit half is spelled out anyway so this
+/// stays correct if that rule ever changes.
+///
+/// This is the narrow local answer for the paste path. Issue #162 gives
+/// `PasteMethod` a capability model that says this properly, and supersedes this
+/// helper when it lands.
+fn delivery_sends_input(paste_method: PasteMethod, auto_submit: bool) -> bool {
+    paste_method != PasteMethod::None || should_send_auto_submit(auto_submit, paste_method)
+}
+
 /// Send the transcript to the resolved target, and report whether it was
 /// delivered. `delivery` is `None` when the target lock was lost, in which case
 /// nothing is typed anywhere.
@@ -773,7 +804,7 @@ fn deliver_to_target(
                 info!("PasteMethod::None selected - skipping paste action");
             }
             PasteMethod::Direct => {
-                hold.ensure().map_err(DeliveryError::Suppressed)?;
+                hold.ensure()?;
                 paste_direct(
                     enigo,
                     text,
@@ -805,7 +836,7 @@ fn deliver_to_target(
 
         if should_send_auto_submit(settings.auto_submit, paste_method) {
             std::thread::sleep(Duration::from_millis(50));
-            hold.ensure().map_err(DeliveryError::Suppressed)?;
+            hold.ensure()?;
             send_return_key(enigo, settings.auto_submit_key)?;
         }
 
@@ -814,6 +845,11 @@ fn deliver_to_target(
 
     let outcome = match delivery {
         Delivery::Foreground => deliver(&mut enigo),
+        // Borrowing focus for a delivery that sends nothing would take the
+        // user's window away from them for no reason at all.
+        Delivery::Pinned(_) if !delivery_sends_input(paste_method, settings.auto_submit) => {
+            deliver(&mut enigo)
+        }
         Delivery::Pinned(identity) => {
             match target_backend::borrow_focus(app_handle, identity, || deliver(&mut enigo)) {
                 Ok(Borrowed::Delivered(result)) => result,
@@ -822,9 +858,7 @@ fn deliver_to_target(
                 Ok(Borrowed::Suppressed) => {
                     return Ok(false);
                 }
-                // The target refused to come forward, so nothing was typed
-                // either: a suppressed delivery, not a broken paste.
-                Err(reason) => Err(DeliveryError::Suppressed(reason)),
+                Err(lost) => Err(lost.into()),
             }
         }
     };
@@ -904,6 +938,54 @@ mod tests {
     fn auto_submit_requires_setting_enabled() {
         assert!(!should_send_auto_submit(false, PasteMethod::CtrlV));
         assert!(!should_send_auto_submit(false, PasteMethod::Direct));
+    }
+
+    #[test]
+    fn a_closed_target_suppresses_but_a_refused_one_fails() {
+        // Gone: already announced, lock already dropped, nothing typed. The
+        // paste path carries on to the clipboard copy without a second alarm.
+        assert_eq!(
+            DeliveryError::from(FocusLost::TargetGone),
+            DeliveryError::Suppressed("the locked window closed during delivery".to_string())
+        );
+        // Still there but refusing to come forward: the transcript went
+        // nowhere and the lock still stands, so the user has to be told --
+        // silence here loses the text outright when nothing is copied.
+        assert_eq!(
+            DeliveryError::from(FocusLost::ActivationRefused("refused".to_string())),
+            DeliveryError::Failed("refused".to_string())
+        );
+    }
+
+    #[test]
+    fn a_refused_activation_reaches_the_user_as_an_error() {
+        // End to end through the outcome mapping: the refusal must surface,
+        // not turn into a quiet "not delivered".
+        let refused = delivery_outcome(Err(FocusLost::ActivationRefused(
+            "the system refused to activate the target window".to_string(),
+        )
+        .into()));
+        assert_eq!(
+            refused,
+            Err("the system refused to activate the target window".to_string())
+        );
+        assert_eq!(
+            delivery_outcome(Err(FocusLost::TargetGone.into())),
+            Ok(false)
+        );
+    }
+
+    #[test]
+    fn only_a_delivery_that_types_something_needs_focus() {
+        // Copy-to-clipboard with no paste method touches no window, so taking
+        // focus for it is pure disruption.
+        assert!(!delivery_sends_input(PasteMethod::None, false));
+        // Auto-submit is suppressed for PasteMethod::None, so it cannot bring
+        // the keystroke back on its own.
+        assert!(!delivery_sends_input(PasteMethod::None, true));
+        assert!(delivery_sends_input(PasteMethod::CtrlV, false));
+        assert!(delivery_sends_input(PasteMethod::Direct, false));
+        assert!(delivery_sends_input(PasteMethod::ExternalScript, false));
     }
 
     #[test]
