@@ -127,15 +127,26 @@ impl DeliveryWorker {
     /// "refused and logged", not "silently truncated mid-keystroke" (#161
     /// review round 4, finding 1).
     ///
+    /// Deliberate tradeoff (#161 review round 5, finding A): a delivery
+    /// refused here during quit is not attempted at all, so its paste never
+    /// happens. The transcript itself is saved to history independently,
+    /// in the same step that enqueues the delivery (see the `save_entry`/
+    /// `save_delivery_recovery` calls around `enqueue_transcript_delivery`
+    /// in `actions.rs`), so refusing the paste costs at most the paste --
+    /// not the user's only copy of the transcript. That is an acceptable
+    /// price for a user-initiated quit, and preferable to either hanging
+    /// quit to finish it or pasting into a dying process.
+    ///
     /// [`shutdown`]: DeliveryWorker::shutdown
     pub fn run(&self, job: DeliveryJob) {
         let jobs = self.jobs.lock().unwrap();
         let Some(sender) = jobs.as_ref() else {
             drop(jobs);
             if self.shutting_down.load(Ordering::SeqCst) {
-                error!(
+                warn!(
                     "Delivery worker is shutting down; refusing to deliver on the calling \
-                     thread to avoid a paste truncated by the process exiting mid-delivery"
+                     thread to avoid a paste truncated by the process exiting mid-delivery. \
+                     The transcript is already saved to history; only its paste is skipped."
                 );
                 return;
             }
@@ -146,9 +157,10 @@ impl DeliveryWorker {
         if let Err(returned) = sender.send(job) {
             drop(jobs);
             if self.shutting_down.load(Ordering::SeqCst) {
-                error!(
+                warn!(
                     "Delivery worker is shutting down; refusing to deliver on the calling \
-                     thread to avoid a paste truncated by the process exiting mid-delivery"
+                     thread to avoid a paste truncated by the process exiting mid-delivery. \
+                     The transcript is already saved to history; only its paste is skipped."
                 );
                 return;
             }

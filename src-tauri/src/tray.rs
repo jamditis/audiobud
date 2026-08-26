@@ -558,6 +558,15 @@ pub fn set_tray_visibility(app: &AppHandle, visible: bool) {
 /// whatever is actually latest at the moment it runs, so which of two queued
 /// requests the mutex happens to wake first stops mattering (#161 review
 /// round 4, finding 2).
+///
+/// Chosen semantics (#161 review round 5, finding B): "Copy Last Transcript"
+/// copies whichever transcript is latest at the moment the copy actually
+/// happens, not whichever was latest at the moment the user clicked. The
+/// alternative -- capture the text at click time and copy exactly that, even
+/// if a newer transcript lands before a deferred write gets its turn -- is
+/// equally defensible; this one was picked because it is also what makes
+/// waiter ordering irrelevant above, with no extra bookkeeping (a generation
+/// counter, coalescing to the newest pending request) needed to get there.
 fn latest_transcript_to_copy(app: &AppHandle) -> Option<String> {
     let history_manager = app.state::<Arc<HistoryManager>>();
     let entry = match history_manager.get_latest_completed_entry() {

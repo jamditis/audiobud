@@ -599,8 +599,25 @@ pub fn borrow_focus<T>(
     // raise a window the user never had (#254).
     let previous = foreground_identity();
     activate_target(target).map_err(FocusLost::ActivationRefused)?;
+
+    // Hands focus back on the way out of this scope, whether `action`
+    // returns normally or panics (#161 review round 5, finding C): a bare
+    // `restore_foreground` call placed after `action()` only ran on normal
+    // return, so a panic mid-paste -- caught further up, in the delivery
+    // job's own `catch_unwind` -- unwound straight past it and left `target`
+    // focused instead of handing focus back. A `Drop` impl runs exactly once
+    // regardless of which way the scope is left, so this replaces the old
+    // call rather than adding to it: the normal path's behavior and ordering
+    // (restore happens before this function returns) are unchanged.
+    struct RestoreFocusOnExit(Option<WindowIdentity>, WindowIdentity);
+    impl Drop for RestoreFocusOnExit {
+        fn drop(&mut self) {
+            restore_foreground(self.0, self.1);
+        }
+    }
+    let _restore_focus_on_exit = RestoreFocusOnExit(previous, target);
+
     let outcome = action();
-    restore_foreground(previous, target);
 
     Ok(Borrowed::Delivered(outcome))
 }
@@ -980,5 +997,41 @@ mod tests {
         // one entitled to clear it.
         assert!(DeliverySource::Lock.clears_the_lock());
         assert!(!DeliverySource::Pick.clears_the_lock());
+    }
+
+    #[test]
+    fn a_drop_based_restore_runs_exactly_once_whether_its_action_panics_or_not() {
+        // `borrow_focus` can't be exercised directly in a unit test -- it
+        // needs a live `AppHandle` and real OS window state, and the
+        // non-Windows fallback's `restore_foreground` is a no-op, so a test
+        // through the real function would prove nothing either way. This
+        // proves the mechanism the fix relies on instead (#161 review round
+        // 5, finding C): a `Drop`-based restore fires exactly once, whether
+        // the action it wraps returns normally or panics -- never zero
+        // times (the pre-fix bug: a panic skipped a bare post-action call)
+        // and never twice (the regression the fix's own comment warns
+        // against: restoring from `Drop` *and* an explicit call).
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        struct RestoreOnDrop<'a>(&'a AtomicUsize);
+        impl Drop for RestoreOnDrop<'_> {
+            fn drop(&mut self) {
+                self.0.fetch_add(1, Ordering::SeqCst);
+            }
+        }
+
+        let restores = AtomicUsize::new(0);
+        {
+            let _guard = RestoreOnDrop(&restores);
+        }
+        assert_eq!(restores.load(Ordering::SeqCst), 1, "normal return");
+
+        let restores_on_panic = AtomicUsize::new(0);
+        let panicked = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _guard = RestoreOnDrop(&restores_on_panic);
+            panic!("simulated panic mid-paste");
+        }));
+        assert!(panicked.is_err());
+        assert_eq!(restores_on_panic.load(Ordering::SeqCst), 1, "unwind");
     }
 }
