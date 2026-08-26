@@ -11,11 +11,11 @@
 //! (#160).
 //!
 //! This module is the platform-independent core: the lock/unlock state machine,
-//! the closed-window failsafe, the window-identity check that rejects a recycled
-//! handle (#254), and the self-window exclusion (#164). [`backend`] holds the
-//! platform half: capturing the foreground window and the focus-borrow paste
-//! (save foreground, activate the pinned window, paste, restore), which is
-//! Windows-only for now (#119).
+//! the compare-and-clear release a stale delivery uses, the window-identity
+//! check that rejects a recycled handle (#254), and the self-window exclusion
+//! (#164). [`backend`] holds the platform half: capturing a dictation's target,
+//! re-checking it, and the focus-borrow paste (save foreground, activate the
+//! pinned window, paste, restore), which is Windows-only for now (#119).
 //!
 //! Parts of the API are used only by the picker (#124), which lands later, so
 //! the module allows dead_code.
@@ -120,6 +120,64 @@ pub fn accept_capture(
     }
 }
 
+/// Whether `class_name` is one of the Windows shell surfaces rather than an
+/// application window.
+///
+/// The tray menu is the reason this exists: while the menu item's callback runs,
+/// the shell's taskbar owns the foreground, so a plain foreground capture would
+/// pin dictation to the taskbar. These are the shell's own top-level classes;
+/// UWP application windows (`ApplicationFrameWindow`) are deliberately NOT here,
+/// because those are real targets a user can dictate into.
+pub fn is_shell_window(class_name: &str) -> bool {
+    matches!(
+        class_name,
+        "Shell_TrayWnd"
+            | "Shell_SecondaryTrayWnd"
+            | "NotifyIconOverflowWindow"
+            | "TopLevelWindowForOverflowXamlIsland"
+            | "Progman"
+            | "WorkerW"
+            | "ForegroundStaging"
+            | "MultitaskingViewFrame"
+    )
+}
+
+/// What a backend reports about one window, so the eligibility rules below stay
+/// testable without a window system.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct WindowFacts<'a> {
+    pub identity: WindowIdentity,
+    /// The window class, used to spot shell surfaces.
+    pub class_name: &'a str,
+    /// Whether the window has a title at all. An untitled top-level window is
+    /// almost always a helper window, not something a user dictates into.
+    pub has_title: bool,
+    pub visible: bool,
+}
+
+/// Whether a window may be locked onto or offered by the picker: visible,
+/// titled, not AudioBud's own (#164), and not a shell surface.
+pub fn is_eligible_target(facts: &WindowFacts, own_process_id: u32) -> bool {
+    facts.visible
+        && facts.has_title
+        && !is_own_window(facts.identity, own_process_id)
+        && !is_shell_window(facts.class_name)
+}
+
+/// Where a lock request came from, which decides how hard the backend looks for
+/// a target.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CaptureSource {
+    /// The global shortcut. The user pressed it while looking at the window they
+    /// mean, so the foreground window is the answer or there is none: guessing
+    /// at another window would pin dictation somewhere never asked for.
+    Shortcut,
+    /// The tray menu. Opening the menu takes the foreground away from the user's
+    /// window, so the foreground cannot be trusted here and the backend falls
+    /// back to the top window the user could have been working in.
+    TrayMenu,
+}
+
 /// What one press of the lock toggle did, for the notice the caller shows.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum LockToggle {
@@ -140,25 +198,6 @@ pub enum OutputTarget {
     Pinned(WindowHandle),
 }
 
-/// The outcome of resolving the target for one paste: either a concrete
-/// delivery target, or the signal that a stale lock was just dropped. This is a
-/// distinct type from [`OutputTarget`] so the "lock lost" transition, which the
-/// caller must surface once, cannot be dropped like a stray bool, and so an
-/// illegal pairing (a pinned target that also lost its lock) is unrepresentable.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Resolved {
-    /// Deliver to this target: `Foreground` normally, `Pinned` when a live
-    /// window is locked.
-    Deliver(OutputTarget),
-    /// The locked window had closed, so the lock was dropped. Do NOT fall back
-    /// to the foreground: pasting the transcript into whatever app now holds
-    /// focus is the exact leak target-locking exists to prevent (#120). The
-    /// caller must SUPPRESS this paste and surface the "lock lost" notice once,
-    /// then let the user re-lock or re-dictate. The lock is already cleared
-    /// here, so the next resolve is a plain `Deliver(Foreground)`.
-    LockLost,
-}
-
 /// Tauri-managed lock state. Registered alongside `EnigoState`; the paste path
 /// reads it at send time to resolve the [`OutputTarget`]. `None` means no lock
 /// is held and delivery follows the foreground.
@@ -177,6 +216,24 @@ impl PinnedTarget {
     /// Clear any lock and return to foreground delivery.
     pub fn unlock(&self) {
         *self.guard() = None;
+    }
+
+    /// Release the lock only if it still points at `expected`, and report
+    /// whether it did.
+    ///
+    /// A delivery that discovers its target has died must not clear whatever
+    /// lock is held by then: a user can unlock and re-lock to another window
+    /// while a paste is still running, and blindly clearing would silently drop
+    /// that new lock. Comparing first keeps a stale delivery from speaking for
+    /// the current one.
+    pub fn unlock_if(&self, expected: WindowIdentity) -> bool {
+        let mut guard = self.guard();
+        if *guard == Some(expected) {
+            *guard = None;
+            true
+        } else {
+            false
+        }
     }
 
     /// Whether a window is currently locked.
@@ -213,67 +270,6 @@ impl PinnedTarget {
         }
     }
 
-    /// The target a dictation starting now will be delivered to.
-    ///
-    /// Read once, at recording start, into that dictation's
-    /// [`DictationContext`](crate::dictation_context::DictationContext). Liveness
-    /// is deliberately not checked here: a check at capture time says nothing
-    /// about the window seconds later, when the transcript is actually ready.
-    /// [`Self::resolve_captured`] is where that check belongs.
-    pub fn capture_target(&self) -> OutputTarget {
-        match *self.guard() {
-            Some(window) => OutputTarget::Pinned(window.handle),
-            None => OutputTarget::Foreground,
-        }
-    }
-
-    /// Resolve delivery for a dictation whose target was captured at recording
-    /// start, immediately before its paste fires.
-    ///
-    /// `captured` is the context's target, not a fresh read of the lock, so a
-    /// lock toggled while the user was speaking cannot redirect an in-flight
-    /// dictation (#160). What is re-checked is liveness: `is_alive` reports
-    /// whether the locked window is still the same window (on Windows,
-    /// [`backend::window_is_alive`], which re-checks the captured process and
-    /// thread so a recycled handle reads as gone -- #254). If it has gone, this
-    /// FAILS SAFE: it drops the lock and returns [`Resolved::LockLost`] rather
-    /// than borrowing focus to a handle the OS may have recycled -- a transcript
-    /// landing in the wrong app is the exact failure this feature exists to
-    /// prevent (#120).
-    ///
-    /// When the captured window is no longer the locked one -- the user released
-    /// or retargeted the lock mid-dictation -- the captured target still stands,
-    /// because that is the destination this dictation was started for. There is
-    /// no recorded identity left to re-check it against, so the focus borrow is
-    /// the failsafe: activating a handle that is no longer a window fails, and a
-    /// failed borrow types nothing.
-    ///
-    /// Liveness is advisory even in the checked case: the window can still close
-    /// between this call and the focus borrow, so that path must tolerate an
-    /// activation that fails rather than assume the handle is good.
-    pub fn resolve_captured(
-        &self,
-        captured: OutputTarget,
-        is_alive: impl FnOnce(WindowIdentity) -> bool,
-    ) -> Resolved {
-        let OutputTarget::Pinned(handle) = captured else {
-            return Resolved::Deliver(OutputTarget::Foreground);
-        };
-
-        let mut guard = self.guard();
-        match *guard {
-            Some(locked) if locked.handle == handle => {
-                if is_alive(locked) {
-                    Resolved::Deliver(OutputTarget::Pinned(handle))
-                } else {
-                    *guard = None;
-                    Resolved::LockLost
-                }
-            }
-            _ => Resolved::Deliver(OutputTarget::Pinned(handle)),
-        }
-    }
-
     /// Borrow the lock, recovering the guard if a previous holder panicked.
     /// The mutex only guards a `Copy` `Option<WindowIdentity>` with no
     /// cross-field invariant, so a poisoned guard's value is always consistent.
@@ -304,12 +300,9 @@ mod tests {
     fn default_is_foreground_and_unlocked() {
         let t = PinnedTarget::default();
         assert!(!t.is_locked());
-        assert_eq!(t.capture_target(), OutputTarget::Foreground);
-        // is_alive must not even be consulted for a foreground dictation.
-        let resolved = t.resolve_captured(OutputTarget::Foreground, |_| {
-            panic!("is_alive called for a foreground target")
-        });
-        assert_eq!(resolved, Resolved::Deliver(OutputTarget::Foreground));
+        // Nothing is locked, so a dictation starting now captures no window and
+        // delivery follows the foreground.
+        assert_eq!(t.locked(), None);
     }
 
     #[test]
@@ -318,18 +311,9 @@ mod tests {
         let w = win(42, 100, 200);
         assert_eq!(t.lock_to(w), OutputTarget::Pinned(w.handle));
         assert!(t.is_locked());
+        // A dictation starting now captures the whole identity, not just the
+        // handle, because that is what every later re-check needs (#254).
         assert_eq!(t.locked(), Some(w));
-        // A dictation starting now captures the pinned window...
-        let captured = t.capture_target();
-        assert_eq!(captured, OutputTarget::Pinned(w.handle));
-        // ...and delivering it re-checks that same window's identity.
-        let resolved = t.resolve_captured(captured, |locked| {
-            assert_eq!(locked, w);
-            true
-        });
-        assert_eq!(resolved, Resolved::Deliver(OutputTarget::Pinned(w.handle)));
-        // Resolving a live target must NOT clear the lock.
-        assert!(t.is_locked());
     }
 
     #[test]
@@ -338,53 +322,26 @@ mod tests {
         t.lock_to(win(7, 1, 2));
         t.unlock();
         assert!(!t.is_locked());
-        assert_eq!(t.capture_target(), OutputTarget::Foreground);
-        let resolved = t.resolve_captured(OutputTarget::Foreground, |_| true);
-        assert_eq!(resolved, Resolved::Deliver(OutputTarget::Foreground));
+        assert_eq!(t.locked(), None);
     }
 
     #[test]
-    fn dead_target_fails_safe_and_drops_the_lock() {
+    fn a_lock_toggled_mid_dictation_does_not_change_what_was_captured() {
+        // The point of capturing at start (#160): a dictation already under way
+        // holds its own target, so releasing or re-pointing the lock while the
+        // user is still speaking governs the NEXT dictation, not this one.
         let t = PinnedTarget::default();
-        let w = win(99, 1, 2);
-        t.lock_to(w);
-        let captured = t.capture_target();
-        // Locked window has closed: resolve must fail safe and report LockLost
-        // so the caller can surface the notice once.
-        assert_eq!(t.resolve_captured(captured, |_| false), Resolved::LockLost);
-        // The lock is gone, so the next dictation captures the foreground.
-        assert!(!t.is_locked());
-        assert_eq!(t.capture_target(), OutputTarget::Foreground);
-    }
+        let started_with = win(42, 100, 200);
+        t.lock_to(started_with);
+        let captured = t.locked();
 
-    #[test]
-    fn a_lock_toggled_mid_dictation_does_not_redirect_it() {
-        // The whole point of capturing at start (#160): the transcript goes
-        // where the user was pointing when they began speaking, not where the
-        // lock happens to point when the paste fires.
-        let t = PinnedTarget::default();
-        let w = win(42, 100, 200);
-        t.lock_to(w);
-        let captured = t.capture_target();
-
-        // Released mid-dictation: still delivered to the captured window. There
-        // is no recorded identity to check any more, so is_alive is not called
-        // and the focus borrow is the failsafe.
         t.unlock();
-        assert_eq!(
-            t.resolve_captured(captured, |_| panic!("no identity left to check")),
-            Resolved::Deliver(OutputTarget::Pinned(w.handle))
-        );
+        assert_eq!(captured, Some(started_with));
 
-        // Retargeted mid-dictation: the new lock governs the NEXT dictation,
-        // not this one.
         let other = win(7, 500, 600);
         t.lock_to(other);
-        assert_eq!(
-            t.resolve_captured(captured, |_| panic!("checked the wrong window")),
-            Resolved::Deliver(OutputTarget::Pinned(w.handle))
-        );
-        assert_eq!(t.capture_target(), OutputTarget::Pinned(other.handle));
+        assert_eq!(captured, Some(started_with));
+        assert_eq!(t.locked(), Some(other));
     }
 
     #[test]
@@ -392,23 +349,18 @@ mod tests {
         use std::panic::{catch_unwind, AssertUnwindSafe};
         let t = PinnedTarget::default();
         let w = win(5, 1, 2);
-        t.lock_to(w);
-        // An is_alive callback that unwinds while resolve holds the guard
-        // poisons the mutex. Recovery must let later calls proceed rather than
-        // panic on every subsequent lock.
+        // Capturing runs inside the guard, so a capture that unwinds poisons the
+        // mutex. Recovery must let later calls proceed rather than panic on
+        // every subsequent lock.
         let blew_up = catch_unwind(AssertUnwindSafe(|| {
-            t.resolve_captured(OutputTarget::Pinned(w.handle), |_| {
-                panic!("is_alive blew up")
-            });
+            t.toggle(|| panic!("capture blew up"));
         }));
         assert!(blew_up.is_err());
-        // The lock is still readable and the pinned window survived the panic;
-        // a normal resolve now succeeds instead of panicking on a poisoned lock.
-        assert!(t.is_locked());
-        assert_eq!(
-            t.resolve_captured(OutputTarget::Pinned(w.handle), |_| true),
-            Resolved::Deliver(OutputTarget::Pinned(w.handle))
-        );
+        // The state is still readable rather than panicking on a poisoned lock,
+        // and nothing was locked by the failed capture.
+        assert!(!t.is_locked());
+        assert_eq!(t.lock_to(w), OutputTarget::Pinned(w.handle));
+        assert_eq!(t.locked(), Some(w));
     }
 
     #[test]
@@ -417,11 +369,7 @@ mod tests {
         t.lock_to(win(1, 1, 1));
         let second = win(2, 2, 2);
         assert_eq!(t.lock_to(second), OutputTarget::Pinned(second.handle));
-        let resolved = t.resolve_captured(t.capture_target(), |_| true);
-        assert_eq!(
-            resolved,
-            Resolved::Deliver(OutputTarget::Pinned(second.handle))
-        );
+        assert_eq!(t.locked(), Some(second));
     }
 
     #[test]
@@ -451,15 +399,16 @@ mod tests {
     }
 
     #[test]
-    fn resolve_drops_a_lock_whose_handle_was_recycled() {
-        // The whole point of carrying identity: the end-to-end path from a
-        // recycled handle to a suppressed paste.
+    fn a_recycled_handle_releases_the_lock_it_impersonates() {
+        // The end-to-end reason identity is carried on the dictation context: a
+        // captured window whose handle the OS has recycled reads as gone, and
+        // the delivery releases exactly that lock (backend::drop_lock_for) so
+        // the transcript is never typed into the window wearing its handle.
         let t = PinnedTarget::default();
-        let locked = win(42, 100, 200);
-        t.lock_to(locked);
-        let captured = t.capture_target();
-        let resolved = t.resolve_captured(captured, |w| identity_is_alive(w, |_| Some((999, 200))));
-        assert_eq!(resolved, Resolved::LockLost);
+        let captured = win(42, 100, 200);
+        t.lock_to(captured);
+        assert!(!identity_is_alive(captured, |_| Some((999, 200))));
+        assert!(t.unlock_if(captured));
         assert!(!t.is_locked());
     }
 
@@ -477,6 +426,80 @@ mod tests {
         let other = win(1, 5, 7);
         assert!(!is_own_window(other, 4242));
         assert_eq!(accept_capture(other, 4242), Ok(other));
+    }
+
+    #[test]
+    fn a_stale_delivery_cannot_clear_a_newer_lock() {
+        // A paste to the first window is still running when the user re-locks
+        // to another. The first window then dies: clearing the lock blindly
+        // would drop the lock the user can see and is still using.
+        let t = PinnedTarget::default();
+        let first = win(1, 10, 20);
+        let second = win(2, 30, 40);
+        t.lock_to(first);
+        t.lock_to(second);
+
+        assert!(!t.unlock_if(first));
+        assert_eq!(t.locked(), Some(second));
+
+        // The current target still clears normally.
+        assert!(t.unlock_if(second));
+        assert!(!t.is_locked());
+        // And clearing an already-empty lock reports that it did nothing.
+        assert!(!t.unlock_if(second));
+    }
+
+    #[test]
+    fn shell_surfaces_are_not_lock_targets() {
+        // The taskbar owns the foreground while a tray menu click is handled,
+        // so locking from the tray would otherwise pin dictation to it.
+        assert!(is_shell_window("Shell_TrayWnd"));
+        assert!(is_shell_window("Shell_SecondaryTrayWnd"));
+        assert!(is_shell_window("Progman"));
+        assert!(is_shell_window("WorkerW"));
+        // Real application windows, including UWP frames, must stay eligible.
+        assert!(!is_shell_window("ApplicationFrameWindow"));
+        assert!(!is_shell_window("CASCADIA_HOSTING_WINDOW_CLASS"));
+        assert!(!is_shell_window("Chrome_WidgetWin_1"));
+    }
+
+    fn facts(identity: WindowIdentity, class_name: &str) -> WindowFacts<'_> {
+        WindowFacts {
+            identity,
+            class_name,
+            has_title: true,
+            visible: true,
+        }
+    }
+
+    #[test]
+    fn an_ordinary_window_is_an_eligible_target() {
+        let other = win(1, 5, 7);
+        assert!(is_eligible_target(
+            &facts(other, "Chrome_WidgetWin_1"),
+            4242
+        ));
+    }
+
+    #[test]
+    fn hidden_untitled_own_and_shell_windows_are_not_eligible() {
+        let other = win(1, 5, 7);
+        let own = win(2, 4242, 7);
+
+        let hidden = WindowFacts {
+            visible: false,
+            ..facts(other, "Chrome_WidgetWin_1")
+        };
+        assert!(!is_eligible_target(&hidden, 4242));
+
+        let untitled = WindowFacts {
+            has_title: false,
+            ..facts(other, "Chrome_WidgetWin_1")
+        };
+        assert!(!is_eligible_target(&untitled, 4242));
+
+        assert!(!is_eligible_target(&facts(own, "Chrome_WidgetWin_1"), 4242));
+        assert!(!is_eligible_target(&facts(other, "Shell_TrayWnd"), 4242));
     }
 
     #[test]
@@ -501,6 +524,6 @@ mod tests {
             LockToggle::NotLocked(CaptureError::OwnWindow)
         );
         assert!(!t.is_locked());
-        assert_eq!(t.capture_target(), OutputTarget::Foreground);
+        assert_eq!(t.locked(), None);
     }
 }

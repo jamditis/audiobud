@@ -22,7 +22,7 @@
 //! recording. From `stop` onwards the context is owned by the pipeline and moves
 //! with the transcript into the delivery queue and the paste.
 
-use crate::output_target::OutputTarget;
+use crate::output_target::backend::Delivery;
 use std::collections::HashMap;
 use std::sync::{Mutex, MutexGuard};
 
@@ -39,7 +39,7 @@ pub struct DictationContext {
     raw_requested: bool,
     post_process_requested: bool,
     effective_raw: bool,
-    output_target: OutputTarget,
+    delivery_target: Delivery,
 }
 
 impl DictationContext {
@@ -55,14 +55,14 @@ impl DictationContext {
         raw_requested: bool,
         post_process_requested: bool,
         raw_output_setting: bool,
-        output_target: OutputTarget,
+        delivery_target: Delivery,
     ) -> Self {
         let effective_raw = raw_requested || (raw_output_setting && !post_process_requested);
         Self {
             raw_requested,
             post_process_requested,
             effective_raw,
-            output_target,
+            delivery_target,
         }
     }
 
@@ -90,8 +90,12 @@ impl DictationContext {
     }
 
     /// Where the finished transcript is delivered, captured at recording start.
-    pub fn output_target(&self) -> OutputTarget {
-        self.output_target
+    ///
+    /// A pinned target carries the whole `WindowIdentity`, not just its handle,
+    /// so the delivery path re-checks the window this dictation was actually
+    /// started for -- never a bare handle Windows may have recycled since (#254).
+    pub fn delivery_target(&self) -> Delivery {
+        self.delivery_target
     }
 }
 
@@ -157,7 +161,16 @@ impl ActiveDictations {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::output_target::{OutputTarget, WindowHandle};
+    use crate::output_target::{PinnedTarget, WindowHandle, WindowIdentity};
+
+    /// A captured window: handle `h`, owned by process `pid` / thread `tid`.
+    fn win(h: isize, pid: u32, tid: u32) -> WindowIdentity {
+        WindowIdentity {
+            handle: WindowHandle(h),
+            process_id: pid,
+            thread_id: tid,
+        }
+    }
 
     // The resolution rule must stay identical to actions.rs::effective_raw_output,
     // whose own test this mirrors, so moving the callers onto the context cannot
@@ -165,7 +178,7 @@ mod tests {
     #[test]
     fn effective_raw_matches_the_resolution_rule() {
         let cap = |raw, post, global| {
-            DictationContext::capture(raw, post, global, OutputTarget::Foreground).effective_raw()
+            DictationContext::capture(raw, post, global, Delivery::Foreground).effective_raw()
         };
         // An explicit per-dictation raw request always forces raw.
         assert!(cap(true, false, false));
@@ -185,9 +198,9 @@ mod tests {
     fn effective_raw_is_frozen_at_capture() {
         let intent = (false, false); // no per-dictation override, so the global decides
         let with_global_on =
-            DictationContext::capture(intent.0, intent.1, true, OutputTarget::Foreground);
+            DictationContext::capture(intent.0, intent.1, true, Delivery::Foreground);
         let with_global_off =
-            DictationContext::capture(intent.0, intent.1, false, OutputTarget::Foreground);
+            DictationContext::capture(intent.0, intent.1, false, Delivery::Foreground);
         assert!(with_global_on.effective_raw());
         assert!(!with_global_off.effective_raw());
         // The stored value is what the accessor returns, not a re-resolution.
@@ -200,25 +213,47 @@ mod tests {
     // The per-dictation intent is carried verbatim, the way history retry replays it.
     #[test]
     fn per_dictation_intent_is_carried_verbatim() {
-        let ctx = DictationContext::capture(true, false, false, OutputTarget::Foreground);
+        let ctx = DictationContext::capture(true, false, false, Delivery::Foreground);
         assert!(ctx.raw_requested());
         assert!(!ctx.post_process_requested());
     }
 
-    // The output target is captured, not re-read: a pinned window survives on the
-    // context so the paste path never has to consult live focus.
+    // The delivery target is captured, not re-read: a pinned window survives on
+    // the context so the paste path never has to consult live focus. It carries
+    // the full identity, which is what every later re-check needs (#254).
     #[test]
-    fn output_target_is_captured() {
-        let pinned = OutputTarget::Pinned(WindowHandle(42));
-        let ctx = DictationContext::capture(false, false, false, pinned);
-        assert_eq!(ctx.output_target(), pinned);
+    fn delivery_target_is_captured_with_its_identity() {
+        let window = win(42, 100, 200);
+        let ctx = DictationContext::capture(false, false, false, Delivery::Pinned(window));
+        assert_eq!(ctx.delivery_target(), Delivery::Pinned(window));
 
-        let fg = DictationContext::capture(false, false, false, OutputTarget::Foreground);
-        assert_eq!(fg.output_target(), OutputTarget::Foreground);
+        let fg = DictationContext::capture(false, false, false, Delivery::Foreground);
+        assert_eq!(fg.delivery_target(), Delivery::Foreground);
+    }
+
+    // The reason the target is captured at all (#160): the lock can be released
+    // or re-pointed while the user is still speaking, and the dictation already
+    // under way must still go where it was started for. The context holds the
+    // window itself, so nothing about the live lock can reach back into it.
+    #[test]
+    fn a_lock_toggled_mid_dictation_cannot_redirect_the_context() {
+        let lock = PinnedTarget::default();
+        let started_with = win(42, 100, 200);
+        lock.lock_to(started_with);
+        let ctx = DictationContext::capture(false, false, false, Delivery::Pinned(started_with));
+
+        // Released mid-dictation.
+        lock.unlock();
+        assert_eq!(ctx.delivery_target(), Delivery::Pinned(started_with));
+
+        // Re-pointed at another window mid-dictation: that governs the NEXT
+        // dictation, not this one.
+        lock.lock_to(win(7, 500, 600));
+        assert_eq!(ctx.delivery_target(), Delivery::Pinned(started_with));
     }
 
     fn ctx(raw: bool) -> DictationContext {
-        DictationContext::capture(raw, false, false, OutputTarget::Foreground)
+        DictationContext::capture(raw, false, false, Delivery::Foreground)
     }
 
     // The hand-off is one-shot: once stop has taken the context, the pipeline

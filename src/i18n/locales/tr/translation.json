@@ -14,7 +14,8 @@
     "showOverlay": "Kaplamayı göster",
     "outputMode": "Çıktı modu",
     "formatted": "Biçimlendirilmiş",
-    "rawTranscript": "Ham transkript"
+    "rawTranscript": "Ham transkript",
+    "lockToWindow": "Pencereye kilitle"
   },
   "sidebar": {
     "navLabel": "Ayar bölümleri",
@@ -195,6 +196,10 @@
           "transcribe_raw": {
             "name": "Ham transkript kısayolu",
             "description": "Yalnızca o dikte için ham, küçük harfli ve noktalama işaretsiz metne dönüştüren özel bir kısayol tuşu."
+          },
+          "toggle_target_lock": {
+            "name": "Pencereye kilitleme kısayolu",
+            "description": "Kilidi açana kadar metninizi tek bir pencereye gönderen klavye kısayolu."
           }
         },
         "errors": {
@@ -802,6 +807,8 @@
     "modelLoadFailedUnknown": "bilinmeyen model",
     "pasteFailedTitle": "Metin yapıştırılamadı",
     "pasteFailed": "Metin etkin uygulamaya yapıştırılamadı.",
+    "targetLockLostTitle": "Kilitlenen pencere yok",
+    "targetLockLost": "Kilitlediğiniz pencere kapalı. AudioBud metni yapıştırmadı. Yeniden bir pencere kilitleyin.",
     "transcriptionErrorTitle": "Transkripsiyon başarısız oldu",
     "transcriptionErrorGeneric": "Kayıt yazıya dökülemedi. Tekrar deneyin veya farklı bir model seçin.",
     "transcriptionTimeoutTitle": "Transkripsiyon zaman aşımına uğradı",

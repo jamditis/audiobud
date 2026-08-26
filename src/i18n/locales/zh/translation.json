@@ -14,7 +14,8 @@
     "showOverlay": "显示悬浮窗",
     "outputMode": "输出模式",
     "formatted": "已格式化",
-    "rawTranscript": "原始转录"
+    "rawTranscript": "原始转录",
+    "lockToWindow": "锁定到窗口"
   },
   "sidebar": {
     "navLabel": "设置分区",
@@ -195,6 +196,10 @@
           "transcribe_raw": {
             "name": "原始转录快捷键",
             "description": "一个专用快捷键，仅对本次听写输出小写、无标点的原始文本。"
+          },
+          "toggle_target_lock": {
+            "name": "锁定到窗口快捷键",
+            "description": "在您解除锁定之前，将文本发送到一个窗口的键盘快捷键。"
           }
         },
         "errors": {
@@ -802,6 +807,8 @@
     "modelLoadFailedUnknown": "未知模型",
     "pasteFailedTitle": "粘贴文本失败",
     "pasteFailed": "无法将文本粘贴到当前活动的应用程序中。",
+    "targetLockLostTitle": "锁定的窗口已关闭",
+    "targetLockLost": "您锁定的窗口已关闭。AudioBud 未粘贴文本。请重新锁定一个窗口。",
     "transcriptionErrorTitle": "转录失败",
     "transcriptionErrorGeneric": "无法转录这段录音。请重试或选择其他模型。",
     "transcriptionTimeoutTitle": "转录超时",

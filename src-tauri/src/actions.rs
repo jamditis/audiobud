@@ -639,7 +639,7 @@ impl ShortcutAction for TranscribeAction {
             self.raw,
             self.post_process,
             settings.raw_output,
-            crate::output_target::backend::capture_output_target(app),
+            crate::output_target::backend::capture_delivery(app),
         );
 
         change_tray_icon(app, TrayIconState::Recording);
@@ -753,7 +753,7 @@ impl ShortcutAction for TranscribeAction {
                 self.raw,
                 self.post_process,
                 get_settings(app).raw_output,
-                crate::output_target::backend::capture_output_target(app),
+                crate::output_target::backend::capture_delivery(app),
             )
         });
         let post_process = context.post_process_requested();
@@ -1028,7 +1028,10 @@ struct ToggleTargetLockAction;
 #[cfg(target_os = "windows")]
 impl ShortcutAction for ToggleTargetLockAction {
     fn start(&self, app: &AppHandle, _binding_id: &str, _shortcut_str: &str) {
-        crate::output_target::backend::toggle_target_lock(app);
+        crate::output_target::backend::toggle_target_lock(
+            app,
+            crate::output_target::CaptureSource::Shortcut,
+        );
     }
 
     fn stop(&self, _app: &AppHandle, _binding_id: &str, _shortcut_str: &str) {
