@@ -171,6 +171,18 @@ async fn install_available_update(
     Ok(true)
 }
 
+/// Drain the delivery worker (#161) before exiting the process, so no exit
+/// path -- tray quit, an update-restart, or any other -- can truncate a
+/// transcript that is mid-delivery. `DeliveryWorker::shutdown` is bounded and
+/// idempotent, so calling this from any thread, including more than once
+/// across a process's lifetime, is safe (#161 review round 2, finding 2).
+fn exit_after_draining_delivery(app: &AppHandle, code: i32) {
+    if let Some(worker) = app.try_state::<delivery_worker::DeliveryWorker>() {
+        worker.shutdown();
+    }
+    app.exit(code);
+}
+
 fn spawn_update_install(
     app: AppHandle,
     exit_when_current: bool,
@@ -181,13 +193,13 @@ fn spawn_update_install(
             Ok(applied) => {
                 log::info!("Signed updater finished; update applied: {applied}");
                 if exit_when_current {
-                    app.exit(0);
+                    exit_after_draining_delivery(&app, 0);
                 }
             }
             Err(error) => {
                 log::error!("{error}");
                 if exit_when_current {
-                    app.exit(1);
+                    exit_after_draining_delivery(&app, 1);
                 }
             }
         }
@@ -413,13 +425,7 @@ fn initialize_core_logic(app_handle: &AppHandle) {
                 cancel_current_operation(app);
             }
             "quit" => {
-                // Drain whatever delivery is already running or queued before
-                // the process exits, so quit cannot truncate a paste that is
-                // mid-flight (#161 review, finding 1).
-                if let Some(worker) = app.try_state::<delivery_worker::DeliveryWorker>() {
-                    worker.shutdown();
-                }
-                app.exit(0);
+                exit_after_draining_delivery(app, 0);
             }
             // The stale target-lock item (#266 review, finding 5): distinct from
             // "toggle:target_lock" so a click here can never be read as a fresh

@@ -29,6 +29,18 @@ use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::mpsc::{self, Sender};
 use std::sync::Mutex;
 use std::thread::{self, JoinHandle};
+use std::time::{Duration, Instant};
+
+/// How long [`DeliveryWorker::shutdown`] waits for the worker thread before
+/// giving up on joining it. A real paste is short (milliseconds to low
+/// hundreds), so this is generous for the normal case; it is bounded at all
+/// so shutdown can never deadlock against work the worker thread itself needs
+/// the caller's thread to finish (#161 review round 2, finding 1).
+const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(3);
+
+/// How often [`DeliveryWorker::shutdown`] polls [`JoinHandle::is_finished`]
+/// while waiting out [`SHUTDOWN_TIMEOUT`].
+const SHUTDOWN_POLL_INTERVAL: Duration = Duration::from_millis(20);
 
 /// One unit of delivery work: the paste, plus whatever hand-off follows it.
 pub type DeliveryJob = Box<dyn FnOnce() + Send + 'static>;
@@ -114,19 +126,55 @@ impl DeliveryWorker {
     /// Drain and stop the delivery thread before the process exits (quit).
     ///
     /// Closing the channel lets the worker's `for job in receiver` loop finish
-    /// whatever is already running or queued and then end on its own; joining
-    /// blocks until it does, so a transcript that is mid-paste when the user
-    /// quits is still delivered instead of being cut off by `app.exit` (#161
-    /// review, finding 1). Safe to call more than once and safe when no
-    /// thread was ever spawned.
+    /// whatever is already running or queued and then end on its own, so a
+    /// transcript that is mid-paste when the user quits is still delivered
+    /// instead of being cut off by `app.exit` (#161 review, finding 1).
+    ///
+    /// The wait for that is bounded and non-blocking (polled via
+    /// [`JoinHandle::is_finished`]), never a plain `join()`, on purpose: this
+    /// runs on the tray callback, which is the platform event-loop thread.
+    /// A delivery that loses its target window mid-paste calls back into
+    /// [`crate::tray::update_tray_menu`] to clear the stale lock indicator
+    /// (`output_target::backend::announce_lock_lost`), and native menu work
+    /// needs that same event-loop thread. A plain `join()` here would then
+    /// wait on the worker thread while the worker thread waits on this one --
+    /// a deadlock that would hang Quit outright (#161 review round 2, finding
+    /// 1). Giving up after [`SHUTDOWN_TIMEOUT`] and letting the caller exit
+    /// anyway is safe: the process is about to go away either way, and a
+    /// stuck delivery blocking real work indefinitely is worse than losing
+    /// the last one on the way out.
+    ///
+    /// Safe to call more than once and safe when no thread was ever spawned.
     pub fn shutdown(&self) {
         // Drop the sender so the worker's receiver iterator ends once it has
         // drained whatever was already sent.
         self.jobs.lock().unwrap().take();
 
-        if let Some(handle) = self.handle.lock().unwrap().take() {
-            if handle.join().is_err() {
-                error!("The delivery thread panicked while shutting down");
+        let deadline = Instant::now() + SHUTDOWN_TIMEOUT;
+        loop {
+            let mut handle_slot = self.handle.lock().unwrap();
+            match handle_slot.as_ref() {
+                None => return,
+                Some(handle) if handle.is_finished() => {
+                    // `is_finished()` is true, so this join cannot block.
+                    let handle = handle_slot.take().unwrap();
+                    drop(handle_slot);
+                    if handle.join().is_err() {
+                        error!("The delivery thread panicked while shutting down");
+                    }
+                    return;
+                }
+                Some(_) => {
+                    drop(handle_slot);
+                    if Instant::now() >= deadline {
+                        warn!(
+                            "Delivery thread did not finish within {:?}; exiting without waiting further",
+                            SHUTDOWN_TIMEOUT
+                        );
+                        return;
+                    }
+                    thread::sleep(SHUTDOWN_POLL_INTERVAL);
+                }
             }
         }
     }
@@ -134,7 +182,7 @@ impl DeliveryWorker {
 
 #[cfg(test)]
 mod tests {
-    use super::DeliveryWorker;
+    use super::{DeliveryWorker, SHUTDOWN_TIMEOUT};
     use crate::delivery_queue::{DeliveryQueue, EnqueueResult};
     use std::sync::mpsc;
     use std::sync::{Arc, Mutex};
@@ -258,6 +306,33 @@ mod tests {
         worker.run(Box::new(|| {}));
         worker.shutdown();
         worker.shutdown();
+    }
+
+    #[test]
+    fn shutdown_gives_up_after_the_timeout_instead_of_blocking_forever() {
+        // The deadlock this guards against (#161 review round 2, finding 1):
+        // shutdown runs on the same thread a stuck delivery might be waiting
+        // on. A plain `join()` would hang Quit outright; the bounded wait
+        // must return control to the caller regardless.
+        let worker = DeliveryWorker::new();
+        let (_keep_stuck, stay_stuck) = mpsc::channel::<()>();
+
+        worker.run(Box::new(move || {
+            // Never finishes on its own; only dropping `_keep_stuck` (which
+            // outlives this test) would end it, standing in for a delivery
+            // that never returns.
+            let _ = stay_stuck.recv();
+        }));
+
+        let started = Instant::now();
+        worker.shutdown();
+        let elapsed = started.elapsed();
+
+        assert!(
+            elapsed < SHUTDOWN_TIMEOUT + Duration::from_secs(1),
+            "shutdown took {:?}, longer than the bounded wait allows",
+            elapsed
+        );
     }
 
     #[test]

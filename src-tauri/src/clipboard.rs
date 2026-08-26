@@ -807,14 +807,20 @@ fn deliver_to_target(
 
     let paste_method = settings.paste_method;
 
-    // Get the managed Enigo instance
+    // Get the managed Enigo instance. A panic while an earlier delivery held
+    // this lock -- caught by the delivery worker so it cannot take the whole
+    // thread down (#161) -- would otherwise poison the mutex and fail every
+    // later delivery with "Failed to lock Enigo" forever (#161 review round
+    // 2, finding 3). The lock only protects the `Enigo` handle itself, not
+    // any OS-level key state, so recovering it and reusing the same instance
+    // is sound: the alternative, failing here, is strictly worse.
     let enigo_state = app_handle
         .try_state::<EnigoState>()
         .ok_or("Enigo state not initialized")?;
     let mut enigo = enigo_state
         .0
         .lock()
-        .map_err(|e| format!("Failed to lock Enigo: {}", e))?;
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
 
     let hold = FocusHold::new(app_handle, delivery);
 
@@ -986,6 +992,29 @@ mod tests {
     fn auto_submit_requires_setting_enabled() {
         assert!(!should_send_auto_submit(false, PasteMethod::CtrlV));
         assert!(!should_send_auto_submit(false, PasteMethod::Direct));
+    }
+
+    #[test]
+    fn a_poisoned_lock_recovers_instead_of_failing_every_later_delivery() {
+        // Regression for #161 review round 2, finding 3: a panic while an
+        // earlier delivery held the Enigo lock -- caught by the delivery
+        // worker so it cannot take the thread down (#161) -- must not leave
+        // the mutex permanently poisoned. `deliver_to_target` recovers it the
+        // same way this test does, via `unwrap_or_else(|p| p.into_inner())`,
+        // rather than the old `.map_err(...)?` that turned a poisoned lock
+        // into a delivery failure forever.
+        let lock = std::sync::Mutex::new(0u32);
+        let poison_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _guard = lock.lock().unwrap();
+            panic!("simulated panic while the lock is held");
+        }));
+        assert!(poison_result.is_err());
+        assert!(lock.is_poisoned());
+
+        // The recovery idiom `deliver_to_target` uses: still yields the inner
+        // value instead of failing.
+        let recovered = lock.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        assert_eq!(*recovered, 0);
     }
 
     #[test]
