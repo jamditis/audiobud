@@ -115,6 +115,31 @@ export function resolveTargetName(app?: string, title?: string): string {
 }
 
 /**
+ * Format a window name for the delivered-transcript confirmation (#165 review
+ * round 1, finding 4). `resolveTargetName` above is built for the lock
+ * indicator badge -- a narrow surface that only has room for one identifier,
+ * so it picks the stabler one (the app) and drops the title. A delivery
+ * confirmation exists specifically to say *which* window received the text,
+ * so when a process has several open windows (two Chrome windows, two Word
+ * documents) the app name alone is ambiguous; this combines both when both
+ * are known, and falls back to `resolveTargetName`'s single-name precedence
+ * when only one is.
+ */
+export function formatDeliveredWindowName(
+  app?: string,
+  title?: string,
+): string {
+  const clean = (value?: string): string =>
+    (value ?? "").replace(/\s+/g, " ").trim();
+  const appName = clean(app);
+  const windowTitle = clean(title);
+  if (appName.length > 0 && windowTitle.length > 0 && appName !== windowTitle) {
+    return `${windowTitle} — ${appName}`;
+  }
+  return resolveTargetName(app, title);
+}
+
+/**
  * Truncate a display name to `max` Unicode code points, appending an ASCII
  * marker. Counting code points, not UTF-16 units, keeps an astral character
  * from being split into a broken half. A name already within the ceiling is
@@ -132,6 +157,32 @@ export function truncateName(
   }
   const keep = max - TRUNCATION_MARKER.length;
   return points.slice(0, keep).join("") + TRUNCATION_MARKER;
+}
+
+/**
+ * Truncate a name for a compact display by keeping both ends and eliding the
+ * middle, rather than cutting off the tail the way `truncateName` does (#279
+ * review round 4). `truncateName` is right for a lock indicator badge, where
+ * names rarely share a prefix; it is wrong for `formatDeliveredWindowName`'s
+ * "title — app" combination, where two windows of the same app commonly do
+ * share one ("Google Docs - A" vs "Google Docs - B") -- a head-only
+ * truncation collapses both to the same compact string and defeats the
+ * point of a confirmation that is supposed to say which window received the
+ * text. Keeping a slice of both ends preserves whatever part actually
+ * differs, wherever it falls.
+ */
+export function truncateMiddle(
+  name: string,
+  headLength: number = 6,
+  tailLength: number = 5,
+): string {
+  const points = Array.from(name);
+  const max = headLength + tailLength + TRUNCATION_MARKER.length;
+  if (points.length <= max) return name;
+  const head = points.slice(0, headLength).join("");
+  const tail =
+    tailLength > 0 ? points.slice(points.length - tailLength).join("") : "";
+  return `${head}${TRUNCATION_MARKER}${tail}`;
 }
 
 /**

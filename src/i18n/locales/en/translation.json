@@ -834,7 +834,11 @@
     "windowPickLostTitle": "Picked window is gone",
     "windowPickLost": "The window you picked is closed. AudioBud did not paste the text. Pick a window again.",
     "pickerOpenTitle": "Picker is open",
-    "pickerOpen": "AudioBud did not paste this text because the window picker was open. Pick a window, then dictate again."
+    "pickerOpen": "AudioBud did not paste this text because the window picker was open. Pick a window, then dictate again.",
+    "transcriptDeliveredTitle": "Delivered",
+    "transcriptDelivered": "The text was pasted into {{window}}.",
+    "transcriptDeliveredUnknown": "The text was pasted into the locked window.",
+    "transcriptDeliveredUnknownPick": "The text was pasted into the selected window."
   },
   "appLanguage": {
     "title": "Application language",
@@ -851,7 +855,11 @@
     "lockedToHint": "Dictation is locked to {{target}}. Click to unlock.",
     "lockedToUnknown": "a locked window",
     "lockStale": "Lock lost",
-    "lockStaleHint": "The locked window closed. Click to dismiss."
+    "lockStaleHint": "The locked window closed. Click to dismiss.",
+    "delivered": "Sent: {{target}}",
+    "deliveredHint": "The text was pasted into {{target}}.",
+    "deliveredUnknown": "Sent",
+    "deliveredUnknownHint": "The text was pasted."
   },
   "windowPicker": {
     "title": "Send to window",

@@ -834,7 +834,11 @@
     "windowPickLostTitle": "Det valda fönstret är borta",
     "windowPickLost": "Fönstret du valde är stängt. AudioBud klistrade inte in texten. Välj ett fönster igen.",
     "pickerOpenTitle": "Väljaren är öppen",
-    "pickerOpen": "AudioBud klistrade inte in texten eftersom fönsterväljaren var öppen. Välj ett fönster och diktera igen."
+    "pickerOpen": "AudioBud klistrade inte in texten eftersom fönsterväljaren var öppen. Välj ett fönster och diktera igen.",
+    "transcriptDeliveredTitle": "Levererat",
+    "transcriptDelivered": "Texten klistrades in i {{window}}.",
+    "transcriptDeliveredUnknown": "Texten klistrades in i det låsta fönstret.",
+    "transcriptDeliveredUnknownPick": "Texten klistrades in i det valda fönstret."
   },
   "appLanguage": {
     "title": "Applikationsspråk",
@@ -851,7 +855,11 @@
     "lockedToHint": "Dikteringen är låst till {{target}}. Klicka för att låsa upp.",
     "lockedToUnknown": "ett låst fönster",
     "lockStale": "Låset förlorat",
-    "lockStaleHint": "Det låsta fönstret stängdes. Klicka för att avfärda."
+    "lockStaleHint": "Det låsta fönstret stängdes. Klicka för att avfärda.",
+    "delivered": "Skickat: {{target}}",
+    "deliveredHint": "Texten klistrades in i {{target}}.",
+    "deliveredUnknown": "Skickat",
+    "deliveredUnknownHint": "Texten klistrades in."
   },
   "windowPicker": {
     "title": "Skicka till fönster",

@@ -745,6 +745,7 @@ fn specta_builder() -> Builder<tauri::Wry> {
         .events(collect_events![
             managers::history::HistoryUpdatePayload,
             output_target::OutputTargetLockEvent,
+            output_target::backend::TranscriptDeliveredEvent,
         ])
 }
 

@@ -842,7 +842,11 @@
     "windowPickLostTitle": "النافذة المختارة لم تعد موجودة",
     "windowPickLost": "النافذة التي اخترتها مغلقة. لم يلصق AudioBud النص. اختر نافذة مرة أخرى.",
     "pickerOpenTitle": "أداة اختيار النوافذ مفتوحة",
-    "pickerOpen": "لم يلصق AudioBud هذا النص لأن أداة اختيار النوافذ كانت مفتوحة. اختر نافذة ثم أملِ مرة أخرى."
+    "pickerOpen": "لم يلصق AudioBud هذا النص لأن أداة اختيار النوافذ كانت مفتوحة. اختر نافذة ثم أملِ مرة أخرى.",
+    "transcriptDeliveredTitle": "تم التسليم",
+    "transcriptDelivered": "تم لصق النص في {{window}}.",
+    "transcriptDeliveredUnknown": "تم لصق النص في النافذة المقفلة.",
+    "transcriptDeliveredUnknownPick": "تم لصق النص في النافذة المحددة."
   },
   "appLanguage": {
     "title": "لغة التطبيق",
@@ -859,7 +863,11 @@
     "lockedToHint": "الإملاء مقفل على {{target}}. انقر لإلغاء القفل.",
     "lockedToUnknown": "نافذة مقفلة",
     "lockStale": "فُقد القفل",
-    "lockStaleHint": "أُغلقت النافذة المقفلة. انقر للتجاهل."
+    "lockStaleHint": "أُغلقت النافذة المقفلة. انقر للتجاهل.",
+    "delivered": "تم الإرسال: {{target}}",
+    "deliveredHint": "تم لصق النص في {{target}}.",
+    "deliveredUnknown": "تم الإرسال",
+    "deliveredUnknownHint": "تم لصق النص."
   },
   "windowPicker": {
     "title": "الإرسال إلى نافذة",
