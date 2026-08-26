@@ -816,6 +816,8 @@
     "pasteFailed": "לא ניתן היה להדביק את הטקסט ביישום הפעיל.",
     "targetLockLostTitle": "החלון הנעול נסגר",
     "targetLockLost": "החלון שנעלת נסגר. AudioBud לא הדביק את הטקסט. נעל חלון מחדש.",
+    "targetWindowGoneTitle": "חלון ההכתבה נסגר",
+    "targetWindowGone": "החלון שאליו הכתבת נסגר לפני ש-AudioBud הספיק להדביק את הטקסט. הגדרת ההצמדה הנוכחית שלך לא השתנתה.",
     "transcriptionErrorTitle": "התמלול נכשל",
     "transcriptionErrorGeneric": "לא ניתן היה לתמלל את ההקלטה. נסו שוב או בחרו מודל אחר.",
     "transcriptionTimeoutTitle": "התמלול חרג מהזמן",

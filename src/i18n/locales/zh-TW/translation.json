@@ -814,6 +814,8 @@
     "pasteFailed": "無法將文字貼上至目前作用中的應用程式。",
     "targetLockLostTitle": "鎖定的視窗已關閉",
     "targetLockLost": "您鎖定的視窗已關閉。AudioBud 未貼上文字。請重新鎖定一個視窗。",
+    "targetWindowGoneTitle": "聽寫目標視窗已關閉",
+    "targetWindowGone": "你聽寫的視窗在 AudioBud 貼上文字前已關閉。目前的鎖定設定沒有變更。",
     "transcriptionErrorTitle": "轉錄失敗",
     "transcriptionErrorGeneric": "無法轉錄這段錄音。請再試一次或選擇其他模型。",
     "transcriptionTimeoutTitle": "轉錄逾時",

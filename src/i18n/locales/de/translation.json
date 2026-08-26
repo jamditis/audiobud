@@ -814,6 +814,8 @@
     "pasteFailed": "Der Text konnte nicht in die aktive Anwendung eingefügt werden.",
     "targetLockLostTitle": "Fixiertes Fenster ist weg",
     "targetLockLost": "Das von Ihnen fixierte Fenster ist geschlossen. AudioBud hat den Text nicht eingefügt. Fixieren Sie erneut ein Fenster.",
+    "targetWindowGoneTitle": "Diktatfenster wurde geschlossen",
+    "targetWindowGone": "Das Fenster, in das Sie diktiert haben, wurde geschlossen, bevor AudioBud den Text einfügen konnte. Ihre aktuelle Fixierung bleibt unverändert.",
     "transcriptionErrorTitle": "Transkription fehlgeschlagen",
     "transcriptionErrorGeneric": "Die Aufnahme konnte nicht transkribiert werden. Versuche es erneut oder wähle ein anderes Modell.",
     "transcriptionTimeoutTitle": "Zeitüberschreitung bei der Transkription",

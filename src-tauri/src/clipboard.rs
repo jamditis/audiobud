@@ -1,6 +1,7 @@
 #[cfg(windows)]
 use crate::clipboard_snapshot::ClipboardBackend;
 use crate::clipboard_snapshot::{self, ArboardBackend, ClipboardContent, ClipboardHistory};
+use crate::dictation_context::DictationContext;
 use crate::input::{self, EnigoState};
 use crate::output_target::backend::{
     self as target_backend, Borrowed, Delivery, FocusHold, FocusLost,
@@ -877,7 +878,15 @@ fn delivery_outcome(outcome: Result<(), DeliveryError>) -> Result<bool, String> 
     }
 }
 
-pub fn paste(text: String, app_handle: AppHandle) -> Result<(), String> {
+/// Deliver one finished transcript.
+///
+/// `context` is the intent captured when that dictation started recording
+/// (#160): it decides where the text goes, so a target lock toggled while the
+/// user was speaking cannot redirect a paste that is already in flight. The
+/// remaining paste settings -- method, delay, auto-submit, clipboard handling --
+/// are still read here, because they describe how the app types rather than what
+/// this dictation asked for.
+pub fn paste(text: String, app_handle: AppHandle, context: DictationContext) -> Result<(), String> {
     let settings = get_settings(&app_handle);
     let paste_method = settings.paste_method;
     let paste_delay_ms = settings.paste_delay_ms;
@@ -894,10 +903,12 @@ pub fn paste(text: String, app_handle: AppHandle) -> Result<(), String> {
         paste_method, paste_delay_ms
     );
 
-    // Where this transcript goes: the foreground window, or the window the user
-    // locked (#120). A lock whose window has closed delivers to no window at
-    // all, rather than to whatever inherited focus.
-    let delivery = target_backend::resolve_paste_target(&app_handle);
+    // Where this transcript goes: the target this dictation captured when its
+    // recording started (#160) -- the foreground window, or the window that was
+    // locked then. A window that has since closed delivers to no window at all,
+    // rather than to whatever inherited focus (#120).
+    let delivery =
+        target_backend::resolve_captured_delivery(&app_handle, context.delivery_target());
     let delivered = deliver_to_target(&text, &app_handle, &settings, delivery)?;
 
     // The clipboard copy is a setting about the clipboard, not about the window

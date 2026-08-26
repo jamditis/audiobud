@@ -6,7 +6,8 @@ use crate::audio_toolkit::{
     apply_spoken_punctuation, format_numbers, is_microphone_access_denied,
     is_no_input_device_error, strip_to_raw_text,
 };
-use crate::delivery_queue::{DeliveryQueue, EnqueueResult};
+use crate::delivery_queue::{DeliveryQueue, EnqueueResult, TranscriptDelivery};
+use crate::dictation_context::{ActiveDictations, DictationContext};
 use crate::managers::audio::AudioRecordingManager;
 use crate::managers::engine_limits::{MODEL_AUTO_LOAD_FAILED_ERROR, WEDGED_ENGINE_ERROR};
 use crate::managers::history::HistoryManager;
@@ -68,10 +69,14 @@ impl Drop for FinishGuard {
     }
 }
 
-/// Enqueue a finished transcript and return it only when the bounded queue
-/// cannot accept it. Callers must persist that returned text before dropping
-/// their last copy.
-fn enqueue_transcript_delivery(app: AppHandle, text: String) -> Option<String> {
+/// Enqueue a finished transcript, under the intent its dictation was started
+/// with, and return the text only when the bounded queue cannot accept it.
+/// Callers must persist that returned text before dropping their last copy.
+fn enqueue_transcript_delivery(
+    app: AppHandle,
+    text: String,
+    context: DictationContext,
+) -> Option<String> {
     let Some(queue) = app.try_state::<DeliveryQueue>() else {
         error!("Delivery queue is not initialized");
         let _ = app.emit("paste-error", ());
@@ -80,28 +85,30 @@ fn enqueue_transcript_delivery(app: AppHandle, text: String) -> Option<String> {
         return Some(text);
     };
 
-    match queue.enqueue(text) {
-        EnqueueResult::Start(text) => {
-            schedule_transcript_delivery(app, text);
+    match queue.enqueue(TranscriptDelivery { text, context }) {
+        EnqueueResult::Start(delivery) => {
+            schedule_transcript_delivery(app, delivery);
             None
         }
         EnqueueResult::Queued => {
             debug!("Transcript queued for delivery");
             None
         }
-        EnqueueResult::Full(text) => {
+        EnqueueResult::Full(delivery) => {
             error!("Delivery queue is full; transcript was not pasted");
             let _ = app.emit("paste-error", ());
-            Some(text)
+            Some(delivery.text)
         }
     }
 }
 
-fn schedule_transcript_delivery(app: AppHandle, text: String) {
+fn schedule_transcript_delivery(app: AppHandle, delivery: TranscriptDelivery) {
     let app_for_delivery = app.clone();
     let scheduled = app.run_on_main_thread(move || {
         let paste_time = Instant::now();
-        match utils::paste(text, app_for_delivery.clone()) {
+        // The queued context, not a fresh read: by the time a queued transcript
+        // is pasted the user may already be dictating somewhere else (#160).
+        match utils::paste(delivery.text, app_for_delivery.clone(), delivery.context) {
             Ok(()) => debug!("Text pasted successfully in {:?}", paste_time.elapsed()),
             Err(error) => {
                 error!("Failed to paste transcription: {}", error);
@@ -123,8 +130,8 @@ fn finish_transcript_delivery(app: AppHandle) {
         .try_state::<DeliveryQueue>()
         .and_then(|queue| queue.finish_and_take_next());
 
-    if let Some(text) = next {
-        schedule_transcript_delivery(app, text);
+    if let Some(delivery) = next {
+        schedule_transcript_delivery(app, delivery);
     } else {
         // Put drain and hotkey events on the same serialized command stream.
         // Whichever arrives first is fully handled before the other can update
@@ -150,6 +157,50 @@ pub(crate) fn clear_transcript_ui_if_delivery_idle(app: &AppHandle) {
     if delivery_is_idle {
         utils::hide_recording_overlay(app);
         change_tray_icon(app, TrayIconState::Idle);
+    }
+}
+
+/// Hand a started dictation's context to the `stop` that will finish it.
+fn park_dictation_context(app: &AppHandle, binding_id: &str, context: DictationContext) {
+    match app.try_state::<ActiveDictations>() {
+        Some(active) => active.begin(binding_id, context),
+        // Recoverable: `stop` captures the intent itself when nothing was
+        // parked, which costs this one dictation its mid-flight immunity but
+        // still delivers it.
+        None => warn!("Active dictation registry is not initialized"),
+    }
+}
+
+/// Drop a context whose recording never started.
+fn discard_dictation_context(app: &AppHandle, binding_id: &str) {
+    if let Some(active) = app.try_state::<ActiveDictations>() {
+        active.discard(binding_id);
+    }
+}
+
+/// Take back the context this binding's recording was started with.
+///
+/// `capture_now` covers the case where no start was recorded for the binding --
+/// the registry was missing, or the recording was cancelled and this is the key
+/// release arriving afterwards. The dictation is still completed, from the state
+/// as it stands now, rather than dropped.
+fn take_dictation_context(
+    app: &AppHandle,
+    binding_id: &str,
+    capture_now: impl FnOnce() -> DictationContext,
+) -> DictationContext {
+    match app
+        .try_state::<ActiveDictations>()
+        .and_then(|active| active.take(binding_id))
+    {
+        Some(context) => context,
+        None => {
+            debug!(
+                "No dictation context is parked for binding '{}'; capturing it at stop instead",
+                binding_id
+            );
+            capture_now()
+        }
     }
 }
 
@@ -467,18 +518,6 @@ pub(crate) struct ProcessedTranscription {
     pub post_process_prompt: Option<String>,
 }
 
-/// Decides whether a dictation is emitted as raw text. Per-dictation requests take precedence over
-/// the persisted `raw_output` toggle: an explicit raw request always forces raw, while an explicit
-/// post-process request suppresses the global toggle so a one-off post-process override still works
-/// even while raw mode is enabled.
-fn effective_raw_output(
-    raw_requested: bool,
-    post_process_requested: bool,
-    raw_output_setting: bool,
-) -> bool {
-    raw_requested || (raw_output_setting && !post_process_requested)
-}
-
 /// Decides whether raw-text formatting should force English casing for the standalone pronoun "I".
 /// This is `true` only when the output is known to be English: translate-to-English makes the engine
 /// emit English regardless of source language, and an explicitly selected English dictation language
@@ -587,17 +626,33 @@ impl ShortcutAction for TranscribeAction {
 
         let binding_id = binding_id.to_string();
 
-        // Read settings once: it drives both the overlay's RAW badge and the microphone
-        // feedback timing below. Resolve the raw decision the same way the transcription path
-        // does so the badge always matches what will actually be emitted (issue #24).
+        // This is the one point where a dictation's intent is decided (#160):
+        // what the user asked for with this shortcut, resolved against the
+        // settings and the output target as they stand right now. Every later
+        // stage -- the overlay badge, transcription, history, the paste -- reads
+        // this context instead of consulting the live state again, so a toggle
+        // flipped while the user is still speaking governs the next dictation
+        // rather than this one.
         let settings = get_settings(app);
         let is_always_on = settings.always_on_microphone;
-        let effective_raw = effective_raw_output(self.raw, self.post_process, settings.raw_output);
+        let context = DictationContext::capture(
+            self.raw,
+            self.post_process,
+            settings.raw_output,
+            crate::output_target::backend::capture_delivery(app),
+        );
 
         change_tray_icon(app, TrayIconState::Recording);
-        show_recording_overlay(app, effective_raw);
+        // The RAW badge shows the resolved decision, so it always matches what
+        // will actually be emitted (issue #24).
+        show_recording_overlay(app, context.effective_raw());
 
         debug!("Microphone mode - always_on: {}", is_always_on);
+
+        // Park the context for `stop`, which runs on a later call stack. It is
+        // stored before recording begins so the hand-off cannot lose a race with
+        // a very short press.
+        park_dictation_context(app, &binding_id, context);
 
         let mut recording_error: Option<String> = None;
         if is_always_on {
@@ -648,7 +703,9 @@ impl ShortcutAction for TranscribeAction {
             shortcut::register_cancel_shortcut(app);
         } else {
             // Starting failed (for example due to blocked microphone permissions).
-            // Revert UI state so we don't stay stuck in the recording overlay.
+            // Revert UI state so we don't stay stuck in the recording overlay,
+            // and drop the context: this dictation never happened.
+            discard_dictation_context(app, &binding_id);
             utils::hide_recording_overlay(app);
             change_tray_icon(app, TrayIconState::Idle);
             if let Some(err) = recording_error {
@@ -687,14 +744,23 @@ impl ShortcutAction for TranscribeAction {
         let tm = Arc::clone(&app.state::<Arc<TranscriptionManager>>());
         let hm = Arc::clone(&app.state::<Arc<HistoryManager>>());
 
-        let post_process = self.post_process;
-        let raw = self.raw;
-        // Resolve the raw decision up front so the overlay's RAW badge matches what will be
-        // emitted; the async task below re-resolves it at completion for the persisted record.
-        let overlay_raw = effective_raw_output(raw, post_process, get_settings(app).raw_output);
+        // The intent this dictation was started with. Everything below -- the
+        // overlay badge, the output processing, the history record, the paste --
+        // reads it, so they cannot disagree with each other or with what the
+        // user asked for when they began speaking (#160).
+        let context = take_dictation_context(app, binding_id, || {
+            DictationContext::capture(
+                self.raw,
+                self.post_process,
+                get_settings(app).raw_output,
+                crate::output_target::backend::capture_delivery(app),
+            )
+        });
+        let post_process = context.post_process_requested();
+        let effective_raw = context.effective_raw();
 
         change_tray_icon(app, TrayIconState::Transcribing);
-        show_transcribing_overlay(app, overlay_raw);
+        show_transcribing_overlay(app, effective_raw);
 
         // Unmute before playing audio feedback so the stop sound is audible
         rm.remove_mute();
@@ -791,11 +857,6 @@ impl ShortcutAction for TranscribeAction {
                         }
                     };
 
-                    // Resolve the raw decision once so the same value drives output and is persisted
-                    // with every history entry (including failed ones) for faithful retries.
-                    let effective_raw =
-                        effective_raw_output(raw, post_process, get_settings(&ah).raw_output);
-
                     match transcription_result {
                         Ok(transcription) => {
                             debug!(
@@ -836,8 +897,11 @@ impl ShortcutAction for TranscribeAction {
                                 change_tray_icon(&ah, TrayIconState::Idle);
                             } else {
                                 let final_text = processed.final_text;
-                                let overflow =
-                                    enqueue_transcript_delivery(ah.clone(), final_text.clone());
+                                let overflow = enqueue_transcript_delivery(
+                                    ah.clone(),
+                                    final_text.clone(),
+                                    context,
+                                );
 
                                 if let Some(recovery_text) = overflow {
                                     // Queue saturation must not destroy the only copy of a
@@ -975,23 +1039,6 @@ impl ShortcutAction for ToggleTargetLockAction {
     }
 }
 
-// One-shot window picker (#124). Pressing opens the picker; choosing a window
-// routes the NEXT transcript there and nothing after it. Windows-only for now
-// (#119), like the target lock, so the binding is registered only there.
-#[cfg(target_os = "windows")]
-struct PickOutputWindowAction;
-
-#[cfg(target_os = "windows")]
-impl ShortcutAction for PickOutputWindowAction {
-    fn start(&self, app: &AppHandle, _binding_id: &str, _shortcut_str: &str) {
-        crate::window_picker::backend::open_picker(app);
-    }
-
-    fn stop(&self, _app: &AppHandle, _binding_id: &str, _shortcut_str: &str) {
-        // The picker opens on press; the release does nothing.
-    }
-}
-
 // Test Action
 struct TestAction;
 
@@ -1048,11 +1095,6 @@ pub static ACTION_MAP: Lazy<HashMap<String, Arc<dyn ShortcutAction>>> = Lazy::ne
         "toggle_target_lock".to_string(),
         Arc::new(ToggleTargetLockAction) as Arc<dyn ShortcutAction>,
     );
-    #[cfg(target_os = "windows")]
-    map.insert(
-        "pick_output_window".to_string(),
-        Arc::new(PickOutputWindowAction) as Arc<dyn ShortcutAction>,
-    );
     map.insert(
         "test".to_string(),
         Arc::new(TestAction) as Arc<dyn ShortcutAction>,
@@ -1062,9 +1104,7 @@ pub static ACTION_MAP: Lazy<HashMap<String, Arc<dyn ShortcutAction>>> = Lazy::ne
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        effective_raw_output, force_english_i_casing, transcription_error_already_notified,
-    };
+    use super::{force_english_i_casing, transcription_error_already_notified};
     use crate::managers::engine_limits::{
         MODEL_AUTO_LOAD_FAILED_ERROR, MODEL_NOT_LOADED_ERROR, WEDGED_ENGINE_ERROR,
     };
@@ -1083,18 +1123,6 @@ mod tests {
         assert!(!transcription_error_already_notified(
             "parakeet_input_too_long:391"
         ));
-    }
-
-    #[test]
-    fn effective_raw_output_per_dictation_overrides_global() {
-        // An explicit per-dictation raw request always forces raw.
-        assert!(effective_raw_output(true, false, false));
-        // An explicit per-dictation post-process request suppresses the global raw toggle.
-        assert!(!effective_raw_output(false, true, true));
-        // With no per-dictation request, the global raw toggle still applies.
-        assert!(effective_raw_output(false, false, true));
-        // Nothing requested and the toggle off -> not raw.
-        assert!(!effective_raw_output(false, false, false));
     }
 
     #[test]

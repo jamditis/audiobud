@@ -498,9 +498,9 @@ fn initialize_core_logic(app_handle: &AppHandle) {
     // recording/transcribing menu instead of forcing Idle.
     app_handle.manage(tray::CurrentTrayState::new());
 
-    // Output target lock for #120. Starts unlocked (foreground delivery); the
-    // paste path reads this at send time. The tray/shortcut toggle and the
-    // Windows focus-borrow that consume it are the next child of epic #119.
+    // Output target lock for #120. Starts unlocked (foreground delivery). Each
+    // dictation reads it once, at recording start, into its DictationContext;
+    // the paste then delivers to that captured target (#160).
     app_handle.manage(output_target::PinnedTarget::default());
     // One-shot window picker state (#124): the rows currently on offer, the
     // pick waiting to route a single transcript, and the remembered pick the
@@ -508,7 +508,10 @@ fn initialize_core_logic(app_handle: &AppHandle) {
     app_handle.manage(window_picker::PickerSession::default());
     app_handle.manage(window_picker::PendingPick::default());
     app_handle.manage(window_picker::LastPick::default());
-    app_handle.manage(delivery_queue::DeliveryQueue::default());
+    // Hand-off of in-flight dictation contexts from recording start to stop.
+    app_handle.manage(dictation_context::ActiveDictations::default());
+    let delivery_queue: delivery_queue::DeliveryQueue = delivery_queue::DeliveryQueue::default();
+    app_handle.manage(delivery_queue);
 
     // Initialize tray menu with idle state
     utils::update_tray_menu(app_handle, &utils::TrayIconState::Idle, None);

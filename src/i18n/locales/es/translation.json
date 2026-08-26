@@ -814,6 +814,8 @@
     "pasteFailed": "No se pudo pegar el texto en la aplicación activa.",
     "targetLockLostTitle": "La ventana fijada ya no existe",
     "targetLockLost": "La ventana que fijaste está cerrada. AudioBud no pegó el texto. Fija una ventana de nuevo.",
+    "targetWindowGoneTitle": "La ventana de dictado se cerró",
+    "targetWindowGone": "La ventana en la que dictaste se cerró antes de que AudioBud pudiera pegar el texto. Tu configuración de fijación actual no ha cambiado.",
     "transcriptionErrorTitle": "La transcripción ha fallado",
     "transcriptionErrorGeneric": "No se pudo transcribir la grabación. Inténtalo de nuevo o elige otro modelo.",
     "transcriptionTimeoutTitle": "Se agotó el tiempo de la transcripción",

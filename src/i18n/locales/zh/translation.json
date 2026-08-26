@@ -814,6 +814,8 @@
     "pasteFailed": "无法将文本粘贴到当前活动的应用程序中。",
     "targetLockLostTitle": "锁定的窗口已关闭",
     "targetLockLost": "您锁定的窗口已关闭。AudioBud 未粘贴文本。请重新锁定一个窗口。",
+    "targetWindowGoneTitle": "听写目标窗口已关闭",
+    "targetWindowGone": "你听写的窗口在 AudioBud 粘贴文本前已关闭。当前的锁定设置没有变化。",
     "transcriptionErrorTitle": "转录失败",
     "transcriptionErrorGeneric": "无法转录这段录音。请重试或选择其他模型。",
     "transcriptionTimeoutTitle": "转录超时",
