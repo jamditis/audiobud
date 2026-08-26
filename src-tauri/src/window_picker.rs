@@ -382,6 +382,19 @@ pub fn decide_paste(
     }
 }
 
+/// Whether a keystroke aimed at the foreground may be sent right now.
+///
+/// Asked again before EVERY foreground keystroke, not once when the delivery was
+/// resolved. Resolving only takes a snapshot, and a delivery then waits on the
+/// Enigo mutex, writes the clipboard and sleeps out `paste_delay_ms`; a picker
+/// opened in any of those gaps is holding the foreground by the time the keys
+/// are sent, so what was safe a moment ago would now type the transcript into
+/// AudioBud's own window (#164). A pinned delivery needs no such check: it
+/// re-activates its own window instead.
+pub fn foreground_keystrokes_allowed(picker_open: bool) -> bool {
+    !picker_open
+}
+
 /// Whether a pick is under way, given what is known about the picker window.
 ///
 /// `window_visible` is `None` when no picker window exists at all. A visible
@@ -1074,6 +1087,15 @@ mod tests {
         let delivery = pending
             .take_resolved(|w| crate::output_target::identity_is_alive(w, |_| Some(impostor)));
         assert_eq!(delivery, Some(PickDelivery::PickLost));
+    }
+
+    #[test]
+    fn a_picker_opened_mid_delivery_stops_the_remaining_keystrokes() {
+        // The delivery was resolved while no picker was up -- that is the only
+        // reason it is a foreground delivery at all -- and then the user opened
+        // one during the wait before the keys were sent.
+        assert!(foreground_keystrokes_allowed(false));
+        assert!(!foreground_keystrokes_allowed(true));
     }
 
     #[test]

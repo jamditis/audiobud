@@ -203,10 +203,17 @@ pub fn unlock_output_target(app: &AppHandle) {
     }
     // unlock() clears any lost-lock notice in the same critical section as
     // the mutation, so there is nothing left to do about it here.
-    pinned.unlock();
+    let generation = pinned.unlock();
     info!("Output lock released from the indicator");
-    let _ = OutputTargetLockEvent::Unlocked.emit(app);
-    crate::tray::update_tray_menu(app, &crate::tray::current_tray_state(app), None);
+    // Publish only while this release is still the newest word on the lock. A
+    // lock taken in the gap between unlocking and announcing has already
+    // emitted its own Locked; a blind Unlocked here would land after it and
+    // leave every indicator claiming there is no lock while the backend holds
+    // one -- the same generation check toggle_target_lock makes.
+    if pinned.generation() == generation {
+        let _ = OutputTargetLockEvent::Unlocked.emit(app);
+        crate::tray::update_tray_menu(app, &crate::tray::current_tray_state(app), None);
+    }
 }
 
 /// Read the current lock state for the indicator surfaces (#255).
@@ -471,6 +478,10 @@ pub fn window_is_alive(locked: WindowIdentity) -> bool {
 pub enum FocusLost {
     /// The target window has closed. Its lock is dropped and the notice sent.
     TargetGone,
+    /// The window picker opened while the delivery was under way, so a
+    /// foreground paste would now land in AudioBud's own window (#164). The
+    /// notice is already sent; nothing more is typed.
+    PickerOpened,
     /// The window is alive, but the system would not bring it forward. The lock
     /// still stands, so a retry can work.
     ActivationRefused(String),
@@ -480,6 +491,9 @@ impl std::fmt::Display for FocusLost {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             FocusLost::TargetGone => write!(f, "the locked window closed during delivery"),
+            FocusLost::PickerOpened => {
+                write!(f, "the window picker opened during delivery")
+            }
             FocusLost::ActivationRefused(reason) => write!(f, "{}", reason),
         }
     }
@@ -511,13 +525,26 @@ impl<'a> FocusHold<'a> {
 
     /// Confirm the next keystroke will reach the intended window.
     ///
-    /// Fails closed. If the target has closed, the lock is dropped, the notice
-    /// is sent, and this reports [`FocusLost::TargetGone`] so the caller sends
-    /// nothing more. If the target merely lost focus, it is re-activated once; a
+    /// Fails closed. A foreground delivery is withheld if the window picker has
+    /// opened since it was resolved ([`FocusLost::PickerOpened`]), because its
+    /// keystrokes would land in the picker. If the target has closed, the lock
+    /// is dropped, the notice is sent, and this reports
+    /// [`FocusLost::TargetGone`] so the caller sends nothing more. If the target merely lost focus, it is re-activated once; a
     /// refused activation is [`FocusLost::ActivationRefused`] rather than typing
     /// into the window that took focus.
     pub fn ensure(&self) -> Result<(), FocusLost> {
         let Some(target) = self.target else {
+            // A foreground delivery has no window of its own to re-activate, so
+            // this is its only guard -- and it is needed at every keystroke, not
+            // just when the delivery was resolved: the Enigo mutex wait, the
+            // clipboard write and `paste_delay_ms` all sit in between, and a
+            // picker opened in any of those gaps holds the foreground now.
+            if !crate::window_picker::foreground_keystrokes_allowed(
+                crate::window_picker::backend::pick_in_progress(self.app),
+            ) {
+                crate::window_picker::backend::announce_pick_in_progress(self.app);
+                return Err(FocusLost::PickerOpened);
+            }
             return Ok(());
         };
 

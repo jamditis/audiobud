@@ -59,7 +59,11 @@ impl From<FocusLost> for DeliveryError {
     /// no copy left behind to recover it from (#120).
     fn from(lost: FocusLost) -> Self {
         match lost {
-            FocusLost::TargetGone => DeliveryError::Suppressed(lost.to_string()),
+            // Both are settled, already-announced outcomes with nothing typed:
+            // the window went, or the picker took the foreground mid-delivery.
+            FocusLost::TargetGone | FocusLost::PickerOpened => {
+                DeliveryError::Suppressed(lost.to_string())
+            }
             FocusLost::ActivationRefused(reason) => DeliveryError::Failed(reason),
         }
     }
