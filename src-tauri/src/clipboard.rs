@@ -1077,21 +1077,33 @@ mod tests {
         // trailing copy, now one continuous span per finding 1). Proves the
         // deferred write only ever runs after the delivery releases the
         // lock, never inside its critical section.
-        use std::sync::Arc;
+        //
+        // Synchronized with channels, not a guessed sleep (#161 review round
+        // 4, finding 4): `holding_rx` only unblocks once the delivery thread
+        // has actually acquired the lock, and the delivery thread only
+        // releases it once this test explicitly tells it to via
+        // `release_tx`, so there is no window where either side is guessing
+        // at the other's timing.
+        use std::sync::{mpsc, Arc};
 
         let order: Arc<Mutex<Vec<&'static str>>> = Arc::new(Mutex::new(Vec::new()));
+        let (holding_tx, holding_rx) = mpsc::channel::<()>();
+        let (release_tx, release_rx) = mpsc::channel::<()>();
 
         let delivery_order = Arc::clone(&order);
         let delivery = std::thread::spawn(move || {
             let _txn = lock_clipboard_txn();
             delivery_order.lock().unwrap().push("delivery holds txn");
-            std::thread::sleep(Duration::from_millis(60));
+            holding_tx.send(()).unwrap();
+            // Waits for the test's explicit go-ahead rather than a fixed
+            // delay, so releasing the lock and the test observing contention
+            // on it can never race each other.
+            release_rx.recv().unwrap();
             delivery_order.lock().unwrap().push("delivery released txn");
         });
 
-        // Give the delivery thread time to actually take the lock before the
-        // simulated tray copy's `try_lock`.
-        std::thread::sleep(Duration::from_millis(15));
+        // Blocks until the delivery thread has genuinely taken the lock.
+        holding_rx.recv().unwrap();
 
         match CLIPBOARD_TXN.try_lock() {
             Ok(_) => panic!("expected the delivery thread to be holding CLIPBOARD_TXN"),
@@ -1101,6 +1113,9 @@ mod tests {
                     let _txn = lock_clipboard_txn();
                     deferred_order.lock().unwrap().push("tray copy ran");
                 });
+                // Only now let the simulated delivery finish and release the
+                // lock; the deferred thread above is already blocked on it.
+                release_tx.send(()).unwrap();
                 deferred.join().unwrap();
             }
             Err(std::sync::TryLockError::Poisoned(_)) => {

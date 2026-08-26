@@ -127,12 +127,34 @@ fn schedule_transcript_delivery(app: AppHandle, delivery: TranscriptDelivery) {
     let job = move || {
         let _handoff = DeliveryHandoff(app_for_delivery.clone());
         let paste_time = Instant::now();
-        // The queued context, not a fresh read: by the time a queued transcript
-        // is pasted the user may already be dictating somewhere else (#160).
-        match utils::paste(delivery.text, app_for_delivery.clone(), delivery.context) {
-            Ok(()) => debug!("Text pasted successfully in {:?}", paste_time.elapsed()),
-            Err(error) => {
+        let app_for_paste = app_for_delivery.clone();
+        // Caught here, not just by delivery_worker's own catch_unwind around
+        // the whole job: that one only logs, so a panic mid-paste (previously
+        // possible, less so now that #161 review round 2's poisoned-Enigo-
+        // lock recovery exists, but still not impossible) reached the user as
+        // silence rather than the same paste-error toast a normal delivery
+        // failure gets (#161 review round 4, finding 3). The panic payload
+        // itself is logged only, never shown -- it is Rust internals, not
+        // something the user can act on.
+        let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || {
+            // The queued context, not a fresh read: by the time a queued
+            // transcript is pasted the user may already be dictating
+            // somewhere else (#160).
+            utils::paste(delivery.text, app_for_paste, delivery.context)
+        }));
+        match outcome {
+            Ok(Ok(())) => debug!("Text pasted successfully in {:?}", paste_time.elapsed()),
+            Ok(Err(error)) => {
                 error!("Failed to paste transcription: {}", error);
+                let _ = app_for_delivery.emit("paste-error", ());
+            }
+            Err(panic_payload) => {
+                let message = panic_payload
+                    .downcast_ref::<&str>()
+                    .map(|s| s.to_string())
+                    .or_else(|| panic_payload.downcast_ref::<String>().cloned())
+                    .unwrap_or_else(|| "no panic message".to_string());
+                error!("Transcript delivery panicked while pasting: {}", message);
                 let _ = app_for_delivery.emit("paste-error", ());
             }
         }

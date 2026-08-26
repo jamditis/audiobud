@@ -26,6 +26,7 @@
 
 use log::{error, warn};
 use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Sender};
 use std::sync::Mutex;
 use std::thread::{self, JoinHandle};
@@ -59,6 +60,15 @@ pub struct DeliveryWorker {
     ///
     /// [`shutdown`]: DeliveryWorker::shutdown
     handle: Mutex<Option<JoinHandle<()>>>,
+    /// Set by [`shutdown`] before it touches `jobs`, so a [`run`] racing it --
+    /// between a caller's `DeliveryQueue::enqueue` returning `Start` and the
+    /// `run` call that follows -- can tell shutdown is already underway even
+    /// if it observes `jobs` as `None` (#161 review round 4, finding 1). See
+    /// [`run`] for why that distinction matters.
+    ///
+    /// [`run`]: DeliveryWorker::run
+    /// [`shutdown`]: DeliveryWorker::shutdown
+    shutting_down: AtomicBool,
 }
 
 impl Default for DeliveryWorker {
@@ -88,6 +98,7 @@ impl DeliveryWorker {
             Ok(handle) => Self {
                 jobs: Mutex::new(Some(jobs)),
                 handle: Mutex::new(Some(handle)),
+                shutting_down: AtomicBool::new(false),
             },
             Err(e) => {
                 // Without a thread the caller's own thread does the work. It is
@@ -98,6 +109,7 @@ impl DeliveryWorker {
                 Self {
                     jobs: Mutex::new(None),
                     handle: Mutex::new(None),
+                    shutting_down: AtomicBool::new(false),
                 }
             }
         }
@@ -107,17 +119,39 @@ impl DeliveryWorker {
     ///
     /// A transcript is never dropped for want of a worker: the fallback costs
     /// the caller the delivery's blocking time, which is what the old
-    /// main-thread dispatch cost every time.
+    /// main-thread dispatch cost every time -- unless [`shutdown`] is already
+    /// underway, in which case the fallback is refused instead. Once
+    /// `app.exit` is in flight the process can end at any moment, and an
+    /// inline paste on some other thread has no guarantee of finishing before
+    /// it does; the acceptable outcome for a delivery that loses this race is
+    /// "refused and logged", not "silently truncated mid-keystroke" (#161
+    /// review round 4, finding 1).
+    ///
+    /// [`shutdown`]: DeliveryWorker::shutdown
     pub fn run(&self, job: DeliveryJob) {
         let jobs = self.jobs.lock().unwrap();
         let Some(sender) = jobs.as_ref() else {
             drop(jobs);
+            if self.shutting_down.load(Ordering::SeqCst) {
+                error!(
+                    "Delivery worker is shutting down; refusing to deliver on the calling \
+                     thread to avoid a paste truncated by the process exiting mid-delivery"
+                );
+                return;
+            }
             job();
             return;
         };
 
         if let Err(returned) = sender.send(job) {
             drop(jobs);
+            if self.shutting_down.load(Ordering::SeqCst) {
+                error!(
+                    "Delivery worker is shutting down; refusing to deliver on the calling \
+                     thread to avoid a paste truncated by the process exiting mid-delivery"
+                );
+                return;
+            }
             warn!("The delivery thread is gone; delivering on the calling thread");
             (returned.0)();
         }
@@ -146,6 +180,14 @@ impl DeliveryWorker {
     ///
     /// Safe to call more than once and safe when no thread was ever spawned.
     pub fn shutdown(&self) {
+        // Set before touching `jobs`, so a `run()` that is concurrently
+        // between `DeliveryQueue::enqueue` returning `Start` and its own call
+        // to `run` -- and so has not yet reached the `self.jobs.lock()` below
+        // -- can still tell shutdown has started once it does, even though it
+        // will find `jobs` already `None` either way (#161 review round 4,
+        // finding 1).
+        self.shutting_down.store(true, Ordering::SeqCst);
+
         // Drop the sender so the worker's receiver iterator ends once it has
         // drained whatever was already sent.
         self.jobs.lock().unwrap().take();
@@ -184,6 +226,7 @@ impl DeliveryWorker {
 mod tests {
     use super::{DeliveryWorker, SHUTDOWN_TIMEOUT};
     use crate::delivery_queue::{DeliveryQueue, EnqueueResult};
+    use std::sync::atomic::AtomicBool;
     use std::sync::mpsc;
     use std::sync::{Arc, Mutex};
     use std::thread::ThreadId;
@@ -336,12 +379,40 @@ mod tests {
     }
 
     #[test]
-    fn run_falls_back_to_the_calling_thread_after_shutdown() {
-        // A delivery submitted after shutdown must not be dropped: the worker
-        // is gone, so `run` delivers inline, same as when the thread never
-        // spawned at all.
+    fn run_refuses_to_deliver_inline_once_shutdown_has_started() {
+        // Regression for #161 review round 4, finding 1: a `run()` that
+        // still reaches this worker after `shutdown()` -- the race between
+        // `DeliveryQueue::enqueue` returning `Start` and the `run` call that
+        // follows -- must not fall back to delivering inline. The process
+        // may already be mid-`app.exit`, and an inline paste on whatever
+        // thread called `run` has no guarantee of finishing before it does;
+        // refusing is the sound outcome, not a truncated paste.
         let worker = DeliveryWorker::new();
         worker.shutdown();
+
+        let ran = Arc::new(Mutex::new(false));
+        let flag = Arc::clone(&ran);
+        worker.run(Box::new(move || {
+            *flag.lock().unwrap() = true;
+        }));
+        assert!(
+            !*ran.lock().unwrap(),
+            "run() must refuse to deliver inline once shutdown has started"
+        );
+    }
+
+    #[test]
+    fn run_still_falls_back_inline_when_the_worker_thread_never_spawned() {
+        // Distinct from the shutdown case above: a worker that never got a
+        // thread at all (`DeliveryWorker::new`'s `Err` arm, simulated here
+        // via `shutting_down` staying false with `jobs` empty) is not
+        // shutting down -- it never started -- so `run` must still deliver
+        // inline the way it always has, rather than refusing.
+        let worker = DeliveryWorker {
+            jobs: Mutex::new(None),
+            handle: Mutex::new(None),
+            shutting_down: AtomicBool::new(false),
+        };
 
         let ran = Arc::new(Mutex::new(false));
         let flag = Arc::clone(&ran);

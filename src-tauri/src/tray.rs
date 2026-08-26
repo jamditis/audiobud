@@ -546,30 +546,44 @@ pub fn set_tray_visibility(app: &AppHandle, visible: bool) {
     }
 }
 
-pub fn copy_last_transcript(app: &AppHandle) {
+/// The transcript `copy_last_transcript` would copy right now, or `None` (with
+/// the reason logged) when there is nothing to copy.
+///
+/// Deliberately re-run at the moment of the actual write, not just once at
+/// the top of `copy_last_transcript`: two rapid clicks can both end up
+/// waiting on `CLIPBOARD_TXN` (a plain `std::sync::Mutex`, which makes no
+/// fairness promise), so an older click's write could otherwise land after a
+/// newer one's and leave a stale transcript behind. Re-reading here instead
+/// of carrying a value captured back at click time means every write copies
+/// whatever is actually latest at the moment it runs, so which of two queued
+/// requests the mutex happens to wake first stops mattering (#161 review
+/// round 4, finding 2).
+fn latest_transcript_to_copy(app: &AppHandle) -> Option<String> {
     let history_manager = app.state::<Arc<HistoryManager>>();
     let entry = match history_manager.get_latest_completed_entry() {
         Ok(Some(entry)) => entry,
         Ok(None) => {
             warn!("No completed transcription history entries available for tray copy.");
-            return;
+            return None;
         }
         Err(err) => {
             error!(
                 "Failed to fetch last completed transcription entry: {}",
                 err
             );
-            return;
+            return None;
         }
     };
 
     let text = last_transcript_text(&entry);
     if text.trim().is_empty() {
         warn!("Last completed transcription is empty; skipping tray copy.");
-        return;
+        return None;
     }
-    let text = text.to_string();
+    Some(text.to_string())
+}
 
+pub fn copy_last_transcript(app: &AppHandle) {
     // Same transaction lock a delivery holds across its capture/write/restore
     // window and its trailing copy (`clipboard::CLIPBOARD_TXN`), so this
     // write cannot land in the middle of one and then get clobbered by a
@@ -587,7 +601,11 @@ pub fn copy_last_transcript(app: &AppHandle) {
     // rare contended case the write is handed to a short-lived thread that is
     // free to block, and this callback returns right away either way.
     match crate::clipboard::CLIPBOARD_TXN.try_lock() {
-        Ok(_txn) => write_last_transcript_to_clipboard(app, &text),
+        Ok(_txn) => {
+            if let Some(text) = latest_transcript_to_copy(app) {
+                write_last_transcript_to_clipboard(app, &text);
+            }
+        }
         Err(std::sync::TryLockError::WouldBlock) => {
             info!("Clipboard busy with a delivery; copying the last transcript in the background");
             let app = app.clone();
@@ -595,7 +613,9 @@ pub fn copy_last_transcript(app: &AppHandle) {
                 let _txn = crate::clipboard::CLIPBOARD_TXN
                     .lock()
                     .unwrap_or_else(|poisoned| poisoned.into_inner());
-                write_last_transcript_to_clipboard(&app, &text);
+                if let Some(text) = latest_transcript_to_copy(&app) {
+                    write_last_transcript_to_clipboard(&app, &text);
+                }
             });
         }
         Err(std::sync::TryLockError::Poisoned(poisoned)) => {
@@ -603,7 +623,9 @@ pub fn copy_last_transcript(app: &AppHandle) {
             // mutex only orders clipboard access, so continuing to use it
             // after a caught panic elsewhere is sound.
             let _txn = poisoned.into_inner();
-            write_last_transcript_to_clipboard(app, &text);
+            if let Some(text) = latest_transcript_to_copy(app) {
+                write_last_transcript_to_clipboard(app, &text);
+            }
         }
     }
 }
