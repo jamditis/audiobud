@@ -127,15 +127,22 @@ impl DeliveryWorker {
     /// "refused and logged", not "silently truncated mid-keystroke" (#161
     /// review round 4, finding 1).
     ///
-    /// Deliberate tradeoff (#161 review round 5, finding A): a delivery
-    /// refused here during quit is not attempted at all, so its paste never
-    /// happens. The transcript itself is saved to history independently,
-    /// in the same step that enqueues the delivery (see the `save_entry`/
-    /// `save_delivery_recovery` calls around `enqueue_transcript_delivery`
-    /// in `actions.rs`), so refusing the paste costs at most the paste --
-    /// not the user's only copy of the transcript. That is an acceptable
-    /// price for a user-initiated quit, and preferable to either hanging
-    /// quit to finish it or pasting into a dying process.
+    /// Deliberate tradeoff, corrected and narrowed (#161 review round 5,
+    /// finding A; round 6, finding 1): a delivery refused here during quit
+    /// is not attempted at all, so its paste never happens. That alone is an
+    /// acceptable price for a user-initiated quit, and preferable to either
+    /// hanging quit to finish it or pasting into a dying process -- but,
+    /// unlike an earlier version of this comment claimed, the transcript's
+    /// history entry is **not** guaranteed to already exist by the time this
+    /// runs: `actions.rs` only calls `hm.save_entry` *after*
+    /// `enqueue_transcript_delivery` returns (so after `run` has already
+    /// decided to refuse), and only when the concurrent WAV save succeeded
+    /// (`else if wav_saved`, in the branch this queues from). A delivery
+    /// refused here whose WAV save also failed has no persisted copy at all
+    /// -- residual data loss this PR does not close. The real fix is
+    /// persisting the transcript before the delivery queue ever accepts it,
+    /// upstream in `actions.rs`; tracked as #300, deferred to v0.8.0 rather
+    /// than folded into this PR's scope.
     ///
     /// [`shutdown`]: DeliveryWorker::shutdown
     pub fn run(&self, job: DeliveryJob) {

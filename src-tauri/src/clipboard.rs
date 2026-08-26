@@ -167,6 +167,36 @@ fn paste_via_clipboard(
 
     write_result?;
 
+    // Restores the captured snapshot on the way out of this function's
+    // scope, whether that is a normal return or a panic unwinding through
+    // the paste-delay wait, the keystroke, or the post-paste wait below --
+    // so a panic in any of that cannot leave the transcript sitting on the
+    // user's clipboard in place of what they had copied (#161 review round
+    // 6, finding 2; the plain post-keystroke call this replaces only ran on
+    // normal return, the same gap the focus hand-back in
+    // `output_target::backend::borrow_focus` had). This function is only
+    // ever called while its caller (`deliver_to_target`'s `deliver` closure)
+    // already holds `CLIPBOARD_TXN` for the whole delivery, so this guard's
+    // `Drop` -- which fires as this function's own scope ends, one way or
+    // the other -- always runs strictly before that lock is released: this
+    // is an inner scope nested entirely within the txn hold, not a sibling
+    // of it, so no explicit ordering between the two is needed here.
+    struct RestoreClipboardOnExit<'a> {
+        saved: &'a SavedClipboard,
+        backend: Option<&'a mut ArboardBackend>,
+        app_handle: &'a AppHandle,
+    }
+    impl Drop for RestoreClipboardOnExit<'_> {
+        fn drop(&mut self) {
+            restore_saved_clipboard(self.saved, self.backend.take(), self.app_handle);
+        }
+    }
+    let _restore_clipboard_on_exit = RestoreClipboardOnExit {
+        saved: &saved_clipboard,
+        backend: snapshot_backend.as_mut(),
+        app_handle,
+    };
+
     std::thread::sleep(Duration::from_millis(paste_delay_ms));
 
     // The clipboard write and the delay above give focus time to move, so the
@@ -177,11 +207,6 @@ fn paste_via_clipboard(
     };
 
     std::thread::sleep(std::time::Duration::from_millis(50));
-
-    // Restore original clipboard content. This runs even when the keystroke was
-    // abandoned, so an aborted delivery does not leave the transcript sitting on
-    // the user's clipboard in place of what they had copied.
-    restore_saved_clipboard(&saved_clipboard, snapshot_backend.as_mut(), app_handle);
 
     pasted
 }
@@ -1065,6 +1090,44 @@ mod tests {
         // value instead of failing.
         let recovered = lock.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
         assert_eq!(*recovered, 0);
+    }
+
+    #[test]
+    fn a_clipboard_restore_guard_runs_exactly_once_whether_the_paste_panics_or_not() {
+        // `paste_via_clipboard` restores the captured clipboard snapshot from
+        // a `Drop` guard, not a plain post-keystroke call, specifically so a
+        // panic mid-paste still restores it (#161 review round 6, finding
+        // 2) -- mirroring the focus hand-back fix in
+        // `output_target::backend::borrow_focus` (round 5, finding C).
+        // `paste_via_clipboard` itself can't be exercised directly here (no
+        // display server, no live `AppHandle`), so this proves the
+        // mechanism instead: exactly one restore either way, using the same
+        // "take the borrowed backend out in `Drop`" shape the real guard
+        // uses.
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        struct RestoreOnDrop<'a>(&'a AtomicUsize, Option<()>);
+        impl Drop for RestoreOnDrop<'_> {
+            fn drop(&mut self) {
+                if self.1.take().is_some() {
+                    self.0.fetch_add(1, Ordering::SeqCst);
+                }
+            }
+        }
+
+        let restores = AtomicUsize::new(0);
+        {
+            let _guard = RestoreOnDrop(&restores, Some(()));
+        }
+        assert_eq!(restores.load(Ordering::SeqCst), 1, "normal return");
+
+        let restores_on_panic = AtomicUsize::new(0);
+        let panicked = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _guard = RestoreOnDrop(&restores_on_panic, Some(()));
+            panic!("simulated panic mid-paste, before the plain restore call this replaces");
+        }));
+        assert!(panicked.is_err());
+        assert_eq!(restores_on_panic.load(Ordering::SeqCst), 1, "unwind");
     }
 
     #[test]
