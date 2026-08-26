@@ -91,9 +91,19 @@ pub fn open_picker(app: &AppHandle) {
 }
 
 /// Close the picker, if it is open. Called when a pick ends, whichever way.
+///
+/// DESTROY, not close: `close()` only asks, and this app's window-event handler
+/// answers every close request by hiding the window instead of letting it go
+/// (so the settings window survives its close button). A picker hidden that way
+/// would stay registered and keep reading as open, holding off every later
+/// paste (see [`pick_in_progress`]). The picker is transient -- one pick, one
+/// window -- so it is destroyed outright and rebuilt next time, which also means
+/// each pick starts from a freshly enumerated list.
 pub fn close_picker(app: &AppHandle) {
     if let Some(window) = app.get_webview_window(PICKER_WINDOW) {
-        let _ = window.close();
+        if let Err(e) = window.destroy() {
+            warn!("Failed to close the window picker: {}", e);
+        }
     }
 }
 
@@ -172,14 +182,22 @@ pub fn resolve_pick(app: &AppHandle, gesture: PickerGesture) -> PickArmed {
 
 /// Whether a pick is in progress, so the paste path can hold off (#164).
 ///
-/// The picker window itself is the authority: it holds the foreground for as
-/// long as it is up, including when it offered no rows at all. The session is
-/// checked too, for the moment between resolving a pick and the window closing.
+/// The picker window is the authority while it is VISIBLE -- it holds the
+/// foreground then, including when it offered no rows at all. A window that is
+/// merely registered proves nothing: something else may have hidden it, and a
+/// hidden picker that still read as open would suppress every later transcript
+/// for the rest of the run. The decision itself is [`super::picker_is_open`],
+/// which is where its reasoning is tested.
 pub fn pick_in_progress(app: &AppHandle) -> bool {
-    app.get_webview_window(PICKER_WINDOW).is_some()
-        || app
-            .try_state::<PickerSession>()
-            .is_some_and(|session| session.is_open())
+    let window_visible = app
+        .get_webview_window(PICKER_WINDOW)
+        // A window whose visibility cannot be read is treated as up: it exists,
+        // and refusing one paste is safer than typing into the picker.
+        .map(|window| window.is_visible().unwrap_or(true));
+    let session_open = app
+        .try_state::<PickerSession>()
+        .is_some_and(|session| session.is_open());
+    super::picker_is_open(window_visible, session_open)
 }
 
 /// Tell the user a transcript was not pasted because the picker was open, and
@@ -219,15 +237,10 @@ pub fn take_pick_target(app: &AppHandle) -> Option<PickDelivery> {
 }
 
 /// The full identity of `handle` right now, or `None` if no window has it any
-/// more. Built on the target lock's probe so the picker and the lock read window
-/// identity the same way.
+/// more. This is the target lock's own probe, so the picker and the lock read
+/// window identity the same way, class fingerprint included (#254).
 fn identify_window(handle: WindowHandle) -> Option<WindowIdentity> {
-    let (process_id, thread_id) = target_backend::probe_identity(handle)?;
-    Some(WindowIdentity {
-        handle,
-        process_id,
-        thread_id,
-    })
+    target_backend::probe_identity(handle)
 }
 
 /// One pass of the OS window list.

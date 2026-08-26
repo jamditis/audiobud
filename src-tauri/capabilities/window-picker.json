@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "window-picker",
+  "description": "The one-shot window picker surface (#124). Its own commands are the app's, which need no grant; this covers the core plumbing every webview uses and the one plugin call it makes, reading the system locale so the picker speaks the same language as the rest of the app. Deliberately narrower than the default capability: the picker touches no files, no store, no dialogs, no updater and no shortcuts.",
+  "windows": ["window_picker"],
+  "permissions": ["core:default", "os:allow-locale"]
+}

@@ -315,6 +315,19 @@ impl PickerSession {
     }
 }
 
+/// Whether a pick is under way, given what is known about the picker window.
+///
+/// `window_visible` is `None` when no picker window exists at all. A visible
+/// window means a pick is up. A window that exists but is hidden is NOT taken as
+/// proof on its own -- only a live session is -- because a picker left hidden
+/// rather than destroyed would otherwise hold off every later paste forever.
+pub fn picker_is_open(window_visible: Option<bool>, session_open: bool) -> bool {
+    match window_visible {
+        Some(true) => true,
+        Some(false) | None => session_open,
+    }
+}
+
 /// What one pick armed for the next transcript.
 ///
 /// The foreground is a route in its own right, not the absence of one. A user
@@ -740,6 +753,7 @@ mod tests {
             handle: WindowHandle(handle),
             process_id: pid,
             thread_id: tid,
+            class: crate::output_target::class_fingerprint("Test_WindowClass"),
         }
     }
 
@@ -990,10 +1004,33 @@ mod tests {
         // window again, but a different process owns it now.
         let pending = PendingPick::default();
         let picked = identity(7, 100, 200);
+        let impostor = identity(7, 999, 200);
         pending.arm(PendingRoute::Window(picked));
         let delivery = pending
-            .take_resolved(|w| crate::output_target::identity_is_alive(w, |_| Some((999, 200))));
+            .take_resolved(|w| crate::output_target::identity_is_alive(w, |_| Some(impostor)));
         assert_eq!(delivery, Some(PickDelivery::PickLost));
+    }
+
+    #[test]
+    fn a_visible_picker_holds_off_a_paste_and_a_gone_one_does_not() {
+        // Up and in front of the user: a transcript now would type into the
+        // picker itself (#164), even before any row has been offered.
+        assert!(picker_is_open(Some(true), false));
+        assert!(picker_is_open(Some(true), true));
+
+        // No picker window at all: only a live session speaks for a pick.
+        assert!(!picker_is_open(None, false));
+        assert!(picker_is_open(None, true));
+    }
+
+    #[test]
+    fn a_hidden_picker_does_not_hold_off_pastes_forever() {
+        // The regression this guards: a picker hidden instead of destroyed
+        // stays registered, and if that alone counted as open, every later
+        // transcript would be suppressed until the app restarted.
+        assert!(!picker_is_open(Some(false), false));
+        // A session still standing behind it is a different matter.
+        assert!(picker_is_open(Some(false), true));
     }
 
     #[test]
