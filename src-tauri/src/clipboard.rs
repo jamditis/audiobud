@@ -918,8 +918,11 @@ pub fn paste(text: String, app_handle: AppHandle, context: DictationContext) -> 
     // recording started (#160) -- the foreground window, or the window that was
     // locked then. A window that has since closed delivers to no window at all,
     // rather than to whatever inherited focus (#120).
-    let delivery =
-        target_backend::resolve_captured_delivery(&app_handle, context.delivery_target());
+    let delivery = target_backend::resolve_captured_delivery(
+        &app_handle,
+        context.delivery_target(),
+        context.sequence(),
+    );
     // Held, not unwrapped with `?`: a delivery that FAILED needs the clipboard
     // copy even more than one that succeeded, because a failure is exactly when
     // the copy is the transcript's last refuge. Returning here would report the

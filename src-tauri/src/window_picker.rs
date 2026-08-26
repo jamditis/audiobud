@@ -26,6 +26,7 @@
 pub mod backend;
 
 use std::sync::{Mutex, MutexGuard};
+use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 
@@ -382,6 +383,56 @@ pub fn decide_paste(
     }
 }
 
+/// How long a dismissal shields the recording from the cancel shortcut.
+///
+/// Long enough to cover the round trip the race is made of -- the overlay's key
+/// handler, the command, the window teardown -- and short enough that a user who
+/// presses Escape again to cancel is not made to wait for it.
+pub const DISMISSAL_SHIELD: Duration = Duration::from_millis(500);
+
+/// A just-dismissed pick, remembered briefly so the cancel shortcut knows the
+/// Escape that dismissed it was not for the recording.
+///
+/// Escape means two things at once while a pick is up: the picker's own key
+/// handler dismisses it, and the global cancel binding -- which defaults to
+/// Escape and is registered while recording -- fires whatever window has focus.
+/// Whichever runs first, the other must not also act. Ordering cannot be relied
+/// on: if the overlay's dismissal lands first, the picker is already gone by the
+/// time cancel looks, and cancel would discard the recording the user only meant
+/// to keep. So every dismissal leaves this mark behind, and cancel stands down
+/// when it finds a fresh one.
+#[derive(Default)]
+pub struct PickerDismissal(Mutex<Option<Instant>>);
+
+impl PickerDismissal {
+    /// Record that a pick was just dismissed.
+    pub fn mark(&self) {
+        self.mark_at(Instant::now());
+    }
+
+    /// [`Self::mark`] with the moment given, for tests.
+    pub fn mark_at(&self, at: Instant) {
+        *self.guard() = Some(at);
+    }
+
+    /// Take a dismissal made within [`DISMISSAL_SHIELD`] of `now`.
+    ///
+    /// Consuming either way: a stale mark has no further use, and leaving it
+    /// would let one dismissal shield a cancel long after the fact.
+    pub fn take_fresh(&self, now: Instant) -> bool {
+        match self.guard().take() {
+            Some(at) => now.duration_since(at) < DISMISSAL_SHIELD,
+            None => false,
+        }
+    }
+
+    fn guard(&self) -> MutexGuard<'_, Option<Instant>> {
+        self.0
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+}
+
 /// Whether a keystroke aimed at the foreground may be sent right now.
 ///
 /// Asked again before EVERY foreground keystroke, not once when the delivery was
@@ -444,12 +495,24 @@ pub enum PickDelivery {
 /// stored, not just the handle, so the paste path can re-run the shared identity
 /// check before typing anything (#254).
 #[derive(Default)]
-pub struct PendingPick(Mutex<Option<PendingRoute>>);
+pub struct PendingPick(Mutex<Option<ArmedRoute>>);
+
+/// A route, and which dictation it is for.
+///
+/// `armed_after` is how many dictations had already started when the pick was
+/// made. Only a dictation whose own number is HIGHER was started after it, and
+/// so is the one the user made the pick for.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ArmedRoute {
+    pub route: PendingRoute,
+    pub armed_after: u64,
+}
 
 impl PendingPick {
-    /// Route the next transcript along `route`, replacing any earlier pick.
-    pub fn arm(&self, route: PendingRoute) {
-        *self.guard() = Some(route);
+    /// Route the next transcript started from now on along `route`, replacing
+    /// any earlier pick. `armed_after` is the dictation count at this moment.
+    pub fn arm(&self, route: PendingRoute, armed_after: u64) {
+        *self.guard() = Some(ArmedRoute { route, armed_after });
     }
 
     /// Drop any pending pick, so the next transcript follows the usual rules.
@@ -463,17 +526,37 @@ impl PendingPick {
     }
 
     /// Consume the pending pick for the paste about to fire, or `None` when no
-    /// pick is pending and the usual target rules apply.
+    /// pick is pending -- or when the pick is not this dictation's -- and the
+    /// usual target rules apply.
     ///
-    /// The pick is taken whichever way `is_alive` answers: one pick routes one
-    /// transcript, and a pick whose window died is not held back for the next
-    /// dictation. A dead window yields [`PickDelivery::PickLost`] so the caller
-    /// suppresses the paste instead of falling back to the foreground.
+    /// `sequence` is the dictation this delivery belongs to. A pick is honored
+    /// only by a dictation started AFTER it was armed: deliveries do not finish
+    /// in the order they began, so an older transcript still transcribing,
+    /// post-processing or queued would otherwise reach here first and take the
+    /// window that was chosen for the dictation the user was about to speak --
+    /// which then quietly fell back to its own captured target. An older
+    /// delivery leaves the route ARMED and untouched, and goes where it was
+    /// captured.
+    ///
+    /// Its dictation's pick is then taken whichever way `is_alive` answers: one
+    /// pick routes one transcript, and a pick whose window died is not held back
+    /// for the next dictation. A dead window yields [`PickDelivery::PickLost`]
+    /// so the caller suppresses the paste instead of falling back to the
+    /// foreground.
     pub fn take_resolved(
         &self,
+        sequence: u64,
         is_alive: impl FnOnce(WindowIdentity) -> bool,
     ) -> Option<PickDelivery> {
-        Some(match self.guard().take()? {
+        let mut guard = self.guard();
+        let armed = (*guard)?;
+        if sequence <= armed.armed_after {
+            return None;
+        }
+        *guard = None;
+        drop(guard);
+
+        Some(match armed.route {
             PendingRoute::Foreground => PickDelivery::Foreground,
             PendingRoute::Window(picked) => {
                 if is_alive(picked) {
@@ -487,7 +570,7 @@ impl PendingPick {
 
     /// Borrow the pick, recovering the guard if a previous holder panicked --
     /// same reasoning as [`LastPick::guard`].
-    fn guard(&self) -> MutexGuard<'_, Option<PendingRoute>> {
+    fn guard(&self) -> MutexGuard<'_, Option<ArmedRoute>> {
         self.0
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
@@ -1047,30 +1130,73 @@ mod tests {
         let pending = PendingPick::default();
         assert!(!pending.is_armed());
         // With nothing armed, the paste falls through to the usual target rules.
-        assert_eq!(pending.take_resolved(|_| panic!("no pick to check")), None);
+        assert_eq!(
+            pending.take_resolved(2, |_| panic!("no pick to check")),
+            None
+        );
 
         let picked = identity(7, 100, 200);
-        pending.arm(PendingRoute::Window(picked));
+        // Armed after one dictation had already started, so it belongs to the
+        // second.
+        pending.arm(PendingRoute::Window(picked), 1);
         assert!(pending.is_armed());
         assert_eq!(
-            pending.take_resolved(|w| {
+            pending.take_resolved(2, |w| {
                 assert_eq!(w, picked);
                 true
             }),
             Some(PickDelivery::Deliver(picked))
         );
-        // One pick, one paste: the second transcript is a normal one.
+        // One pick, one paste: the third transcript is a normal one.
         assert!(!pending.is_armed());
-        assert_eq!(pending.take_resolved(|_| true), None);
+        assert_eq!(pending.take_resolved(3, |_| true), None);
+    }
+
+    #[test]
+    fn an_older_dictation_does_not_take_the_pick_made_after_it() {
+        // Dictation 1 is still transcribing when the user picks a window for
+        // what they are about to say. Its paste lands first -- and must go where
+        // IT was captured, leaving the pick for dictation 2.
+        let pending = PendingPick::default();
+        let picked = identity(7, 100, 200);
+        pending.arm(PendingRoute::Window(picked), 1);
+
+        assert_eq!(
+            pending.take_resolved(1, |_| panic!("an older delivery must not consume the pick")),
+            None
+        );
+        // Still armed, and still whole.
+        assert!(pending.is_armed());
+
+        // The dictation the user made the pick for takes it.
+        assert_eq!(
+            pending.take_resolved(2, |_| true),
+            Some(PickDelivery::Deliver(picked))
+        );
+        assert!(!pending.is_armed());
+    }
+
+    #[test]
+    fn a_foreground_pick_is_bound_to_its_dictation_too() {
+        let pending = PendingPick::default();
+        pending.arm(PendingRoute::Foreground, 4);
+        // An older queued delivery leaves it alone...
+        assert_eq!(pending.take_resolved(4, |_| true), None);
+        assert_eq!(pending.take_resolved(3, |_| true), None);
+        // ...and the next dictation started after the pick gets it.
+        assert_eq!(
+            pending.take_resolved(5, |_| true),
+            Some(PickDelivery::Foreground)
+        );
     }
 
     #[test]
     fn a_picked_window_that_closed_suppresses_the_paste() {
         let pending = PendingPick::default();
-        pending.arm(PendingRoute::Window(identity(7, 100, 200)));
+        pending.arm(PendingRoute::Window(identity(7, 100, 200)), 0);
         // Same fail-safe as a lost lock: never fall back to the foreground.
         assert_eq!(
-            pending.take_resolved(|_| false),
+            pending.take_resolved(1, |_| false),
             Some(PickDelivery::PickLost)
         );
         assert!(!pending.is_armed());
@@ -1083,10 +1209,50 @@ mod tests {
         let pending = PendingPick::default();
         let picked = identity(7, 100, 200);
         let impostor = identity(7, 999, 200);
-        pending.arm(PendingRoute::Window(picked));
-        let delivery = pending
-            .take_resolved(|w| crate::output_target::identity_is_alive(w, |_| Some(impostor)));
+        pending.arm(PendingRoute::Window(picked), 0);
+        let delivery = pending.take_resolved(1, |w| {
+            crate::output_target::identity_is_alive(w, |_| Some(impostor))
+        });
         assert_eq!(delivery, Some(PickDelivery::PickLost));
+    }
+
+    #[test]
+    fn a_fresh_dismissal_shields_the_recording_from_the_cancel_shortcut() {
+        // Escape reached the picker first and it is already gone; the cancel
+        // shortcut arriving a moment later must not discard the recording.
+        let dismissal = PickerDismissal::default();
+        dismissal.mark();
+        assert!(dismissal.take_fresh(Instant::now()));
+        // One dismissal shields one cancel: the next Escape means cancel.
+        assert!(!dismissal.take_fresh(Instant::now()));
+    }
+
+    #[test]
+    fn a_stale_dismissal_shields_nothing() {
+        let dismissal = PickerDismissal::default();
+        let long_ago = Instant::now();
+        dismissal.mark_at(long_ago);
+        // A cancel pressed well after the picker closed is a cancel.
+        assert!(!dismissal.take_fresh(long_ago + DISMISSAL_SHIELD));
+        assert!(!dismissal.take_fresh(long_ago + DISMISSAL_SHIELD * 4));
+    }
+
+    #[test]
+    fn with_no_dismissal_the_cancel_shortcut_cancels() {
+        let dismissal = PickerDismissal::default();
+        assert!(!dismissal.take_fresh(Instant::now()));
+    }
+
+    #[test]
+    fn the_shield_covers_the_round_trip_but_not_a_deliberate_second_press() {
+        let dismissal = PickerDismissal::default();
+        let at = Instant::now();
+        dismissal.mark_at(at);
+        // Inside the window the dismissal still speaks for the Escape.
+        assert!(dismissal.take_fresh(at + Duration::from_millis(200)));
+        dismissal.mark_at(at);
+        // At the boundary it has expired: the user pressed Escape again.
+        assert!(!dismissal.take_fresh(at + DISMISSAL_SHIELD));
     }
 
     #[test]
@@ -1134,7 +1300,7 @@ mod tests {
         // replaces the old route, and if they back out instead, the old route
         // must not quietly fire later.
         let pending = PendingPick::default();
-        pending.arm(PendingRoute::Window(identity(1, 100, 200)));
+        pending.arm(PendingRoute::Window(identity(1, 100, 200)), 0);
 
         supersede_pick(&pending);
 
@@ -1149,7 +1315,7 @@ mod tests {
         let session = PickerSession::default();
         let pending = PendingPick::default();
         session.offer(offer(vec![raw(1, "Mail", None, true)]));
-        pending.arm(PendingRoute::Window(identity(1, 100, 200)));
+        pending.arm(PendingRoute::Window(identity(1, 100, 200)), 0);
 
         abandon_pick(&session, &pending);
 
@@ -1208,24 +1374,27 @@ mod tests {
         // The user picked "use the current window" while a lock was held, so
         // this transcript must escape the lock -- and only this one.
         let pending = PendingPick::default();
-        pending.arm(PendingRoute::Foreground);
+        pending.arm(PendingRoute::Foreground, 0);
         assert!(pending.is_armed());
         assert_eq!(
-            pending.take_resolved(|_| panic!("the foreground has no identity to check")),
+            pending.take_resolved(1, |_| panic!("the foreground has no identity to check")),
             Some(PickDelivery::Foreground)
         );
         assert!(!pending.is_armed());
         // The next transcript follows the usual rules again, lock included.
-        assert_eq!(pending.take_resolved(|_| true), None);
+        assert_eq!(pending.take_resolved(2, |_| true), None);
     }
 
     #[test]
     fn clearing_a_pending_pick_returns_to_the_usual_target() {
         let pending = PendingPick::default();
-        pending.arm(PendingRoute::Window(identity(7, 100, 200)));
+        pending.arm(PendingRoute::Window(identity(7, 100, 200)), 0);
         pending.clear();
         assert!(!pending.is_armed());
-        assert_eq!(pending.take_resolved(|_| panic!("no pick to check")), None);
+        assert_eq!(
+            pending.take_resolved(1, |_| panic!("no pick to check")),
+            None
+        );
     }
 
     #[test]

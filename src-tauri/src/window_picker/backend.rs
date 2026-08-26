@@ -27,7 +27,8 @@ use crate::output_target::{WindowHandle, WindowIdentity};
 use super::{
     arm_pick, decide_paste, is_stale_selection, offer_rows, offered_candidates, resolve_gesture,
     supersede_pick, visible_candidates, LastPick, OfferedWindow, PasteVerdict, PendingPick,
-    PendingRoute, PickArmed, PickDelivery, PickerGesture, PickerSession, PickerWindow, RawWindow,
+    PendingRoute, PickArmed, PickDelivery, PickerDismissal, PickerGesture, PickerSession,
+    PickerWindow, RawWindow,
 };
 
 /// The picker window's Tauri label.
@@ -162,8 +163,10 @@ pub fn resolve_pick(app: &AppHandle, gesture: PickerGesture) -> PickArmed {
     if let Some(pending) = app.try_state::<PendingPick>() {
         match route {
             // A foreground send is armed too, so it outranks a target lock for
-            // this one transcript (#120).
-            Some(route) => pending.arm(route),
+            // this one transcript (#120). It is stamped with the dictations
+            // started so far, so it reaches the one the user made it for rather
+            // than an older transcript still working its way to a paste (#124).
+            Some(route) => pending.arm(route, crate::dictation_context::current_sequence(app)),
             // A dismissal, or a window that closed or was recycled under the
             // user's click, clears any earlier pick rather than leave one armed
             // that the user did not just confirm.
@@ -183,6 +186,12 @@ pub fn resolve_pick(app: &AppHandle, gesture: PickerGesture) -> PickArmed {
             info!("Next transcript follows the foreground, whatever is locked")
         }
         None => info!("Window pick cancelled; nothing was armed"),
+    }
+
+    // The overlay's own Escape arrives here as a dismissal. Mark it, because the
+    // cancel shortcut fired on that same key press and may not have looked yet.
+    if matches!(gesture, PickerGesture::Dismiss) {
+        note_dismissal(app);
     }
 
     // A row the user clicked that could not be honored -- its window closed, or
@@ -245,6 +254,30 @@ pub fn abandon_pick(app: &AppHandle) {
         info!("The window picker was closed without a pick; nothing was armed");
     }
     super::abandon_pick(&session, &pending);
+    note_dismissal(app);
+}
+
+/// Remember that a pick was just dismissed, so the cancel shortcut arriving on
+/// the same Escape keeps its hands off the recording (#124).
+pub fn note_dismissal(app: &AppHandle) {
+    if let Some(dismissal) = app.try_state::<PickerDismissal>() {
+        dismissal.mark();
+    }
+}
+
+/// Whether the cancel gesture has already been spent dismissing a pick.
+///
+/// True when a picker is up -- which this closes -- or when one was dismissed a
+/// moment ago by the same Escape, whichever side got there first. That is what
+/// makes the two orderings behave alike: the cancel shortcut and the picker's
+/// own key handler race on every Escape, and neither may cancel a recording the
+/// user was only backing out of a pick from.
+pub fn cancel_belongs_to_picker(app: &AppHandle) -> bool {
+    if dismiss_open_picker(app) {
+        return true;
+    }
+    app.try_state::<PickerDismissal>()
+        .is_some_and(|dismissal| dismissal.take_fresh(std::time::Instant::now()))
 }
 
 /// Whether a pick is in progress, so the paste path can hold off (#164).
@@ -288,13 +321,15 @@ pub fn announce_pick_lost(app: &AppHandle) {
 
 /// Consume a pending one-shot pick for the paste about to fire.
 ///
-/// `None` means no pick is waiting and the usual target rules apply. The picked
+/// `None` means no pick is waiting FOR THIS DICTATION -- either nothing is
+/// armed, or what is armed belongs to a dictation started after this one -- and
+/// the usual target rules apply. The picked
 /// window is re-validated through the shared identity check first, so a window
 /// that closed (or a handle Windows recycled) suppresses the paste exactly as a
 /// lost lock does (#254), emitting [`WINDOW_PICK_LOST_EVENT`] once.
-pub fn take_pick_target(app: &AppHandle) -> Option<PickDelivery> {
+pub fn take_pick_target(app: &AppHandle, sequence: u64) -> Option<PickDelivery> {
     let pending = app.try_state::<PendingPick>()?;
-    let delivery = pending.take_resolved(target_backend::window_is_alive)?;
+    let delivery = pending.take_resolved(sequence, target_backend::window_is_alive)?;
 
     if delivery == PickDelivery::PickLost {
         announce_pick_lost(app);
@@ -310,9 +345,10 @@ pub fn take_pick_target(app: &AppHandle) -> Option<PickDelivery> {
 /// The order is [`decide_paste`]'s, and it matters: an open picker is checked
 /// before any armed route is consumed, so a route the user has moved on from is
 /// never spent on a transcript that is about to be withheld -- and never aimed
-/// at the picker window itself.
-pub fn paste_verdict(app: &AppHandle) -> PasteVerdict {
-    let verdict = decide_paste(pick_in_progress(app), || take_pick_target(app));
+/// at the picker window itself. `sequence` is the dictation asking, so a route
+/// armed after it was captured stays put for the dictation it was made for.
+pub fn paste_verdict(app: &AppHandle, sequence: u64) -> PasteVerdict {
+    let verdict = decide_paste(pick_in_progress(app), || take_pick_target(app, sequence));
     if verdict == PasteVerdict::WithholdForPicker {
         announce_pick_in_progress(app);
     }

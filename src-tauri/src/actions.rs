@@ -640,6 +640,9 @@ impl ShortcutAction for TranscribeAction {
             self.post_process,
             settings.raw_output,
             crate::output_target::backend::capture_delivery(app),
+            // Where this dictation falls in the order they were started, so a
+            // one-shot pick reaches the dictation it was made for (#124).
+            crate::dictation_context::next_sequence(app),
         );
 
         change_tray_icon(app, TrayIconState::Recording);
@@ -754,6 +757,7 @@ impl ShortcutAction for TranscribeAction {
                 self.post_process,
                 get_settings(app).raw_output,
                 crate::output_target::backend::capture_delivery(app),
+                crate::dictation_context::next_sequence(app),
             )
         });
         let post_process = context.post_process_requested();
@@ -1014,9 +1018,11 @@ impl ShortcutAction for CancelAction {
         // The cancel binding defaults to Escape, which is also how the one-shot
         // picker is dismissed (#124) -- and a global shortcut fires whatever the
         // focused window does with the key, so backing out of the picker would
-        // otherwise throw away the recording underneath it. While a pick is up,
-        // the picker owns the gesture: it closes, and the recording keeps going.
-        if crate::window_picker::backend::dismiss_open_picker(app) {
+        // otherwise throw away the recording underneath it. The picker owns that
+        // gesture whichever side of the race gets there first: this closes a
+        // picker still up, and stands down for one just dismissed by the same
+        // key press. The recording keeps going either way.
+        if crate::window_picker::backend::cancel_belongs_to_picker(app) {
             return;
         }
         utils::cancel_current_operation(app);

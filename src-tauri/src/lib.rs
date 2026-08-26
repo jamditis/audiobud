@@ -524,8 +524,14 @@ fn initialize_core_logic(app_handle: &AppHandle) {
     app_handle.manage(window_picker::PickerSession::default());
     app_handle.manage(window_picker::PendingPick::default());
     app_handle.manage(window_picker::LastPick::default());
+    // Remembers a just-dismissed pick, so the cancel shortcut and the picker's
+    // own Escape handler cannot both act on one key press (#124).
+    app_handle.manage(window_picker::PickerDismissal::default());
     // Hand-off of in-flight dictation contexts from recording start to stop.
     app_handle.manage(dictation_context::ActiveDictations::default());
+    // Counts dictations as they start, so a one-shot pick can be handed to the
+    // dictation it was made for rather than to whichever paste lands first.
+    app_handle.manage(dictation_context::DictationSequence::default());
     let delivery_queue: delivery_queue::DeliveryQueue = delivery_queue::DeliveryQueue::default();
     app_handle.manage(delivery_queue);
 

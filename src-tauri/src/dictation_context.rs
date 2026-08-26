@@ -40,6 +40,7 @@ pub struct DictationContext {
     post_process_requested: bool,
     effective_raw: bool,
     delivery_target: Delivery,
+    sequence: u64,
 }
 
 impl DictationContext {
@@ -56,6 +57,7 @@ impl DictationContext {
         post_process_requested: bool,
         raw_output_setting: bool,
         delivery_target: Delivery,
+        sequence: u64,
     ) -> Self {
         let effective_raw = raw_requested || (raw_output_setting && !post_process_requested);
         Self {
@@ -63,6 +65,7 @@ impl DictationContext {
             post_process_requested,
             effective_raw,
             delivery_target,
+            sequence,
         }
     }
 
@@ -97,6 +100,58 @@ impl DictationContext {
     pub fn delivery_target(&self) -> Delivery {
         self.delivery_target
     }
+
+    /// Where this dictation falls in the order they were started.
+    ///
+    /// Deliveries do not finish in the order they began -- transcription,
+    /// post-processing and the delivery queue all take their own time -- so
+    /// "which dictation is this?" cannot be answered by whichever paste happens
+    /// to arrive first. A one-shot pick (#124) is offered to the dictation the
+    /// user made it FOR, which is the first one started after the pick, and this
+    /// number is how the two are told apart.
+    pub fn sequence(&self) -> u64 {
+        self.sequence
+    }
+}
+
+/// Counts dictations in the order they start, so a pick made between two of them
+/// can be given to the right one.
+///
+/// Tauri-managed, ticked once per recording start. Only the ORDER matters, never
+/// the value: it is compared with the count a pending pick recorded when it was
+/// armed, and nothing else reads it.
+#[derive(Default)]
+pub struct DictationSequence(std::sync::atomic::AtomicU64);
+
+impl DictationSequence {
+    /// The number for a dictation starting now.
+    pub fn next(&self) -> u64 {
+        self.0.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1
+    }
+
+    /// How many dictations have started so far.
+    pub fn current(&self) -> u64 {
+        self.0.load(std::sync::atomic::Ordering::SeqCst)
+    }
+}
+
+/// The number for a dictation starting now, or 0 when the counter is missing --
+/// in which case a pending pick is never consumed, which is the safe way round:
+/// the transcript goes where the dictation was captured instead of somewhere the
+/// user chose for a different one.
+pub fn next_sequence(app: &tauri::AppHandle) -> u64 {
+    use tauri::Manager;
+    app.try_state::<DictationSequence>()
+        .map(|counter| counter.next())
+        .unwrap_or(0)
+}
+
+/// How many dictations have started so far, for stamping a pick as it is armed.
+pub fn current_sequence(app: &tauri::AppHandle) -> u64 {
+    use tauri::Manager;
+    app.try_state::<DictationSequence>()
+        .map(|counter| counter.current())
+        .unwrap_or(0)
 }
 
 /// Tauri-managed hand-off of in-flight dictation contexts, keyed by the shortcut
@@ -180,7 +235,7 @@ mod tests {
     #[test]
     fn effective_raw_matches_the_resolution_rule() {
         let cap = |raw, post, global| {
-            DictationContext::capture(raw, post, global, Delivery::Foreground).effective_raw()
+            DictationContext::capture(raw, post, global, Delivery::Foreground, 1).effective_raw()
         };
         // An explicit per-dictation raw request always forces raw.
         assert!(cap(true, false, false));
@@ -200,9 +255,9 @@ mod tests {
     fn effective_raw_is_frozen_at_capture() {
         let intent = (false, false); // no per-dictation override, so the global decides
         let with_global_on =
-            DictationContext::capture(intent.0, intent.1, true, Delivery::Foreground);
+            DictationContext::capture(intent.0, intent.1, true, Delivery::Foreground, 1);
         let with_global_off =
-            DictationContext::capture(intent.0, intent.1, false, Delivery::Foreground);
+            DictationContext::capture(intent.0, intent.1, false, Delivery::Foreground, 1);
         assert!(with_global_on.effective_raw());
         assert!(!with_global_off.effective_raw());
         // The stored value is what the accessor returns, not a re-resolution.
@@ -215,7 +270,7 @@ mod tests {
     // The per-dictation intent is carried verbatim, the way history retry replays it.
     #[test]
     fn per_dictation_intent_is_carried_verbatim() {
-        let ctx = DictationContext::capture(true, false, false, Delivery::Foreground);
+        let ctx = DictationContext::capture(true, false, false, Delivery::Foreground, 1);
         assert!(ctx.raw_requested());
         assert!(!ctx.post_process_requested());
     }
@@ -231,13 +286,14 @@ mod tests {
             false,
             false,
             Delivery::Pinned(window, DeliverySource::Lock),
+            1,
         );
         assert_eq!(
             ctx.delivery_target(),
             Delivery::Pinned(window, DeliverySource::Lock)
         );
 
-        let fg = DictationContext::capture(false, false, false, Delivery::Foreground);
+        let fg = DictationContext::capture(false, false, false, Delivery::Foreground, 1);
         assert_eq!(fg.delivery_target(), Delivery::Foreground);
     }
 
@@ -255,6 +311,7 @@ mod tests {
             false,
             false,
             Delivery::Pinned(started_with, DeliverySource::Lock),
+            1,
         );
 
         // Released mid-dictation.
@@ -274,7 +331,7 @@ mod tests {
     }
 
     fn ctx(raw: bool) -> DictationContext {
-        DictationContext::capture(raw, false, false, Delivery::Foreground)
+        DictationContext::capture(raw, false, false, Delivery::Foreground, 1)
     }
 
     // The hand-off is one-shot: once stop has taken the context, the pipeline

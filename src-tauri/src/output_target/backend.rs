@@ -295,6 +295,11 @@ pub fn capture_delivery(app: &AppHandle) -> Delivery {
 /// or `None` when the paste must be suppressed because that window is gone
 /// (#120).
 ///
+/// `sequence` is which dictation this is, in the order they were started, so a
+/// one-shot pick is honored only by the dictation it was made for (#124): an
+/// older transcript arriving late leaves the pick alone and goes where it was
+/// captured.
+///
 /// The picker speaks first (#124). A pick in progress withholds the transcript
 /// outright -- pasting into the window the user is picking from is exactly the
 /// misfire the flow exists to avoid -- and otherwise a pending one-shot route is
@@ -308,10 +313,14 @@ pub fn capture_delivery(app: &AppHandle) -> Delivery {
 /// captured identity, because a window can close during a dictation. A dead
 /// target is dropped through [`drop_lock_for`], which clears the lock only if it
 /// still points at this same window and announces the loss either way.
-pub fn resolve_captured_delivery(app: &AppHandle, captured: Delivery) -> Option<Delivery> {
+pub fn resolve_captured_delivery(
+    app: &AppHandle,
+    captured: Delivery,
+    sequence: u64,
+) -> Option<Delivery> {
     use crate::window_picker::{PasteVerdict, PickDelivery};
 
-    match crate::window_picker::backend::paste_verdict(app) {
+    match crate::window_picker::backend::paste_verdict(app, sequence) {
         // A pick is up, so this transcript finished mid-pick. The picker holds
         // the foreground, and delivering now would type the transcript into
         // AudioBud's own window (#164) -- including along a route armed before
