@@ -39,11 +39,48 @@ pub struct WindowHandle(pub isize);
 /// user chose" from "a different window wearing the same handle". A window keeps
 /// its owning thread for its whole life, so both fields are stable while the
 /// window exists.
+///
+/// Process and thread alone are not unique, though: one GUI thread can destroy a
+/// window and create another, and the new one can inherit the recycled handle,
+/// matching on both counts. The window class is recorded as well, which tells
+/// those apart whenever the replacement is a different kind of window -- a
+/// dialog where a document window was, say.
+///
+/// RESIDUAL RISK: a replacement of the SAME class on the SAME thread reusing the
+/// SAME handle still reads as alive. Closing that gap needs a positive signal
+/// that the original window died (a `WinEvent` destruction hook), which means a
+/// hook, a message loop to service it, and per-window bookkeeping -- a different
+/// shape of change than this comparison, tracked as its own follow-up. Until
+/// then the check is deliberately cheap and stateless, and every delivery is
+/// still guarded by the foreground re-checks around each keystroke.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct WindowIdentity {
     pub handle: WindowHandle,
     pub process_id: u32,
     pub thread_id: u32,
+    /// The window class at capture time, as [`class_fingerprint`] reduces it.
+    pub class: ClassFingerprint,
+}
+
+/// A window class reduced to one comparable value.
+///
+/// The class is kept as a fingerprint rather than a `String` so an identity
+/// stays `Copy`: it is held in Tauri-managed state, matched out of a mutex
+/// guard, and passed by value through every layer of the paste path. Nothing
+/// reads the class back -- it is only ever compared with another capture of the
+/// same window -- so the name itself is not worth carrying.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct ClassFingerprint(pub u64);
+
+/// Reduce a window class name to a [`ClassFingerprint`].
+pub fn class_fingerprint(class_name: &str) -> ClassFingerprint {
+    use std::hash::{Hash, Hasher};
+    // DefaultHasher is seeded identically every time, so a fingerprint is
+    // stable for as long as it needs to be: one capture compared with one
+    // later probe, in the same run of the app.
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    class_name.hash(&mut hasher);
+    ClassFingerprint(hasher.finish())
 }
 
 /// Why a window could not be captured for locking.
@@ -73,25 +110,25 @@ impl fmt::Display for CaptureError {
 
 /// Whether a locked window is still the same window.
 ///
-/// `probe` reports the process and thread that own `locked.handle` right now, or
-/// `None` if no window has that handle any more (on Windows,
-/// `GetWindowThreadProcessId`, which returns 0 for a dead handle). A handle the
-/// OS has recycled reads as a different owner and so is NOT alive: the caller
-/// then drops the lock and suppresses the paste rather than typing a transcript
-/// into a window the user never chose (#254).
+/// `probe` reads the identity of whatever window holds `locked.handle` right
+/// now, or `None` if no window holds it any more (on Windows,
+/// `GetWindowThreadProcessId`, which returns 0 for a dead handle). Every
+/// recorded field must match: a handle the OS has recycled reads as a different
+/// owner or a different class of window, and so is NOT alive. The caller then
+/// drops the lock and suppresses the paste rather than typing a transcript into
+/// a window the user never chose (#254). See [`WindowIdentity`] for what this
+/// catches and the one case it does not.
 ///
 /// This is the one identity check for the whole subsystem; the one-shot picker
 /// (#124) re-validates its chosen handle through it too.
 pub fn identity_is_alive(
     locked: WindowIdentity,
-    probe: impl FnOnce(WindowHandle) -> Option<(u32, u32)>,
+    probe: impl FnOnce(WindowHandle) -> Option<WindowIdentity>,
 ) -> bool {
-    match probe(locked.handle) {
-        Some((process_id, thread_id)) => {
-            process_id == locked.process_id && thread_id == locked.thread_id
-        }
-        None => false,
-    }
+    // Comparing the whole identity keeps this honest as the struct grows: a new
+    // field is compared the moment it is captured, rather than being forgotten
+    // in a hand-written field list.
+    probe(locked.handle) == Some(locked)
 }
 
 /// Whether `candidate` is one of AudioBud's own windows (#164).
@@ -343,10 +380,16 @@ mod tests {
 
     /// A captured window: handle `h`, owned by process `pid` / thread `tid`.
     fn win(h: isize, pid: u32, tid: u32) -> WindowIdentity {
+        classed_win(h, pid, tid, "Chrome_WidgetWin_1")
+    }
+
+    /// The same, with the window class spelled out.
+    fn classed_win(h: isize, pid: u32, tid: u32, class_name: &str) -> WindowIdentity {
         WindowIdentity {
             handle: WindowHandle(h),
             process_id: pid,
             thread_id: tid,
+            class: class_fingerprint(class_name),
         }
     }
 
@@ -433,7 +476,7 @@ mod tests {
         let locked = win(42, 100, 200);
         assert!(identity_is_alive(locked, |h| {
             assert_eq!(h, locked.handle);
-            Some((100, 200))
+            Some(locked)
         }));
     }
 
@@ -443,9 +486,21 @@ mod tests {
         // OS handed the number to an unrelated window (#254). Bare IsWindow
         // would say "alive" here and leak the transcript into that window.
         let locked = win(42, 100, 200);
-        assert!(!identity_is_alive(locked, |_| Some((999, 200))));
+        assert!(!identity_is_alive(locked, |_| Some(win(42, 999, 200))));
         // Same process, different thread: another window of the same app.
-        assert!(!identity_is_alive(locked, |_| Some((100, 999))));
+        assert!(!identity_is_alive(locked, |_| Some(win(42, 100, 999))));
+    }
+
+    #[test]
+    fn a_same_thread_replacement_of_another_class_is_not_alive() {
+        // One GUI thread can destroy a window and create another that inherits
+        // the handle, so process and thread both still match. A different class
+        // -- a dialog where a document window was -- gives it away (#254).
+        let locked = classed_win(42, 100, 200, "CabinetWClass");
+        let replacement = classed_win(42, 100, 200, "#32770");
+        assert!(!identity_is_alive(locked, |_| Some(replacement)));
+        // The window itself, unchanged, still reads as alive.
+        assert!(identity_is_alive(locked, |_| Some(locked)));
     }
 
     #[test]
@@ -461,7 +516,7 @@ mod tests {
         let t = PinnedTarget::default();
         let locked = win(42, 100, 200);
         t.lock_to(locked);
-        let resolved = t.resolve(|w| identity_is_alive(w, |_| Some((999, 200))));
+        let resolved = t.resolve(|w| identity_is_alive(w, |_| Some(win(42, 999, 200))));
         assert_eq!(resolved, Resolved::LockLost);
         assert!(!t.is_locked());
     }

@@ -237,7 +237,7 @@ pub use fallback::{
 #[cfg(windows)]
 mod imp {
     use super::{CaptureError, CaptureSource, WindowIdentity};
-    use crate::output_target::{is_eligible_target, WindowFacts, WindowHandle};
+    use crate::output_target::{class_fingerprint, is_eligible_target, WindowFacts, WindowHandle};
     use log::warn;
     use std::ffi::c_void;
     use std::time::Duration;
@@ -308,10 +308,11 @@ mod imp {
         }
     }
 
-    /// The process and thread that own `handle` right now, or `None` if no
-    /// window has that handle any more.
-    pub fn probe_identity(handle: WindowHandle) -> Option<(u32, u32)> {
-        identity_of(to_hwnd(handle)).map(|w| (w.process_id, w.thread_id))
+    /// The identity of whatever window holds `handle` right now, or `None` if
+    /// no window holds it any more. Shared by the target lock and the picker
+    /// (#124) so both judge a handle the same way.
+    pub fn probe_identity(handle: WindowHandle) -> Option<WindowIdentity> {
+        identity_of(to_hwnd(handle))
     }
 
     /// The window that currently holds the foreground, with its identity, if
@@ -369,6 +370,9 @@ mod imp {
             handle: from_hwnd(hwnd),
             process_id,
             thread_id,
+            // Recorded here, at every capture and every probe alike, so the two
+            // are always comparable (#254).
+            class: class_fingerprint(&class_name_of(hwnd)),
         })
     }
 
@@ -467,7 +471,7 @@ mod fallback {
 
     /// Unreachable while capture is unsupported. `None` reads as "not alive",
     /// which drops any lock that somehow exists rather than pasting into it.
-    pub fn probe_identity(_handle: WindowHandle) -> Option<(u32, u32)> {
+    pub fn probe_identity(_handle: WindowHandle) -> Option<WindowIdentity> {
         None
     }
 
