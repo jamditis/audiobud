@@ -14,7 +14,8 @@
     "showOverlay": "Mostrar superposición",
     "outputMode": "Modo de salida",
     "formatted": "Con formato",
-    "rawTranscript": "Transcripción sin formato"
+    "rawTranscript": "Transcripción sin formato",
+    "lockToWindow": "Fijar a una ventana"
   },
   "sidebar": {
     "navLabel": "Secciones de configuración",
@@ -802,6 +803,8 @@
     "modelLoadFailedUnknown": "modelo desconocido",
     "pasteFailedTitle": "Error al pegar el texto",
     "pasteFailed": "No se pudo pegar el texto en la aplicación activa.",
+    "targetLockLostTitle": "La ventana fijada ya no existe",
+    "targetLockLost": "La ventana que fijaste está cerrada. AudioBud no pegó el texto. Fija una ventana de nuevo.",
     "transcriptionErrorTitle": "La transcripción ha fallado",
     "transcriptionErrorGeneric": "No se pudo transcribir la grabación. Inténtalo de nuevo o elige otro modelo.",
     "transcriptionTimeoutTitle": "Se agotó el tiempo de la transcripción",

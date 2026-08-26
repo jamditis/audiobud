@@ -14,7 +14,8 @@
     "showOverlay": "הצג שכבת משוב",
     "outputMode": "מצב פלט",
     "formatted": "מעוצב",
-    "rawTranscript": "תמלול גולמי"
+    "rawTranscript": "תמלול גולמי",
+    "lockToWindow": "נעילה לחלון"
   },
   "sidebar": {
     "navLabel": "מדורי ההגדרות",
@@ -804,6 +805,8 @@
     "modelLoadFailedUnknown": "מודל לא ידוע",
     "pasteFailedTitle": "ההדבקה נכשלה",
     "pasteFailed": "לא ניתן היה להדביק את הטקסט ביישום הפעיל.",
+    "targetLockLostTitle": "החלון הנעול נסגר",
+    "targetLockLost": "החלון שנעלת נסגר. AudioBud לא הדביק את הטקסט. נעל חלון מחדש.",
     "transcriptionErrorTitle": "התמלול נכשל",
     "transcriptionErrorGeneric": "לא ניתן היה לתמלל את ההקלטה. נסו שוב או בחרו מודל אחר.",
     "transcriptionTimeoutTitle": "התמלול חרג מהזמן",

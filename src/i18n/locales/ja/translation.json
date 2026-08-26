@@ -14,7 +14,8 @@
     "showOverlay": "オーバーレイを表示",
     "outputMode": "出力モード",
     "formatted": "整形あり",
-    "rawTranscript": "未加工の文字起こし"
+    "rawTranscript": "未加工の文字起こし",
+    "lockToWindow": "ウィンドウに固定"
   },
   "sidebar": {
     "navLabel": "設定セクション",
@@ -802,6 +803,8 @@
     "modelLoadFailedUnknown": "不明なモデル",
     "pasteFailedTitle": "テキストの貼り付けに失敗しました",
     "pasteFailed": "アクティブなアプリケーションにテキストを貼り付けられませんでした。",
+    "targetLockLostTitle": "固定したウィンドウがありません",
+    "targetLockLost": "固定したウィンドウは閉じられています。AudioBud はテキストを貼り付けませんでした。もう一度ウィンドウを固定してください。",
     "transcriptionErrorTitle": "文字起こしに失敗しました",
     "transcriptionErrorGeneric": "録音を文字起こしできませんでした。もう一度試すか、別のモデルを選択してください。",
     "transcriptionTimeoutTitle": "文字起こしがタイムアウトしました",

@@ -14,7 +14,8 @@
     "showOverlay": "إظهار التراكب",
     "outputMode": "وضع الإخراج",
     "formatted": "منسّق",
-    "rawTranscript": "نص خام"
+    "rawTranscript": "نص خام",
+    "lockToWindow": "تثبيت على نافذة"
   },
   "sidebar": {
     "navLabel": "أقسام الإعدادات",
@@ -810,6 +811,8 @@
     "modelLoadFailedUnknown": "نموذج غير معروف",
     "pasteFailedTitle": "فشل لصق النص",
     "pasteFailed": "تعذر لصق النص في التطبيق النشط.",
+    "targetLockLostTitle": "النافذة المثبتة لم تعد موجودة",
+    "targetLockLost": "النافذة التي ثبّتها مغلقة. لم يلصق AudioBud النص. ثبّت نافذة مرة أخرى.",
     "transcriptionErrorTitle": "فشل التفريغ",
     "transcriptionErrorGeneric": "تعذر نسخ التسجيل. حاول مرة أخرى أو اختر نموذجًا مختلفًا.",
     "transcriptionTimeoutTitle": "انتهت مهلة التفريغ",

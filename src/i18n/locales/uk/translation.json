@@ -14,7 +14,8 @@
     "showOverlay": "Показувати оверлей",
     "outputMode": "Режим виводу",
     "formatted": "З форматуванням",
-    "rawTranscript": "Сира транскрипція"
+    "rawTranscript": "Сира транскрипція",
+    "lockToWindow": "Закріпити за вікном"
   },
   "sidebar": {
     "navLabel": "Розділи налаштувань",
@@ -806,6 +807,8 @@
     "modelLoadFailedUnknown": "невідома модель",
     "pasteFailedTitle": "Не вдалося вставити текст",
     "pasteFailed": "Не вдалося вставити текст до активної програми.",
+    "targetLockLostTitle": "Закріплене вікно закрито",
+    "targetLockLost": "Вікно, яке ви закріпили, закрито. AudioBud не вставив текст. Закріпіть вікно знову.",
     "transcriptionErrorTitle": "Не вдалося виконати транскрипцію",
     "transcriptionErrorGeneric": "Не вдалося транскрибувати запис. Спробуйте ще раз або виберіть іншу модель.",
     "transcriptionTimeoutTitle": "Час очікування транскрипції вичерпано",

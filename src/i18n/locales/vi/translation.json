@@ -14,7 +14,8 @@
     "showOverlay": "Hiện lớp phủ",
     "outputMode": "Chế độ đầu ra",
     "formatted": "Đã định dạng",
-    "rawTranscript": "Văn bản thô"
+    "rawTranscript": "Văn bản thô",
+    "lockToWindow": "Khóa vào cửa sổ"
   },
   "sidebar": {
     "navLabel": "Các mục cài đặt",
@@ -802,6 +803,8 @@
     "modelLoadFailedUnknown": "mô hình không xác định",
     "pasteFailedTitle": "Không thể dán văn bản",
     "pasteFailed": "Không thể dán văn bản vào ứng dụng đang hoạt động.",
+    "targetLockLostTitle": "Cửa sổ đã khóa không còn nữa",
+    "targetLockLost": "Cửa sổ bạn đã khóa đã đóng. AudioBud không dán văn bản. Hãy khóa lại một cửa sổ.",
     "transcriptionErrorTitle": "Chuyển đổi không thành công",
     "transcriptionErrorGeneric": "Không thể chuyển đổi bản ghi âm thành văn bản. Hãy thử lại hoặc chọn một mô hình khác.",
     "transcriptionTimeoutTitle": "Chuyển đổi đã quá thời gian chờ",

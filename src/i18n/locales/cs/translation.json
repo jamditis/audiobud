@@ -14,7 +14,8 @@
     "showOverlay": "Zobrazit překryv",
     "outputMode": "Režim výstupu",
     "formatted": "Formátováno",
-    "rawTranscript": "Surový přepis"
+    "rawTranscript": "Surový přepis",
+    "lockToWindow": "Uzamknout na okno"
   },
   "sidebar": {
     "navLabel": "Sekce nastavení",
@@ -804,6 +805,8 @@
     "modelLoadFailedUnknown": "neznámý model",
     "pasteFailedTitle": "Vložení textu se nezdařilo",
     "pasteFailed": "Text nebylo možné vložit do aktivní aplikace.",
+    "targetLockLostTitle": "Uzamčené okno už neexistuje",
+    "targetLockLost": "Okno, které jste uzamkli, je zavřené. AudioBud text nevložil. Uzamkněte okno znovu.",
     "transcriptionErrorTitle": "Přepis se nezdařil",
     "transcriptionErrorGeneric": "Nahrávku se nepodařilo přepsat. Zkuste to znovu nebo vyberte jiný model.",
     "transcriptionTimeoutTitle": "Vypršel časový limit přepisu",

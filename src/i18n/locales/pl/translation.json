@@ -14,7 +14,8 @@
     "showOverlay": "Pokaż nakładkę",
     "outputMode": "Tryb wyjścia",
     "formatted": "Sformatowany",
-    "rawTranscript": "Surowa transkrypcja"
+    "rawTranscript": "Surowa transkrypcja",
+    "lockToWindow": "Przypnij do okna"
   },
   "sidebar": {
     "navLabel": "Sekcje ustawień",
@@ -806,6 +807,8 @@
     "modelLoadFailedUnknown": "nieznany model",
     "pasteFailedTitle": "Nie udało się wkleić tekstu",
     "pasteFailed": "Nie można było wkleić tekstu do aktywnej aplikacji.",
+    "targetLockLostTitle": "Przypiętego okna już nie ma",
+    "targetLockLost": "Przypięte okno jest zamknięte. AudioBud nie wkleił tekstu. Przypnij okno ponownie.",
     "transcriptionErrorTitle": "Transkrypcja nie powiodła się",
     "transcriptionErrorGeneric": "Nie udało się transkrybować nagrania. Spróbuj ponownie lub wybierz inny model.",
     "transcriptionTimeoutTitle": "Przekroczono czas transkrypcji",

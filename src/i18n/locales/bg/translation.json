@@ -14,7 +14,8 @@
     "showOverlay": "Показване на наслагването",
     "outputMode": "Режим на изход",
     "formatted": "Форматиран",
-    "rawTranscript": "Суров транскрипт"
+    "rawTranscript": "Суров транскрипт",
+    "lockToWindow": "Заключване към прозорец"
   },
   "sidebar": {
     "navLabel": "Раздели с настройки",
@@ -802,6 +803,8 @@
     "modelLoadFailedUnknown": "неизвестен модел",
     "pasteFailedTitle": "Неуспешно поставяне на текст",
     "pasteFailed": "Текстът не можа да бъде поставен в активното приложение.",
+    "targetLockLostTitle": "Заключеният прозорец вече го няма",
+    "targetLockLost": "Прозорецът, който заключихте, е затворен. AudioBud не постави текста. Заключете прозорец отново.",
     "transcriptionErrorTitle": "Транскрипцията не бе успешна",
     "transcriptionErrorGeneric": "Записът не можа да бъде транскрибиран. Опитайте отново или изберете друг модел.",
     "transcriptionTimeoutTitle": "Времето за транскрипция изтече",
