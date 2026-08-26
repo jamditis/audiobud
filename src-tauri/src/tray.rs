@@ -569,6 +569,14 @@ pub fn copy_last_transcript(app: &AppHandle) {
         return;
     }
 
+    // Same transaction lock the delivery worker's paste holds across its
+    // capture/write/restore window, so this write cannot land in the middle
+    // of a paste and then get clobbered by its stale-snapshot restore (#161
+    // review, finding 2).
+    let _txn = crate::clipboard::CLIPBOARD_TXN
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+
     if let Err(err) = app.clipboard().write_text(text) {
         error!("Failed to copy last transcript to clipboard: {}", err);
         return;

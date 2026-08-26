@@ -27,7 +27,8 @@
 use log::{error, warn};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::mpsc::{self, Sender};
-use std::thread;
+use std::sync::Mutex;
+use std::thread::{self, JoinHandle};
 
 /// One unit of delivery work: the paste, plus whatever hand-off follows it.
 pub type DeliveryJob = Box<dyn FnOnce() + Send + 'static>;
@@ -35,10 +36,17 @@ pub type DeliveryJob = Box<dyn FnOnce() + Send + 'static>;
 /// Owns the delivery thread and the channel that feeds it.
 pub struct DeliveryWorker {
     /// `None` when the thread could not be spawned, which makes [`run`] fall
-    /// back to the calling thread.
+    /// back to the calling thread. Also taken (left `None`) by [`shutdown`],
+    /// which is how the worker thread's receive loop is told to end.
     ///
     /// [`run`]: DeliveryWorker::run
-    jobs: Option<Sender<DeliveryJob>>,
+    /// [`shutdown`]: DeliveryWorker::shutdown
+    jobs: Mutex<Option<Sender<DeliveryJob>>>,
+    /// Joined by [`shutdown`] so quit can wait for whatever delivery is
+    /// already running or queued instead of killing the process mid-paste.
+    ///
+    /// [`shutdown`]: DeliveryWorker::shutdown
+    handle: Mutex<Option<JoinHandle<()>>>,
 }
 
 impl Default for DeliveryWorker {
@@ -65,14 +73,20 @@ impl DeliveryWorker {
             });
 
         match spawned {
-            Ok(_handle) => Self { jobs: Some(jobs) },
+            Ok(handle) => Self {
+                jobs: Mutex::new(Some(jobs)),
+                handle: Mutex::new(Some(handle)),
+            },
             Err(e) => {
                 // Without a thread the caller's own thread does the work. It is
                 // the transcription thread, never the main thread, so the
                 // overlay still moves; only the ordering across overlapping
                 // deliveries falls back to the queue's own hand-off.
                 error!("Failed to spawn the delivery thread: {}", e);
-                Self { jobs: None }
+                Self {
+                    jobs: Mutex::new(None),
+                    handle: Mutex::new(None),
+                }
             }
         }
     }
@@ -83,14 +97,37 @@ impl DeliveryWorker {
     /// the caller the delivery's blocking time, which is what the old
     /// main-thread dispatch cost every time.
     pub fn run(&self, job: DeliveryJob) {
-        let Some(jobs) = self.jobs.as_ref() else {
+        let jobs = self.jobs.lock().unwrap();
+        let Some(sender) = jobs.as_ref() else {
+            drop(jobs);
             job();
             return;
         };
 
-        if let Err(returned) = jobs.send(job) {
+        if let Err(returned) = sender.send(job) {
+            drop(jobs);
             warn!("The delivery thread is gone; delivering on the calling thread");
             (returned.0)();
+        }
+    }
+
+    /// Drain and stop the delivery thread before the process exits (quit).
+    ///
+    /// Closing the channel lets the worker's `for job in receiver` loop finish
+    /// whatever is already running or queued and then end on its own; joining
+    /// blocks until it does, so a transcript that is mid-paste when the user
+    /// quits is still delivered instead of being cut off by `app.exit` (#161
+    /// review, finding 1). Safe to call more than once and safe when no
+    /// thread was ever spawned.
+    pub fn shutdown(&self) {
+        // Drop the sender so the worker's receiver iterator ends once it has
+        // drained whatever was already sent.
+        self.jobs.lock().unwrap().take();
+
+        if let Some(handle) = self.handle.lock().unwrap().take() {
+            if handle.join().is_err() {
+                error!("The delivery thread panicked while shutting down");
+            }
         }
     }
 }
@@ -173,6 +210,72 @@ mod tests {
             receiver.recv_timeout(Duration::from_secs(5)),
             Ok("delivered anyway")
         );
+    }
+
+    #[test]
+    fn shutdown_waits_for_a_running_delivery_before_returning() {
+        // The quit path (#161 review, finding 1): shutdown must not return --
+        // and so must not let `app.exit` run -- until a delivery already in
+        // flight has actually finished.
+        let worker = DeliveryWorker::new();
+        let finished = Arc::new(Mutex::new(false));
+
+        let flag = Arc::clone(&finished);
+        worker.run(Box::new(move || {
+            std::thread::sleep(Duration::from_millis(80));
+            *flag.lock().unwrap() = true;
+        }));
+
+        worker.shutdown();
+        assert!(
+            *finished.lock().unwrap(),
+            "shutdown returned before the in-flight delivery finished"
+        );
+    }
+
+    #[test]
+    fn shutdown_drains_jobs_queued_behind_a_running_delivery() {
+        let worker = DeliveryWorker::new();
+        let order = Arc::new(Mutex::new(Vec::new()));
+
+        let first = Arc::clone(&order);
+        worker.run(Box::new(move || {
+            std::thread::sleep(Duration::from_millis(50));
+            first.lock().unwrap().push("first");
+        }));
+        let second = Arc::clone(&order);
+        worker.run(Box::new(move || {
+            second.lock().unwrap().push("second");
+        }));
+
+        worker.shutdown();
+        assert_eq!(*order.lock().unwrap(), vec!["first", "second"]);
+    }
+
+    #[test]
+    fn shutdown_is_a_harmless_no_op_when_called_twice() {
+        let worker = DeliveryWorker::new();
+        worker.run(Box::new(|| {}));
+        worker.shutdown();
+        worker.shutdown();
+    }
+
+    #[test]
+    fn run_falls_back_to_the_calling_thread_after_shutdown() {
+        // A delivery submitted after shutdown must not be dropped: the worker
+        // is gone, so `run` delivers inline, same as when the thread never
+        // spawned at all.
+        let worker = DeliveryWorker::new();
+        worker.shutdown();
+
+        let ran = Arc::new(Mutex::new(false));
+        let flag = Arc::clone(&ran);
+        let this_thread = std::thread::current().id();
+        worker.run(Box::new(move || {
+            assert_eq!(std::thread::current().id(), this_thread);
+            *flag.lock().unwrap() = true;
+        }));
+        assert!(*ran.lock().unwrap());
     }
 
     #[test]

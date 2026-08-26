@@ -12,9 +12,22 @@ use crate::settings::{get_settings, AppSettings, AutoSubmitKey, ClipboardHandlin
 use enigo::{Direction, Enigo, Key, Keyboard};
 use log::{info, warn};
 use std::process::Command;
+use std::sync::Mutex;
 use std::time::Duration;
 use tauri::{AppHandle, Manager};
 use tauri_plugin_clipboard_manager::ClipboardExt;
+
+/// Serializes every clipboard-touching operation that must not interleave
+/// with a paste's capture/write/restore window: the delivery worker's own
+/// paste, its final "leave a copy behind" write, and the tray's
+/// `copy_last_transcript`. Paste now runs off the main thread (#161), so
+/// these are no longer implicitly serialized by all running on it; without
+/// this lock a tray copy landing between `paste_via_clipboard`'s capture and
+/// its restore gets clobbered by the stale snapshot restore (#161 review,
+/// finding 2). Held across the paste's delays deliberately: correctness
+/// matters more than shaving latency off one delivery, and that is what the
+/// old main-thread serialization cost too.
+pub(crate) static CLIPBOARD_TXN: Mutex<()> = Mutex::new(());
 
 #[cfg(target_os = "linux")]
 use crate::utils::{is_kde_wayland, is_wayland};
@@ -78,6 +91,14 @@ fn paste_via_clipboard(
     paste_delay_ms: u64,
     hold: &FocusHold,
 ) -> Result<(), DeliveryError> {
+    // Held across the whole capture -> write -> paste -> restore window, so a
+    // concurrent tray clipboard write (`copy_last_transcript`) cannot land
+    // between the capture and the restore and get overwritten by the stale
+    // snapshot (#161 review, finding 2).
+    let _txn = CLIPBOARD_TXN
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+
     let clipboard = app_handle.clipboard();
 
     // Save the full clipboard before overwriting it with the transcript.
@@ -936,6 +957,12 @@ pub fn paste(text: String, app_handle: AppHandle, context: DictationContext) -> 
     // target is lost or refuses to come forward -- which, with
     // PasteMethod::None, is the entire output.
     let copied = if should_copy_to_clipboard(settings.clipboard_handling, delivered) {
+        // Same transaction lock as `paste_via_clipboard`: this write leaves
+        // the transcript as the final clipboard content, and must not race a
+        // concurrent tray copy either (#161 review, finding 2).
+        let _txn = CLIPBOARD_TXN
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         app_handle
             .clipboard()
             .write_text(&text)

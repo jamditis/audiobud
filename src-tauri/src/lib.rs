@@ -413,6 +413,12 @@ fn initialize_core_logic(app_handle: &AppHandle) {
                 cancel_current_operation(app);
             }
             "quit" => {
+                // Drain whatever delivery is already running or queued before
+                // the process exits, so quit cannot truncate a paste that is
+                // mid-flight (#161 review, finding 1).
+                if let Some(worker) = app.try_state::<delivery_worker::DeliveryWorker>() {
+                    worker.shutdown();
+                }
                 app.exit(0);
             }
             // The stale target-lock item (#266 review, finding 5): distinct from
