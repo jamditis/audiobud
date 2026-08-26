@@ -1,13 +1,13 @@
 //! Per-dictation context: the intent captured once at recording start and
 //! carried unchanged to paste time.
 //!
-//! Today every stage re-derives its decisions from the live global settings.
-//! `effective_raw_output` is recomputed three times per dictation in
-//! `actions.rs` (`:602`, `:701`, `:804`), each reading `get_settings` again.
-//! That works only because those inputs happen not to change mid-dictation.
-//! Output target (#120) breaks the assumption: the destination window is chosen
-//! at recording start and MUST NOT be re-read at paste time, because by then the
-//! user has deliberately moved focus elsewhere.
+//! Every stage used to re-derive its decisions from the live global settings:
+//! `effective_raw_output` was recomputed three times per dictation in
+//! `actions.rs`, each reading `get_settings` again. That worked only because
+//! those inputs happen not to change mid-dictation. Output target (#120) breaks
+//! the assumption: the destination window is chosen at recording start and MUST
+//! NOT be re-read at paste time, because by then the user has deliberately moved
+//! focus elsewhere.
 //!
 //! This is the object epic #142 calls the missing abstraction -- the thing the
 //! other output-routing children (#122, #123, #124) all need. It follows the
@@ -15,14 +15,16 @@
 //! / `post_process_requested` rather than re-reading the current settings
 //! (`commands/history.rs`).
 //!
-//! Pure logic only: no Tauri, no globals. A context is built once at start and
-//! threaded through. Wiring the three `actions.rs` sites and the paste path onto
-//! it (so they read the context instead of re-resolving from live settings) is
-//! the next child of the epic; until that lands nothing constructs one, hence
-//! the module-level dead_code allow, mirroring `output_target.rs`.
-#![allow(dead_code)]
+//! [`DictationContext`] itself is pure logic: no Tauri, no globals. Recording
+//! start and delivery are separate stacks, though -- `ShortcutAction::start`
+//! returns long before `stop` runs -- so [`ActiveDictations`] holds each
+//! in-flight context between them, keyed by the shortcut binding that owns the
+//! recording. From `stop` onwards the context is owned by the pipeline and moves
+//! with the transcript into the delivery queue and the paste.
 
 use crate::output_target::OutputTarget;
+use std::collections::HashMap;
+use std::sync::{Mutex, MutexGuard};
 
 /// One dictation's intent, fixed at recording start.
 ///
@@ -65,6 +67,12 @@ impl DictationContext {
     }
 
     /// Whether this dictation explicitly asked for raw output.
+    ///
+    /// The pipeline reads [`Self::effective_raw`] rather than this, because the
+    /// resolved decision is what it acts on. The unresolved request is kept
+    /// because it is the per-dictation intent history retry replays, and the
+    /// picker (#124) needs the same distinction.
+    #[allow(dead_code)]
     pub fn raw_requested(&self) -> bool {
         self.raw_requested
     }
@@ -84,6 +92,65 @@ impl DictationContext {
     /// Where the finished transcript is delivered, captured at recording start.
     pub fn output_target(&self) -> OutputTarget {
         self.output_target
+    }
+}
+
+/// Tauri-managed hand-off of in-flight dictation contexts, keyed by the shortcut
+/// binding that started the recording.
+///
+/// A dictation's intent is captured in `ShortcutAction::start` but first acted on
+/// in `stop`, which runs on a later call stack, so the context has to be parked
+/// somewhere in between. Keying by binding rather than using a single slot keeps
+/// two bindings (say plain transcribe and transcribe-with-post-process) from
+/// overwriting each other, matching how `AudioRecordingManager` tracks its own
+/// recordings.
+///
+/// This is deliberately only the start-to-stop hand-off: [`Self::take`] removes
+/// the context, and everything after it -- the async transcription task, the
+/// delivery queue, the paste -- carries the value it returned. Nothing re-reads
+/// the registry later, so it can never hand a stale intent to a paste.
+#[derive(Default)]
+pub struct ActiveDictations(Mutex<HashMap<String, DictationContext>>);
+
+impl ActiveDictations {
+    /// Record the context of a dictation that just started recording.
+    ///
+    /// A context already stored for this binding is replaced: it belongs to a
+    /// recording that never reached `stop` (a cancel, or a start whose recording
+    /// failed), and the fresh press is what the user is asking for now.
+    pub fn begin(&self, binding_id: &str, context: DictationContext) {
+        self.guard().insert(binding_id.to_string(), context);
+    }
+
+    /// Take the context of the dictation this binding started, if one is still
+    /// parked. `None` means no start was recorded for it -- the caller must then
+    /// capture the intent itself rather than drop the dictation.
+    pub fn take(&self, binding_id: &str) -> Option<DictationContext> {
+        self.guard().remove(binding_id)
+    }
+
+    /// Drop a binding's parked context because its recording never became a
+    /// dictation (the recording failed to start).
+    pub fn discard(&self, binding_id: &str) {
+        self.guard().remove(binding_id);
+    }
+
+    /// Drop every parked context. Cancellation abandons whatever is recording
+    /// without knowing which binding started it, and an abandoned context must
+    /// not outlive its recording.
+    pub fn discard_all(&self) {
+        self.guard().clear();
+    }
+
+    /// Borrow the registry, recovering the guard if a previous holder panicked.
+    /// The map is plain owned data with no cross-entry invariant, so a poisoned
+    /// guard's contents are always consistent; recovering keeps one panic from
+    /// bricking every later dictation on an `unwrap` (AGENTS.md: avoid unwrap in
+    /// production).
+    fn guard(&self) -> MutexGuard<'_, HashMap<String, DictationContext>> {
+        self.0
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 }
 
@@ -148,5 +215,62 @@ mod tests {
 
         let fg = DictationContext::capture(false, false, false, OutputTarget::Foreground);
         assert_eq!(fg.output_target(), OutputTarget::Foreground);
+    }
+
+    fn ctx(raw: bool) -> DictationContext {
+        DictationContext::capture(raw, false, false, OutputTarget::Foreground)
+    }
+
+    // The hand-off is one-shot: once stop has taken the context, the pipeline
+    // owns it and nothing can pick a second copy out of the registry.
+    #[test]
+    fn a_started_dictation_is_taken_once() {
+        let active = ActiveDictations::default();
+        active.begin("transcribe", ctx(true));
+        let taken = active.take("transcribe");
+        assert_eq!(taken, Some(ctx(true)));
+        assert_eq!(active.take("transcribe"), None);
+    }
+
+    // A stop with no recorded start must be visible to the caller so it can
+    // capture the intent itself rather than paste with someone else's.
+    #[test]
+    fn an_unstarted_binding_has_no_context() {
+        let active = ActiveDictations::default();
+        active.begin("transcribe", ctx(false));
+        assert_eq!(active.take("transcribe_raw"), None);
+    }
+
+    // Bindings are independent: a raw dictation and a normal one can be parked
+    // at once without either inheriting the other's intent.
+    #[test]
+    fn bindings_do_not_overwrite_each_other() {
+        let active = ActiveDictations::default();
+        active.begin("transcribe", ctx(false));
+        active.begin("transcribe_raw", ctx(true));
+        assert_eq!(
+            active.take("transcribe_raw").map(|c| c.effective_raw()),
+            Some(true)
+        );
+        assert_eq!(
+            active.take("transcribe").map(|c| c.effective_raw()),
+            Some(false)
+        );
+    }
+
+    // A recording that failed to start, or was cancelled, must not leave an
+    // intent behind for a later dictation to pick up.
+    #[test]
+    fn abandoned_contexts_are_dropped() {
+        let active = ActiveDictations::default();
+        active.begin("transcribe", ctx(true));
+        active.discard("transcribe");
+        assert_eq!(active.take("transcribe"), None);
+
+        active.begin("transcribe", ctx(true));
+        active.begin("transcribe_raw", ctx(true));
+        active.discard_all();
+        assert_eq!(active.take("transcribe"), None);
+        assert_eq!(active.take("transcribe_raw"), None);
     }
 }

@@ -1,6 +1,7 @@
 #[cfg(windows)]
 use crate::clipboard_snapshot::ClipboardBackend;
 use crate::clipboard_snapshot::{self, ArboardBackend, ClipboardContent, ClipboardHistory};
+use crate::dictation_context::DictationContext;
 use crate::input::{self, EnigoState};
 use crate::output_target::{backend as target_backend, OutputTarget};
 #[cfg(target_os = "linux")]
@@ -682,7 +683,15 @@ fn should_send_auto_submit(auto_submit: bool, paste_method: PasteMethod) -> bool
     auto_submit && paste_method != PasteMethod::None
 }
 
-pub fn paste(text: String, app_handle: AppHandle) -> Result<(), String> {
+/// Deliver one finished transcript.
+///
+/// `context` is the intent captured when that dictation started recording
+/// (#160): it decides where the text goes, so a target lock toggled while the
+/// user was speaking cannot redirect a paste that is already in flight. The
+/// remaining paste settings -- method, delay, auto-submit -- are still read here,
+/// because they describe how the app types rather than what this dictation asked
+/// for.
+pub fn paste(text: String, app_handle: AppHandle, context: DictationContext) -> Result<(), String> {
     let settings = get_settings(&app_handle);
     let paste_method = settings.paste_method;
     let paste_delay_ms = settings.paste_delay_ms;
@@ -699,10 +708,13 @@ pub fn paste(text: String, app_handle: AppHandle) -> Result<(), String> {
         paste_method, paste_delay_ms
     );
 
-    // Where this transcript goes: the foreground window, or the window the user
-    // locked (#120). A lock whose window has closed suppresses the paste rather
-    // than sending it to whatever inherited focus.
-    let Some(target) = target_backend::resolve_paste_target(&app_handle) else {
+    // Where this transcript goes: the target captured at recording start -- the
+    // foreground window, or the window the user had locked then (#120). A lock
+    // whose window has since closed suppresses the paste rather than sending it
+    // to whatever inherited focus.
+    let Some(target) =
+        target_backend::resolve_captured_target(&app_handle, context.output_target())
+    else {
         return Ok(());
     };
 

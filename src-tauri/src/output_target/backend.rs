@@ -45,15 +45,35 @@ pub fn toggle_target_lock(app: &AppHandle) {
     crate::tray::update_tray_menu(app, &crate::tray::current_tray_state(app), None);
 }
 
-/// Resolve where the paste about to fire is delivered, or `None` when it must be
-/// suppressed because the locked window is gone (#120). Suppression emits
-/// [`TARGET_LOCK_LOST_EVENT`] once and leaves the app unlocked.
-pub fn resolve_paste_target(app: &AppHandle) -> Option<super::OutputTarget> {
+/// Capture where a dictation starting now will be delivered, for its
+/// [`DictationContext`](crate::dictation_context::DictationContext) (#160).
+///
+/// Read once, at recording start. Everything downstream carries this value, so a
+/// lock toggled while the user is still speaking governs the next dictation
+/// rather than the one in flight.
+pub fn capture_output_target(app: &AppHandle) -> super::OutputTarget {
+    match app.try_state::<PinnedTarget>() {
+        Some(pinned) => pinned.capture_target(),
+        None => {
+            warn!("Target lock state is not initialized; delivering to the foreground");
+            super::OutputTarget::Foreground
+        }
+    }
+}
+
+/// Resolve delivery for the target this dictation captured at recording start,
+/// or `None` when the paste must be suppressed because the locked window is gone
+/// (#120). Suppression emits [`TARGET_LOCK_LOST_EVENT`] once and leaves the app
+/// unlocked.
+pub fn resolve_captured_target(
+    app: &AppHandle,
+    captured: super::OutputTarget,
+) -> Option<super::OutputTarget> {
     let Some(pinned) = app.try_state::<PinnedTarget>() else {
-        return Some(super::OutputTarget::Foreground);
+        return Some(captured);
     };
 
-    match pinned.resolve(window_is_alive) {
+    match pinned.resolve_captured(captured, window_is_alive) {
         super::Resolved::Deliver(target) => Some(target),
         super::Resolved::LockLost => {
             warn!("Locked window is gone; the transcript was not pasted");

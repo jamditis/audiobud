@@ -5,7 +5,10 @@
 //! can "lock" the currently focused window; while locked, every transcript goes
 //! to that window regardless of what is focused at send time (issue #120). The
 //! locked handle is held in Tauri-managed state ([`PinnedTarget`]) alongside
-//! `EnigoState`, and the paste path reads it at send time.
+//! `EnigoState`. Each dictation reads it once, at recording start, into its
+//! [`DictationContext`](crate::dictation_context::DictationContext); the paste
+//! path then delivers to that captured target rather than re-reading the lock
+//! (#160).
 //!
 //! This module is the platform-independent core: the lock/unlock state machine,
 //! the closed-window failsafe, the window-identity check that rejects a recycled
@@ -210,33 +213,64 @@ impl PinnedTarget {
         }
     }
 
-    /// Resolve the target for the paste about to fire.
+    /// The target a dictation starting now will be delivered to.
     ///
-    /// `is_alive` reports whether the locked window is still the same window
-    /// (on Windows, [`backend::window_is_alive`], which re-checks the captured
-    /// process and thread so a recycled handle reads as gone -- #254). It is not
-    /// consulted when nothing is locked. If the
-    /// locked window has gone, this FAILS SAFE: it drops the lock and returns
-    /// [`Resolved::LockLost`] rather than borrowing focus to a handle the OS may
-    /// have recycled -- a transcript landing in the wrong app is the exact
-    /// failure this feature exists to prevent (#120).
+    /// Read once, at recording start, into that dictation's
+    /// [`DictationContext`](crate::dictation_context::DictationContext). Liveness
+    /// is deliberately not checked here: a check at capture time says nothing
+    /// about the window seconds later, when the transcript is actually ready.
+    /// [`Self::resolve_captured`] is where that check belongs.
+    pub fn capture_target(&self) -> OutputTarget {
+        match *self.guard() {
+            Some(window) => OutputTarget::Pinned(window.handle),
+            None => OutputTarget::Foreground,
+        }
+    }
+
+    /// Resolve delivery for a dictation whose target was captured at recording
+    /// start, immediately before its paste fires.
     ///
-    /// Liveness here is advisory, not a guarantee: the window can still close
-    /// between this call and the focus-borrow that acts on a `Pinned` result, so
-    /// that paste path must itself tolerate an activation that fails rather than
-    /// assume the handle is good.
-    pub fn resolve(&self, is_alive: impl FnOnce(WindowIdentity) -> bool) -> Resolved {
+    /// `captured` is the context's target, not a fresh read of the lock, so a
+    /// lock toggled while the user was speaking cannot redirect an in-flight
+    /// dictation (#160). What is re-checked is liveness: `is_alive` reports
+    /// whether the locked window is still the same window (on Windows,
+    /// [`backend::window_is_alive`], which re-checks the captured process and
+    /// thread so a recycled handle reads as gone -- #254). If it has gone, this
+    /// FAILS SAFE: it drops the lock and returns [`Resolved::LockLost`] rather
+    /// than borrowing focus to a handle the OS may have recycled -- a transcript
+    /// landing in the wrong app is the exact failure this feature exists to
+    /// prevent (#120).
+    ///
+    /// When the captured window is no longer the locked one -- the user released
+    /// or retargeted the lock mid-dictation -- the captured target still stands,
+    /// because that is the destination this dictation was started for. There is
+    /// no recorded identity left to re-check it against, so the focus borrow is
+    /// the failsafe: activating a handle that is no longer a window fails, and a
+    /// failed borrow types nothing.
+    ///
+    /// Liveness is advisory even in the checked case: the window can still close
+    /// between this call and the focus borrow, so that path must tolerate an
+    /// activation that fails rather than assume the handle is good.
+    pub fn resolve_captured(
+        &self,
+        captured: OutputTarget,
+        is_alive: impl FnOnce(WindowIdentity) -> bool,
+    ) -> Resolved {
+        let OutputTarget::Pinned(handle) = captured else {
+            return Resolved::Deliver(OutputTarget::Foreground);
+        };
+
         let mut guard = self.guard();
         match *guard {
-            None => Resolved::Deliver(OutputTarget::Foreground),
-            Some(window) => {
-                if is_alive(window) {
-                    Resolved::Deliver(OutputTarget::Pinned(window.handle))
+            Some(locked) if locked.handle == handle => {
+                if is_alive(locked) {
+                    Resolved::Deliver(OutputTarget::Pinned(handle))
                 } else {
                     *guard = None;
                     Resolved::LockLost
                 }
             }
+            _ => Resolved::Deliver(OutputTarget::Pinned(handle)),
         }
     }
 
@@ -270,8 +304,11 @@ mod tests {
     fn default_is_foreground_and_unlocked() {
         let t = PinnedTarget::default();
         assert!(!t.is_locked());
-        // is_alive must not even be consulted when nothing is locked.
-        let resolved = t.resolve(|_| panic!("is_alive called with no lock"));
+        assert_eq!(t.capture_target(), OutputTarget::Foreground);
+        // is_alive must not even be consulted for a foreground dictation.
+        let resolved = t.resolve_captured(OutputTarget::Foreground, |_| {
+            panic!("is_alive called for a foreground target")
+        });
         assert_eq!(resolved, Resolved::Deliver(OutputTarget::Foreground));
     }
 
@@ -282,7 +319,11 @@ mod tests {
         assert_eq!(t.lock_to(w), OutputTarget::Pinned(w.handle));
         assert!(t.is_locked());
         assert_eq!(t.locked(), Some(w));
-        let resolved = t.resolve(|locked| {
+        // A dictation starting now captures the pinned window...
+        let captured = t.capture_target();
+        assert_eq!(captured, OutputTarget::Pinned(w.handle));
+        // ...and delivering it re-checks that same window's identity.
+        let resolved = t.resolve_captured(captured, |locked| {
             assert_eq!(locked, w);
             true
         });
@@ -297,22 +338,53 @@ mod tests {
         t.lock_to(win(7, 1, 2));
         t.unlock();
         assert!(!t.is_locked());
-        let resolved = t.resolve(|_| true);
+        assert_eq!(t.capture_target(), OutputTarget::Foreground);
+        let resolved = t.resolve_captured(OutputTarget::Foreground, |_| true);
         assert_eq!(resolved, Resolved::Deliver(OutputTarget::Foreground));
     }
 
     #[test]
     fn dead_target_fails_safe_and_drops_the_lock() {
         let t = PinnedTarget::default();
-        t.lock_to(win(99, 1, 2));
+        let w = win(99, 1, 2);
+        t.lock_to(w);
+        let captured = t.capture_target();
         // Locked window has closed: resolve must fail safe and report LockLost
         // so the caller can surface the notice once.
-        assert_eq!(t.resolve(|_| false), Resolved::LockLost);
-        // The lock is gone, so the next paste is a plain foreground paste and
-        // is_alive is never consulted again.
+        assert_eq!(t.resolve_captured(captured, |_| false), Resolved::LockLost);
+        // The lock is gone, so the next dictation captures the foreground.
         assert!(!t.is_locked());
-        let again = t.resolve(|_| panic!("stale lock still consulted"));
-        assert_eq!(again, Resolved::Deliver(OutputTarget::Foreground));
+        assert_eq!(t.capture_target(), OutputTarget::Foreground);
+    }
+
+    #[test]
+    fn a_lock_toggled_mid_dictation_does_not_redirect_it() {
+        // The whole point of capturing at start (#160): the transcript goes
+        // where the user was pointing when they began speaking, not where the
+        // lock happens to point when the paste fires.
+        let t = PinnedTarget::default();
+        let w = win(42, 100, 200);
+        t.lock_to(w);
+        let captured = t.capture_target();
+
+        // Released mid-dictation: still delivered to the captured window. There
+        // is no recorded identity to check any more, so is_alive is not called
+        // and the focus borrow is the failsafe.
+        t.unlock();
+        assert_eq!(
+            t.resolve_captured(captured, |_| panic!("no identity left to check")),
+            Resolved::Deliver(OutputTarget::Pinned(w.handle))
+        );
+
+        // Retargeted mid-dictation: the new lock governs the NEXT dictation,
+        // not this one.
+        let other = win(7, 500, 600);
+        t.lock_to(other);
+        assert_eq!(
+            t.resolve_captured(captured, |_| panic!("checked the wrong window")),
+            Resolved::Deliver(OutputTarget::Pinned(w.handle))
+        );
+        assert_eq!(t.capture_target(), OutputTarget::Pinned(other.handle));
     }
 
     #[test]
@@ -325,14 +397,16 @@ mod tests {
         // poisons the mutex. Recovery must let later calls proceed rather than
         // panic on every subsequent lock.
         let blew_up = catch_unwind(AssertUnwindSafe(|| {
-            t.resolve(|_| panic!("is_alive blew up"));
+            t.resolve_captured(OutputTarget::Pinned(w.handle), |_| {
+                panic!("is_alive blew up")
+            });
         }));
         assert!(blew_up.is_err());
         // The lock is still readable and the pinned window survived the panic;
         // a normal resolve now succeeds instead of panicking on a poisoned lock.
         assert!(t.is_locked());
         assert_eq!(
-            t.resolve(|_| true),
+            t.resolve_captured(OutputTarget::Pinned(w.handle), |_| true),
             Resolved::Deliver(OutputTarget::Pinned(w.handle))
         );
     }
@@ -343,7 +417,7 @@ mod tests {
         t.lock_to(win(1, 1, 1));
         let second = win(2, 2, 2);
         assert_eq!(t.lock_to(second), OutputTarget::Pinned(second.handle));
-        let resolved = t.resolve(|_| true);
+        let resolved = t.resolve_captured(t.capture_target(), |_| true);
         assert_eq!(
             resolved,
             Resolved::Deliver(OutputTarget::Pinned(second.handle))
@@ -383,7 +457,8 @@ mod tests {
         let t = PinnedTarget::default();
         let locked = win(42, 100, 200);
         t.lock_to(locked);
-        let resolved = t.resolve(|w| identity_is_alive(w, |_| Some((999, 200))));
+        let captured = t.capture_target();
+        let resolved = t.resolve_captured(captured, |w| identity_is_alive(w, |_| Some((999, 200))));
         assert_eq!(resolved, Resolved::LockLost);
         assert!(!t.is_locked());
     }
@@ -426,9 +501,6 @@ mod tests {
             LockToggle::NotLocked(CaptureError::OwnWindow)
         );
         assert!(!t.is_locked());
-        assert_eq!(
-            t.resolve(|_| panic!("is_alive called with no lock")),
-            Resolved::Deliver(OutputTarget::Foreground)
-        );
+        assert_eq!(t.capture_target(), OutputTarget::Foreground);
     }
 }
