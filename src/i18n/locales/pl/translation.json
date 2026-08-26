@@ -843,6 +843,7 @@
   "windowPicker": {
     "title": "Wyślij do okna",
     "hint": "Wybierz okno dla następnego tekstu. Naciśnij F, aby użyć bieżącego okna, Esc, aby anulować.",
+    "refused": "Tego okna już nie ma. Wybierz inne.",
     "loading": "Szukanie okien...",
     "empty": "Brak dostępnych okien.",
     "useForeground": "Użyj bieżącego okna",

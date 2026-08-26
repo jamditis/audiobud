@@ -839,6 +839,7 @@
   "windowPicker": {
     "title": "发送到窗口",
     "hint": "为下一段文字选择一个窗口。按 F 使用当前窗口，按 Esc 取消。",
+    "refused": "那个窗口已不存在。请选择另一个。",
     "loading": "正在查找窗口…",
     "empty": "没有可用的窗口。",
     "useForeground": "使用当前窗口",

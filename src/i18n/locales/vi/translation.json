@@ -839,6 +839,7 @@
   "windowPicker": {
     "title": "Gửi tới cửa sổ",
     "hint": "Chọn cửa sổ cho văn bản tiếp theo. Nhấn F để dùng cửa sổ hiện tại, Esc để hủy.",
+    "refused": "Cửa sổ đó không còn. Hãy chọn cửa sổ khác.",
     "loading": "Đang tìm cửa sổ...",
     "empty": "Không có cửa sổ nào.",
     "useForeground": "Dùng cửa sổ hiện tại",

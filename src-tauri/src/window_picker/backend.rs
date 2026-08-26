@@ -25,9 +25,9 @@ use crate::output_target::backend as target_backend;
 use crate::output_target::{WindowHandle, WindowIdentity};
 
 use super::{
-    arm_pick, offer_rows, offered_candidates, resolve_gesture, visible_candidates, LastPick,
-    OfferedWindow, PendingPick, PendingRoute, PickArmed, PickDelivery, PickerGesture,
-    PickerSession, PickerWindow, RawWindow,
+    arm_pick, is_stale_selection, offer_rows, offered_candidates, resolve_gesture,
+    visible_candidates, LastPick, OfferedWindow, PendingPick, PendingRoute, PickArmed,
+    PickDelivery, PickerGesture, PickerSession, PickerWindow, RawWindow,
 };
 
 /// The picker window's Tauri label.
@@ -64,7 +64,9 @@ pub fn open_picker(app: &AppHandle) {
         PICKER_WINDOW,
         WebviewUrl::App("src/window-picker/index.html".into()),
     )
-    .title("Send to window")
+    // Placeholder only: the overlay sets the real, translated title once i18n
+    // has loaded, since the translations live in the frontend bundle.
+    .title("AudioBud")
     .inner_size(PICKER_WIDTH, PICKER_HEIGHT)
     .resizable(false)
     .maximizable(false)
@@ -159,11 +161,7 @@ pub fn resolve_pick(app: &AppHandle, gesture: PickerGesture) -> PickArmed {
     }
 
     if let (Some(last), Some(PendingRoute::Window(window))) = (app.try_state::<LastPick>(), route) {
-        last.remember(window.handle);
-    }
-
-    if let Some(session) = app.try_state::<PickerSession>() {
-        session.clear();
+        last.remember(window);
     }
 
     match route {
@@ -176,8 +174,47 @@ pub fn resolve_pick(app: &AppHandle, gesture: PickerGesture) -> PickArmed {
         None => info!("Window pick cancelled; nothing was armed"),
     }
 
+    // A row the user clicked that could not be honored -- its window closed, or
+    // its handle was recycled, since it was offered. Closing now would look
+    // exactly like a pick that worked, so the picker STAYS OPEN with its offer
+    // still standing; the overlay says what happened and re-lists the windows,
+    // which replaces that offer with a fresh one.
+    if is_stale_selection(&gesture, armed) {
+        warn!("The chosen window is gone; the picker stays open for another try");
+        return armed;
+    }
+
+    if let Some(session) = app.try_state::<PickerSession>() {
+        session.clear();
+    }
+
     close_picker(app);
     armed
+}
+
+/// Forget the rows a picker window was offering, whatever ended it. Leaves any
+/// armed route alone: a pick that WAS made arms its route and then destroys the
+/// window on its way out.
+pub fn forget_offer(app: &AppHandle) {
+    if let Some(session) = app.try_state::<PickerSession>() {
+        session.clear();
+    }
+}
+
+/// End a pick that was abandoned rather than answered -- the picker window went
+/// away without a gesture (Alt+F4, the window menu). Leaves nothing armed and no
+/// session standing, so the next transcript follows the usual rules.
+pub fn abandon_pick(app: &AppHandle) {
+    let (Some(session), Some(pending)) = (
+        app.try_state::<PickerSession>(),
+        app.try_state::<PendingPick>(),
+    ) else {
+        return;
+    };
+    if session.is_open() {
+        info!("The window picker was closed without a pick; nothing was armed");
+    }
+    super::abandon_pick(&session, &pending);
 }
 
 /// Whether a pick is in progress, so the paste path can hold off (#164).

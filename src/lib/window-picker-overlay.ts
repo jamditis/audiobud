@@ -138,6 +138,32 @@ export function chooseAt(state: PickerState, index: number): PickerStep {
 }
 
 /**
+ * The backend's answer to a resolved gesture, mirroring window_picker.rs
+ * `PickArmed`: the next transcript goes to the picked window, follows the
+ * foreground, or nothing was armed at all.
+ */
+export type PickerArmed =
+  | { readonly kind: "window" }
+  | { readonly kind: "foreground" }
+  | { readonly kind: "cancelled" };
+
+/**
+ * Whether the pick the user just made was refused.
+ *
+ * The backend answers `cancelled` both when the user dismissed and when a
+ * chosen row could not be honored -- its window closed, or its handle was
+ * recycled, since it was offered. Only the second is a failure the picker owes
+ * the user an explanation for; a dismissal is simply what they asked for. The
+ * gesture is what tells them apart, which is why this takes both.
+ */
+export function pickWasRefused(
+  gesture: PickerGesture,
+  armed: PickerArmed,
+): boolean {
+  return gesture.kind === "chose" && armed.kind === "cancelled";
+}
+
+/**
  * The parts of a keydown target this module needs. Structural, not a DOM type,
  * so the rule below is testable without a document.
  */

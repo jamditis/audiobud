@@ -839,6 +839,7 @@
   "windowPicker": {
     "title": "Pencereye gönder",
     "hint": "Sonraki metniniz için bir pencere seçin. Geçerli pencere için F, iptal için Esc tuşuna basın.",
+    "refused": "O pencere kayboldu. Başka bir tane seçin.",
     "loading": "Pencereler aranıyor...",
     "empty": "Kullanılabilir pencere yok.",
     "useForeground": "Geçerli pencereyi kullan",

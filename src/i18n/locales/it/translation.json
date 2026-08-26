@@ -839,6 +839,7 @@
   "windowPicker": {
     "title": "Invia a una finestra",
     "hint": "Scegli una finestra per il prossimo testo. Premi F per la finestra attuale, Esc per annullare.",
+    "refused": "Quella finestra non c'è più. Scegline un'altra.",
     "loading": "Ricerca finestre...",
     "empty": "Nessuna finestra disponibile.",
     "useForeground": "Usa la finestra attuale",

@@ -6,6 +6,7 @@ import {
   foregroundGesture,
   chooseAt,
   handleKey,
+  pickWasRefused,
   targetOwnsKey,
   type PickerWindow,
   type PickerState,
@@ -166,5 +167,31 @@ describe("keys on the picker's own controls belong to the control", () => {
 
   it("matches tag names case-insensitively, as a lowercase DOM would report", () => {
     expect(targetOwnsKey({ tagName: "button" }, "1")).toBe(true);
+  });
+});
+
+describe("a chosen row the backend could not honor", () => {
+  it("is a refusal the user is owed an explanation for", () => {
+    // The window closed, or its handle was recycled, between being offered and
+    // being clicked. Closing the picker as if the pick worked would leave the
+    // user believing their next transcript is routed.
+    expect(
+      pickWasRefused({ kind: "chose", handle: "7" }, { kind: "cancelled" }),
+    ).toBe(true);
+  });
+
+  it("is not raised for a pick that landed", () => {
+    expect(
+      pickWasRefused({ kind: "chose", handle: "7" }, { kind: "window" }),
+    ).toBe(false);
+  });
+
+  it("is not raised for a dismissal, which is what the user asked for", () => {
+    expect(pickWasRefused({ kind: "dismiss" }, { kind: "cancelled" })).toBe(
+      false,
+    );
+    expect(pickWasRefused({ kind: "foreground" }, { kind: "foreground" })).toBe(
+      false,
+    );
   });
 });

@@ -839,6 +839,7 @@
   "windowPicker": {
     "title": "Send to window",
     "hint": "Choose a window for your next text. Press F for the current window, Esc to cancel.",
+    "refused": "That window is gone. Pick another one.",
     "loading": "Looking for windows...",
     "empty": "No windows to choose.",
     "useForeground": "Use current window",

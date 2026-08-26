@@ -9,6 +9,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { commands } from "@/bindings";
 import i18n, { syncLanguageFromSettings } from "@/i18n";
 import {
@@ -16,6 +17,7 @@ import {
   createPickerState,
   foregroundGesture,
   handleKey,
+  pickWasRefused,
   targetOwnsKey,
   type PickerGesture,
   type PickerState,
@@ -27,34 +29,62 @@ const WindowPicker: React.FC = () => {
   const { t } = useTranslation();
   const [state, setState] = useState<PickerState>(() => createPickerState([]));
   const [loading, setLoading] = useState(true);
+  // Set when a row the user clicked turned out to be gone. The picker stays
+  // open so they can pick again, rather than closing as if it had worked.
+  const [refused, setRefused] = useState(false);
   const direction = getLanguageDirection(i18n.language);
   // One pick per opening: a click that lands while a gesture is in flight must
   // not send a second one.
   const sending = useRef(false);
   const listRef = useRef<HTMLUListElement>(null);
 
+  const load = useCallback(async () => {
+    const windows = await commands.listPickerWindows();
+    setState(createPickerState(windows));
+    setLoading(false);
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
-    const load = async () => {
+    const start = async () => {
       await syncLanguageFromSettings();
-      const windows = await commands.listPickerWindows();
       if (cancelled) return;
-      setState(createPickerState(windows));
-      setLoading(false);
+      // The window is built before the translations are loaded, so its native
+      // title -- what a screen reader and the window list announce -- is set
+      // here, in the language the rest of the app is using.
+      await getCurrentWindow()
+        .setTitle(t("windowPicker.title"))
+        .catch(() => {});
+      await load();
     };
-    void load();
+    void start();
     return () => {
       cancelled = true;
     };
-  }, []);
+    // Runs once: the picker lives for a single pick, and `t` and `load` are
+    // stable for its whole life.
+  }, [load, t]);
 
-  const send = useCallback(async (gesture: PickerGesture) => {
-    if (sending.current) return;
-    sending.current = true;
-    // The backend closes this window once the pick is resolved, so there is
-    // nothing to restore here on success.
-    await commands.resolveWindowPick(gesture);
-  }, []);
+  const send = useCallback(
+    async (gesture: PickerGesture) => {
+      if (sending.current) return;
+      sending.current = true;
+      const armed = await commands.resolveWindowPick(gesture);
+
+      // A row that could not be honored: its window closed, or its handle was
+      // recycled, since the list was drawn. The backend leaves the picker open
+      // for exactly this, so say what happened and offer a fresh list.
+      if (pickWasRefused(gesture, armed)) {
+        setRefused(true);
+        setLoading(true);
+        await load();
+        sending.current = false;
+        return;
+      }
+      // Otherwise the backend closes this window, so there is nothing to undo.
+    },
+    [load],
+  );
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -96,7 +126,9 @@ const WindowPicker: React.FC = () => {
     <div className="window-picker" dir={direction}>
       <header className="picker-header">
         <h1 className="picker-title">{t("windowPicker.title")}</h1>
-        <p className="picker-hint">{t("windowPicker.hint")}</p>
+        <p className="picker-hint">
+          {refused ? t("windowPicker.refused") : t("windowPicker.hint")}
+        </p>
       </header>
 
       {loading ? (

@@ -841,6 +841,7 @@
   "windowPicker": {
     "title": "Odeslat do okna",
     "hint": "Vyberte okno pro svůj další text. Stiskněte F pro aktuální okno, Esc pro zrušení.",
+    "refused": "Toto okno už neexistuje. Vyberte jiné.",
     "loading": "Hledání oken...",
     "empty": "Žádná okna nejsou k dispozici.",
     "useForeground": "Použít aktuální okno",

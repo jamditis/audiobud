@@ -315,6 +315,29 @@ impl PickerSession {
     }
 }
 
+/// Forget a pick that ended without a gesture -- the user closed the picker
+/// window itself, with Alt+F4 or the window menu.
+///
+/// Both halves have to go. A session left behind still reads as a pick in
+/// progress ([`picker_is_open`]), which would withhold every later transcript
+/// until the picker was opened again; and closing the window is a dismissal, so
+/// like Escape it leaves nothing armed.
+pub fn abandon_pick(session: &PickerSession, pending: &PendingPick) {
+    session.clear();
+    pending.clear();
+}
+
+/// Whether a chosen row was refused -- the window died, or its handle was
+/// recycled, between being offered and being clicked.
+///
+/// Told apart from a plain dismissal because the two deserve opposite answers:
+/// a dismissal is the user leaving, while a refused selection is the picker
+/// failing to do what the user just asked, which has to be shown rather than
+/// closed away as if it had worked.
+pub fn is_stale_selection(gesture: &PickerGesture, armed: PickArmed) -> bool {
+    matches!(gesture, PickerGesture::Chose { .. }) && armed == PickArmed::Cancelled
+}
+
 /// Whether a pick is under way, given what is known about the picker window.
 ///
 /// `window_visible` is `None` when no picker window exists at all. A visible
@@ -490,11 +513,13 @@ pub fn resolve_gesture(gesture: PickGesture, offered: &[WindowCandidate]) -> Pic
 /// convenience only -- unlike a lock it never redirects a paste on its own; it
 /// just reorders what the picker shows.
 #[derive(Default)]
-pub struct LastPick(Mutex<Option<WindowHandle>>);
+pub struct LastPick(Mutex<Option<WindowIdentity>>);
 
 impl LastPick {
-    /// Record `window` as the most recent pick.
-    pub fn remember(&self, window: WindowHandle) {
+    /// Record `window` as the most recent pick. The whole identity is kept, not
+    /// just its handle: `HWND` values are recycled, and the remembered pick is
+    /// promoted to row 0, the one row a user confirms without reading.
+    pub fn remember(&self, window: WindowIdentity) {
         *self.guard() = Some(window);
     }
 
@@ -504,48 +529,42 @@ impl LastPick {
     }
 
     /// The remembered pick, if any.
-    pub fn get(&self) -> Option<WindowHandle> {
+    pub fn get(&self) -> Option<WindowIdentity> {
         *self.guard()
     }
 
-    /// Move the remembered pick to the front of `candidates` for quick repeat
-    /// routing. If the remembered window is no longer offered it has closed, so
-    /// forget it rather than keep pointing at a gone handle. A no-op when nothing
-    /// is remembered or it is already first.
-    pub fn promote_to_front(&self, candidates: &mut Vec<WindowCandidate>) {
-        self.promote(candidates, |c| c.handle);
-    }
-
-    /// [`LastPick::promote_to_front`] for the rows the backend actually offers,
-    /// which carry their enumeration-time identity alongside the candidate.
+    /// Move the remembered pick to the front of the rows on offer, for quick
+    /// repeat routing.
+    ///
+    /// The match is on the WHOLE identity each row was enumerated with, so a
+    /// window that merely inherited the remembered handle is never promoted: it
+    /// is not the window the user picked last time, whatever the number says.
+    /// Row 0 is the one row a user confirms without reading -- it is where their
+    /// last pick lives -- so a recycled handle there would route a transcript
+    /// into a stranger (#254). A remembered pick that is no longer offered has
+    /// closed, so it is forgotten rather than left pointing at a gone window. A
+    /// no-op when nothing is remembered or it is already first.
     pub fn promote_offered(&self, offered: &mut Vec<OfferedWindow>) {
-        self.promote(offered, |o| o.candidate.handle);
-    }
-
-    /// Shared body of the two promotions above, over anything that can name its
-    /// window handle, so the "remembered but no longer offered means forget it"
-    /// rule lives in one place.
-    fn promote<T>(&self, items: &mut Vec<T>, handle_of: impl Fn(&T) -> WindowHandle) {
         let mut guard = self.guard();
         let Some(remembered) = *guard else {
             return;
         };
-        match items.iter().position(|item| handle_of(item) == remembered) {
+        match offered.iter().position(|o| o.identity == remembered) {
             Some(0) => {}
             Some(i) => {
-                let item = items.remove(i);
-                items.insert(0, item);
+                let item = offered.remove(i);
+                offered.insert(0, item);
             }
             None => *guard = None,
         }
     }
 
     /// Borrow the memory, recovering the guard if a previous holder panicked.
-    /// The mutex only guards a `Copy` `Option<WindowHandle>` with no cross-field
-    /// invariant, so a poisoned guard's value is always consistent; recovering it
-    /// keeps one panic from bricking every later pick on `unwrap` (AGENTS.md:
-    /// avoid unwrap in production).
-    fn guard(&self) -> MutexGuard<'_, Option<WindowHandle>> {
+    /// The mutex only guards a `Copy` `Option<WindowIdentity>` with no
+    /// cross-field invariant, so a poisoned guard's value is always consistent;
+    /// recovering it keeps one panic from bricking every later pick on `unwrap`
+    /// (AGENTS.md: avoid unwrap in production).
+    fn guard(&self) -> MutexGuard<'_, Option<WindowIdentity>> {
         self.0
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
@@ -680,8 +699,9 @@ mod tests {
     fn last_pick_remembers_and_forgets() {
         let last = LastPick::default();
         assert_eq!(last.get(), None);
-        last.remember(WindowHandle(3));
-        assert_eq!(last.get(), Some(WindowHandle(3)));
+        let window = identity(3, 100, 200);
+        last.remember(window);
+        assert_eq!(last.get(), Some(window));
         last.forget();
         assert_eq!(last.get(), None);
     }
@@ -689,63 +709,64 @@ mod tests {
     #[test]
     fn promote_moves_remembered_pick_to_front() {
         let last = LastPick::default();
-        last.remember(WindowHandle(2));
-        let mut candidates = visible_candidates(
-            vec![
-                raw(1, "First", None, true),
-                raw(2, "Second", None, true),
-                raw(3, "Third", None, true),
-            ],
-            &[],
-        );
-        last.promote_to_front(&mut candidates);
-        assert_eq!(candidates[0].handle, WindowHandle(2));
-        // The rest keep their relative order.
-        assert_eq!(candidates[1].handle, WindowHandle(1));
-        assert_eq!(candidates[2].handle, WindowHandle(3));
-    }
-
-    #[test]
-    fn promote_offered_moves_the_remembered_row_to_the_front() {
-        let last = LastPick::default();
-        last.remember(WindowHandle(2));
         let mut offered = offer(vec![
             raw(1, "First", None, true),
             raw(2, "Second", None, true),
             raw(3, "Third", None, true),
         ]);
+        last.remember(offered[1].identity);
         last.promote_offered(&mut offered);
         assert_eq!(offered[0].candidate.handle, WindowHandle(2));
-        assert_eq!(offered[0].identity.handle, WindowHandle(2));
+        // The rest keep their relative order.
         assert_eq!(offered[1].candidate.handle, WindowHandle(1));
+        assert_eq!(offered[2].candidate.handle, WindowHandle(3));
+    }
+
+    #[test]
+    fn promote_ignores_a_window_that_only_inherited_the_remembered_handle() {
+        // Row 0 is the row a repeat route confirms without reading, so a
+        // recycled handle there would send the next transcript to a stranger
+        // (#254). Only the same window, identity and all, earns the promotion.
+        let last = LastPick::default();
+        last.remember(identity(2, 100, 200));
+        let mut offered = offer(vec![
+            raw(1, "First", None, true),
+            // Same handle as the remembered pick, different owner.
+            raw(2, "An unrelated window", None, true),
+        ]);
+        offered[1].identity.process_id = 999;
+        last.promote_offered(&mut offered);
+        assert_eq!(offered[0].candidate.handle, WindowHandle(1));
+        // The remembered pick is not on offer any more, so it is forgotten.
+        assert_eq!(last.get(), None);
     }
 
     #[test]
     fn promote_forgets_a_pick_no_longer_offered() {
         let last = LastPick::default();
-        last.remember(WindowHandle(9));
-        let mut candidates = visible_candidates(vec![raw(1, "Only", None, true)], &[]);
-        last.promote_to_front(&mut candidates);
+        last.remember(identity(9, 100, 200));
+        let mut offered = offer(vec![raw(1, "Only", None, true)]);
+        last.promote_offered(&mut offered);
         // Window 9 is gone, so the memory is cleared and the list is untouched.
         assert_eq!(last.get(), None);
-        assert_eq!(candidates.len(), 1);
-        assert_eq!(candidates[0].handle, WindowHandle(1));
+        assert_eq!(offered.len(), 1);
+        assert_eq!(offered[0].candidate.handle, WindowHandle(1));
     }
 
     #[test]
     fn promote_is_a_noop_with_no_memory_or_already_first() {
         let last = LastPick::default();
-        let mut candidates = visible_candidates(
-            vec![raw(1, "First", None, true), raw(2, "Second", None, true)],
-            &[],
-        );
-        last.promote_to_front(&mut candidates); // nothing remembered
-        assert_eq!(candidates[0].handle, WindowHandle(1));
+        let mut offered = offer(vec![
+            raw(1, "First", None, true),
+            raw(2, "Second", None, true),
+        ]);
+        last.promote_offered(&mut offered); // nothing remembered
+        assert_eq!(offered[0].candidate.handle, WindowHandle(1));
 
-        last.remember(WindowHandle(1)); // already at front
-        last.promote_to_front(&mut candidates);
-        assert_eq!(candidates[0].handle, WindowHandle(1));
-        assert_eq!(candidates[1].handle, WindowHandle(2));
+        last.remember(offered[0].identity); // already at front
+        last.promote_offered(&mut offered);
+        assert_eq!(offered[0].candidate.handle, WindowHandle(1));
+        assert_eq!(offered[1].candidate.handle, WindowHandle(2));
     }
 
     fn identity(handle: isize, pid: u32, tid: u32) -> WindowIdentity {
@@ -1012,6 +1033,46 @@ mod tests {
     }
 
     #[test]
+    fn a_picker_closed_from_outside_leaves_nothing_behind() {
+        // Alt+F4 or the window menu ends a pick with no gesture at all. If the
+        // session survived that, the picker would read as open forever and
+        // every later transcript would be withheld (#164).
+        let session = PickerSession::default();
+        let pending = PendingPick::default();
+        session.offer(offer(vec![raw(1, "Mail", None, true)]));
+        pending.arm(PendingRoute::Window(identity(1, 100, 200)));
+
+        abandon_pick(&session, &pending);
+
+        assert!(!session.is_open());
+        assert!(!pending.is_armed());
+        // Which is exactly what a dismissal leaves: a transcript now follows the
+        // usual rules rather than being held or redirected.
+        assert!(!picker_is_open(None, session.is_open()));
+    }
+
+    #[test]
+    fn a_refused_selection_is_told_apart_from_a_dismissal() {
+        let chose = PickerGesture::Chose {
+            handle: "7".to_string(),
+        };
+        // The user clicked a row and the picker could not honor it: something to
+        // show them, not a reason to close as though it worked.
+        assert!(is_stale_selection(&chose, PickArmed::Cancelled));
+        // A pick that landed is not stale, whatever else happens.
+        assert!(!is_stale_selection(&chose, PickArmed::Window));
+        // Leaving on purpose is not a failure.
+        assert!(!is_stale_selection(
+            &PickerGesture::Dismiss,
+            PickArmed::Cancelled
+        ));
+        assert!(!is_stale_selection(
+            &PickerGesture::Foreground,
+            PickArmed::Foreground
+        ));
+    }
+
+    #[test]
     fn a_visible_picker_holds_off_a_paste_and_a_gone_one_does_not() {
         // Up and in front of the user: a transcript now would type into the
         // picker itself (#164), even before any row has been offered.
@@ -1062,7 +1123,8 @@ mod tests {
     fn last_pick_recovers_from_a_poisoned_lock() {
         use std::panic::{catch_unwind, AssertUnwindSafe};
         let last = LastPick::default();
-        last.remember(WindowHandle(5));
+        let window = identity(5, 100, 200);
+        last.remember(window);
         // A panic while holding the guard poisons the mutex. Recovery must let
         // later reads proceed instead of panicking on every subsequent pick.
         let blew_up = catch_unwind(AssertUnwindSafe(|| {
@@ -1070,6 +1132,6 @@ mod tests {
             panic!("holder blew up");
         }));
         assert!(blew_up.is_err());
-        assert_eq!(last.get(), Some(WindowHandle(5)));
+        assert_eq!(last.get(), Some(window));
     }
 }

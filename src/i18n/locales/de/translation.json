@@ -839,6 +839,7 @@
   "windowPicker": {
     "title": "An Fenster senden",
     "hint": "Wähle ein Fenster für deinen nächsten Text. F für das aktuelle Fenster, Esc zum Abbrechen.",
+    "refused": "Dieses Fenster gibt es nicht mehr. Wähle ein anderes.",
     "loading": "Fenster werden gesucht ...",
     "empty": "Keine Fenster verfügbar.",
     "useForeground": "Aktuelles Fenster verwenden",

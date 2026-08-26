@@ -839,6 +839,7 @@
   "windowPicker": {
     "title": "傳送到視窗",
     "hint": "為下一段文字選擇一個視窗。按 F 使用目前視窗，按 Esc 取消。",
+    "refused": "那個視窗已不存在。請選擇另一個。",
     "loading": "正在尋找視窗…",
     "empty": "沒有可用的視窗。",
     "useForeground": "使用目前視窗",

@@ -839,6 +839,7 @@
   "windowPicker": {
     "title": "Skicka till fönster",
     "hint": "Välj ett fönster för din nästa text. Tryck F för det aktuella fönstret, Esc för att avbryta.",
+    "refused": "Det fönstret är borta. Välj ett annat.",
     "loading": "Söker efter fönster ...",
     "empty": "Inga fönster tillgängliga.",
     "useForeground": "Använd aktuellt fönster",

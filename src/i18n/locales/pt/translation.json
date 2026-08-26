@@ -839,6 +839,7 @@
   "windowPicker": {
     "title": "Enviar para uma janela",
     "hint": "Escolha uma janela para o próximo texto. Pressione F para a janela atual e Esc para cancelar.",
+    "refused": "Essa janela sumiu. Escolha outra.",
     "loading": "Procurando janelas...",
     "empty": "Nenhuma janela disponível.",
     "useForeground": "Usar a janela atual",

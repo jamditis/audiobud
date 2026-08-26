@@ -905,8 +905,11 @@ pub fn run(cli_args: CliArgs) {
                 // The one-shot picker (#124) is transient: it exists for one
                 // pick and must actually go when it closes. Hiding it like the
                 // settings window would leave it registered and reading as
-                // open, which holds off every later paste.
+                // open, which holds off every later paste. Closing it from
+                // outside -- Alt+F4, the window menu -- is a dismissal, so the
+                // offer and any armed route go with it.
                 if window.label() == window_picker::backend::PICKER_WINDOW {
+                    window_picker::backend::abandon_pick(window.app_handle());
                     return;
                 }
 
@@ -929,6 +932,17 @@ pub fn run(cli_args: CliArgs) {
                     }
                     // No tray: keep the dock icon visible so the user can reopen
                 }
+            }
+            // Whatever destroyed the picker -- our own close, a close request, or
+            // the window manager -- the offer must not outlive its window: a
+            // session left standing reads as a pick in progress and withholds
+            // every later transcript. Clearing it here is idempotent, and the
+            // armed route is deliberately left alone, because a pick that WAS
+            // made destroys this window on its way to the paste path.
+            tauri::WindowEvent::Destroyed
+                if window.label() == window_picker::backend::PICKER_WINDOW =>
+            {
+                window_picker::backend::forget_offer(window.app_handle());
             }
             tauri::WindowEvent::ThemeChanged(theme) => {
                 log::info!("Theme changed to: {:?}", theme);
