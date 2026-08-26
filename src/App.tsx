@@ -193,9 +193,10 @@ function App() {
   }, [t]);
 
   // Listen for a transcript that reached no window because the window it was
-  // dictated to closed first, while the lock the user can see has since moved on
-  // (issue #160). Distinct from target-lock-lost: their current lock is fine, so
-  // the notice must not tell them to lock again.
+  // dictated to closed first, after the user had already moved on from it --
+  // either by unlocking or by locking onto something else (issue #160).
+  // Distinct from target-lock-lost: whatever they set since still stands, so the
+  // notice must neither tell them to lock again nor claim their lock changed.
   useEffect(() => {
     const unlisten = listen("target-window-gone", () => {
       toast.warning(t("errors.targetWindowGoneTitle"), {

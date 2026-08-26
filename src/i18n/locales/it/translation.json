@@ -810,7 +810,7 @@
     "targetLockLostTitle": "La finestra bloccata non esiste più",
     "targetLockLost": "La finestra che hai bloccato è chiusa. AudioBud non ha incollato il testo. Blocca di nuovo una finestra.",
     "targetWindowGoneTitle": "La finestra di dettatura è stata chiusa",
-    "targetWindowGone": "La finestra in cui hai dettato è stata chiusa prima che AudioBud potesse incollare il testo. La finestra bloccata attuale non è cambiata.",
+    "targetWindowGone": "La finestra in cui hai dettato è stata chiusa prima che AudioBud potesse incollare il testo. La tua impostazione di blocco attuale non è cambiata.",
     "transcriptionErrorTitle": "Trascrizione non riuscita",
     "transcriptionErrorGeneric": "Non è stato possibile trascrivere la registrazione. Riprova o scegli un altro modello.",
     "transcriptionTimeoutTitle": "Tempo scaduto per la trascrizione",

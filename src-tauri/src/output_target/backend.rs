@@ -168,11 +168,12 @@ fn drop_lock_for(app: &AppHandle, target: WindowIdentity) {
     }
 }
 
-/// Tell the user this transcript reached no window, without touching the lock or
-/// the tray: the window that died is not the one they have locked now.
+/// Tell the user this transcript reached no window, without touching the lock
+/// state or the tray: the window that died is one they had already moved on
+/// from, whether by unlocking or by locking onto something else.
 fn announce_target_window_gone(app: &AppHandle, target: WindowIdentity) {
     warn!(
-        "Window {:#x} closed before its transcript was delivered; the current lock is untouched",
+        "Window {:#x} closed before its transcript was delivered; the lock state is untouched",
         target.handle.0
     );
     let _ = app.emit(TARGET_WINDOW_GONE_EVENT, ());

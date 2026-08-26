@@ -248,9 +248,10 @@ pub enum TargetLoss {
     /// user is told their lock is gone.
     LockCleared,
     /// The dead window had already been superseded -- unlocked, or re-locked to
-    /// another window -- so the lock stands untouched. The user must still be
-    /// told this transcript reached no window, but NOT that their current lock
-    /// was lost, because it was not.
+    /// another window -- so whatever the user set since stands untouched. They
+    /// must still be told this transcript reached no window, but NOT that a lock
+    /// was lost: the notice has to read true both when another window is locked
+    /// and when they deliberately unlocked and nothing is.
     ObsoleteTarget,
 }
 

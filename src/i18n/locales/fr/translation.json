@@ -810,7 +810,7 @@
     "targetLockLostTitle": "La fenêtre épinglée a disparu",
     "targetLockLost": "La fenêtre que vous avez épinglée est fermée. AudioBud n'a pas collé le texte. Épinglez à nouveau une fenêtre.",
     "targetWindowGoneTitle": "La fenêtre de dictée s'est fermée",
-    "targetWindowGone": "La fenêtre dans laquelle vous avez dicté s'est fermée avant qu'AudioBud puisse coller le texte. Votre fenêtre épinglée actuelle est inchangée.",
+    "targetWindowGone": "La fenêtre dans laquelle vous avez dicté s'est fermée avant qu'AudioBud puisse coller le texte. Votre réglage d'épinglage actuel est inchangé.",
     "transcriptionErrorTitle": "Échec de la transcription",
     "transcriptionErrorGeneric": "L’enregistrement n’a pas pu être transcrit. Réessayez ou choisissez un autre modèle.",
     "transcriptionTimeoutTitle": "Délai de transcription dépassé",

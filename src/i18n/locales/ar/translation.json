@@ -818,7 +818,7 @@
     "targetLockLostTitle": "النافذة المثبتة لم تعد موجودة",
     "targetLockLost": "النافذة التي ثبّتها مغلقة. لم يلصق AudioBud النص. ثبّت نافذة مرة أخرى.",
     "targetWindowGoneTitle": "أُغلقت نافذة الإملاء",
-    "targetWindowGone": "أُغلقت النافذة التي أمليت إليها قبل أن يتمكن AudioBud من لصق النص. النافذة المثبّتة حاليًا لم تتغيّر.",
+    "targetWindowGone": "أُغلقت النافذة التي أمليت إليها قبل أن يتمكن AudioBud من لصق النص. إعداد التثبيت الحالي لم يتغيّر.",
     "transcriptionErrorTitle": "فشل التفريغ",
     "transcriptionErrorGeneric": "تعذر نسخ التسجيل. حاول مرة أخرى أو اختر نموذجًا مختلفًا.",
     "transcriptionTimeoutTitle": "انتهت مهلة التفريغ",
