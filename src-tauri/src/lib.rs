@@ -902,6 +902,14 @@ pub fn run(cli_args: CliArgs) {
         })
         .on_window_event(|window, event| match event {
             tauri::WindowEvent::CloseRequested { api, .. } => {
+                // The one-shot picker (#124) is transient: it exists for one
+                // pick and must actually go when it closes. Hiding it like the
+                // settings window would leave it registered and reading as
+                // open, which holds off every later paste.
+                if window.label() == window_picker::backend::PICKER_WINDOW {
+                    return;
+                }
+
                 api.prevent_close();
                 let _res = window.hide();
 
