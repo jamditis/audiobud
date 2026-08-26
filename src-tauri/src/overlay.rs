@@ -1,6 +1,7 @@
 use crate::input;
 use crate::settings;
 use crate::settings::{OverlayAnchor, OverlayPosition};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize};
 
 #[cfg(not(target_os = "macos"))]
@@ -33,6 +34,42 @@ tauri_panel! {
 
 const OVERLAY_WIDTH: f64 = 172.0;
 const OVERLAY_HEIGHT: f64 = 36.0;
+
+/// How long the native overlay window's hide waits, after `hide-overlay` is
+/// emitted, for a plain paste -- just enough for the CSS fade-out the event
+/// triggers to finish before the window itself disappears.
+const OVERLAY_HIDE_DELAY_MS: u64 = 300;
+
+/// How long it waits instead when a delivery confirmation (#165) was just
+/// shown. Must comfortably outlast the overlay's own JS timeout for the
+/// confirmation chip (`DELIVERY_CONFIRMATION_MS` in RecordingOverlay.tsx,
+/// currently 1800ms), or the native window would vanish out from under a
+/// chip the user is still reading (#279 review round 2).
+const OVERLAY_HIDE_DELAY_AFTER_CONFIRMATION_MS: u64 = 2200;
+
+/// Bumped by every show-overlay or hide-overlay instruction (#279 review
+/// round 2). Each hide spawns a thread that sleeps, then only actually calls
+/// `.hide()` if this still reads the value it captured before sleeping: a
+/// show that lands while it slept (a new dictation starting during the
+/// extended delivery-confirmation delay above) or a newer hide otherwise
+/// bumps it first, turning a stale sleeper into a silent no-op instead of
+/// taking down a window whose state has since moved on. This keeps the
+/// existing single-spawned-thread mechanism rather than adding a cancel
+/// token or a second thread.
+static OVERLAY_VISIBILITY_EPOCH: AtomicU64 = AtomicU64::new(0);
+
+/// Set by `output_target::backend::announce_delivered` right before the
+/// delivery pipeline finishes and calls `hide_recording_overlay` (issue
+/// #165). Read (and reset) by the very next hide to decide whether the
+/// overlay's confirmation chip needs the longer delay above instead of the
+/// quick one meant for a plain paste.
+static PENDING_DELIVERY_CONFIRMATION: AtomicBool = AtomicBool::new(false);
+
+/// Mark that a delivery confirmation chip was just shown on the overlay, so
+/// the hide that is about to follow gives it time to actually be read.
+pub fn mark_delivery_confirmation_pending() {
+    PENDING_DELIVERY_CONFIRMATION.store(true, Ordering::SeqCst);
+}
 
 #[cfg(target_os = "macos")]
 const OVERLAY_TOP_OFFSET: f64 = 46.0;
@@ -448,6 +485,11 @@ fn show_overlay_state(app_handle: &AppHandle, state: &str, raw: bool) {
         return;
     }
 
+    // Supersede any hide still asleep from a previous dictation (#279 review
+    // round 2): showing the overlay again means whatever that sleeping hide
+    // would have done is stale, whether it is mid-fade or mid-confirmation.
+    OVERLAY_VISIBILITY_EPOCH.fetch_add(1, Ordering::SeqCst);
+
     update_overlay_position(app_handle);
 
     if let Some(overlay_window) = app_handle.get_webview_window("recording_overlay") {
@@ -499,11 +541,28 @@ pub fn hide_recording_overlay(app_handle: &AppHandle) {
     if let Some(overlay_window) = app_handle.get_webview_window("recording_overlay") {
         // Emit event to trigger fade-out animation
         let _ = overlay_window.emit("hide-overlay", ());
+
+        // A delivery confirmation (#165) needs longer on screen than the
+        // usual quick fade-out; the flag is reset here so only the hide it
+        // was set for is delayed.
+        let delay_ms = if PENDING_DELIVERY_CONFIRMATION.swap(false, Ordering::SeqCst) {
+            OVERLAY_HIDE_DELAY_AFTER_CONFIRMATION_MS
+        } else {
+            OVERLAY_HIDE_DELAY_MS
+        };
+        let epoch = OVERLAY_VISIBILITY_EPOCH.fetch_add(1, Ordering::SeqCst) + 1;
+
         // Hide the window after a short delay to allow animation to complete
         let window_clone = overlay_window.clone();
         std::thread::spawn(move || {
-            std::thread::sleep(std::time::Duration::from_millis(300));
-            let _ = window_clone.hide();
+            std::thread::sleep(std::time::Duration::from_millis(delay_ms));
+            // A newer show or hide instruction landed while this one slept
+            // (#279 review round 2); leave the window as that instruction
+            // left it instead of taking down state this hide no longer
+            // reflects.
+            if OVERLAY_VISIBILITY_EPOCH.load(Ordering::SeqCst) == epoch {
+                let _ = window_clone.hide();
+            }
         });
     }
 }

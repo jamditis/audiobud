@@ -68,6 +68,20 @@ const RecordingOverlay: React.FC = () => {
         // Sync language from settings each time overlay is shown
         await syncLanguageFromSettings();
         const payload = event.payload as OverlayShowPayload;
+        // A new show supersedes any delivery confirmation (#165) and its
+        // pending hide left over from the previous dictation (#279 review
+        // round 2) -- otherwise the old "Sent" chip would keep masking the
+        // new recording state, and its timer would later hide this overlay
+        // out from under it. (The backend independently guards its own
+        // native hide the same way, but the React-side state needs its own
+        // reset regardless.)
+        if (confirmationTimeoutRef.current) {
+          clearTimeout(confirmationTimeoutRef.current);
+          confirmationTimeoutRef.current = null;
+        }
+        confirmationActiveRef.current = false;
+        pendingHideRef.current = false;
+        setDeliveryConfirmation(null);
         setState(payload.state);
         setIsRaw(payload.raw);
         setIsVisible(true);

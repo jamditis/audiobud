@@ -410,26 +410,33 @@ fn lost_label(app: &AppHandle, identity: WindowIdentity) -> WindowLabel {
 
 /// Pick the label to report for a delivery that just succeeded (issue #165).
 ///
-/// A locked window's label was already cached at lock time, while the window
-/// was reliably alive (#266 review); a `Lock` delivery reuses it rather than
-/// re-querying, so the confirmation matches whatever the indicator is already
-/// showing for the same window. A one-shot pick (#124) has no such cache -- it
-/// lives only for the length of one delivery -- so `live` is always consulted
-/// for it, and for a lock with nothing cached (state not yet managed, or this
-/// identity was never actually the one locked). `live` is safe to call in
-/// either fallback case: the delivery that just happened proves the window
-/// was alive a moment ago.
+/// Unlike [`lost_label`] -- where the window is already gone and a live query
+/// routinely comes back empty -- a delivery just proved the window alive a
+/// moment ago, so the live lookup is tried first and used whenever it comes
+/// back with anything. This matters because a locked window's content can
+/// change after the lock was captured (a tab switch, a different document in
+/// the same editor, #279 review round 2): reporting the label cached at lock
+/// time would name whatever was open back then, not what the transcript
+/// actually landed in. The cache remains the fallback -- for a live query
+/// that fails outright (`(None, None)`), and only for a `Lock` delivery,
+/// since that is the only source with a cache to fall back to; a one-shot
+/// pick (#124) has none, so a failed live lookup for it reports unknown
+/// rather than borrowing an unrelated lock's cached name.
 pub fn resolve_delivered_label(
     source: DeliverySource,
     cached: Option<WindowLabel>,
     live: impl FnOnce() -> WindowLabel,
 ) -> WindowLabel {
+    let live_label = live();
+    if live_label != (None, None) {
+        return live_label;
+    }
     if source.clears_the_lock() {
         if let Some(label) = cached {
             return label;
         }
     }
-    live()
+    live_label
 }
 
 /// Resolve [`resolve_delivered_label`] against the real cache and the real
@@ -451,6 +458,11 @@ fn delivered_label(
 /// plain foreground.
 pub fn announce_delivered(app: &AppHandle, identity: WindowIdentity, source: DeliverySource) {
     let (app_name, title) = delivered_label(app, identity, source);
+    // The pipeline is about to finish and hide the overlay right behind this
+    // (#279 review round 2); mark it so that hide gives the confirmation chip
+    // this event is about to trigger enough time to actually be read instead
+    // of the usual quick fade meant for a plain paste.
+    crate::overlay::mark_delivery_confirmation_pending();
     // The window title routinely carries sensitive context -- document names,
     // page titles, client names -- so it stays out of the persistent, default-
     // level handy.log; only the handle and app/process name, which is already
@@ -1075,14 +1087,28 @@ mod tests {
     }
 
     #[test]
-    fn a_locked_delivery_prefers_its_cached_label() {
-        // The label cached at lock time (#266 review) is what the indicator is
-        // already showing for the same window, so a successful delivery to it
-        // must match rather than re-query and risk disagreeing (issue #165).
+    fn a_locked_delivery_prefers_the_live_label_over_a_stale_cache() {
+        // The window's content can change after the lock was captured -- a tab
+        // switch, a different document in the same editor (#279 review round
+        // 2) -- so a live lookup that comes back with anything wins over
+        // whatever was cached at lock time, even though the cache exists.
         let cached = (Some("Terminal".to_string()), Some("zsh".to_string()));
-        let label = resolve_delivered_label(DeliverySource::Lock, Some(cached.clone()), || {
-            panic!("live lookup must not run when a cache entry exists")
-        });
+        let live = (
+            Some("Terminal".to_string()),
+            Some("vim - notes.md".to_string()),
+        );
+        let label = resolve_delivered_label(DeliverySource::Lock, Some(cached), || live.clone());
+        assert_eq!(label, live);
+    }
+
+    #[test]
+    fn a_locked_delivery_falls_back_to_its_cached_label_when_the_live_lookup_is_empty() {
+        // The live query can fail outright even for a window that is still
+        // there (a transient OS refusal); the label cached at lock time
+        // (#266 review) is still better than reporting nothing.
+        let cached = (Some("Terminal".to_string()), Some("zsh".to_string()));
+        let label =
+            resolve_delivered_label(DeliverySource::Lock, Some(cached.clone()), || (None, None));
         assert_eq!(label, cached);
     }
 
@@ -1105,6 +1131,17 @@ mod tests {
         let live = (Some("Fresh".to_string()), None);
         let label = resolve_delivered_label(DeliverySource::Pick, Some(cached), || live.clone());
         assert_eq!(label, live);
+    }
+
+    #[test]
+    fn a_picked_delivery_reports_unknown_rather_than_borrow_an_unrelated_cache() {
+        // A one-shot pick has no cache of its own; an empty live lookup for
+        // one must not fall back to a Lock's cache even if one happens to be
+        // present, or the confirmation would name a window the pick never
+        // touched.
+        let cached = (Some("Unrelated Lock".to_string()), None);
+        let label = resolve_delivered_label(DeliverySource::Pick, Some(cached), || (None, None));
+        assert_eq!(label, (None, None));
     }
 
     #[test]
