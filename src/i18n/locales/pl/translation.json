@@ -813,6 +813,8 @@
     "pasteFailed": "Nie można było wkleić tekstu do aktywnej aplikacji.",
     "targetLockLostTitle": "Przypiętego okna już nie ma",
     "targetLockLost": "Przypięte okno jest zamknięte. AudioBud nie wkleił tekstu. Przypnij okno ponownie.",
+    "targetWindowGoneTitle": "Okno dyktowania zostało zamknięte",
+    "targetWindowGone": "Okno, do którego dyktowałeś, zostało zamknięte, zanim AudioBud zdążył wkleić tekst. Aktualnie przypięte okno pozostaje bez zmian.",
     "transcriptionErrorTitle": "Transkrypcja nie powiodła się",
     "transcriptionErrorGeneric": "Nie udało się transkrybować nagrania. Spróbuj ponownie lub wybierz inny model.",
     "transcriptionTimeoutTitle": "Przekroczono czas transkrypcji",

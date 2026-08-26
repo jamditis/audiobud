@@ -192,6 +192,21 @@ function App() {
     };
   }, [t]);
 
+  // Listen for a transcript that reached no window because the window it was
+  // dictated to closed first, while the lock the user can see has since moved on
+  // (issue #160). Distinct from target-lock-lost: their current lock is fine, so
+  // the notice must not tell them to lock again.
+  useEffect(() => {
+    const unlisten = listen("target-window-gone", () => {
+      toast.warning(t("errors.targetWindowGoneTitle"), {
+        description: t("errors.targetWindowGone"),
+      });
+    });
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, [t]);
+
   // Listen for transcription watchdog timeouts (wedged engine, issue #58)
   // and show a toast. The Rust side has already recovered the overlay/tray.
   useEffect(() => {

@@ -809,6 +809,8 @@
     "pasteFailed": "Text could not be pasted into the active application.",
     "targetLockLostTitle": "Locked window is gone",
     "targetLockLost": "The window you locked is closed. AudioBud did not paste the text. Lock a window again.",
+    "targetWindowGoneTitle": "Dictation window closed",
+    "targetWindowGone": "The window you dictated to closed before AudioBud could paste the text. Your locked window is unchanged.",
     "transcriptionErrorTitle": "Transcription failed",
     "transcriptionErrorGeneric": "The recording could not be transcribed. Try again or choose a different model.",
     "transcriptionTimeoutTitle": "Transcription timed out",

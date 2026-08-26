@@ -809,6 +809,8 @@
     "pasteFailed": "アクティブなアプリケーションにテキストを貼り付けられませんでした。",
     "targetLockLostTitle": "固定したウィンドウがありません",
     "targetLockLost": "固定したウィンドウは閉じられています。AudioBud はテキストを貼り付けませんでした。もう一度ウィンドウを固定してください。",
+    "targetWindowGoneTitle": "音声入力先のウィンドウが閉じられました",
+    "targetWindowGone": "音声入力していたウィンドウが、AudioBud がテキストを貼り付ける前に閉じられました。現在固定しているウィンドウは変わっていません。",
     "transcriptionErrorTitle": "文字起こしに失敗しました",
     "transcriptionErrorGeneric": "録音を文字起こしできませんでした。もう一度試すか、別のモデルを選択してください。",
     "transcriptionTimeoutTitle": "文字起こしがタイムアウトしました",

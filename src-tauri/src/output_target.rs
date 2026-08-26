@@ -198,6 +198,25 @@ pub enum OutputTarget {
     Pinned(WindowHandle),
 }
 
+/// What the death of one delivery's target meant for the lock.
+///
+/// A delivery carries the target it was started for, so the window it is aimed
+/// at and the window currently locked can differ: the user may have unlocked, or
+/// re-locked elsewhere, while the transcript was still being produced (#160).
+/// Both cases lose the transcript and both must be said out loud; only one of
+/// them may touch the lock.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TargetLoss {
+    /// The dead window was the one still locked, so the lock was released. The
+    /// user is told their lock is gone.
+    LockCleared,
+    /// The dead window had already been superseded -- unlocked, or re-locked to
+    /// another window -- so the lock stands untouched. The user must still be
+    /// told this transcript reached no window, but NOT that their current lock
+    /// was lost, because it was not.
+    ObsoleteTarget,
+}
+
 /// Tauri-managed lock state. Registered alongside `EnigoState`; the paste path
 /// reads it at send time to resolve the [`OutputTarget`]. `None` means no lock
 /// is held and delivery follows the foreground.
@@ -233,6 +252,21 @@ impl PinnedTarget {
             true
         } else {
             false
+        }
+    }
+
+    /// Retire the dead target of one delivery, and report what that meant for
+    /// the lock the user can see.
+    ///
+    /// Wraps [`Self::unlock_if`] so a caller cannot read "the lock did not
+    /// change" as "there is nothing to tell the user". Both outcomes are a
+    /// transcript that reached no window: the difference is only whether the
+    /// lock the user is looking at went with it (#160).
+    pub fn retire_dead_target(&self, target: WindowIdentity) -> TargetLoss {
+        if self.unlock_if(target) {
+            TargetLoss::LockCleared
+        } else {
+            TargetLoss::ObsoleteTarget
         }
     }
 
@@ -426,6 +460,45 @@ mod tests {
         let other = win(1, 5, 7);
         assert!(!is_own_window(other, 4242));
         assert_eq!(accept_capture(other, 4242), Ok(other));
+    }
+
+    #[test]
+    fn an_obsolete_target_is_announced_without_clearing_the_newer_lock() {
+        // The silent-loss case (#160): a dictation started against one window
+        // finishes after the user re-locked elsewhere, and its own window has
+        // since closed. The transcript reached no window, so the user must hear
+        // about it -- but the lock they can see is still good and must survive.
+        let t = PinnedTarget::default();
+        let started_with = win(1, 10, 20);
+        let locked_now = win(2, 30, 40);
+        t.lock_to(started_with);
+        t.lock_to(locked_now);
+
+        assert_eq!(
+            t.retire_dead_target(started_with),
+            TargetLoss::ObsoleteTarget
+        );
+        assert_eq!(t.locked(), Some(locked_now));
+
+        // Same when the user simply unlocked mid-dictation: still a lost
+        // transcript to report, still nothing to clear.
+        t.unlock();
+        assert_eq!(
+            t.retire_dead_target(started_with),
+            TargetLoss::ObsoleteTarget
+        );
+        assert!(!t.is_locked());
+    }
+
+    #[test]
+    fn a_dead_target_that_is_still_the_lock_clears_it() {
+        // The ordinary case: the window that died is the one locked, so the
+        // lock goes with it and the user is told their lock is gone.
+        let t = PinnedTarget::default();
+        let w = win(9, 1, 2);
+        t.lock_to(w);
+        assert_eq!(t.retire_dead_target(w), TargetLoss::LockCleared);
+        assert!(!t.is_locked());
     }
 
     #[test]

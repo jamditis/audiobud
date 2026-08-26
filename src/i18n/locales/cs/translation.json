@@ -811,6 +811,8 @@
     "pasteFailed": "Text nebylo možné vložit do aktivní aplikace.",
     "targetLockLostTitle": "Uzamčené okno už neexistuje",
     "targetLockLost": "Okno, které jste uzamkli, je zavřené. AudioBud text nevložil. Uzamkněte okno znovu.",
+    "targetWindowGoneTitle": "Okno diktování se zavřelo",
+    "targetWindowGone": "Okno, do kterého jste diktovali, se zavřelo dřív, než AudioBud stihl vložit text. Aktuálně připnuté okno zůstává beze změny.",
     "transcriptionErrorTitle": "Přepis se nezdařil",
     "transcriptionErrorGeneric": "Nahrávku se nepodařilo přepsat. Zkuste to znovu nebo vyberte jiný model.",
     "transcriptionTimeoutTitle": "Vypršel časový limit přepisu",

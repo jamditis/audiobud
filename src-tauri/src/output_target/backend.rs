@@ -21,13 +21,23 @@
 use log::{info, warn};
 use tauri::{AppHandle, Emitter, Manager};
 
-use super::{CaptureError, CaptureSource, LockToggle, PinnedTarget, WindowIdentity};
+use super::{CaptureError, CaptureSource, LockToggle, PinnedTarget, TargetLoss, WindowIdentity};
 
 /// Emitted when a pinned paste was suppressed because the locked window is gone
 /// (#120). The frontend turns this into a brief notice; the lock is already
 /// dropped by the time it fires, so the next dictation is a normal foreground
 /// paste.
 pub const TARGET_LOCK_LOST_EVENT: &str = "target-lock-lost";
+
+/// Emitted when a delivery reached no window because the window that dictation
+/// was started for had closed, while the lock the user can see has since moved
+/// on and still stands (#160).
+///
+/// Distinct from [`TARGET_LOCK_LOST_EVENT`] because the two say different things
+/// to the user: this one must NOT claim their current lock is gone. Without it a
+/// suppressed delivery in this case is silent, and with the default
+/// `ClipboardHandling::DontModify` the transcript is gone with it.
+pub const TARGET_WINDOW_GONE_EVENT: &str = "target-window-gone";
 
 /// Where one paste is delivered. Carries the whole [`WindowIdentity`], not just
 /// the handle, because every step of the delivery re-checks it (#254).
@@ -133,20 +143,39 @@ fn announce_lock_lost(app: &AppHandle) {
     crate::tray::update_tray_menu(app, &crate::tray::current_tray_state(app), None);
 }
 
-/// Drop the lock on `target` because its window has gone, and tell the user.
+/// Drop the lock on `target` because its window has gone, and tell the user the
+/// transcript did not reach it.
 ///
 /// Only this delivery's own target is cleared: the user may have unlocked and
 /// re-locked to another window while this paste was running, and a dead target
-/// from the older delivery must not take the newer lock down with it. When the
-/// lock has already moved on, there is nothing to announce -- the lock the user
-/// can see is still good -- but this delivery is abandoned all the same.
+/// from the older delivery must not take the newer lock down with it. That case
+/// still has to be announced, though, in its own words -- the delivery failed
+/// either way, and staying quiet about it loses a finished transcript without a
+/// trace, since a suppressed delivery is deliberately not a paste error and the
+/// default clipboard handling leaves no copy behind (#160).
 fn drop_lock_for(app: &AppHandle, target: WindowIdentity) {
-    let cleared = app
+    let Some(loss) = app
         .try_state::<PinnedTarget>()
-        .is_some_and(|pinned| pinned.unlock_if(target));
-    if cleared {
-        announce_lock_lost(app);
+        .map(|pinned| pinned.retire_dead_target(target))
+    else {
+        warn!("Target lock state is not initialized; a dead target went unreported");
+        return;
+    };
+
+    match loss {
+        TargetLoss::LockCleared => announce_lock_lost(app),
+        TargetLoss::ObsoleteTarget => announce_target_window_gone(app, target),
     }
+}
+
+/// Tell the user this transcript reached no window, without touching the lock or
+/// the tray: the window that died is not the one they have locked now.
+fn announce_target_window_gone(app: &AppHandle, target: WindowIdentity) {
+    warn!(
+        "Window {:#x} closed before its transcript was delivered; the current lock is untouched",
+        target.handle.0
+    );
+    let _ = app.emit(TARGET_WINDOW_GONE_EVENT, ());
 }
 
 /// Whether the locked window is still the window that was locked. Wraps the

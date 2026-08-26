@@ -809,6 +809,8 @@
     "pasteFailed": "Metin etkin uygulamaya yapıştırılamadı.",
     "targetLockLostTitle": "Kilitlenen pencere yok",
     "targetLockLost": "Kilitlediğiniz pencere kapalı. AudioBud metni yapıştırmadı. Yeniden bir pencere kilitleyin.",
+    "targetWindowGoneTitle": "Dikte penceresi kapandı",
+    "targetWindowGone": "Dikte ettiğiniz pencere, AudioBud metni yapıştıramadan kapandı. Şu anda sabitlenmiş pencereniz değişmedi.",
     "transcriptionErrorTitle": "Transkripsiyon başarısız oldu",
     "transcriptionErrorGeneric": "Kayıt yazıya dökülemedi. Tekrar deneyin veya farklı bir model seçin.",
     "transcriptionTimeoutTitle": "Transkripsiyon zaman aşımına uğradı",
