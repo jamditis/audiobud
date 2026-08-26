@@ -810,6 +810,11 @@ pub fn run(cli_args: CliArgs) {
         builder = builder.plugin(tauri_nspanel::init());
     }
 
+    #[cfg(target_os = "macos")]
+    {
+        builder = builder.plugin(tauri_plugin_macos_permissions::init());
+    }
+
     // Only register the updater while AudioBud has a release feed configured.
     // Registering it without a `plugins.updater` block in tauri.conf.json panics
     // at startup (issue #32); UPDATER_FEED_READY keeps this in step with the
@@ -842,7 +847,6 @@ pub fn run(cli_args: CliArgs) {
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_clipboard_manager::init())
-        .plugin(tauri_plugin_macos_permissions::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
