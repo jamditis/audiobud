@@ -196,6 +196,10 @@
           "transcribe_raw": {
             "name": "Rohtranskript-Tastenkürzel",
             "description": "Ein dediziertes Tastenkürzel, das nur für dieses Diktat rohen Text in Kleinbuchstaben und ohne Satzzeichen erzeugt."
+          },
+          "toggle_target_lock": {
+            "name": "Kurzbefehl zum Fixieren auf ein Fenster",
+            "description": "Der Kurzbefehl, der Ihren Text an ein Fenster sendet, bis Sie die Fixierung aufheben."
           }
         },
         "errors": {

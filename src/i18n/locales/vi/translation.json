@@ -196,6 +196,10 @@
           "transcribe_raw": {
             "name": "Phím tắt văn bản thô",
             "description": "Phím tắt riêng để chuyển đổi thành văn bản thô, chữ thường, không dấu câu, chỉ áp dụng cho lần đọc này."
+          },
+          "toggle_target_lock": {
+            "name": "Phím tắt khóa vào cửa sổ",
+            "description": "Phím tắt gửi văn bản của bạn đến một cửa sổ cho đến khi bạn mở khóa."
           }
         },
         "errors": {

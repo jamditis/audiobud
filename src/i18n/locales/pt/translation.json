@@ -196,6 +196,10 @@
           "transcribe_raw": {
             "name": "Tecla de transcrição bruta",
             "description": "Uma tecla de atalho dedicada que transcreve em texto bruto, em minúsculas e sem pontuação, apenas para este ditado."
+          },
+          "toggle_target_lock": {
+            "name": "Atalho para fixar em uma janela",
+            "description": "O atalho de teclado que envia seu texto para uma única janela até você liberá-la."
           }
         },
         "errors": {

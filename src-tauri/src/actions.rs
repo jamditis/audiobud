@@ -964,7 +964,10 @@ struct ToggleTargetLockAction;
 #[cfg(target_os = "windows")]
 impl ShortcutAction for ToggleTargetLockAction {
     fn start(&self, app: &AppHandle, _binding_id: &str, _shortcut_str: &str) {
-        crate::output_target::backend::toggle_target_lock(app);
+        crate::output_target::backend::toggle_target_lock(
+            app,
+            crate::output_target::CaptureSource::Shortcut,
+        );
     }
 
     fn stop(&self, _app: &AppHandle, _binding_id: &str, _shortcut_str: &str) {

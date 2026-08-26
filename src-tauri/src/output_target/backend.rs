@@ -17,7 +17,7 @@
 use log::{info, warn};
 use tauri::{AppHandle, Emitter, Manager};
 
-use super::{CaptureError, LockToggle, PinnedTarget, WindowIdentity};
+use super::{CaptureError, CaptureSource, LockToggle, PinnedTarget, WindowIdentity};
 
 /// Emitted when a pinned paste was suppressed because the locked window is gone
 /// (#120). The frontend turns this into a brief notice; the lock is already
@@ -49,14 +49,16 @@ pub enum Borrowed<T> {
 /// Toggle the target lock from the tray item or the shortcut.
 ///
 /// Locking captures the window focused at that moment; pressing again unlocks.
-/// The tray menu is rebuilt either way so its checkmark follows the real state.
-pub fn toggle_target_lock(app: &AppHandle) {
+/// `source` says which gesture asked, because the tray menu holds the foreground
+/// itself while its click is handled (see [`capture_foreground_window`]). The
+/// tray menu is rebuilt either way so its checkmark follows the real state.
+pub fn toggle_target_lock(app: &AppHandle, source: CaptureSource) {
     let Some(pinned) = app.try_state::<PinnedTarget>() else {
         warn!("Target lock state is not initialized");
         return;
     };
 
-    match pinned.toggle(capture_foreground_window) {
+    match pinned.toggle(|| capture_foreground_window(source)) {
         LockToggle::Locked(window) => info!(
             "Output locked to window {:#x} (process {})",
             window.handle.0, window.process_id
@@ -106,6 +108,22 @@ fn announce_lock_lost(app: &AppHandle) {
     crate::tray::update_tray_menu(app, &crate::tray::current_tray_state(app), None);
 }
 
+/// Drop the lock on `target` because its window has gone, and tell the user.
+///
+/// Only this delivery's own target is cleared: the user may have unlocked and
+/// re-locked to another window while this paste was running, and a dead target
+/// from the older delivery must not take the newer lock down with it. When the
+/// lock has already moved on, there is nothing to announce -- the lock the user
+/// can see is still good -- but this delivery is abandoned all the same.
+fn drop_lock_for(app: &AppHandle, target: WindowIdentity) {
+    let cleared = app
+        .try_state::<PinnedTarget>()
+        .is_some_and(|pinned| pinned.unlock_if(target));
+    if cleared {
+        announce_lock_lost(app);
+    }
+}
+
 /// Whether the locked window is still the window that was locked. Wraps the
 /// shared identity check with this platform's probe (#254).
 pub fn window_is_alive(locked: WindowIdentity) -> bool {
@@ -142,10 +160,7 @@ impl<'a> FocusHold<'a> {
         };
 
         if !window_is_alive(target) {
-            if let Some(pinned) = self.app.try_state::<PinnedTarget>() {
-                pinned.unlock();
-            }
-            announce_lock_lost(self.app);
+            drop_lock_for(self.app, target);
             return Err("the locked window closed during delivery".to_string());
         }
 
@@ -171,10 +186,7 @@ pub fn borrow_focus<T>(
     action: impl FnOnce() -> T,
 ) -> Result<Borrowed<T>, String> {
     if !window_is_alive(target) {
-        if let Some(pinned) = app.try_state::<PinnedTarget>() {
-            pinned.unlock();
-        }
-        announce_lock_lost(app);
+        drop_lock_for(app, target);
         return Ok(Borrowed::Suppressed);
     }
 
@@ -200,7 +212,7 @@ pub use fallback::{
 
 #[cfg(windows)]
 mod imp {
-    use super::{CaptureError, WindowIdentity};
+    use super::{CaptureError, CaptureSource, WindowIdentity};
     use crate::output_target::{is_eligible_target, WindowFacts, WindowHandle};
     use log::warn;
     use std::ffi::c_void;
@@ -234,16 +246,23 @@ mod imp {
 
     /// Capture the window to lock onto.
     ///
-    /// Normally that is the foreground window. It is not when the capture is
-    /// requested from the tray menu: handling that click, the shell's taskbar
-    /// (or AudioBud's own menu window) holds the foreground, and pinning to
-    /// either is useless. Tauri's tray API reports the menu click, not the
-    /// window that was in front before the menu opened, and polling the
+    /// From the shortcut this is strictly the foreground window: the user
+    /// pressed the key while looking at the window they mean, so if that window
+    /// is not a usable target -- it is AudioBud's own, or the bare desktop --
+    /// the honest answer is to refuse. Silently pinning some other window would
+    /// send later dictation somewhere the user never chose.
+    ///
+    /// From the tray menu the foreground cannot be trusted at all: while the
+    /// menu item's callback runs, the shell's taskbar (or AudioBud's own menu
+    /// window) holds the foreground. Tauri's tray API reports the menu click,
+    /// not the window that was in front before the menu opened, and polling the
     /// foreground on a timer just to have an answer ready is a background cost
-    /// paid for a rare click. So the fallback is the top window in Z order that
-    /// a user could actually dictate into -- which, right after the shell's
+    /// paid for a rare click. So that path falls back to the top window in Z
+    /// order a user could dictate into -- which, right behind the shell's
     /// surfaces, is the window they were last working in.
-    pub fn capture_foreground_window() -> Result<WindowIdentity, CaptureError> {
+    pub fn capture_foreground_window(
+        source: CaptureSource,
+    ) -> Result<WindowIdentity, CaptureError> {
         let own_process_id = std::process::id();
 
         let foreground = unsafe { GetForegroundWindow() };
@@ -251,8 +270,10 @@ mod imp {
             return Ok(window);
         }
 
-        if let Some(window) = top_eligible_window(own_process_id) {
-            return Ok(window);
+        if source == CaptureSource::TrayMenu {
+            if let Some(window) = top_eligible_window(own_process_id) {
+                return Ok(window);
+            }
         }
 
         // Nothing to lock onto. Report the foreground being AudioBud's own as
@@ -400,12 +421,14 @@ mod imp {
 
 #[cfg(not(windows))]
 mod fallback {
-    use super::{CaptureError, WindowIdentity};
+    use super::{CaptureError, CaptureSource, WindowIdentity};
     use crate::output_target::WindowHandle;
 
     /// No window-targeting backend on this platform yet (#119), so nothing can
     /// be locked and the paste path always sees `Foreground`.
-    pub fn capture_foreground_window() -> Result<WindowIdentity, CaptureError> {
+    pub fn capture_foreground_window(
+        _source: CaptureSource,
+    ) -> Result<WindowIdentity, CaptureError> {
         Err(CaptureError::Unsupported)
     }
 
