@@ -1,8 +1,9 @@
-import { useEffect, useState, useRef } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { toast, Toaster } from "sonner";
 import { useTranslation } from "react-i18next";
 import { listen } from "@tauri-apps/api/event";
 import { platform } from "@tauri-apps/plugin-os";
+import { Loader2 } from "lucide-react";
 import {
   checkMacOSAccessibilityPermission,
   checkMacOSMicrophonePermission,
@@ -440,7 +441,26 @@ function App() {
               className="app-content flex flex-col items-center gap-4"
             >
               <AccessibilityPermissions />
-              {renderSettingsContent(currentSection, setCurrentSection)}
+              <Suspense
+                fallback={
+                  <div
+                    className="flex min-h-48 w-full items-center justify-center"
+                    role="status"
+                    aria-live="polite"
+                    aria-busy="true"
+                  >
+                    <Loader2
+                      className="h-6 w-6 animate-spin text-text/50"
+                      aria-hidden="true"
+                    />
+                    <span className="sr-only">
+                      {t("modelSelector.loadingGeneric")}
+                    </span>
+                  </div>
+                }
+              >
+                {renderSettingsContent(currentSection, setCurrentSection)}
+              </Suspense>
             </div>
           </div>
         </main>
