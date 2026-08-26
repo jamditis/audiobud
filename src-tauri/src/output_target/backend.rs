@@ -21,6 +21,7 @@
 use log::{info, warn};
 use serde::{Deserialize, Serialize};
 use specta::Type;
+use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_specta::Event;
 
@@ -718,7 +719,107 @@ impl<'a> FocusHold<'a> {
         }
 
         warn!("Target window lost focus mid-delivery; re-activating it");
-        activate_target(target).map_err(FocusLost::ActivationRefused)
+        activate_with_retries(self.app, target, self.source)
+    }
+}
+
+/// Extra attempts [`activate_with_retries`] gives a target that was not ready
+/// on the first try -- minimized, momentarily hung, or refusing to confirm
+/// the foreground switch (#122). Windows-only: the non-Windows fallback's
+/// `activate_target` always fails outright ("not supported"), so retrying it
+/// would only add latency with no chance of a different outcome.
+#[cfg(windows)]
+const ACTIVATION_RETRIES: u32 = 2;
+#[cfg(not(windows))]
+const ACTIVATION_RETRIES: u32 = 0;
+
+/// How long [`activate_with_retries`] waits between attempts. Short by design:
+/// this runs on the delivery worker thread, inside the single active delivery
+/// the queue (#257) is already holding open, so the wait is paid by every
+/// transcript still queued behind this one, not just this delivery.
+const ACTIVATION_RETRY_DELAY: Duration = Duration::from_millis(120);
+
+/// Why [`retry_activation`] gave up.
+#[derive(Debug, PartialEq, Eq)]
+enum RetryOutcome {
+    /// The target died partway through the retry budget -- not busy, gone.
+    Dead,
+    /// Every attempt was spent and each one failed for a reason short of the
+    /// target being gone (busy, hung, refused, unconfirmed).
+    Refused(String),
+}
+
+/// The pure retry loop behind [`activate_with_retries`]: how many attempts
+/// run, when it gives up early because the target died, and what it reports
+/// once every attempt is spent. Factored out from the OS-facing wrapper so
+/// this counting and short-circuit logic is exercisable without live OS
+/// window state (mirrors [`resolve_delivered_label`]'s split, for the same
+/// reason -- `activate_with_retries` itself needs a real `AppHandle` and real
+/// windows to run the side effects a dead target requires).
+fn retry_activation(
+    retries: u32,
+    mut is_alive: impl FnMut() -> bool,
+    mut try_activate: impl FnMut() -> Result<(), String>,
+    mut wait: impl FnMut(),
+) -> Result<(), RetryOutcome> {
+    let mut last_error = String::new();
+    for attempt in 0..=retries {
+        if !is_alive() {
+            return Err(RetryOutcome::Dead);
+        }
+
+        match try_activate() {
+            Ok(()) => return Ok(()),
+            Err(e) => {
+                last_error = e;
+                if attempt < retries {
+                    wait();
+                }
+            }
+        }
+    }
+    Err(RetryOutcome::Refused(last_error))
+}
+
+/// Bring `target` to the foreground, retrying briefly if activation fails for
+/// a reason that can clear on its own -- the window was minimized, its
+/// message queue was momentarily hung, or the OS declined to confirm the
+/// switch actually landed (#122). Each attempt re-validates the target is
+/// still alive first: a target that died between attempts is not "busy", it
+/// is gone, and the caller's usual dead-target cleanup (drop the lock, tell
+/// the user) applies instead of burning the rest of the retry budget on it.
+///
+/// The queue and worker (#257, #161) already own serializing deliveries onto
+/// one thread, so retrying here -- inside the single item the worker holds
+/// active -- costs the retry delay against that one delivery without letting
+/// a wedged target stack unbounded attempts or block anything past its own
+/// bounded budget: [`ACTIVATION_RETRIES`] attempts, [`ACTIVATION_RETRY_DELAY`]
+/// apart.
+fn activate_with_retries(
+    app: &AppHandle,
+    target: WindowIdentity,
+    source: DeliverySource,
+) -> Result<(), FocusLost> {
+    let outcome = retry_activation(
+        ACTIVATION_RETRIES,
+        || window_is_alive(target),
+        || activate_target(target),
+        || {
+            warn!(
+                "Target window not ready; retrying activation after {:?}",
+                ACTIVATION_RETRY_DELAY
+            );
+            std::thread::sleep(ACTIVATION_RETRY_DELAY);
+        },
+    );
+
+    match outcome {
+        Ok(()) => Ok(()),
+        Err(RetryOutcome::Dead) => {
+            abandon_target(app, target, source);
+            Err(FocusLost::TargetGone)
+        }
+        Err(RetryOutcome::Refused(reason)) => Err(FocusLost::ActivationRefused(reason)),
     }
 }
 
@@ -749,7 +850,7 @@ pub fn borrow_focus<T>(
     // the foreground back through a handle Windows has since recycled would
     // raise a window the user never had (#254).
     let previous = foreground_identity();
-    activate_target(target).map_err(FocusLost::ActivationRefused)?;
+    activate_with_retries(app, target, source)?;
 
     // Hands focus back on the way out of this scope, whether `action`
     // returns normally or panics (#161 review round 5, finding C): a bare
@@ -802,8 +903,8 @@ mod imp {
     };
     use windows::Win32::UI::WindowsAndMessaging::{
         GetClassNameW, GetForegroundWindow, GetTopWindow, GetWindow, GetWindowTextLengthW,
-        GetWindowTextW, GetWindowThreadProcessId, IsWindowVisible, SetForegroundWindow,
-        GW_HWNDNEXT,
+        GetWindowTextW, GetWindowThreadProcessId, IsHungAppWindow, IsIconic, IsWindowVisible,
+        SetForegroundWindow, ShowWindow, GW_HWNDNEXT, SW_RESTORE,
     };
 
     /// How long the activated window gets to take focus before keystrokes are
@@ -1038,9 +1139,34 @@ mod imp {
     /// window, so this thread attaches its input queue to that one -- not to the
     /// target's, which has no say in the matter -- for the length of the call
     /// (#163). The attachment is always undone, including when activation fails.
+    ///
+    /// Readiness is checked before the attempt, not just aliveness (#122): a
+    /// window whose message queue is not pumping (`IsHungAppWindow`) is not
+    /// going to receive keystrokes no matter how the `SetForegroundWindow` call
+    /// resolves, so that case fails fast rather than paying the call's cost for
+    /// an answer that cannot help; a minimized window (`IsIconic`) is restored
+    /// first, because a minimized target cannot become the foreground window at
+    /// all. And the switch is confirmed after the call, not just trusted: a
+    /// `true` return only means the request was accepted, not that `hwnd` now
+    /// actually owns the foreground, so the caller re-reads
+    /// `GetForegroundWindow` before it is allowed to treat activation as done.
+    /// Every one of these failures is a plain `Err`, indistinguishable here
+    /// from the plain "refused" case below -- what a failure *means* (retry vs.
+    /// give up) is [`super::activate_with_retries`]'s call, not this function's.
     fn activate(hwnd: HWND) -> Result<(), String> {
         if unsafe { GetWindowThreadProcessId(hwnd, None) } == 0 {
             return Err("target window no longer exists".to_string());
+        }
+
+        if unsafe { IsHungAppWindow(hwnd) }.as_bool() {
+            return Err("target window is not responding".to_string());
+        }
+
+        if unsafe { IsIconic(hwnd) }.as_bool() {
+            // Best-effort: a restore that itself fails just means the
+            // `SetForegroundWindow` attempt right after it still runs, and
+            // fails on its own terms if the window really cannot come forward.
+            let _ = unsafe { ShowWindow(hwnd, SW_RESTORE) };
         }
 
         let this_thread = unsafe { GetCurrentThreadId() };
@@ -1068,6 +1194,16 @@ mod imp {
         }
 
         std::thread::sleep(FOCUS_SETTLE);
+
+        // `SetForegroundWindow` returning `true` only means the request was
+        // accepted, not that `hwnd` actually holds the foreground now -- a
+        // pending foreground-lock timeout can still swallow it silently.
+        // Confirming here is what lets the caller trust "activated" enough to
+        // start sending keystrokes (#122).
+        if unsafe { GetForegroundWindow() }.0 != hwnd.0 {
+            return Err("target window did not confirm activation".to_string());
+        }
+
         Ok(())
     }
 }
@@ -1129,6 +1265,105 @@ mod tests {
             thread_id: 200,
             class: class_fingerprint("Test_WindowClass"),
         }
+    }
+
+    #[test]
+    fn retry_activation_succeeds_without_retrying_when_the_first_attempt_lands() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let attempts = AtomicUsize::new(0);
+        let waits = AtomicUsize::new(0);
+        let result = retry_activation(
+            2,
+            || true,
+            || {
+                attempts.fetch_add(1, Ordering::SeqCst);
+                Ok(())
+            },
+            || {
+                waits.fetch_add(1, Ordering::SeqCst);
+            },
+        );
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(attempts.load(Ordering::SeqCst), 1);
+        assert_eq!(waits.load(Ordering::SeqCst), 0, "no wait once it succeeds");
+    }
+
+    #[test]
+    fn retry_activation_retries_a_transient_failure_and_then_succeeds() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let attempts = AtomicUsize::new(0);
+        let waits = AtomicUsize::new(0);
+        let result = retry_activation(
+            2,
+            || true,
+            || {
+                let n = attempts.fetch_add(1, Ordering::SeqCst);
+                if n < 2 {
+                    Err("not ready yet".to_string())
+                } else {
+                    Ok(())
+                }
+            },
+            || {
+                waits.fetch_add(1, Ordering::SeqCst);
+            },
+        );
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(attempts.load(Ordering::SeqCst), 3);
+        // A wait happens only between attempts, never after the last one.
+        assert_eq!(waits.load(Ordering::SeqCst), 2);
+    }
+
+    #[test]
+    fn retry_activation_gives_up_after_the_bounded_number_of_attempts() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let attempts = AtomicUsize::new(0);
+        let result = retry_activation(
+            2,
+            || true,
+            || {
+                attempts.fetch_add(1, Ordering::SeqCst);
+                Err("still refused".to_string())
+            },
+            || {},
+        );
+
+        assert_eq!(
+            result,
+            Err(RetryOutcome::Refused("still refused".to_string()))
+        );
+        // Exactly retries + 1 attempts: the first try plus the bounded retries.
+        assert_eq!(attempts.load(Ordering::SeqCst), 3);
+    }
+
+    #[test]
+    fn retry_activation_stops_immediately_once_the_target_dies_instead_of_retrying_it() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let alive_checks = AtomicUsize::new(0);
+        let activate_attempts = AtomicUsize::new(0);
+        let result = retry_activation(
+            2,
+            || {
+                let n = alive_checks.fetch_add(1, Ordering::SeqCst);
+                n == 0 // alive for the first check, gone by the second
+            },
+            || {
+                activate_attempts.fetch_add(1, Ordering::SeqCst);
+                Err("refused".to_string())
+            },
+            || {},
+        );
+
+        assert_eq!(result, Err(RetryOutcome::Dead));
+        // The dead target is not retried: only one activation attempt is
+        // spent before the second aliveness check ends the loop.
+        assert_eq!(activate_attempts.load(Ordering::SeqCst), 1);
     }
 
     #[test]
