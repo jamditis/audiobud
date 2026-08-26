@@ -19,6 +19,9 @@ export const GeneralSettings: React.FC = () => {
   const { audioFeedbackEnabled, getSetting } = useSettings();
   const pushToTalk = getSetting("push_to_talk");
   const isLinux = type() === "linux";
+  // The target lock has a Windows backend only for now (issue #119), so the
+  // binding exists only there.
+  const isWindows = type() === "windows";
   return (
     <div className="max-w-3xl w-full mx-auto space-y-6">
       <SettingsGroup title={t("settings.general.title")}>
@@ -27,6 +30,12 @@ export const GeneralSettings: React.FC = () => {
         {/* Cancel shortcut is hidden with push-to-talk (release key cancels) and on Linux (dynamic shortcut instability) */}
         {!isLinux && !pushToTalk && (
           <ShortcutInput shortcutId="cancel" grouped={true} />
+        )}
+        {isWindows && (
+          <ShortcutInput shortcutId="toggle_target_lock" grouped={true} />
+        )}
+        {isWindows && (
+          <ShortcutInput shortcutId="pick_output_window" grouped={true} />
         )}
       </SettingsGroup>
       <ModelSettingsCard />

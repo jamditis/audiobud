@@ -13,21 +13,24 @@
 //!   - optionally remembers the last pick ([`LastPick`]) so a repeat route is a
 //!     single confirm.
 //!
-//! The Windows half -- enumerating windows (`EnumWindows` + `GetWindowTextW` +
-//! the owning process name), rendering the picker overlay, and running the
-//! focus-borrow on the chosen handle -- is the next child of #119 and is where
-//! [`resolve_gesture`] and [`visible_candidates`] get their first callers. That
-//! half must re-validate the chosen handle at paste time (#254): the window can
-//! close between the pick and the paste, so a live-at-pick handle is not a
-//! guarantee; the paste path must tolerate an activation that fails.
+//! [`backend`] holds the platform half -- enumerating windows (`EnumWindows` +
+//! `GetWindowTextW` + the owning process name), opening the picker window, and
+//! arming the pick the paste path consumes (#259). A pick is re-validated at
+//! paste time through the shared identity check (#254): the window can close
+//! between the pick and the paste, so a live-at-pick handle is not a guarantee.
 //!
-//! Until that caller lands, the API is exercised only by the unit tests below,
-//! so the module allows dead_code; drop the allow when the picker UI wires in.
+//! Parts of the API are convenience the UI does not use yet, so the module
+//! allows dead_code.
 #![allow(dead_code)]
 
-use std::sync::{Mutex, MutexGuard};
+pub mod backend;
 
-use crate::output_target::{OutputTarget, WindowHandle};
+use std::sync::{Mutex, MutexGuard};
+use std::time::{Duration, Instant};
+
+use serde::{Deserialize, Serialize};
+
+use crate::output_target::{OutputTarget, WindowHandle, WindowIdentity};
 
 /// One window as the OS enumeration reports it, before filtering. The Windows
 /// backend fills this from `EnumWindows`: `handle` from the `HWND`, `title` from
@@ -121,6 +124,459 @@ pub fn visible_candidates(
     kept
 }
 
+/// A [`WindowHandle`] as it crosses the Tauri boundary: a decimal STRING, never
+/// a JS number. A handle is an `isize`, 64-bit on Win64, so a large `HWND`
+/// exceeds a JavaScript number's 2^53 safe range and would be silently rounded
+/// into a different window on the way to the paste path. The overlay carries the
+/// value opaquely and echoes it back, so a string round-trips exactly.
+pub fn handle_id(handle: WindowHandle) -> String {
+    handle.0.to_string()
+}
+
+/// Parse a handle id produced by [`handle_id`]. Returns `None` for anything that
+/// is not one, so a malformed gesture from the webview fails safe (the caller
+/// treats it as a dismissal) instead of borrowing focus to a guessed handle.
+pub fn parse_handle_id(id: &str) -> Option<WindowHandle> {
+    id.trim().parse::<isize>().ok().map(WindowHandle)
+}
+
+/// One row as the overlay renders it: the opaque handle and the label the
+/// backend already composed ([`WindowCandidate::label`]). The frontend never
+/// recomputes the label, so the row text and its source cannot drift.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+pub struct PickerWindow {
+    pub handle: String,
+    pub label: String,
+}
+
+/// A candidate together with the identity it had WHEN IT WAS OFFERED.
+///
+/// The identity is captured during enumeration, not when the user clicks. A
+/// window can close in between and Windows can hand its `HWND` to an unrelated
+/// new window, so identifying the handle at click time would happily capture the
+/// impostor and every later liveness check would agree with it. Holding the
+/// enumeration-time identity lets [`arm_pick`] demand that the window on the
+/// other end of the handle is still the one the user was shown (#254).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OfferedWindow {
+    pub candidate: WindowCandidate,
+    pub identity: WindowIdentity,
+}
+
+/// Pair each candidate with the identity enumeration read for it, dropping any
+/// candidate whose identity is missing -- a window that went between the two
+/// reads, which must not be offered.
+pub fn offered_windows(
+    candidates: Vec<WindowCandidate>,
+    identities: &[WindowIdentity],
+) -> Vec<OfferedWindow> {
+    candidates
+        .into_iter()
+        .filter_map(|candidate| {
+            identities
+                .iter()
+                .find(|i| i.handle == candidate.handle)
+                .map(|identity| OfferedWindow {
+                    candidate,
+                    identity: *identity,
+                })
+        })
+        .collect()
+}
+
+/// The candidates behind the offered rows, for [`resolve_gesture`].
+pub fn offered_candidates(offered: &[OfferedWindow]) -> Vec<WindowCandidate> {
+    offered.iter().map(|o| o.candidate.clone()).collect()
+}
+
+/// Shape the offered rows for the overlay to render.
+pub fn offer_rows(offered: &[OfferedWindow]) -> Vec<PickerWindow> {
+    offered
+        .iter()
+        .map(|o| PickerWindow {
+            handle: handle_id(o.candidate.handle),
+            label: o.candidate.label(),
+        })
+        .collect()
+}
+
+/// The overlay's terminal gesture as it arrives over the Tauri boundary. The
+/// tag and its lowercase variant names mirror the frontend `PickerGesture`
+/// (`src/lib/window-picker-overlay.ts`) one-to-one, so the two halves share a
+/// single vocabulary and the mapping below is the only translation step.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(tag = "kind", rename_all = "lowercase")]
+pub enum PickerGesture {
+    Chose { handle: String },
+    Foreground,
+    Dismiss,
+}
+
+impl PickerGesture {
+    /// Map the wire gesture onto the core's [`PickGesture`]. A handle that is
+    /// not a valid id reads as a dismissal, which [`resolve_gesture`] turns into
+    /// [`PickOutcome::Cancel`]: a suppressed paste is the safe reading of a
+    /// gesture the backend cannot make sense of.
+    pub fn to_gesture(&self) -> PickGesture {
+        match self {
+            PickerGesture::Chose { handle } => match parse_handle_id(handle) {
+                Some(window) => PickGesture::Chose(window),
+                None => PickGesture::Dismiss,
+            },
+            PickerGesture::Foreground => PickGesture::FocusForeground,
+            PickerGesture::Dismiss => PickGesture::Dismiss,
+        }
+    }
+}
+
+/// What one resolved pick armed, for the log line and the overlay's reply.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(tag = "kind", rename_all = "lowercase")]
+pub enum PickArmed {
+    /// The next transcript goes to this window, once.
+    Window,
+    /// The next transcript follows the foreground, as usual.
+    Foreground,
+    /// Nothing was armed: the user dismissed, or the chosen window was already
+    /// gone. Either way no paste is redirected.
+    Cancelled,
+}
+
+/// Turn a resolved [`PickOutcome`] into the route to arm.
+///
+/// A chosen window is honored only when the handle STILL BELONGS TO THE WINDOW
+/// THAT WAS OFFERED: `identify` reads the owner now, and it must match the
+/// identity enumeration recorded for that row. A window that closed under the
+/// user's click fails that test, and so does one whose handle Windows has
+/// already recycled into another application -- the case a click-time capture
+/// would wave through, because the impostor is perfectly alive (#254). Either
+/// way the pick is refused rather than pointed at a window the user never saw.
+///
+/// An explicit foreground send arms a route too, not nothing: it has to survive
+/// as a pending state so it can override a target lock for this one transcript,
+/// which is what the user asked for by choosing "use the current window".
+pub fn arm_pick(
+    outcome: PickOutcome,
+    offered: &[OfferedWindow],
+    identify: impl FnOnce(WindowHandle) -> Option<WindowIdentity>,
+) -> (PickArmed, Option<PendingRoute>) {
+    match outcome.delivery_target() {
+        Some(OutputTarget::Pinned(handle)) => {
+            let offered_identity = offered
+                .iter()
+                .find(|o| o.candidate.handle == handle)
+                .map(|o| o.identity);
+            match (offered_identity, identify(handle)) {
+                (Some(offered), Some(current)) if offered == current => {
+                    (PickArmed::Window, Some(PendingRoute::Window(current)))
+                }
+                _ => (PickArmed::Cancelled, None),
+            }
+        }
+        Some(OutputTarget::Foreground) => (PickArmed::Foreground, Some(PendingRoute::Foreground)),
+        None => (PickArmed::Cancelled, None),
+    }
+}
+
+/// The windows the picker is currently offering. Held as Tauri state so the
+/// resolve command validates the gesture against exactly the rows the user saw,
+/// which is what keeps [`resolve_gesture`] able to reject a handle that was
+/// never presented.
+#[derive(Default)]
+pub struct PickerSession(Mutex<Vec<OfferedWindow>>);
+
+impl PickerSession {
+    /// Record the rows now on offer, replacing any earlier ones.
+    pub fn offer(&self, offered: Vec<OfferedWindow>) {
+        *self.guard() = offered;
+    }
+
+    /// The rows currently on offer, each with the identity it was offered with.
+    pub fn offered(&self) -> Vec<OfferedWindow> {
+        self.guard().clone()
+    }
+
+    /// Whether a pick is in progress. A finishing transcript must not be pasted
+    /// while it is: the picker holds the foreground, so the paste would land in
+    /// AudioBud's own window (#164).
+    pub fn is_open(&self) -> bool {
+        !self.guard().is_empty()
+    }
+
+    /// Forget the offer once the pick has ended, so a late gesture cannot be
+    /// resolved against a stale window list.
+    pub fn clear(&self) {
+        self.guard().clear();
+    }
+
+    fn guard(&self) -> MutexGuard<'_, Vec<OfferedWindow>> {
+        self.0
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+}
+
+/// Forget a pick that ended without a gesture -- the user closed the picker
+/// window itself, with Alt+F4 or the window menu.
+///
+/// Both halves have to go. A session left behind still reads as a pick in
+/// progress ([`picker_is_open`]), which would withhold every later transcript
+/// until the picker was opened again; and closing the window is a dismissal, so
+/// like Escape it leaves nothing armed.
+pub fn abandon_pick(session: &PickerSession, pending: &PendingPick) {
+    session.clear();
+    pending.clear();
+}
+
+/// Start a fresh offer: whatever an earlier pick armed is superseded.
+///
+/// Opening the picker again is the user starting over, so the route they armed
+/// last time must not be left waiting behind the new one. Clearing it here also
+/// closes the window where an old route could fire while a new picker is up.
+pub fn supersede_pick(pending: &PendingPick) {
+    pending.clear();
+}
+
+/// Whether a chosen row was refused -- the window died, or its handle was
+/// recycled, between being offered and being clicked.
+///
+/// Told apart from a plain dismissal because the two deserve opposite answers:
+/// a dismissal is the user leaving, while a refused selection is the picker
+/// failing to do what the user just asked, which has to be shown rather than
+/// closed away as if it had worked.
+pub fn is_stale_selection(gesture: &PickerGesture, armed: PickArmed) -> bool {
+    matches!(gesture, PickerGesture::Chose { .. }) && armed == PickArmed::Cancelled
+}
+
+/// What the paste path should do about a finished transcript, given what the
+/// picker looks like right now.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PasteVerdict {
+    /// A pick is under way: withhold this transcript. Nothing is consumed, so a
+    /// route armed earlier survives for whatever the user settles on.
+    WithholdForPicker,
+    /// Deliver along the route one pick armed, now spent.
+    Route(PickDelivery),
+    /// No pick has a say: deliver to the target this dictation captured.
+    Captured,
+}
+
+/// Decide between an open picker, an armed route, and the captured target.
+///
+/// ORDER MATTERS. A visible picker outranks any route armed earlier, and is
+/// checked FIRST so `take_route` is not even called: consuming a route here
+/// would spend it on a transcript that is about to be withheld, and an older
+/// `Foreground` route would aim that paste straight at the picker window the
+/// user is looking at (#164). The route is left armed instead -- a new pick
+/// supersedes it when the user makes one, and it is cleared when they open a
+/// fresh picker.
+pub fn decide_paste(
+    picker_open: bool,
+    take_route: impl FnOnce() -> Option<PickDelivery>,
+) -> PasteVerdict {
+    if picker_open {
+        return PasteVerdict::WithholdForPicker;
+    }
+    match take_route() {
+        Some(delivery) => PasteVerdict::Route(delivery),
+        None => PasteVerdict::Captured,
+    }
+}
+
+/// How long a dismissal shields the recording from the cancel shortcut.
+///
+/// Long enough to cover the round trip the race is made of -- the overlay's key
+/// handler, the command, the window teardown -- and short enough that a user who
+/// presses Escape again to cancel is not made to wait for it.
+pub const DISMISSAL_SHIELD: Duration = Duration::from_millis(500);
+
+/// A just-dismissed pick, remembered briefly so the cancel shortcut knows the
+/// Escape that dismissed it was not for the recording.
+///
+/// Escape means two things at once while a pick is up: the picker's own key
+/// handler dismisses it, and the global cancel binding -- which defaults to
+/// Escape and is registered while recording -- fires whatever window has focus.
+/// Whichever runs first, the other must not also act. Ordering cannot be relied
+/// on: if the overlay's dismissal lands first, the picker is already gone by the
+/// time cancel looks, and cancel would discard the recording the user only meant
+/// to keep. So every dismissal leaves this mark behind, and cancel stands down
+/// when it finds a fresh one.
+#[derive(Default)]
+pub struct PickerDismissal(Mutex<Option<Instant>>);
+
+impl PickerDismissal {
+    /// Record that a pick was just dismissed.
+    pub fn mark(&self) {
+        self.mark_at(Instant::now());
+    }
+
+    /// [`Self::mark`] with the moment given, for tests.
+    pub fn mark_at(&self, at: Instant) {
+        *self.guard() = Some(at);
+    }
+
+    /// Take a dismissal made within [`DISMISSAL_SHIELD`] of `now`.
+    ///
+    /// Consuming either way: a stale mark has no further use, and leaving it
+    /// would let one dismissal shield a cancel long after the fact.
+    pub fn take_fresh(&self, now: Instant) -> bool {
+        match self.guard().take() {
+            Some(at) => now.duration_since(at) < DISMISSAL_SHIELD,
+            None => false,
+        }
+    }
+
+    fn guard(&self) -> MutexGuard<'_, Option<Instant>> {
+        self.0
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+}
+
+/// Whether a keystroke aimed at the foreground may be sent right now.
+///
+/// Asked again before EVERY foreground keystroke, not once when the delivery was
+/// resolved. Resolving only takes a snapshot, and a delivery then waits on the
+/// Enigo mutex, writes the clipboard and sleeps out `paste_delay_ms`; a picker
+/// opened in any of those gaps is holding the foreground by the time the keys
+/// are sent, so what was safe a moment ago would now type the transcript into
+/// AudioBud's own window (#164). A pinned delivery needs no such check: it
+/// re-activates its own window instead.
+pub fn foreground_keystrokes_allowed(picker_open: bool) -> bool {
+    !picker_open
+}
+
+/// Whether a pick is under way, given what is known about the picker window.
+///
+/// `window_visible` is `None` when no picker window exists at all. A visible
+/// window means a pick is up. A window that exists but is hidden is NOT taken as
+/// proof on its own -- only a live session is -- because a picker left hidden
+/// rather than destroyed would otherwise hold off every later paste forever.
+pub fn picker_is_open(window_visible: Option<bool>, session_open: bool) -> bool {
+    match window_visible {
+        Some(true) => true,
+        Some(false) | None => session_open,
+    }
+}
+
+/// What one pick armed for the next transcript.
+///
+/// The foreground is a route in its own right, not the absence of one. A user
+/// who picks "use the current window" while a target lock is held is asking for
+/// THIS transcript to escape the lock; representing that as "nothing armed"
+/// would drop it straight back into the locked window (#120).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PendingRoute {
+    /// Send the next transcript to this window.
+    Window(WindowIdentity),
+    /// Send the next transcript to whatever holds the foreground, overriding any
+    /// lock for that one transcript.
+    Foreground,
+}
+
+/// Where a pending one-shot pick sends the paste about to fire.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PickDelivery {
+    /// Deliver this transcript to the picked window. Carries the whole
+    /// identity, not just the handle, because every later step of the delivery
+    /// re-checks it (#254).
+    Deliver(WindowIdentity),
+    /// Deliver this transcript to the foreground window, ignoring any lock.
+    Foreground,
+    /// The picked window is gone. SUPPRESS the paste, exactly as a lost lock
+    /// does ([`crate::output_target::Resolved::LockLost`]): a recycled handle
+    /// must never receive the transcript (#254).
+    PickLost,
+}
+
+/// The window one pick armed, consumed by the next paste and then forgotten --
+/// this is what makes the picker one-shot rather than a lock. Tauri-managed
+/// state alongside [`crate::output_target::PinnedTarget`]. The full identity is
+/// stored, not just the handle, so the paste path can re-run the shared identity
+/// check before typing anything (#254).
+#[derive(Default)]
+pub struct PendingPick(Mutex<Option<ArmedRoute>>);
+
+/// A route, and which dictation it is for.
+///
+/// `armed_after` is how many dictations had already started when the pick was
+/// made. Only a dictation whose own number is HIGHER was started after it, and
+/// so is the one the user made the pick for.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ArmedRoute {
+    pub route: PendingRoute,
+    pub armed_after: u64,
+}
+
+impl PendingPick {
+    /// Route the next transcript started from now on along `route`, replacing
+    /// any earlier pick. `armed_after` is the dictation count at this moment.
+    pub fn arm(&self, route: PendingRoute, armed_after: u64) {
+        *self.guard() = Some(ArmedRoute { route, armed_after });
+    }
+
+    /// Drop any pending pick, so the next transcript follows the usual rules.
+    pub fn clear(&self) {
+        *self.guard() = None;
+    }
+
+    /// Whether a pick is waiting to be delivered.
+    pub fn is_armed(&self) -> bool {
+        self.guard().is_some()
+    }
+
+    /// Consume the pending pick for the paste about to fire, or `None` when no
+    /// pick is pending -- or when the pick is not this dictation's -- and the
+    /// usual target rules apply.
+    ///
+    /// `sequence` is the dictation this delivery belongs to. A pick is honored
+    /// only by a dictation started AFTER it was armed: deliveries do not finish
+    /// in the order they began, so an older transcript still transcribing,
+    /// post-processing or queued would otherwise reach here first and take the
+    /// window that was chosen for the dictation the user was about to speak --
+    /// which then quietly fell back to its own captured target. An older
+    /// delivery leaves the route ARMED and untouched, and goes where it was
+    /// captured.
+    ///
+    /// Its dictation's pick is then taken whichever way `is_alive` answers: one
+    /// pick routes one transcript, and a pick whose window died is not held back
+    /// for the next dictation. A dead window yields [`PickDelivery::PickLost`]
+    /// so the caller suppresses the paste instead of falling back to the
+    /// foreground.
+    pub fn take_resolved(
+        &self,
+        sequence: u64,
+        is_alive: impl FnOnce(WindowIdentity) -> bool,
+    ) -> Option<PickDelivery> {
+        let mut guard = self.guard();
+        let armed = (*guard)?;
+        if sequence <= armed.armed_after {
+            return None;
+        }
+        *guard = None;
+        drop(guard);
+
+        Some(match armed.route {
+            PendingRoute::Foreground => PickDelivery::Foreground,
+            PendingRoute::Window(picked) => {
+                if is_alive(picked) {
+                    PickDelivery::Deliver(picked)
+                } else {
+                    PickDelivery::PickLost
+                }
+            }
+        })
+    }
+
+    /// Borrow the pick, recovering the guard if a previous holder panicked --
+    /// same reasoning as [`LastPick::guard`].
+    fn guard(&self) -> MutexGuard<'_, Option<ArmedRoute>> {
+        self.0
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+}
+
 /// The user's terminal action in the picker. Kept distinct from the outcome so
 /// the two ways a paste can be suppressed-or-sent stay explicit at the UI edge.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -138,9 +594,9 @@ pub enum PickGesture {
 }
 
 /// The result of one pick. A distinct type from [`OutputTarget`] -- like
-/// [`crate::output_target::Resolved`] -- so a dismissal, which must suppress the
-/// paste, cannot be dropped like a stray bool or silently become a foreground
-/// paste.
+/// [`crate::output_target::backend::Borrowed`] -- so a dismissal, which must
+/// suppress the paste, cannot be dropped like a stray bool or silently become a
+/// foreground paste.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PickOutcome {
     /// Deliver this ONE transcript to the target, then forget it: the picker
@@ -151,7 +607,7 @@ pub enum PickOutcome {
     /// The pick was cancelled. SUPPRESS the paste; do NOT fall back to the
     /// foreground -- pasting into whatever now holds focus is the exact misfire
     /// the one-shot flow exists to avoid, the same fail-safe discipline as
-    /// [`crate::output_target::Resolved::LockLost`].
+    /// [`crate::output_target::backend::Borrowed::Suppressed`].
     Cancel,
 }
 
@@ -197,11 +653,13 @@ pub fn resolve_gesture(gesture: PickGesture, offered: &[WindowCandidate]) -> Pic
 /// convenience only -- unlike a lock it never redirects a paste on its own; it
 /// just reorders what the picker shows.
 #[derive(Default)]
-pub struct LastPick(Mutex<Option<WindowHandle>>);
+pub struct LastPick(Mutex<Option<WindowIdentity>>);
 
 impl LastPick {
-    /// Record `window` as the most recent pick.
-    pub fn remember(&self, window: WindowHandle) {
+    /// Record `window` as the most recent pick. The whole identity is kept, not
+    /// just its handle: `HWND` values are recycled, and the remembered pick is
+    /// promoted to row 0, the one row a user confirms without reading.
+    pub fn remember(&self, window: WindowIdentity) {
         *self.guard() = Some(window);
     }
 
@@ -211,35 +669,42 @@ impl LastPick {
     }
 
     /// The remembered pick, if any.
-    pub fn get(&self) -> Option<WindowHandle> {
+    pub fn get(&self) -> Option<WindowIdentity> {
         *self.guard()
     }
 
-    /// Move the remembered pick to the front of `candidates` for quick repeat
-    /// routing. If the remembered window is no longer offered it has closed, so
-    /// forget it rather than keep pointing at a gone handle. A no-op when nothing
-    /// is remembered or it is already first.
-    pub fn promote_to_front(&self, candidates: &mut Vec<WindowCandidate>) {
+    /// Move the remembered pick to the front of the rows on offer, for quick
+    /// repeat routing.
+    ///
+    /// The match is on the WHOLE identity each row was enumerated with, so a
+    /// window that merely inherited the remembered handle is never promoted: it
+    /// is not the window the user picked last time, whatever the number says.
+    /// Row 0 is the one row a user confirms without reading -- it is where their
+    /// last pick lives -- so a recycled handle there would route a transcript
+    /// into a stranger (#254). A remembered pick that is no longer offered has
+    /// closed, so it is forgotten rather than left pointing at a gone window. A
+    /// no-op when nothing is remembered or it is already first.
+    pub fn promote_offered(&self, offered: &mut Vec<OfferedWindow>) {
         let mut guard = self.guard();
         let Some(remembered) = *guard else {
             return;
         };
-        match candidates.iter().position(|c| c.handle == remembered) {
+        match offered.iter().position(|o| o.identity == remembered) {
             Some(0) => {}
             Some(i) => {
-                let c = candidates.remove(i);
-                candidates.insert(0, c);
+                let item = offered.remove(i);
+                offered.insert(0, item);
             }
             None => *guard = None,
         }
     }
 
     /// Borrow the memory, recovering the guard if a previous holder panicked.
-    /// The mutex only guards a `Copy` `Option<WindowHandle>` with no cross-field
-    /// invariant, so a poisoned guard's value is always consistent; recovering it
-    /// keeps one panic from bricking every later pick on `unwrap` (AGENTS.md:
-    /// avoid unwrap in production).
-    fn guard(&self) -> MutexGuard<'_, Option<WindowHandle>> {
+    /// The mutex only guards a `Copy` `Option<WindowIdentity>` with no
+    /// cross-field invariant, so a poisoned guard's value is always consistent;
+    /// recovering it keeps one panic from bricking every later pick on `unwrap`
+    /// (AGENTS.md: avoid unwrap in production).
+    fn guard(&self) -> MutexGuard<'_, Option<WindowIdentity>> {
         self.0
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
@@ -374,8 +839,9 @@ mod tests {
     fn last_pick_remembers_and_forgets() {
         let last = LastPick::default();
         assert_eq!(last.get(), None);
-        last.remember(WindowHandle(3));
-        assert_eq!(last.get(), Some(WindowHandle(3)));
+        let window = identity(3, 100, 200);
+        last.remember(window);
+        assert_eq!(last.get(), Some(window));
         last.forget();
         assert_eq!(last.get(), None);
     }
@@ -383,55 +849,560 @@ mod tests {
     #[test]
     fn promote_moves_remembered_pick_to_front() {
         let last = LastPick::default();
-        last.remember(WindowHandle(2));
-        let mut candidates = visible_candidates(
-            vec![
-                raw(1, "First", None, true),
-                raw(2, "Second", None, true),
-                raw(3, "Third", None, true),
-            ],
-            &[],
-        );
-        last.promote_to_front(&mut candidates);
-        assert_eq!(candidates[0].handle, WindowHandle(2));
+        let mut offered = offer(vec![
+            raw(1, "First", None, true),
+            raw(2, "Second", None, true),
+            raw(3, "Third", None, true),
+        ]);
+        last.remember(offered[1].identity);
+        last.promote_offered(&mut offered);
+        assert_eq!(offered[0].candidate.handle, WindowHandle(2));
         // The rest keep their relative order.
-        assert_eq!(candidates[1].handle, WindowHandle(1));
-        assert_eq!(candidates[2].handle, WindowHandle(3));
+        assert_eq!(offered[1].candidate.handle, WindowHandle(1));
+        assert_eq!(offered[2].candidate.handle, WindowHandle(3));
+    }
+
+    #[test]
+    fn promote_ignores_a_window_that_only_inherited_the_remembered_handle() {
+        // Row 0 is the row a repeat route confirms without reading, so a
+        // recycled handle there would send the next transcript to a stranger
+        // (#254). Only the same window, identity and all, earns the promotion.
+        let last = LastPick::default();
+        last.remember(identity(2, 100, 200));
+        let mut offered = offer(vec![
+            raw(1, "First", None, true),
+            // Same handle as the remembered pick, different owner.
+            raw(2, "An unrelated window", None, true),
+        ]);
+        offered[1].identity.process_id = 999;
+        last.promote_offered(&mut offered);
+        assert_eq!(offered[0].candidate.handle, WindowHandle(1));
+        // The remembered pick is not on offer any more, so it is forgotten.
+        assert_eq!(last.get(), None);
     }
 
     #[test]
     fn promote_forgets_a_pick_no_longer_offered() {
         let last = LastPick::default();
-        last.remember(WindowHandle(9));
-        let mut candidates = visible_candidates(vec![raw(1, "Only", None, true)], &[]);
-        last.promote_to_front(&mut candidates);
+        last.remember(identity(9, 100, 200));
+        let mut offered = offer(vec![raw(1, "Only", None, true)]);
+        last.promote_offered(&mut offered);
         // Window 9 is gone, so the memory is cleared and the list is untouched.
         assert_eq!(last.get(), None);
-        assert_eq!(candidates.len(), 1);
-        assert_eq!(candidates[0].handle, WindowHandle(1));
+        assert_eq!(offered.len(), 1);
+        assert_eq!(offered[0].candidate.handle, WindowHandle(1));
     }
 
     #[test]
     fn promote_is_a_noop_with_no_memory_or_already_first() {
         let last = LastPick::default();
-        let mut candidates = visible_candidates(
-            vec![raw(1, "First", None, true), raw(2, "Second", None, true)],
+        let mut offered = offer(vec![
+            raw(1, "First", None, true),
+            raw(2, "Second", None, true),
+        ]);
+        last.promote_offered(&mut offered); // nothing remembered
+        assert_eq!(offered[0].candidate.handle, WindowHandle(1));
+
+        last.remember(offered[0].identity); // already at front
+        last.promote_offered(&mut offered);
+        assert_eq!(offered[0].candidate.handle, WindowHandle(1));
+        assert_eq!(offered[1].candidate.handle, WindowHandle(2));
+    }
+
+    fn identity(handle: isize, pid: u32, tid: u32) -> WindowIdentity {
+        WindowIdentity {
+            handle: WindowHandle(handle),
+            process_id: pid,
+            thread_id: tid,
+            class: crate::output_target::class_fingerprint("Test_WindowClass"),
+        }
+    }
+
+    #[test]
+    fn a_handle_id_round_trips_including_values_a_js_number_would_round() {
+        for handle in [0isize, 1, -1, 0x0001_2345, isize::MAX, isize::MIN] {
+            let id = handle_id(WindowHandle(handle));
+            assert_eq!(parse_handle_id(&id), Some(WindowHandle(handle)));
+        }
+        // The reason ids are strings: this HWND is past 2^53, so a JS number
+        // would hand the paste path a different window.
+        let big = WindowHandle(9_007_199_254_740_993);
+        assert_eq!(handle_id(big), "9007199254740993");
+        assert_eq!(parse_handle_id("9007199254740993"), Some(big));
+    }
+
+    #[test]
+    fn a_malformed_handle_id_is_not_a_handle() {
+        for id in ["", "  ", "0x10", "12.5", "not-a-handle"] {
+            assert_eq!(parse_handle_id(id), None);
+        }
+    }
+
+    /// The rows the backend would offer for `raws`, with each window's identity
+    /// as enumeration read it (process and thread stand in for the real ones).
+    fn offer(raws: Vec<RawWindow>) -> Vec<OfferedWindow> {
+        let identities: Vec<WindowIdentity> = raws
+            .iter()
+            .map(|w| identity(w.handle.0, 100, 200))
+            .collect();
+        offered_windows(visible_candidates(raws, &[]), &identities)
+    }
+
+    #[test]
+    fn rows_carry_the_backend_label_and_a_string_handle() {
+        let offered = offer(vec![
+            raw(9_007_199_254_740_993, "notes.txt", Some("TextEdit"), true),
+            raw(2, "Terminal", None, true),
+        ]);
+        let rows = offer_rows(&offered);
+        assert_eq!(rows[0].handle, "9007199254740993");
+        assert_eq!(rows[0].label, "TextEdit: notes.txt");
+        assert_eq!(rows[1].handle, "2");
+        assert_eq!(rows[1].label, "Terminal");
+    }
+
+    #[test]
+    fn wire_gestures_map_onto_the_core_vocabulary() {
+        assert_eq!(
+            PickerGesture::Chose {
+                handle: "42".to_string()
+            }
+            .to_gesture(),
+            PickGesture::Chose(WindowHandle(42))
+        );
+        assert_eq!(
+            PickerGesture::Foreground.to_gesture(),
+            PickGesture::FocusForeground
+        );
+        assert_eq!(PickerGesture::Dismiss.to_gesture(), PickGesture::Dismiss);
+    }
+
+    #[test]
+    fn a_gesture_with_an_unreadable_handle_fails_safe_to_dismiss() {
+        let gesture = PickerGesture::Chose {
+            handle: "nonsense".to_string(),
+        };
+        assert_eq!(gesture.to_gesture(), PickGesture::Dismiss);
+        assert_eq!(
+            resolve_gesture(gesture.to_gesture(), &[]),
+            PickOutcome::Cancel
+        );
+    }
+
+    #[test]
+    fn wire_gestures_deserialize_from_the_overlays_shape() {
+        let chose: PickerGesture =
+            serde_json::from_str(r#"{"kind":"chose","handle":"42"}"#).expect("valid gesture");
+        assert_eq!(
+            chose,
+            PickerGesture::Chose {
+                handle: "42".to_string()
+            }
+        );
+        let foreground: PickerGesture =
+            serde_json::from_str(r#"{"kind":"foreground"}"#).expect("valid gesture");
+        assert_eq!(foreground, PickerGesture::Foreground);
+        let dismiss: PickerGesture =
+            serde_json::from_str(r#"{"kind":"dismiss"}"#).expect("valid gesture");
+        assert_eq!(dismiss, PickerGesture::Dismiss);
+    }
+
+    #[test]
+    fn arming_a_chosen_window_records_the_identity_it_was_offered_with() {
+        let offered = offer(vec![raw(7, "Mail", Some("Mail"), true)]);
+        let picked = offered[0].identity;
+        let armed = arm_pick(
+            PickOutcome::DeliverOnce(OutputTarget::Pinned(WindowHandle(7))),
+            &offered,
+            |h| {
+                assert_eq!(h, WindowHandle(7));
+                Some(picked)
+            },
+        );
+        assert_eq!(
+            armed,
+            (PickArmed::Window, Some(PendingRoute::Window(picked)))
+        );
+    }
+
+    #[test]
+    fn arming_a_window_that_died_between_offer_and_click_arms_nothing() {
+        let offered = offer(vec![raw(7, "Mail", Some("Mail"), true)]);
+        let armed = arm_pick(
+            PickOutcome::DeliverOnce(OutputTarget::Pinned(WindowHandle(7))),
+            &offered,
+            |_| None,
+        );
+        assert_eq!(armed, (PickArmed::Cancelled, None));
+    }
+
+    #[test]
+    fn arming_refuses_a_handle_recycled_since_it_was_offered() {
+        // The click-time owner is alive and would pass every later liveness
+        // check -- but it is a different window wearing the offered window's
+        // handle (#254). Only the identity captured at enumeration can catch it.
+        let offered = offer(vec![raw(7, "Mail", Some("Mail"), true)]);
+        let impostor = identity(7, 999, 200);
+        assert_ne!(offered[0].identity, impostor);
+        assert_eq!(
+            arm_pick(
+                PickOutcome::DeliverOnce(OutputTarget::Pinned(WindowHandle(7))),
+                &offered,
+                |_| Some(impostor),
+            ),
+            (PickArmed::Cancelled, None)
+        );
+    }
+
+    #[test]
+    fn arming_refuses_a_handle_that_was_never_offered() {
+        let offered = offer(vec![raw(7, "Mail", Some("Mail"), true)]);
+        assert_eq!(
+            arm_pick(
+                PickOutcome::DeliverOnce(OutputTarget::Pinned(WindowHandle(8))),
+                &offered,
+                |_| Some(identity(8, 100, 200)),
+            ),
+            (PickArmed::Cancelled, None)
+        );
+    }
+
+    #[test]
+    fn arming_foreground_arms_a_route_of_its_own() {
+        // Not "nothing armed": the foreground send has to outrank a target lock
+        // for this one transcript, which only a pending route can do.
+        assert_eq!(
+            arm_pick(
+                PickOutcome::DeliverOnce(OutputTarget::Foreground),
+                &[],
+                |_| panic!("foreground needs no identity"),
+            ),
+            (PickArmed::Foreground, Some(PendingRoute::Foreground))
+        );
+    }
+
+    #[test]
+    fn arming_a_cancelled_pick_arms_nothing() {
+        assert_eq!(
+            arm_pick(PickOutcome::Cancel, &[], |_| panic!(
+                "a cancelled pick needs no identity"
+            )),
+            (PickArmed::Cancelled, None)
+        );
+    }
+
+    #[test]
+    fn offered_windows_drop_a_candidate_with_no_identity() {
+        // Enumeration read the window, then it closed before its identity could
+        // be taken. Offering it would hand out a handle with nothing behind it.
+        let candidates = visible_candidates(
+            vec![raw(1, "Mail", None, true), raw(2, "Notes", None, true)],
             &[],
         );
-        last.promote_to_front(&mut candidates); // nothing remembered
-        assert_eq!(candidates[0].handle, WindowHandle(1));
+        let offered = offered_windows(candidates, &[identity(1, 100, 200)]);
+        assert_eq!(offered.len(), 1);
+        assert_eq!(offered[0].candidate.handle, WindowHandle(1));
+    }
 
-        last.remember(WindowHandle(1)); // already at front
-        last.promote_to_front(&mut candidates);
-        assert_eq!(candidates[0].handle, WindowHandle(1));
-        assert_eq!(candidates[1].handle, WindowHandle(2));
+    #[test]
+    fn a_session_offers_then_forgets_its_rows() {
+        let session = PickerSession::default();
+        assert!(session.offered().is_empty());
+        assert!(!session.is_open());
+        let offered = offer(vec![raw(1, "Mail", None, true)]);
+        session.offer(offered.clone());
+        assert_eq!(session.offered(), offered);
+        assert!(session.is_open());
+        session.clear();
+        assert!(!session.is_open());
+        // A late gesture now resolves against nothing, so it cannot pick.
+        assert_eq!(
+            resolve_gesture(
+                PickGesture::Chose(WindowHandle(1)),
+                &offered_candidates(&session.offered()),
+            ),
+            PickOutcome::Cancel
+        );
+    }
+
+    #[test]
+    fn a_pending_pick_routes_exactly_one_paste() {
+        let pending = PendingPick::default();
+        assert!(!pending.is_armed());
+        // With nothing armed, the paste falls through to the usual target rules.
+        assert_eq!(
+            pending.take_resolved(2, |_| panic!("no pick to check")),
+            None
+        );
+
+        let picked = identity(7, 100, 200);
+        // Armed after one dictation had already started, so it belongs to the
+        // second.
+        pending.arm(PendingRoute::Window(picked), 1);
+        assert!(pending.is_armed());
+        assert_eq!(
+            pending.take_resolved(2, |w| {
+                assert_eq!(w, picked);
+                true
+            }),
+            Some(PickDelivery::Deliver(picked))
+        );
+        // One pick, one paste: the third transcript is a normal one.
+        assert!(!pending.is_armed());
+        assert_eq!(pending.take_resolved(3, |_| true), None);
+    }
+
+    #[test]
+    fn an_older_dictation_does_not_take_the_pick_made_after_it() {
+        // Dictation 1 is still transcribing when the user picks a window for
+        // what they are about to say. Its paste lands first -- and must go where
+        // IT was captured, leaving the pick for dictation 2.
+        let pending = PendingPick::default();
+        let picked = identity(7, 100, 200);
+        pending.arm(PendingRoute::Window(picked), 1);
+
+        assert_eq!(
+            pending.take_resolved(1, |_| panic!("an older delivery must not consume the pick")),
+            None
+        );
+        // Still armed, and still whole.
+        assert!(pending.is_armed());
+
+        // The dictation the user made the pick for takes it.
+        assert_eq!(
+            pending.take_resolved(2, |_| true),
+            Some(PickDelivery::Deliver(picked))
+        );
+        assert!(!pending.is_armed());
+    }
+
+    #[test]
+    fn a_foreground_pick_is_bound_to_its_dictation_too() {
+        let pending = PendingPick::default();
+        pending.arm(PendingRoute::Foreground, 4);
+        // An older queued delivery leaves it alone...
+        assert_eq!(pending.take_resolved(4, |_| true), None);
+        assert_eq!(pending.take_resolved(3, |_| true), None);
+        // ...and the next dictation started after the pick gets it.
+        assert_eq!(
+            pending.take_resolved(5, |_| true),
+            Some(PickDelivery::Foreground)
+        );
+    }
+
+    #[test]
+    fn a_picked_window_that_closed_suppresses_the_paste() {
+        let pending = PendingPick::default();
+        pending.arm(PendingRoute::Window(identity(7, 100, 200)), 0);
+        // Same fail-safe as a lost lock: never fall back to the foreground.
+        assert_eq!(
+            pending.take_resolved(1, |_| false),
+            Some(PickDelivery::PickLost)
+        );
+        assert!(!pending.is_armed());
+    }
+
+    #[test]
+    fn a_recycled_handle_is_not_the_picked_window() {
+        // End to end through the shared identity check (#254): the handle is a
+        // window again, but a different process owns it now.
+        let pending = PendingPick::default();
+        let picked = identity(7, 100, 200);
+        let impostor = identity(7, 999, 200);
+        pending.arm(PendingRoute::Window(picked), 0);
+        let delivery = pending.take_resolved(1, |w| {
+            crate::output_target::identity_is_alive(w, |_| Some(impostor))
+        });
+        assert_eq!(delivery, Some(PickDelivery::PickLost));
+    }
+
+    #[test]
+    fn a_fresh_dismissal_shields_the_recording_from_the_cancel_shortcut() {
+        // Escape reached the picker first and it is already gone; the cancel
+        // shortcut arriving a moment later must not discard the recording.
+        let dismissal = PickerDismissal::default();
+        dismissal.mark();
+        assert!(dismissal.take_fresh(Instant::now()));
+        // One dismissal shields one cancel: the next Escape means cancel.
+        assert!(!dismissal.take_fresh(Instant::now()));
+    }
+
+    #[test]
+    fn a_stale_dismissal_shields_nothing() {
+        let dismissal = PickerDismissal::default();
+        let long_ago = Instant::now();
+        dismissal.mark_at(long_ago);
+        // A cancel pressed well after the picker closed is a cancel.
+        assert!(!dismissal.take_fresh(long_ago + DISMISSAL_SHIELD));
+        assert!(!dismissal.take_fresh(long_ago + DISMISSAL_SHIELD * 4));
+    }
+
+    #[test]
+    fn with_no_dismissal_the_cancel_shortcut_cancels() {
+        let dismissal = PickerDismissal::default();
+        assert!(!dismissal.take_fresh(Instant::now()));
+    }
+
+    #[test]
+    fn the_shield_covers_the_round_trip_but_not_a_deliberate_second_press() {
+        let dismissal = PickerDismissal::default();
+        let at = Instant::now();
+        dismissal.mark_at(at);
+        // Inside the window the dismissal still speaks for the Escape.
+        assert!(dismissal.take_fresh(at + Duration::from_millis(200)));
+        dismissal.mark_at(at);
+        // At the boundary it has expired: the user pressed Escape again.
+        assert!(!dismissal.take_fresh(at + DISMISSAL_SHIELD));
+    }
+
+    #[test]
+    fn a_picker_opened_mid_delivery_stops_the_remaining_keystrokes() {
+        // The delivery was resolved while no picker was up -- that is the only
+        // reason it is a foreground delivery at all -- and then the user opened
+        // one during the wait before the keys were sent.
+        assert!(foreground_keystrokes_allowed(false));
+        assert!(!foreground_keystrokes_allowed(true));
+    }
+
+    #[test]
+    fn an_open_picker_outranks_a_route_armed_earlier() {
+        // The user armed a route, then opened the picker again. A transcript
+        // finishing now must be withheld, NOT delivered along the old route: a
+        // foreground route would paste into the picker they are looking at.
+        let verdict = decide_paste(true, || {
+            panic!("an open picker must not consume the armed route")
+        });
+        assert_eq!(verdict, PasteVerdict::WithholdForPicker);
+    }
+
+    #[test]
+    fn with_no_picker_up_the_armed_route_is_taken_then_the_captured_target() {
+        let picked = identity(7, 100, 200);
+        assert_eq!(
+            decide_paste(false, || Some(PickDelivery::Deliver(picked))),
+            PasteVerdict::Route(PickDelivery::Deliver(picked))
+        );
+        assert_eq!(
+            decide_paste(false, || Some(PickDelivery::Foreground)),
+            PasteVerdict::Route(PickDelivery::Foreground)
+        );
+        assert_eq!(
+            decide_paste(false, || Some(PickDelivery::PickLost)),
+            PasteVerdict::Route(PickDelivery::PickLost)
+        );
+        // Nothing armed at all: the dictation's own captured target decides.
+        assert_eq!(decide_paste(false, || None), PasteVerdict::Captured);
+    }
+
+    #[test]
+    fn opening_a_fresh_picker_supersedes_a_route_armed_earlier() {
+        // Offering a new list is the user starting over. Whatever they pick
+        // replaces the old route, and if they back out instead, the old route
+        // must not quietly fire later.
+        let pending = PendingPick::default();
+        pending.arm(PendingRoute::Window(identity(1, 100, 200)), 0);
+
+        supersede_pick(&pending);
+
+        assert!(!pending.is_armed());
+    }
+
+    #[test]
+    fn a_picker_closed_from_outside_leaves_nothing_behind() {
+        // Alt+F4 or the window menu ends a pick with no gesture at all. If the
+        // session survived that, the picker would read as open forever and
+        // every later transcript would be withheld (#164).
+        let session = PickerSession::default();
+        let pending = PendingPick::default();
+        session.offer(offer(vec![raw(1, "Mail", None, true)]));
+        pending.arm(PendingRoute::Window(identity(1, 100, 200)), 0);
+
+        abandon_pick(&session, &pending);
+
+        assert!(!session.is_open());
+        assert!(!pending.is_armed());
+        // Which is exactly what a dismissal leaves: a transcript now follows the
+        // usual rules rather than being held or redirected.
+        assert!(!picker_is_open(None, session.is_open()));
+    }
+
+    #[test]
+    fn a_refused_selection_is_told_apart_from_a_dismissal() {
+        let chose = PickerGesture::Chose {
+            handle: "7".to_string(),
+        };
+        // The user clicked a row and the picker could not honor it: something to
+        // show them, not a reason to close as though it worked.
+        assert!(is_stale_selection(&chose, PickArmed::Cancelled));
+        // A pick that landed is not stale, whatever else happens.
+        assert!(!is_stale_selection(&chose, PickArmed::Window));
+        // Leaving on purpose is not a failure.
+        assert!(!is_stale_selection(
+            &PickerGesture::Dismiss,
+            PickArmed::Cancelled
+        ));
+        assert!(!is_stale_selection(
+            &PickerGesture::Foreground,
+            PickArmed::Foreground
+        ));
+    }
+
+    #[test]
+    fn a_visible_picker_holds_off_a_paste_and_a_gone_one_does_not() {
+        // Up and in front of the user: a transcript now would type into the
+        // picker itself (#164), even before any row has been offered.
+        assert!(picker_is_open(Some(true), false));
+        assert!(picker_is_open(Some(true), true));
+
+        // No picker window at all: only a live session speaks for a pick.
+        assert!(!picker_is_open(None, false));
+        assert!(picker_is_open(None, true));
+    }
+
+    #[test]
+    fn a_hidden_picker_does_not_hold_off_pastes_forever() {
+        // The regression this guards: a picker hidden instead of destroyed
+        // stays registered, and if that alone counted as open, every later
+        // transcript would be suppressed until the app restarted.
+        assert!(!picker_is_open(Some(false), false));
+        // A session still standing behind it is a different matter.
+        assert!(picker_is_open(Some(false), true));
+    }
+
+    #[test]
+    fn a_foreground_pick_overrides_a_lock_for_exactly_one_transcript() {
+        // The user picked "use the current window" while a lock was held, so
+        // this transcript must escape the lock -- and only this one.
+        let pending = PendingPick::default();
+        pending.arm(PendingRoute::Foreground, 0);
+        assert!(pending.is_armed());
+        assert_eq!(
+            pending.take_resolved(1, |_| panic!("the foreground has no identity to check")),
+            Some(PickDelivery::Foreground)
+        );
+        assert!(!pending.is_armed());
+        // The next transcript follows the usual rules again, lock included.
+        assert_eq!(pending.take_resolved(2, |_| true), None);
+    }
+
+    #[test]
+    fn clearing_a_pending_pick_returns_to_the_usual_target() {
+        let pending = PendingPick::default();
+        pending.arm(PendingRoute::Window(identity(7, 100, 200)), 0);
+        pending.clear();
+        assert!(!pending.is_armed());
+        assert_eq!(
+            pending.take_resolved(1, |_| panic!("no pick to check")),
+            None
+        );
     }
 
     #[test]
     fn last_pick_recovers_from_a_poisoned_lock() {
         use std::panic::{catch_unwind, AssertUnwindSafe};
         let last = LastPick::default();
-        last.remember(WindowHandle(5));
+        let window = identity(5, 100, 200);
+        last.remember(window);
         // A panic while holding the guard poisons the mutex. Recovery must let
         // later reads proceed instead of panicking on every subsequent pick.
         let blew_up = catch_unwind(AssertUnwindSafe(|| {
@@ -439,6 +1410,6 @@ mod tests {
             panic!("holder blew up");
         }));
         assert!(blew_up.is_err());
-        assert_eq!(last.get(), Some(WindowHandle(5)));
+        assert_eq!(last.get(), Some(window));
     }
 }

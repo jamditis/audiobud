@@ -113,6 +113,39 @@ fn init_gtk_layer_shell(overlay_window: &tauri::webview::WebviewWindow) -> bool 
     false
 }
 
+/// Marks the overlay's HWND `WS_EX_NOACTIVATE` (Windows only): the window never
+/// takes the foreground, no matter what generates the click.
+///
+/// `.focused(false)` on the window builder only sets the window's state at
+/// creation -- it says nothing about what a later mouse click does. Without
+/// this style, clicking anything in the overlay (the target-lock indicator's
+/// unlock button, #255/#266) activates the overlay's own HWND like any other
+/// window would. If that happens while a lock is held, unlocking then resolves
+/// the next paste to "whatever is in the foreground" -- which is now the
+/// overlay itself, so the transcript would be typed into the overlay rather
+/// than the app the user meant. `WS_EX_NOACTIVATE` stops Windows from ever
+/// activating this window; it still receives and delivers the click, so the
+/// button keeps working.
+///
+/// Set once at creation: the style persists across every later show/hide.
+#[cfg(target_os = "windows")]
+fn set_overlay_noactivate(overlay_window: &tauri::webview::WebviewWindow) {
+    use windows::Win32::UI::WindowsAndMessaging::{
+        GetWindowLongPtrW, SetWindowLongPtrW, GWL_EXSTYLE, WS_EX_NOACTIVATE,
+    };
+
+    let overlay_clone = overlay_window.clone();
+    let _ = overlay_clone.clone().run_on_main_thread(move || {
+        if let Ok(hwnd) = overlay_clone.hwnd() {
+            unsafe {
+                let current = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+                let with_noactivate = current | (WS_EX_NOACTIVATE.0 as isize);
+                SetWindowLongPtrW(hwnd, GWL_EXSTYLE, with_noactivate);
+            }
+        }
+    });
+}
+
 /// Forces a window to be topmost using Win32 API (Windows only)
 /// This is more reliable than Tauri's set_always_on_top which can be overridden
 #[cfg(target_os = "windows")]
@@ -351,6 +384,9 @@ pub fn create_recording_overlay(app_handle: &AppHandle) {
                     debug!("GTK layer shell not available, falling back to regular window");
                 }
             }
+
+            #[cfg(target_os = "windows")]
+            set_overlay_noactivate(&window);
 
             debug!("Recording overlay window created successfully (hidden)");
         }

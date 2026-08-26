@@ -867,9 +867,16 @@ fn clear_target_lock_if_focus_free(app: &AppHandle, paste_method: PasteMethod, a
                 "Paste method {:?} (auto_submit={}) cannot target a focused window; clearing the active target-lock",
                 paste_method, auto_submit
             );
-            pinned.unlock();
         }
     }
+    // Released through the shared unlock rather than PinnedTarget::unlock: the
+    // lock is shown in three places now (#255) -- the overlay indicator, the
+    // tray checkmark, the settings card -- and clearing it silently would leave
+    // every one of them claiming a lock the app no longer holds. This also
+    // clears a stale "lock lost" latch, which is equally meaningless once
+    // delivery cannot reach a window at all, and does nothing when there is
+    // neither a lock nor a latch.
+    output_target::backend::unlock_output_target(app);
 }
 
 #[tauri::command]

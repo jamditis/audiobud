@@ -14,7 +14,10 @@
     "showOverlay": "顯示懸浮窗",
     "outputMode": "輸出模式",
     "formatted": "已格式化",
-    "rawTranscript": "原始轉錄文字"
+    "rawTranscript": "原始轉錄文字",
+    "lockToWindow": "鎖定至視窗",
+    "lockLost": "鎖定已遺失",
+    "sendToWindowOnce": "傳送到視窗一次"
   },
   "sidebar": {
     "navLabel": "設定區塊",
@@ -195,6 +198,14 @@
           "transcribe_raw": {
             "name": "原始轉錄快捷鍵",
             "description": "專用快捷鍵，僅在這次聽寫輸出全部小寫、不含標點的原始文字。"
+          },
+          "toggle_target_lock": {
+            "name": "鎖定至視窗快速鍵",
+            "description": "在您解除鎖定之前，將文字傳送至單一視窗的鍵盤快速鍵。"
+          },
+          "pick_output_window": {
+            "name": "傳送到視窗的快速鍵",
+            "description": "為下一段文字選擇視窗的鍵盤快速鍵。"
           }
         },
         "errors": {
@@ -349,6 +360,15 @@
           "externalScript": "外部腳本"
         },
         "externalScriptPlaceholder": "/path/to/your/script.sh"
+      },
+      "outputTargetLock": {
+        "title": "輸出目標鎖定",
+        "description": "鎖定期間，每次聽寫都會傳送到您鎖定的視窗，而不是目前聚焦的視窗。",
+        "unlockedStatus": "未鎖定。聽寫會跟隨目前聚焦的視窗。",
+        "lockedStatus": "已鎖定至 {{target}}",
+        "staleStatus": "曾鎖定至 {{target}}，但該視窗已不存在。在您重新鎖定之前，聽寫會跟隨目前聚焦的視窗。",
+        "unknownTarget": "已鎖定的視窗",
+        "unlock": "解除鎖定"
       },
       "typingTool": {
         "title": "輸入工具",
@@ -802,11 +822,19 @@
     "modelLoadFailedUnknown": "未知模型",
     "pasteFailedTitle": "貼上文字失敗",
     "pasteFailed": "無法將文字貼上至目前作用中的應用程式。",
+    "targetLockLostTitle": "鎖定的視窗已關閉",
+    "targetLockLost": "您鎖定的視窗已關閉。AudioBud 未貼上文字。請重新鎖定一個視窗。",
+    "targetWindowGoneTitle": "聽寫目標視窗已關閉",
+    "targetWindowGone": "你聽寫的視窗在 AudioBud 貼上文字前已關閉。目前的鎖定設定沒有變更。",
     "transcriptionErrorTitle": "轉錄失敗",
     "transcriptionErrorGeneric": "無法轉錄這段錄音。請再試一次或選擇其他模型。",
     "transcriptionTimeoutTitle": "轉錄逾時",
     "transcriptionTimeout": "引擎在 {{seconds}} 秒後仍未回應，可能已卡住。如果持續發生，請重新啟動 AudioBud。",
-    "parakeetInputTooLong": "這段錄音長度為 {{duration}}。Parakeet 無法轉錄超過約 6:30 的錄音，之後的音訊會在沒有提示的情況下被省略。長錄音請使用 Whisper 模型。"
+    "parakeetInputTooLong": "這段錄音長度為 {{duration}}。Parakeet 無法轉錄超過約 6:30 的錄音，之後的音訊會在沒有提示的情況下被省略。長錄音請使用 Whisper 模型。",
+    "windowPickLostTitle": "所選視窗已不存在",
+    "windowPickLost": "你選擇的視窗已關閉。AudioBud 沒有貼上文字。請重新選擇視窗。",
+    "pickerOpenTitle": "視窗選擇器已開啟",
+    "pickerOpen": "視窗選擇器處於開啟狀態，AudioBud 沒有貼上這段文字。請先選擇視窗，然後重新口述。"
   },
   "appLanguage": {
     "title": "應用程式語言",
@@ -818,7 +846,21 @@
     "recording": "錄製中",
     "cancel": "取消錄製",
     "raw": "RAW",
-    "rawHint": "原始轉錄模式"
+    "rawHint": "原始轉錄模式",
+    "lockedTo": "→ {{target}}",
+    "lockedToHint": "聽寫已鎖定至 {{target}}。點按以解除鎖定。",
+    "lockedToUnknown": "已鎖定的視窗",
+    "lockStale": "鎖定遺失",
+    "lockStaleHint": "已鎖定的視窗已關閉。點按以關閉提示。"
+  },
+  "windowPicker": {
+    "title": "傳送到視窗",
+    "hint": "為下一段文字選擇一個視窗。按 F 使用目前視窗，按 Esc 取消。",
+    "refused": "那個視窗已不存在。請選擇另一個。",
+    "loading": "正在尋找視窗…",
+    "empty": "沒有可用的視窗。",
+    "useForeground": "使用目前視窗",
+    "cancel": "取消"
   },
   "critters": {
     "frog": "青蛙"

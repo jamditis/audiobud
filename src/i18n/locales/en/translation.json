@@ -14,7 +14,10 @@
     "showOverlay": "Show overlay",
     "outputMode": "Output mode",
     "formatted": "Formatted",
-    "rawTranscript": "Raw transcript"
+    "rawTranscript": "Raw transcript",
+    "lockToWindow": "Lock to window",
+    "lockLost": "Lock lost",
+    "sendToWindowOnce": "Send to window once"
   },
   "sidebar": {
     "navLabel": "Settings sections",
@@ -195,6 +198,14 @@
           "transcribe_raw": {
             "name": "Raw transcript hotkey",
             "description": "A dedicated hotkey that transcribes to raw, lowercased, unpunctuated text for this dictation only."
+          },
+          "toggle_target_lock": {
+            "name": "Lock to window shortcut",
+            "description": "The keyboard shortcut that sends your text to one window until you unlock it."
+          },
+          "pick_output_window": {
+            "name": "Send to window shortcut",
+            "description": "The keyboard shortcut that picks a window for your next text only."
           }
         },
         "errors": {
@@ -349,6 +360,15 @@
           "externalScript": "External script"
         },
         "externalScriptPlaceholder": "/path/to/your/script.sh"
+      },
+      "outputTargetLock": {
+        "title": "Output target lock",
+        "description": "While locked, every dictation is delivered to the window you locked instead of whatever is focused.",
+        "unlockedStatus": "Not locked. Dictation follows the focused window.",
+        "lockedStatus": "Locked to {{target}}",
+        "staleStatus": "Was locked to {{target}}, but that window is gone. Dictation follows the focused window until you lock again.",
+        "unknownTarget": "a locked window",
+        "unlock": "Unlock"
       },
       "typingTool": {
         "title": "Typing tool",
@@ -802,11 +822,19 @@
     "modelLoadFailedUnknown": "unknown model",
     "pasteFailedTitle": "Failed to paste text",
     "pasteFailed": "Text could not be pasted into the active application.",
+    "targetLockLostTitle": "Locked window is gone",
+    "targetLockLost": "The window you locked is closed. AudioBud did not paste the text. Lock a window again.",
+    "targetWindowGoneTitle": "Dictation window closed",
+    "targetWindowGone": "The window you dictated to closed before AudioBud could paste the text. Your current lock setting is unchanged.",
     "transcriptionErrorTitle": "Transcription failed",
     "transcriptionErrorGeneric": "The recording could not be transcribed. Try again or choose a different model.",
     "transcriptionTimeoutTitle": "Transcription timed out",
     "transcriptionTimeout": "The engine did not respond after {{seconds}} seconds and may be stuck. Restart AudioBud if this keeps happening.",
-    "parakeetInputTooLong": "This recording is {{duration}} long. Parakeet cannot transcribe recordings longer than about 6:30 because later audio would be silently omitted. Use a Whisper model for long recordings."
+    "parakeetInputTooLong": "This recording is {{duration}} long. Parakeet cannot transcribe recordings longer than about 6:30 because later audio would be silently omitted. Use a Whisper model for long recordings.",
+    "windowPickLostTitle": "Picked window is gone",
+    "windowPickLost": "The window you picked is closed. AudioBud did not paste the text. Pick a window again.",
+    "pickerOpenTitle": "Picker is open",
+    "pickerOpen": "AudioBud did not paste this text because the window picker was open. Pick a window, then dictate again."
   },
   "appLanguage": {
     "title": "Application language",
@@ -818,7 +846,21 @@
     "recording": "Recording",
     "cancel": "Cancel recording",
     "raw": "RAW",
-    "rawHint": "Raw transcript mode"
+    "rawHint": "Raw transcript mode",
+    "lockedTo": "→ {{target}}",
+    "lockedToHint": "Dictation is locked to {{target}}. Click to unlock.",
+    "lockedToUnknown": "a locked window",
+    "lockStale": "Lock lost",
+    "lockStaleHint": "The locked window closed. Click to dismiss."
+  },
+  "windowPicker": {
+    "title": "Send to window",
+    "hint": "Choose a window for your next text. Press F for the current window, Esc to cancel.",
+    "refused": "That window is gone. Pick another one.",
+    "loading": "Looking for windows...",
+    "empty": "No windows to choose.",
+    "useForeground": "Use current window",
+    "cancel": "Cancel"
   },
   "critters": {
     "frog": "Frog"

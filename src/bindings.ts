@@ -518,6 +518,17 @@ async getAppSettings() : Promise<Result<AppSettings, string>> {
     else return { status: "error", error: e  as any };
 }
 },
+/**
+ * The app's chosen interface language, and nothing else.
+ *
+ * Every window syncs i18next against this on load, including surfaces that
+ * have no business seeing the rest of the settings: the whole `AppSettings`
+ * carries the post-processing API keys, and a one-shot picker asking "what
+ * language am I in" should not be handed those to answer it.
+ */
+async getAppLanguage() : Promise<string> {
+    return await TAURI_INVOKE("get_app_language");
+},
 async getDefaultSettings() : Promise<Result<AppSettings, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("get_default_settings") };
@@ -962,6 +973,20 @@ async exportPersonalization() : Promise<Result<boolean, string>> {
 }
 },
 /**
+ * The rows the picker should render, remembered pick first. An empty list is a
+ * normal answer, not an error: the overlay shows its empty state.
+ */
+async listPickerWindows() : Promise<PickerWindow[]> {
+    return await TAURI_INVOKE("list_picker_windows");
+},
+/**
+ * Report the gesture that ended the pick and arm what it asked for. The picker
+ * window closes either way, so the overlay does not have to close itself.
+ */
+async resolveWindowPick(gesture: PickerGesture) : Promise<PickArmed> {
+    return await TAURI_INVOKE("resolve_window_pick", { gesture });
+},
+/**
  * Stub implementation for non-macOS platforms
  * Always returns false since laptop detection is macOS-specific
  */
@@ -972,6 +997,32 @@ async isLaptop() : Promise<Result<boolean, string>> {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
 }
+},
+/**
+ * Read the current lock state for the indicator surfaces (#255).
+ *
+ * Reports [`OutputTargetLockEvent::Lost`] when nothing is locked but
+ * [`PinnedTarget::lost_notice`] still remembers the last loss (#266 review,
+ * finding 1). The `Lost` kind was originally event-only, on the theory that
+ * a mount after the loss could just read `Unlocked` -- but the event fires
+ * once, to whichever webview happens to be listening at that moment, and a
+ * second webview mounting afterwards (settings opened after the overlay
+ * already showed the stale target, say) missed it entirely and quietly
+ * disagreed with the tray, which does consult the notice. Consulting it
+ * here too makes the notice authoritative across every webview, not just
+ * the one that was listening when the loss happened.
+ */
+async getOutputTargetLock() : Promise<OutputTargetLockEvent> {
+    return await TAURI_INVOKE("get_output_target_lock");
+},
+/**
+ * Release the output target lock from the indicator's quick-unlock button
+ * (#121). A thin command wrapper around [`unlock_output_target`] so the
+ * frontend has an explicit "unlock", distinct from the tray's lock/unlock
+ * toggle.
+ */
+async releaseOutputTargetLock() : Promise<void> {
+    await TAURI_INVOKE("release_output_target_lock");
 }
 }
 
@@ -979,9 +1030,11 @@ async isLaptop() : Promise<Result<boolean, string>> {
 
 
 export const events = __makeEvents__<{
-historyUpdatePayload: HistoryUpdatePayload
+historyUpdatePayload: HistoryUpdatePayload,
+outputTargetLockEvent: OutputTargetLockEvent
 }>({
-historyUpdatePayload: "history-update-payload"
+historyUpdatePayload: "history-update-payload",
+outputTargetLockEvent: "output-target-lock-event"
 })
 
 /** user-defined constants **/
@@ -1071,6 +1124,30 @@ export type ModelLoadStatus = { is_loaded: boolean; current_model: string | null
 export type ModelUnloadTimeout = "never" | "immediately" | "min_2" | "min_5" | "min_10" | "min_15" | "hour_1" | "sec_15"
 export type OrtAcceleratorSetting = "auto" | "cpu" | "cuda" | "directml" | "rocm"
 /**
+ * A lock-state snapshot as reported to the indicator surfaces (#255): the
+ * recording overlay, the tray, and settings. Mirrors the frontend's
+ * `LockSnapshot` in `src/lib/output-target-indicator.ts`:
+ * - `Unlocked`: delivery follows the foreground window.
+ * - `Locked`: a window is pinned and was alive when this was built.
+ * - `Lost`: a pinned window closed; [`TargetLoss::LockCleared`] just dropped
+ * the lock. Originally event-only, on the theory that `PinnedTarget` being
+ * already cleared by the time this fires means a poll afterwards reads
+ * `Unlocked` -- but a webview that mounts (or a settings window that
+ * opens) after the one-shot event has already fired would then silently
+ * disagree with a tray or overlay that is still showing the loss (#266
+ * review, finding 1). `backend::get_output_target_lock` now also consults
+ * [`PinnedTarget::lost_notice`], the same persisted memory of the loss the
+ * tray reads, so a snapshot query returns `Lost` for as long as that
+ * notice stands. The frontend holds `Lost` as a latch until the user
+ * dismisses it or a new lock/unlock replaces it.
+ *
+ * `app`/`title` are the raw strings the platform label lookup read (an
+ * app/process name and the window title). Either may be `None`. They are
+ * sent untruncated -- the frontend core owns truncation and name precedence
+ * so the source of the name and the source of the display cannot drift.
+ */
+export type OutputTargetLockEvent = { kind: "unlocked" } | { kind: "locked"; app: string | null; title: string | null } | { kind: "lost"; app: string | null; title: string | null }
+/**
  * A 3x3 grid of placement anchors on a monitor's work area. Used by #9's
  * reposition feature: the user picks an anchor (and can drag to nudge), and
  * the overlay is placed relative to that anchor on whichever monitor has the
@@ -1129,6 +1206,36 @@ learned_replacements?: WordReplacement[];
  * Mined suggestions the user dismissed, so they are never surfaced again.
  */
 dismissed_suggestions?: string[] }
+/**
+ * What one resolved pick armed, for the log line and the overlay's reply.
+ */
+export type PickArmed =
+/**
+ * The next transcript goes to this window, once.
+ */
+{ kind: "window" } |
+/**
+ * The next transcript follows the foreground, as usual.
+ */
+{ kind: "foreground" } |
+/**
+ * Nothing was armed: the user dismissed, or the chosen window was already
+ * gone. Either way no paste is redirected.
+ */
+{ kind: "cancelled" }
+/**
+ * The overlay's terminal gesture as it arrives over the Tauri boundary. The
+ * tag and its lowercase variant names mirror the frontend `PickerGesture`
+ * (`src/lib/window-picker-overlay.ts`) one-to-one, so the two halves share a
+ * single vocabulary and the mapping below is the only translation step.
+ */
+export type PickerGesture = { kind: "chose"; handle: string } | { kind: "foreground" } | { kind: "dismiss" }
+/**
+ * One row as the overlay renders it: the opaque handle and the label the
+ * backend already composed ([`WindowCandidate::label`]). The frontend never
+ * recomputes the label, so the row text and its source cannot drift.
+ */
+export type PickerWindow = { handle: string; label: string }
 export type PostProcessProvider = { id: string; label: string; base_url: string; allow_base_url_edit?: boolean; models_endpoint?: string | null; supports_structured_output?: boolean }
 export type RecordingRetentionPeriod = "never" | "preserve_limit" | "days_3" | "weeks_2" | "months_3"
 export type SecretMap = Partial<{ [key in string]: string }>

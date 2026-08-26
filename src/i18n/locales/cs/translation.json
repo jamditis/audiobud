@@ -14,7 +14,10 @@
     "showOverlay": "Zobrazit překryv",
     "outputMode": "Režim výstupu",
     "formatted": "Formátováno",
-    "rawTranscript": "Surový přepis"
+    "rawTranscript": "Surový přepis",
+    "lockToWindow": "Uzamknout na okno",
+    "lockLost": "Zámek ztracen",
+    "sendToWindowOnce": "Odeslat do okna jednou"
   },
   "sidebar": {
     "navLabel": "Sekce nastavení",
@@ -195,6 +198,14 @@
           "transcribe_raw": {
             "name": "Klávesa pro surový přepis",
             "description": "Vyhrazená klávesová zkratka, která pouze pro tento jeden diktát přepíše text jako surový – malými písmeny a bez interpunkce."
+          },
+          "toggle_target_lock": {
+            "name": "Zkratka pro uzamknutí na okno",
+            "description": "Klávesová zkratka, která posílá váš text do jednoho okna, dokud jej neodemknete."
+          },
+          "pick_output_window": {
+            "name": "Zkratka pro odeslání do okna",
+            "description": "Klávesová zkratka, která vybere okno jen pro váš další text."
           }
         },
         "errors": {
@@ -349,6 +360,15 @@
           "externalScript": "Externí skript"
         },
         "externalScriptPlaceholder": "/cesta/k/vasemu/skriptu.sh"
+      },
+      "outputTargetLock": {
+        "title": "Zámek cílového okna",
+        "description": "Když je zamčeno, každý diktát se doručí do okna, které jste zamkli, místo do aktuálně aktivního okna.",
+        "unlockedStatus": "Nezamčeno. Diktát sleduje aktivní okno.",
+        "lockedStatus": "Zamčeno na {{target}}",
+        "staleStatus": "Bylo zamčeno na {{target}}, ale toto okno už neexistuje. Diktát sleduje aktivní okno, dokud znovu nezamknete.",
+        "unknownTarget": "zamčené okno",
+        "unlock": "Odemknout"
       },
       "typingTool": {
         "title": "Nástroj pro psaní",
@@ -804,11 +824,19 @@
     "modelLoadFailedUnknown": "neznámý model",
     "pasteFailedTitle": "Vložení textu se nezdařilo",
     "pasteFailed": "Text nebylo možné vložit do aktivní aplikace.",
+    "targetLockLostTitle": "Uzamčené okno už neexistuje",
+    "targetLockLost": "Okno, které jste uzamkli, je zavřené. AudioBud text nevložil. Uzamkněte okno znovu.",
+    "targetWindowGoneTitle": "Okno diktování se zavřelo",
+    "targetWindowGone": "Okno, do kterého jste diktovali, se zavřelo dřív, než AudioBud stihl vložit text. Vaše nastavení připnutí se nezměnilo.",
     "transcriptionErrorTitle": "Přepis se nezdařil",
     "transcriptionErrorGeneric": "Nahrávku se nepodařilo přepsat. Zkuste to znovu nebo vyberte jiný model.",
     "transcriptionTimeoutTitle": "Vypršel časový limit přepisu",
     "transcriptionTimeout": "Engine neodpověděl ani po {{seconds}} sekundách a možná se zasekl. Pokud se to bude opakovat, restartujte AudioBud.",
-    "parakeetInputTooLong": "Tato nahrávka má délku {{duration}}. Parakeet nedokáže přepsat nahrávky delší než přibližně 6:30, protože další zvuk by byl bez upozornění vynechán. Pro dlouhé nahrávky použijte model Whisper."
+    "parakeetInputTooLong": "Tato nahrávka má délku {{duration}}. Parakeet nedokáže přepsat nahrávky delší než přibližně 6:30, protože další zvuk by byl bez upozornění vynechán. Pro dlouhé nahrávky použijte model Whisper.",
+    "windowPickLostTitle": "Vybrané okno zmizelo",
+    "windowPickLost": "Vybrané okno je zavřené. AudioBud text nevložil. Vyberte okno znovu.",
+    "pickerOpenTitle": "Výběr okna je otevřený",
+    "pickerOpen": "AudioBud tento text nevložil, protože byl otevřený výběr oken. Vyberte okno a diktujte znovu."
   },
   "appLanguage": {
     "title": "Jazyk aplikace",
@@ -820,7 +848,21 @@
     "recording": "Nahrávání",
     "cancel": "Zrušit nahrávání",
     "raw": "RAW",
-    "rawHint": "Režim surového přepisu"
+    "rawHint": "Režim surového přepisu",
+    "lockedTo": "→ {{target}}",
+    "lockedToHint": "Diktát je zamčen na {{target}}. Kliknutím odemkněte.",
+    "lockedToUnknown": "zamčené okno",
+    "lockStale": "Zámek ztracen",
+    "lockStaleHint": "Zamčené okno bylo zavřeno. Kliknutím zavřete."
+  },
+  "windowPicker": {
+    "title": "Odeslat do okna",
+    "hint": "Vyberte okno pro svůj další text. Stiskněte F pro aktuální okno, Esc pro zrušení.",
+    "refused": "Toto okno už neexistuje. Vyberte jiné.",
+    "loading": "Hledání oken...",
+    "empty": "Žádná okna nejsou k dispozici.",
+    "useForeground": "Použít aktuální okno",
+    "cancel": "Zrušit"
   },
   "critters": {
     "frog": "Žába"

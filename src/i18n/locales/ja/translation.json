@@ -14,7 +14,10 @@
     "showOverlay": "オーバーレイを表示",
     "outputMode": "出力モード",
     "formatted": "整形あり",
-    "rawTranscript": "未加工の文字起こし"
+    "rawTranscript": "未加工の文字起こし",
+    "lockToWindow": "ウィンドウに固定",
+    "lockLost": "ロック消失",
+    "sendToWindowOnce": "一度だけウィンドウに送る"
   },
   "sidebar": {
     "navLabel": "設定セクション",
@@ -195,6 +198,14 @@
           "transcribe_raw": {
             "name": "未加工文字起こしホットキー",
             "description": "この入力に限り、小文字で句読点なしの未加工テキストに文字起こしする専用ホットキー。"
+          },
+          "toggle_target_lock": {
+            "name": "ウィンドウ固定のショートカット",
+            "description": "固定を解除するまで、テキストを 1 つのウィンドウに送るキーボードショートカットです。"
+          },
+          "pick_output_window": {
+            "name": "ウィンドウに送るショートカット",
+            "description": "次のテキストだけを送るウィンドウを選ぶキーボードショートカット。"
           }
         },
         "errors": {
@@ -349,6 +360,15 @@
           "externalScript": "外部スクリプト"
         },
         "externalScriptPlaceholder": "/path/to/your/script.sh"
+      },
+      "outputTargetLock": {
+        "title": "出力先のロック",
+        "description": "ロック中は、フォーカスされているウィンドウではなく、ロックしたウィンドウにすべてのディクテーションが送信されます。",
+        "unlockedStatus": "ロックされていません。ディクテーションはフォーカス中のウィンドウに従います。",
+        "lockedStatus": "{{target}} にロック中",
+        "staleStatus": "{{target}} にロックされていましたが、そのウィンドウは存在しません。再度ロックするまで、ディクテーションはフォーカス中のウィンドウに従います。",
+        "unknownTarget": "ロックされたウィンドウ",
+        "unlock": "ロック解除"
       },
       "typingTool": {
         "title": "タイピングツール",
@@ -802,11 +822,19 @@
     "modelLoadFailedUnknown": "不明なモデル",
     "pasteFailedTitle": "テキストの貼り付けに失敗しました",
     "pasteFailed": "アクティブなアプリケーションにテキストを貼り付けられませんでした。",
+    "targetLockLostTitle": "固定したウィンドウがありません",
+    "targetLockLost": "固定したウィンドウは閉じられています。AudioBud はテキストを貼り付けませんでした。もう一度ウィンドウを固定してください。",
+    "targetWindowGoneTitle": "音声入力先のウィンドウが閉じられました",
+    "targetWindowGone": "音声入力していたウィンドウが、AudioBud がテキストを貼り付ける前に閉じられました。現在の固定設定は変わっていません。",
     "transcriptionErrorTitle": "文字起こしに失敗しました",
     "transcriptionErrorGeneric": "録音を文字起こしできませんでした。もう一度試すか、別のモデルを選択してください。",
     "transcriptionTimeoutTitle": "文字起こしがタイムアウトしました",
     "transcriptionTimeout": "エンジンが{{seconds}}秒応答せず、停止している可能性があります。この状態が続く場合はAudioBudを再起動してください。",
-    "parakeetInputTooLong": "この録音の長さは{{duration}}です。Parakeetは約6分30秒を超える録音を文字起こしできず、それ以降の音声は通知なく省略されます。長い録音にはWhisperモデルを使用してください。"
+    "parakeetInputTooLong": "この録音の長さは{{duration}}です。Parakeetは約6分30秒を超える録音を文字起こしできず、それ以降の音声は通知なく省略されます。長い録音にはWhisperモデルを使用してください。",
+    "windowPickLostTitle": "選んだウィンドウがありません",
+    "windowPickLost": "選んだウィンドウは閉じています。AudioBud はテキストを貼り付けませんでした。もう一度ウィンドウを選んでください。",
+    "pickerOpenTitle": "ウィンドウ選択が開いています",
+    "pickerOpen": "ウィンドウ選択が開いていたため、AudioBud はこのテキストを貼り付けませんでした。ウィンドウを選んでからもう一度話してください。"
   },
   "appLanguage": {
     "title": "アプリケーション言語",
@@ -818,7 +846,21 @@
     "recording": "録音中",
     "cancel": "録音をキャンセル",
     "raw": "RAW",
-    "rawHint": "未加工文字起こしモード"
+    "rawHint": "未加工文字起こしモード",
+    "lockedTo": "→ {{target}}",
+    "lockedToHint": "ディクテーションは {{target}} にロックされています。クリックしてロック解除。",
+    "lockedToUnknown": "ロックされたウィンドウ",
+    "lockStale": "ロックが失われました",
+    "lockStaleHint": "ロックされたウィンドウが閉じられました。クリックして閉じる。"
+  },
+  "windowPicker": {
+    "title": "ウィンドウに送る",
+    "hint": "次のテキストを送るウィンドウを選びます。F キーで現在のウィンドウ、Esc キーで取り消します。",
+    "refused": "そのウィンドウはありません。別のウィンドウを選んでください。",
+    "loading": "ウィンドウを検索中...",
+    "empty": "利用できるウィンドウがありません。",
+    "useForeground": "現在のウィンドウを使う",
+    "cancel": "キャンセル"
   },
   "critters": {
     "frog": "カエル"

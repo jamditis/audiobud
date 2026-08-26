@@ -138,6 +138,91 @@ export function chooseAt(state: PickerState, index: number): PickerStep {
 }
 
 /**
+ * The backend's answer to a resolved gesture, mirroring window_picker.rs
+ * `PickArmed`: the next transcript goes to the picked window, follows the
+ * foreground, or nothing was armed at all.
+ */
+export type PickerArmed =
+  | { readonly kind: "window" }
+  | { readonly kind: "foreground" }
+  | { readonly kind: "cancelled" };
+
+/**
+ * Whether the pick the user just made was refused.
+ *
+ * The backend answers `cancelled` both when the user dismissed and when a
+ * chosen row could not be honored -- its window closed, or its handle was
+ * recycled, since it was offered. Only the second is a failure the picker owes
+ * the user an explanation for; a dismissal is simply what they asked for. The
+ * gesture is what tells them apart, which is why this takes both.
+ */
+export function pickWasRefused(
+  gesture: PickerGesture,
+  armed: PickerArmed,
+): boolean {
+  return gesture.kind === "chose" && armed.kind === "cancelled";
+}
+
+/**
+ * The parts of a keydown target this module needs. Structural, not a DOM type,
+ * so the rule below is testable without a document.
+ */
+export interface KeyTarget {
+  readonly tagName?: string;
+  readonly isContentEditable?: boolean;
+}
+
+/** Controls that own their own keyboard behaviour. */
+const INTERACTIVE_TAGS = new Set([
+  "BUTTON",
+  "INPUT",
+  "SELECT",
+  "TEXTAREA",
+  "A",
+]);
+
+/**
+ * The only keys a focused control actually acts on: Enter and Space activate a
+ * button, a link, a checkbox. Everything else -- arrows, digits, f, Home, End --
+ * means nothing to them, so the picker keeps it and the list stays drivable from
+ * the footer buttons.
+ */
+const CONTROL_KEYS = new Set(["Enter", " ", "Spacebar"]);
+
+/**
+ * Whether a keydown on `target` belongs to the control it landed on rather than
+ * to the picker.
+ *
+ * The picker listens for keys on the window, so a keydown on its own footer
+ * buttons reaches the reducer too. Without this, Enter while "Use current
+ * window" or "Cancel" is focused would arm the HIGHLIGHTED ROW and swallow the
+ * button's activation -- the picker would do something the user did not ask
+ * for. Only the keys the control itself handles are given up; Escape is never
+ * one of them, because backing out has to work from anywhere.
+ */
+export function targetOwnsKey(target: KeyTarget | null, key: string): boolean {
+  if (!target || !CONTROL_KEYS.has(key)) return false;
+  return (
+    INTERACTIVE_TAGS.has((target.tagName ?? "").toUpperCase()) ||
+    target.isContentEditable === true
+  );
+}
+
+/**
+ * Feed one keydown to a picker whose rows have not arrived yet.
+ *
+ * Nothing can be chosen from a list that has not loaded, and the reducer reads
+ * an empty list as "nothing to deliver to", so plain [`handleKey`] would turn an
+ * eager Enter into a DISMISSAL -- ending the pick and clearing whatever route
+ * was already armed. So while loading, only Escape does anything: it backs out,
+ * which is what the user pressing it means either way. Every other key returns
+ * `null` and is ignored.
+ */
+export function handleKeyWhileLoading(key: string): PickerStep | null {
+  return key === "Escape" ? { gesture: { kind: "dismiss" } } : null;
+}
+
+/**
  * Feed one keydown to the overlay. `key` is a KeyboardEvent.key. Returns either
  * the next state (the overlay stays open) or the gesture that ends the pick:
  * - ArrowDown / ArrowUp: move the highlight, wrapping.

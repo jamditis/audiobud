@@ -927,6 +927,34 @@ pub fn get_default_settings() -> AppSettings {
         },
     );
 
+    // Target lock (#120): pin dictation to one window. Windows-only for now
+    // (#119), so other platforms get no binding rather than a dead shortcut.
+    #[cfg(target_os = "windows")]
+    bindings.insert(
+        "toggle_target_lock".to_string(),
+        ShortcutBinding {
+            id: "toggle_target_lock".to_string(),
+            name: "Lock to window".to_string(),
+            description: "Sends your text to one window until you unlock it.".to_string(),
+            default_binding: "ctrl+alt+l".to_string(),
+            current_binding: "ctrl+alt+l".to_string(),
+        },
+    );
+
+    // One-shot window picker (#124): send just the next transcript to a window
+    // you choose. Windows-only for now (#119), like the target lock.
+    #[cfg(target_os = "windows")]
+    bindings.insert(
+        "pick_output_window".to_string(),
+        ShortcutBinding {
+            id: "pick_output_window".to_string(),
+            name: "Send to window once".to_string(),
+            description: "Pick a window for your next text only.".to_string(),
+            default_binding: "ctrl+alt+w".to_string(),
+            current_binding: "ctrl+alt+w".to_string(),
+        },
+    );
+
     bindings.insert(
         "cancel".to_string(),
         ShortcutBinding {

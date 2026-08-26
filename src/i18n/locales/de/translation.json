@@ -14,7 +14,10 @@
     "showOverlay": "Overlay anzeigen",
     "outputMode": "Ausgabemodus",
     "formatted": "Formatiert",
-    "rawTranscript": "Rohtranskript"
+    "rawTranscript": "Rohtranskript",
+    "lockToWindow": "Auf Fenster fixieren",
+    "lockLost": "Fixierung verloren",
+    "sendToWindowOnce": "Einmal an Fenster senden"
   },
   "sidebar": {
     "navLabel": "Einstellungsbereiche",
@@ -195,6 +198,14 @@
           "transcribe_raw": {
             "name": "Rohtranskript-Tastenkürzel",
             "description": "Ein dediziertes Tastenkürzel, das nur für dieses Diktat rohen Text in Kleinbuchstaben und ohne Satzzeichen erzeugt."
+          },
+          "toggle_target_lock": {
+            "name": "Kurzbefehl zum Fixieren auf ein Fenster",
+            "description": "Der Kurzbefehl, der Ihren Text an ein Fenster sendet, bis Sie die Fixierung aufheben."
+          },
+          "pick_output_window": {
+            "name": "Kurzbefehl „An Fenster senden“",
+            "description": "Der Kurzbefehl, der nur für deinen nächsten Text ein Fenster wählt."
           }
         },
         "errors": {
@@ -349,6 +360,15 @@
           "externalScript": "Externes Skript"
         },
         "externalScriptPlaceholder": "/pfad/zu/ihrem/skript.sh"
+      },
+      "outputTargetLock": {
+        "title": "Ausgabeziel-Sperre",
+        "description": "Solange gesperrt, wird jedes Diktat an das gesperrte Fenster gesendet statt an das gerade fokussierte.",
+        "unlockedStatus": "Nicht gesperrt. Das Diktat folgt dem fokussierten Fenster.",
+        "lockedStatus": "Gesperrt auf {{target}}",
+        "staleStatus": "War auf {{target}} gesperrt, aber dieses Fenster existiert nicht mehr. Das Diktat folgt dem fokussierten Fenster, bis du erneut sperrst.",
+        "unknownTarget": "ein gesperrtes Fenster",
+        "unlock": "Entsperren"
       },
       "typingTool": {
         "title": "Eingabetool",
@@ -802,11 +822,19 @@
     "modelLoadFailedUnknown": "unbekanntes Modell",
     "pasteFailedTitle": "Text konnte nicht eingefügt werden",
     "pasteFailed": "Der Text konnte nicht in die aktive Anwendung eingefügt werden.",
+    "targetLockLostTitle": "Fixiertes Fenster ist weg",
+    "targetLockLost": "Das von Ihnen fixierte Fenster ist geschlossen. AudioBud hat den Text nicht eingefügt. Fixieren Sie erneut ein Fenster.",
+    "targetWindowGoneTitle": "Diktatfenster wurde geschlossen",
+    "targetWindowGone": "Das Fenster, in das Sie diktiert haben, wurde geschlossen, bevor AudioBud den Text einfügen konnte. Ihre aktuelle Fixierung bleibt unverändert.",
     "transcriptionErrorTitle": "Transkription fehlgeschlagen",
     "transcriptionErrorGeneric": "Die Aufnahme konnte nicht transkribiert werden. Versuche es erneut oder wähle ein anderes Modell.",
     "transcriptionTimeoutTitle": "Zeitüberschreitung bei der Transkription",
     "transcriptionTimeout": "Die Engine hat nach {{seconds}} Sekunden nicht reagiert und hängt möglicherweise. Starte AudioBud neu, wenn das häufiger vorkommt.",
-    "parakeetInputTooLong": "Diese Aufnahme ist {{duration}} lang. Parakeet kann Aufnahmen über etwa 6:30 nicht transkribieren, da späteres Audio unbemerkt ausgelassen würde. Verwende für lange Aufnahmen ein Whisper-Modell."
+    "parakeetInputTooLong": "Diese Aufnahme ist {{duration}} lang. Parakeet kann Aufnahmen über etwa 6:30 nicht transkribieren, da späteres Audio unbemerkt ausgelassen würde. Verwende für lange Aufnahmen ein Whisper-Modell.",
+    "windowPickLostTitle": "Gewähltes Fenster ist weg",
+    "windowPickLost": "Das gewählte Fenster ist geschlossen. AudioBud hat den Text nicht eingefügt. Wähle erneut ein Fenster.",
+    "pickerOpenTitle": "Fensterauswahl ist offen",
+    "pickerOpen": "AudioBud hat diesen Text nicht eingefügt, weil die Fensterauswahl offen war. Wähle ein Fenster und diktiere erneut."
   },
   "appLanguage": {
     "title": "Anwendungssprache",
@@ -818,7 +846,21 @@
     "recording": "Aufnahme",
     "cancel": "Aufnahme abbrechen",
     "raw": "RAW",
-    "rawHint": "Rohtranskript-Modus"
+    "rawHint": "Rohtranskript-Modus",
+    "lockedTo": "→ {{target}}",
+    "lockedToHint": "Das Diktat ist auf {{target}} gesperrt. Klicken zum Entsperren.",
+    "lockedToUnknown": "ein gesperrtes Fenster",
+    "lockStale": "Sperre verloren",
+    "lockStaleHint": "Das gesperrte Fenster wurde geschlossen. Klicken zum Ausblenden."
+  },
+  "windowPicker": {
+    "title": "An Fenster senden",
+    "hint": "Wähle ein Fenster für deinen nächsten Text. F für das aktuelle Fenster, Esc zum Abbrechen.",
+    "refused": "Dieses Fenster gibt es nicht mehr. Wähle ein anderes.",
+    "loading": "Fenster werden gesucht ...",
+    "empty": "Keine Fenster verfügbar.",
+    "useForeground": "Aktuelles Fenster verwenden",
+    "cancel": "Abbrechen"
   },
   "critters": {
     "frog": "Frosch"

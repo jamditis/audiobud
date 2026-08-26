@@ -1,10 +1,14 @@
 #[cfg(windows)]
 use crate::clipboard_snapshot::ClipboardBackend;
 use crate::clipboard_snapshot::{self, ArboardBackend, ClipboardContent, ClipboardHistory};
+use crate::dictation_context::DictationContext;
 use crate::input::{self, EnigoState};
+use crate::output_target::backend::{
+    self as target_backend, Borrowed, Delivery, FocusHold, FocusLost,
+};
 #[cfg(target_os = "linux")]
 use crate::settings::TypingTool;
-use crate::settings::{get_settings, AutoSubmitKey, ClipboardHandling, PasteMethod};
+use crate::settings::{get_settings, AppSettings, AutoSubmitKey, ClipboardHandling, PasteMethod};
 use enigo::{Direction, Enigo, Key, Keyboard};
 use log::{info, warn};
 use std::process::Command;
@@ -23,6 +27,48 @@ enum SavedClipboard {
     TextOnly(String),
 }
 
+/// Why one delivery stopped early.
+#[derive(Debug, PartialEq, Eq)]
+enum DeliveryError {
+    /// The target window went away, so no further keystrokes were sent and the
+    /// user has already been told the lock is gone. Nothing is wrong with the
+    /// transcript itself, so whatever does not depend on a window -- the
+    /// clipboard copy -- still applies (#120).
+    Suppressed(String),
+    /// The paste machinery failed and the user should be told.
+    Failed(String),
+}
+
+impl From<String> for DeliveryError {
+    fn from(error: String) -> Self {
+        DeliveryError::Failed(error)
+    }
+}
+
+impl From<&str> for DeliveryError {
+    fn from(error: &str) -> Self {
+        DeliveryError::Failed(error.to_string())
+    }
+}
+
+impl From<FocusLost> for DeliveryError {
+    /// A window that has gone is a settled outcome the user was already told
+    /// about, so the delivery is merely suppressed. A window that is still there
+    /// but will not come forward is a failure: saying nothing would drop the
+    /// transcript in silence, and with `ClipboardHandling::DontModify` there is
+    /// no copy left behind to recover it from (#120).
+    fn from(lost: FocusLost) -> Self {
+        match lost {
+            // Both are settled, already-announced outcomes with nothing typed:
+            // the window went, or the picker took the foreground mid-delivery.
+            FocusLost::TargetGone | FocusLost::PickerOpened => {
+                DeliveryError::Suppressed(lost.to_string())
+            }
+            FocusLost::ActivationRefused(reason) => DeliveryError::Failed(reason),
+        }
+    }
+}
+
 /// Pastes text using the clipboard: saves current content, writes text, sends paste keystroke, restores clipboard.
 fn paste_via_clipboard(
     enigo: &mut Enigo,
@@ -30,7 +76,8 @@ fn paste_via_clipboard(
     app_handle: &AppHandle,
     paste_method: &PasteMethod,
     paste_delay_ms: u64,
-) -> Result<(), String> {
+    hold: &FocusHold,
+) -> Result<(), DeliveryError> {
     let clipboard = app_handle.clipboard();
 
     // Save the full clipboard before overwriting it with the transcript.
@@ -77,14 +124,32 @@ fn paste_via_clipboard(
 
     std::thread::sleep(Duration::from_millis(paste_delay_ms));
 
-    // Send paste key combo
+    // The clipboard write and the delay above give focus time to move, so the
+    // target is re-checked here, immediately before the keystroke (#120).
+    let pasted = match hold.ensure() {
+        Ok(()) => send_paste_key_combo(enigo, paste_method).map_err(DeliveryError::Failed),
+        Err(lost) => Err(lost.into()),
+    };
+
+    std::thread::sleep(std::time::Duration::from_millis(50));
+
+    // Restore original clipboard content. This runs even when the keystroke was
+    // abandoned, so an aborted delivery does not leave the transcript sitting on
+    // the user's clipboard in place of what they had copied.
+    restore_saved_clipboard(&saved_clipboard, snapshot_backend.as_mut(), app_handle);
+
+    pasted
+}
+
+/// Sends the paste key combination, preferring a Linux-native tool when one is
+/// available and falling back to enigo.
+fn send_paste_key_combo(enigo: &mut Enigo, paste_method: &PasteMethod) -> Result<(), String> {
     #[cfg(target_os = "linux")]
     let key_combo_sent = try_send_key_combo_linux(paste_method)?;
 
     #[cfg(not(target_os = "linux"))]
     let key_combo_sent = false;
 
-    // Fall back to enigo if no native tool handled it
     if !key_combo_sent {
         match paste_method {
             PasteMethod::CtrlV => input::send_paste_ctrl_v(enigo)?,
@@ -93,11 +158,6 @@ fn paste_via_clipboard(
             _ => return Err("Invalid paste method for clipboard paste".into()),
         }
     }
-
-    std::thread::sleep(std::time::Duration::from_millis(50));
-
-    // Restore original clipboard content
-    restore_saved_clipboard(&saved_clipboard, snapshot_backend.as_mut(), app_handle);
 
     Ok(())
 }
@@ -701,7 +761,143 @@ pub(crate) fn requires_focus_for_delivery(paste_method: PasteMethod, auto_submit
     paste_method.requires_focus() || should_send_auto_submit(auto_submit, paste_method)
 }
 
-pub fn paste(text: String, app_handle: AppHandle) -> Result<(), String> {
+/// Whether the transcript is also copied to the clipboard.
+///
+/// `delivered` is deliberately ignored: this setting is about the clipboard, so
+/// it holds whether or not the text reached a window. A suppressed delivery
+/// (#120) that also skipped the copy would silently discard the transcript.
+fn should_copy_to_clipboard(handling: ClipboardHandling, delivered: bool) -> bool {
+    let _ = delivered;
+    handling == ClipboardHandling::CopyToClipboard
+}
+
+/// Send the transcript to the resolved target, and report whether it was
+/// delivered. `delivery` is `None` when the target lock was lost, in which case
+/// nothing is typed anywhere.
+fn deliver_to_target(
+    text: &str,
+    app_handle: &AppHandle,
+    settings: &AppSettings,
+    delivery: Option<Delivery>,
+) -> Result<bool, String> {
+    let Some(delivery) = delivery else {
+        return Ok(false);
+    };
+
+    let paste_method = settings.paste_method;
+
+    // Get the managed Enigo instance
+    let enigo_state = app_handle
+        .try_state::<EnigoState>()
+        .ok_or("Enigo state not initialized")?;
+    let mut enigo = enigo_state
+        .0
+        .lock()
+        .map_err(|e| format!("Failed to lock Enigo: {}", e))?;
+
+    let hold = FocusHold::new(app_handle, delivery);
+
+    // The paste itself, unchanged whichever window it lands in. A pinned target
+    // runs it inside a focus borrow; `hold.ensure()` re-checks the target at
+    // every keystroke boundary, because focus can move during the writes and
+    // waits in between.
+    let deliver = |enigo: &mut Enigo| -> Result<(), DeliveryError> {
+        match paste_method {
+            PasteMethod::None => {
+                info!("PasteMethod::None selected - skipping paste action");
+            }
+            PasteMethod::Direct => {
+                hold.ensure()?;
+                paste_direct(
+                    enigo,
+                    text,
+                    #[cfg(target_os = "linux")]
+                    settings.typing_tool,
+                )?;
+            }
+            PasteMethod::CtrlV | PasteMethod::CtrlShiftV | PasteMethod::ShiftInsert => {
+                paste_via_clipboard(
+                    enigo,
+                    text,
+                    app_handle,
+                    &paste_method,
+                    settings.paste_delay_ms,
+                    &hold,
+                )?
+            }
+            PasteMethod::ExternalScript => {
+                // The script decides for itself where the text goes, so there is
+                // no keystroke here to hold focus for.
+                let script_path = settings
+                    .external_script_path
+                    .as_ref()
+                    .filter(|p| !p.is_empty())
+                    .ok_or("External script path is not configured")?;
+                paste_via_external_script(text, script_path)?;
+            }
+        }
+
+        if should_send_auto_submit(settings.auto_submit, paste_method) {
+            std::thread::sleep(Duration::from_millis(50));
+            hold.ensure()?;
+            send_return_key(enigo, settings.auto_submit_key)?;
+        }
+
+        Ok(())
+    };
+
+    let outcome = match delivery {
+        Delivery::Foreground => deliver(&mut enigo),
+        // Borrowing focus for a delivery that sends nothing would take the
+        // user's window away from them for no reason at all.
+        Delivery::Pinned(_, _)
+            if !requires_focus_for_delivery(paste_method, settings.auto_submit) =>
+        {
+            deliver(&mut enigo)
+        }
+        Delivery::Pinned(identity, source) => {
+            match target_backend::borrow_focus(app_handle, identity, source, || deliver(&mut enigo))
+            {
+                Ok(Borrowed::Delivered(result)) => result,
+                // The window died between resolving it and activating it, so
+                // nothing was typed and the pick or lock is already cleaned up.
+                Ok(Borrowed::Suppressed) => {
+                    return Ok(false);
+                }
+                Err(lost) => Err(lost.into()),
+            }
+        }
+    };
+
+    delivery_outcome(outcome)
+}
+
+/// Turn one delivery's result into "was it delivered", or a real error.
+///
+/// A suppressed delivery is not an error: the target window was lost, nothing
+/// was typed anywhere, and the user has already been told the lock is gone.
+/// Reporting it as a failure would abandon the rest of the paste path, and with
+/// it the clipboard copy that is the transcript's last refuge (#120).
+fn delivery_outcome(outcome: Result<(), DeliveryError>) -> Result<bool, String> {
+    match outcome {
+        Ok(()) => Ok(true),
+        Err(DeliveryError::Suppressed(reason)) => {
+            warn!("Delivery to the locked window stopped: {}", reason);
+            Ok(false)
+        }
+        Err(DeliveryError::Failed(error)) => Err(error),
+    }
+}
+
+/// Deliver one finished transcript.
+///
+/// `context` is the intent captured when that dictation started recording
+/// (#160): it decides where the text goes, so a target lock toggled while the
+/// user was speaking cannot redirect a paste that is already in flight. The
+/// remaining paste settings -- method, delay, auto-submit, clipboard handling --
+/// are still read here, because they describe how the app types rather than what
+/// this dictation asked for.
+pub fn paste(text: String, app_handle: AppHandle, context: DictationContext) -> Result<(), String> {
     let settings = get_settings(&app_handle);
     let paste_method = settings.paste_method;
     let paste_delay_ms = settings.paste_delay_ms;
@@ -718,61 +914,41 @@ pub fn paste(text: String, app_handle: AppHandle) -> Result<(), String> {
         paste_method, paste_delay_ms
     );
 
-    // Get the managed Enigo instance
-    let enigo_state = app_handle
-        .try_state::<EnigoState>()
-        .ok_or("Enigo state not initialized")?;
-    let mut enigo = enigo_state
-        .0
-        .lock()
-        .map_err(|e| format!("Failed to lock Enigo: {}", e))?;
+    // Where this transcript goes: the target this dictation captured when its
+    // recording started (#160) -- the foreground window, or the window that was
+    // locked then. A window that has since closed delivers to no window at all,
+    // rather than to whatever inherited focus (#120).
+    let delivery = target_backend::resolve_captured_delivery(
+        &app_handle,
+        context.delivery_target(),
+        context.sequence(),
+    );
+    // Held, not unwrapped with `?`: a delivery that FAILED needs the clipboard
+    // copy even more than one that succeeded, because a failure is exactly when
+    // the copy is the transcript's last refuge. Returning here would report the
+    // error and throw the text away with it.
+    let outcome = deliver_to_target(&text, &app_handle, &settings, delivery);
+    let delivered = matches!(outcome, Ok(true));
 
-    // Perform the paste operation
-    match paste_method {
-        PasteMethod::None => {
-            info!("PasteMethod::None selected - skipping paste action");
-        }
-        PasteMethod::Direct => {
-            paste_direct(
-                &mut enigo,
-                &text,
-                #[cfg(target_os = "linux")]
-                settings.typing_tool,
-            )?;
-        }
-        PasteMethod::CtrlV | PasteMethod::CtrlShiftV | PasteMethod::ShiftInsert => {
-            paste_via_clipboard(
-                &mut enigo,
-                &text,
-                &app_handle,
-                &paste_method,
-                paste_delay_ms,
-            )?
-        }
-        PasteMethod::ExternalScript => {
-            let script_path = settings
-                .external_script_path
-                .as_ref()
-                .filter(|p| !p.is_empty())
-                .ok_or("External script path is not configured")?;
-            paste_via_external_script(&text, script_path)?;
-        }
-    }
-
-    if should_send_auto_submit(settings.auto_submit, paste_method) {
-        std::thread::sleep(Duration::from_millis(50));
-        send_return_key(&mut enigo, settings.auto_submit_key)?;
-    }
-
-    // After pasting, optionally copy to clipboard based on settings
-    if settings.clipboard_handling == ClipboardHandling::CopyToClipboard {
-        let clipboard = app_handle.clipboard();
-        clipboard
+    // The clipboard copy is a setting about the clipboard, not about the window
+    // delivery, so it runs whether the delivery succeeded, was suppressed, or
+    // failed. Otherwise the only copy of a transcript is discarded whenever the
+    // target is lost or refuses to come forward -- which, with
+    // PasteMethod::None, is the entire output.
+    let copied = if should_copy_to_clipboard(settings.clipboard_handling, delivered) {
+        app_handle
+            .clipboard()
             .write_text(&text)
-            .map_err(|e| format!("Failed to copy to clipboard: {}", e))?;
-    }
+            .map_err(|e| format!("Failed to copy to clipboard: {}", e))
+    } else {
+        Ok(())
+    };
 
-    Ok(())
+    // The delivery failure is reported after the copy has been made, and takes
+    // precedence over a copy that also failed: it is the one the user is waiting
+    // to hear about, and the copy error would otherwise mask it.
+    outcome?;
+    copied
 }
 
 #[cfg(test)]
@@ -783,6 +959,129 @@ mod tests {
     fn auto_submit_requires_setting_enabled() {
         assert!(!should_send_auto_submit(false, PasteMethod::CtrlV));
         assert!(!should_send_auto_submit(false, PasteMethod::Direct));
+    }
+
+    #[test]
+    fn a_closed_target_suppresses_but_a_refused_one_fails() {
+        // Gone: already announced, lock already dropped, nothing typed. The
+        // paste path carries on to the clipboard copy without a second alarm.
+        assert_eq!(
+            DeliveryError::from(FocusLost::TargetGone),
+            DeliveryError::Suppressed("the locked window closed during delivery".to_string())
+        );
+        // Still there but refusing to come forward: the transcript went
+        // nowhere and the lock still stands, so the user has to be told --
+        // silence here loses the text outright when nothing is copied.
+        assert_eq!(
+            DeliveryError::from(FocusLost::ActivationRefused("refused".to_string())),
+            DeliveryError::Failed("refused".to_string())
+        );
+    }
+
+    #[test]
+    fn a_refused_delivery_still_leaves_the_configured_copy_behind() {
+        // The recovery copy is decided by the clipboard setting alone, so a
+        // delivery that failed -- a live window refusing to come forward --
+        // must not skip it. This is the regression that made the paste path
+        // report the error and drop the transcript on the way out.
+        let refused: Result<bool, String> = delivery_outcome(Err(FocusLost::ActivationRefused(
+            "the system refused to activate the target window".to_string(),
+        )
+        .into()));
+        assert!(refused.is_err(), "a refusal is reported as an error");
+
+        let delivered = matches!(refused, Ok(true));
+        assert!(!delivered);
+        assert!(should_copy_to_clipboard(
+            ClipboardHandling::CopyToClipboard,
+            delivered
+        ));
+        // And the setting still decides: nobody asked for a copy here.
+        assert!(!should_copy_to_clipboard(
+            ClipboardHandling::DontModify,
+            delivered
+        ));
+    }
+
+    #[test]
+    fn a_refused_activation_reaches_the_user_as_an_error() {
+        // End to end through the outcome mapping: the refusal must surface,
+        // not turn into a quiet "not delivered".
+        let refused = delivery_outcome(Err(FocusLost::ActivationRefused(
+            "the system refused to activate the target window".to_string(),
+        )
+        .into()));
+        assert_eq!(
+            refused,
+            Err("the system refused to activate the target window".to_string())
+        );
+        assert_eq!(
+            delivery_outcome(Err(FocusLost::TargetGone.into())),
+            Ok(false)
+        );
+    }
+
+    #[test]
+    fn a_pinned_delivery_that_types_nothing_does_not_borrow_focus() {
+        // The focus borrow exists to put keystrokes in the right window. When
+        // the delivery sends none -- copy-to-clipboard with no paste method,
+        // or a script that places the text itself -- taking the user's window
+        // away, waiting, and handing it back is pure disruption. The paste
+        // path asks the same capability question every other consumer asks
+        // (#162, #264), so all of them agree about what needs focus.
+        assert!(!requires_focus_for_delivery(PasteMethod::None, false));
+        assert!(!requires_focus_for_delivery(PasteMethod::None, true));
+        assert!(!requires_focus_for_delivery(
+            PasteMethod::ExternalScript,
+            false
+        ));
+        assert!(requires_focus_for_delivery(PasteMethod::CtrlV, false));
+        assert!(requires_focus_for_delivery(PasteMethod::Direct, false));
+    }
+
+    #[test]
+    fn a_lost_target_is_not_a_paste_failure() {
+        // Losing the target mid-delivery must not abort the rest of the paste
+        // path: the clipboard copy below is the transcript's last refuge, and
+        // the user has already seen the "lock lost" notice.
+        let suppressed = delivery_outcome(Err(DeliveryError::Suppressed(
+            "the locked window closed during delivery".to_string(),
+        )));
+        assert_eq!(suppressed, Ok(false));
+    }
+
+    #[test]
+    fn a_broken_paste_is_still_reported() {
+        let failed = delivery_outcome(Err(DeliveryError::Failed("enigo exploded".to_string())));
+        assert_eq!(failed, Err("enigo exploded".to_string()));
+        assert_eq!(delivery_outcome(Ok(())), Ok(true));
+    }
+
+    #[test]
+    fn a_suppressed_delivery_still_copies_to_the_clipboard() {
+        // A lost target lock stops the paste, not the clipboard copy. With
+        // PasteMethod::None the copy is the whole output, so skipping it would
+        // throw the transcript away.
+        assert!(should_copy_to_clipboard(
+            ClipboardHandling::CopyToClipboard,
+            false
+        ));
+        assert!(should_copy_to_clipboard(
+            ClipboardHandling::CopyToClipboard,
+            true
+        ));
+    }
+
+    #[test]
+    fn no_copy_when_the_setting_is_off() {
+        assert!(!should_copy_to_clipboard(
+            ClipboardHandling::DontModify,
+            true
+        ));
+        assert!(!should_copy_to_clipboard(
+            ClipboardHandling::DontModify,
+            false
+        ));
     }
 
     #[test]

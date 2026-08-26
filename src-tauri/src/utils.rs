@@ -25,6 +25,13 @@ pub fn cancel_current_operation(app: &AppHandle) {
     let recording_was_active = audio_manager.is_recording();
     audio_manager.cancel_recording();
 
+    // A cancelled recording never becomes a dictation, so its captured intent
+    // must not outlive it. Cancellation is app-wide and does not know which
+    // binding is recording, so every parked context goes (#160).
+    if let Some(active) = app.try_state::<crate::dictation_context::ActiveDictations>() {
+        active.discard_all();
+    }
+
     // Update tray icon and hide overlay
     change_tray_icon(app, crate::tray::TrayIconState::Idle);
     hide_recording_overlay(app);

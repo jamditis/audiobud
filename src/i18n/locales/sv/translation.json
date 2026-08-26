@@ -14,7 +14,10 @@
     "showOverlay": "Visa överlagring",
     "outputMode": "Utdataläge",
     "formatted": "Formaterad",
-    "rawTranscript": "Rå transkription"
+    "rawTranscript": "Rå transkription",
+    "lockToWindow": "Lås till fönster",
+    "lockLost": "Låsning förlorad",
+    "sendToWindowOnce": "Skicka till fönster en gång"
   },
   "sidebar": {
     "navLabel": "Inställningsavsnitt",
@@ -195,6 +198,14 @@
           "transcribe_raw": {
             "name": "Snabbkommando för rå transkription",
             "description": "Ett dedikerat snabbkommando som transkriberar till rå text med gemener och utan skiljetecken, endast för den här dikteringen."
+          },
+          "toggle_target_lock": {
+            "name": "Kortkommando för att låsa till fönster",
+            "description": "Kortkommandot som skickar din text till ett fönster tills du låser upp det."
+          },
+          "pick_output_window": {
+            "name": "Kortkommando för att skicka till fönster",
+            "description": "Kortkommandot som väljer ett fönster för enbart din nästa text."
           }
         },
         "errors": {
@@ -349,6 +360,15 @@
           "externalScript": "Externt skript"
         },
         "externalScriptPlaceholder": "/sökväg/till/ditt/skript.sh"
+      },
+      "outputTargetLock": {
+        "title": "Lås utdatamål",
+        "description": "När det är låst skickas all diktering till fönstret du låste i stället för det aktiva fönstret.",
+        "unlockedStatus": "Inte låst. Dikteringen följer det aktiva fönstret.",
+        "lockedStatus": "Låst till {{target}}",
+        "staleStatus": "Var låst till {{target}}, men det fönstret finns inte längre. Dikteringen följer det aktiva fönstret tills du låser igen.",
+        "unknownTarget": "ett låst fönster",
+        "unlock": "Lås upp"
       },
       "typingTool": {
         "title": "Skrivverktyg",
@@ -802,11 +822,19 @@
     "modelLoadFailedUnknown": "okänd modell",
     "pasteFailedTitle": "Det gick inte att klistra in texten",
     "pasteFailed": "Texten kunde inte klistras in i det aktiva programmet.",
+    "targetLockLostTitle": "Det låsta fönstret finns inte längre",
+    "targetLockLost": "Fönstret du låste är stängt. AudioBud klistrade inte in texten. Lås ett fönster igen.",
+    "targetWindowGoneTitle": "Dikteringsfönstret stängdes",
+    "targetWindowGone": "Fönstret du dikterade till stängdes innan AudioBud hann klistra in texten. Din nuvarande låsinställning är oförändrad.",
     "transcriptionErrorTitle": "Transkriptionen misslyckades",
     "transcriptionErrorGeneric": "Inspelningen kunde inte transkriberas. Försök igen eller välj en annan modell.",
     "transcriptionTimeoutTitle": "Transkriptionen tog för lång tid",
     "transcriptionTimeout": "Motorn svarade inte efter {{seconds}} sekunder och kan ha hängt sig. Starta om AudioBud om det fortsätter hända.",
-    "parakeetInputTooLong": "Den här inspelningen är {{duration}} lång. Parakeet kan inte transkribera inspelningar längre än cirka 6:30, eftersom senare ljud då utelämnas utan varning. Använd en Whisper-modell för långa inspelningar."
+    "parakeetInputTooLong": "Den här inspelningen är {{duration}} lång. Parakeet kan inte transkribera inspelningar längre än cirka 6:30, eftersom senare ljud då utelämnas utan varning. Använd en Whisper-modell för långa inspelningar.",
+    "windowPickLostTitle": "Det valda fönstret är borta",
+    "windowPickLost": "Fönstret du valde är stängt. AudioBud klistrade inte in texten. Välj ett fönster igen.",
+    "pickerOpenTitle": "Väljaren är öppen",
+    "pickerOpen": "AudioBud klistrade inte in texten eftersom fönsterväljaren var öppen. Välj ett fönster och diktera igen."
   },
   "appLanguage": {
     "title": "Applikationsspråk",
@@ -818,7 +846,21 @@
     "recording": "Spelar in",
     "cancel": "Avbryt inspelning",
     "raw": "RÅ",
-    "rawHint": "Läge för rå transkription"
+    "rawHint": "Läge för rå transkription",
+    "lockedTo": "→ {{target}}",
+    "lockedToHint": "Dikteringen är låst till {{target}}. Klicka för att låsa upp.",
+    "lockedToUnknown": "ett låst fönster",
+    "lockStale": "Låset förlorat",
+    "lockStaleHint": "Det låsta fönstret stängdes. Klicka för att avfärda."
+  },
+  "windowPicker": {
+    "title": "Skicka till fönster",
+    "hint": "Välj ett fönster för din nästa text. Tryck F för det aktuella fönstret, Esc för att avbryta.",
+    "refused": "Det fönstret är borta. Välj ett annat.",
+    "loading": "Söker efter fönster ...",
+    "empty": "Inga fönster tillgängliga.",
+    "useForeground": "Använd aktuellt fönster",
+    "cancel": "Avbryt"
   },
   "critters": {
     "frog": "Groda"

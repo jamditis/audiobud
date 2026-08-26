@@ -85,12 +85,17 @@ i18n.use(initReactI18next).init({
   },
 });
 
-// Sync language from app settings
+// Sync language from app settings.
+//
+// Asks for the language alone, not the whole settings object: this runs in every
+// window, and the surfaces that need the least -- the recording overlay, the
+// one-shot window picker -- would otherwise be handed the post-processing API
+// keys along with the answer.
 export const syncLanguageFromSettings = async () => {
   try {
-    const result = await commands.getAppSettings();
-    if (result.status === "ok" && result.data.app_language) {
-      const supported = getSupportedLanguage(result.data.app_language);
+    const language = await commands.getAppLanguage();
+    if (language) {
+      const supported = getSupportedLanguage(language);
       if (supported && supported !== i18n.language) {
         await i18n.changeLanguage(supported);
       }

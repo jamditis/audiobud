@@ -6,6 +6,9 @@ import {
   foregroundGesture,
   chooseAt,
   handleKey,
+  handleKeyWhileLoading,
+  pickWasRefused,
+  targetOwnsKey,
   type PickerWindow,
   type PickerState,
 } from "./window-picker-overlay";
@@ -139,5 +142,90 @@ describe("handles cross the boundary as opaque lossless strings", () => {
       gesture: { kind: "chose", handle: big },
     });
     expect(String(Number(big))).not.toBe(big);
+  });
+});
+
+describe("keys on the picker's own controls belong to the control", () => {
+  it("leaves the activation keys to a focused button", () => {
+    // The footer's "Use current window" and "Cancel" buttons are activated with
+    // Enter or Space. The picker listens on the window, so without this the
+    // reducer would pick a row AND swallow the button press.
+    for (const tagName of ["BUTTON", "INPUT", "SELECT", "TEXTAREA", "A"]) {
+      expect(targetOwnsKey({ tagName }, "Enter")).toBe(true);
+      expect(targetOwnsKey({ tagName }, " ")).toBe(true);
+    }
+    expect(targetOwnsKey({ isContentEditable: true }, "Enter")).toBe(true);
+  });
+
+  it("keeps every key a button does nothing with, so the list stays drivable", () => {
+    // Focus sitting on a footer button must not deaden navigation: a button has
+    // no use for arrows, digits, Home/End or f, so the picker keeps them.
+    for (const key of ["ArrowDown", "ArrowUp", "Home", "End", "1", "9", "f"]) {
+      expect(targetOwnsKey({ tagName: "BUTTON" }, key)).toBe(false);
+    }
+  });
+
+  it("keeps Escape for the picker, even from a focused button", () => {
+    expect(targetOwnsKey({ tagName: "BUTTON" }, "Escape")).toBe(false);
+  });
+
+  it("leaves keys on the surface itself to the picker", () => {
+    expect(targetOwnsKey({ tagName: "DIV" }, "Enter")).toBe(false);
+    expect(targetOwnsKey({ tagName: "LI" }, "ArrowDown")).toBe(false);
+    expect(targetOwnsKey(null, "Enter")).toBe(false);
+  });
+
+  it("matches tag names case-insensitively, as a lowercase DOM would report", () => {
+    expect(targetOwnsKey({ tagName: "button" }, "Enter")).toBe(true);
+  });
+});
+
+describe("keys pressed before the rows arrive", () => {
+  it("ignores Enter rather than reading an empty list as a dismissal", () => {
+    // The regression: handleKey on an empty list dismisses, which would end the
+    // pick and clear a route the user had already armed -- all because they
+    // pressed Enter a moment early.
+    expect(handleKeyWhileLoading("Enter")).toBeNull();
+    expect(handleKey(createPickerState([]), "Enter")).toEqual({
+      gesture: { kind: "dismiss" },
+    });
+  });
+
+  it("ignores navigation and the foreground send until there is a list", () => {
+    for (const key of ["ArrowDown", "ArrowUp", "Home", "End", "1", "f"]) {
+      expect(handleKeyWhileLoading(key)).toBeNull();
+    }
+  });
+
+  it("still lets Escape back out", () => {
+    expect(handleKeyWhileLoading("Escape")).toEqual({
+      gesture: { kind: "dismiss" },
+    });
+  });
+});
+
+describe("a chosen row the backend could not honor", () => {
+  it("is a refusal the user is owed an explanation for", () => {
+    // The window closed, or its handle was recycled, between being offered and
+    // being clicked. Closing the picker as if the pick worked would leave the
+    // user believing their next transcript is routed.
+    expect(
+      pickWasRefused({ kind: "chose", handle: "7" }, { kind: "cancelled" }),
+    ).toBe(true);
+  });
+
+  it("is not raised for a pick that landed", () => {
+    expect(
+      pickWasRefused({ kind: "chose", handle: "7" }, { kind: "window" }),
+    ).toBe(false);
+  });
+
+  it("is not raised for a dismissal, which is what the user asked for", () => {
+    expect(pickWasRefused({ kind: "dismiss" }, { kind: "cancelled" })).toBe(
+      false,
+    );
+    expect(pickWasRefused({ kind: "foreground" }, { kind: "foreground" })).toBe(
+      false,
+    );
   });
 });
