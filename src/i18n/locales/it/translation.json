@@ -14,7 +14,8 @@
     "showOverlay": "Mostra la sovrimpressione",
     "outputMode": "Modalità di output",
     "formatted": "Formattato",
-    "rawTranscript": "Trascrizione grezza"
+    "rawTranscript": "Trascrizione grezza",
+    "lockToWindow": "Blocca sulla finestra"
   },
   "sidebar": {
     "navLabel": "Sezioni delle impostazioni",
@@ -349,6 +350,15 @@
           "externalScript": "Script esterno"
         },
         "externalScriptPlaceholder": "/percorso/del/tuo/script.sh"
+      },
+      "outputTargetLock": {
+        "title": "Blocco della destinazione di output",
+        "description": "Quando è bloccato, ogni dettatura viene inviata alla finestra bloccata invece che a quella attiva.",
+        "unlockedStatus": "Non bloccato. La dettatura segue la finestra attiva.",
+        "lockedStatus": "Bloccato su {{target}}",
+        "staleStatus": "Era bloccato su {{target}}, ma quella finestra non esiste più. La dettatura segue la finestra attiva finché non blocchi di nuovo.",
+        "unknownTarget": "una finestra bloccata",
+        "unlock": "Sblocca"
       },
       "typingTool": {
         "title": "Strumento di digitazione",
@@ -802,6 +812,8 @@
     "modelLoadFailedUnknown": "modello sconosciuto",
     "pasteFailedTitle": "Impossibile incollare il testo",
     "pasteFailed": "Non è stato possibile incollare il testo nell'applicazione attiva.",
+    "targetLockLostTitle": "La finestra bloccata è scomparsa",
+    "targetLockLost": "La finestra che hai bloccato è chiusa. AudioBud non ha incollato il testo. Blocca di nuovo una finestra.",
     "transcriptionErrorTitle": "Trascrizione non riuscita",
     "transcriptionErrorGeneric": "Non è stato possibile trascrivere la registrazione. Riprova o scegli un altro modello.",
     "transcriptionTimeoutTitle": "Tempo scaduto per la trascrizione",
@@ -818,7 +830,12 @@
     "recording": "Registrazione",
     "cancel": "Annulla la registrazione",
     "raw": "RAW",
-    "rawHint": "Modalità trascrizione grezza"
+    "rawHint": "Modalità trascrizione grezza",
+    "lockedTo": "→ {{target}}",
+    "lockedToHint": "La dettatura è bloccata su {{target}}. Fai clic per sbloccare.",
+    "lockedToUnknown": "una finestra bloccata",
+    "lockStale": "Blocco perso",
+    "lockStaleHint": "La finestra bloccata è stata chiusa. Fai clic per ignorare."
   },
   "critters": {
     "frog": "Rana"

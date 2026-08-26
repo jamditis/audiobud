@@ -972,6 +972,26 @@ async isLaptop() : Promise<Result<boolean, string>> {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
 }
+},
+/**
+ * Read the current lock state for the indicator surfaces (#255).
+ *
+ * Never reports [`OutputTargetLockEvent::Lost`]: that kind is event-only,
+ * emitted once when [`resolve_paste_target`] drops a stale lock. A snapshot
+ * query after that loss reads `Unlocked`, matching the frontend contract in
+ * `output-target-indicator.ts`.
+ */
+async getOutputTargetLock() : Promise<OutputTargetLockEvent> {
+    return await TAURI_INVOKE("get_output_target_lock");
+},
+/**
+ * Release the output target lock from the indicator's quick-unlock button
+ * (#121). A thin command wrapper around [`unlock_output_target`] so the
+ * frontend has an explicit "unlock", distinct from the tray's lock/unlock
+ * toggle.
+ */
+async releaseOutputTargetLock() : Promise<void> {
+    await TAURI_INVOKE("release_output_target_lock");
 }
 }
 
@@ -979,9 +999,11 @@ async isLaptop() : Promise<Result<boolean, string>> {
 
 
 export const events = __makeEvents__<{
-historyUpdatePayload: HistoryUpdatePayload
+historyUpdatePayload: HistoryUpdatePayload,
+outputTargetLockEvent: OutputTargetLockEvent
 }>({
-historyUpdatePayload: "history-update-payload"
+historyUpdatePayload: "history-update-payload",
+outputTargetLockEvent: "output-target-lock-event"
 })
 
 /** user-defined constants **/
@@ -1070,6 +1092,24 @@ export type ModelInfo = { id: string; name: string; description: string; filenam
 export type ModelLoadStatus = { is_loaded: boolean; current_model: string | null }
 export type ModelUnloadTimeout = "never" | "immediately" | "min_2" | "min_5" | "min_10" | "min_15" | "hour_1" | "sec_15"
 export type OrtAcceleratorSetting = "auto" | "cpu" | "cuda" | "directml" | "rocm"
+/**
+ * A lock-state snapshot as reported to the indicator surfaces (#255): the
+ * recording overlay, the tray, and settings. Mirrors the frontend's
+ * `LockSnapshot` in `src/lib/output-target-indicator.ts`:
+ * - `Unlocked`: delivery follows the foreground window.
+ * - `Locked`: a window is pinned and was alive when this was built.
+ * - `Lost`: a pinned window closed; [`Resolved::LockLost`] just dropped the
+ * lock. Event-only -- never returned by a snapshot query, since the lock is
+ * already cleared by the time this fires and a poll after that reads
+ * `Unlocked`. The frontend holds `Lost` as a latch until the user dismisses
+ * it or a new lock/unlock replaces it.
+ *
+ * `app`/`title` are the raw strings the platform label lookup read (an
+ * app/process name and the window title). Either may be `None`. They are
+ * sent untruncated -- the frontend core owns truncation and name precedence
+ * so the source of the name and the source of the display cannot drift.
+ */
+export type OutputTargetLockEvent = { kind: "unlocked" } | { kind: "locked"; app: string | null; title: string | null } | { kind: "lost"; app: string | null; title: string | null }
 /**
  * A 3x3 grid of placement anchors on a monitor's work area. Used by #9's
  * reposition feature: the user picks an anchor (and can drag to nudge), and

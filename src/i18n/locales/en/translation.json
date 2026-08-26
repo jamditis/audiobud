@@ -351,6 +351,15 @@
         },
         "externalScriptPlaceholder": "/path/to/your/script.sh"
       },
+      "outputTargetLock": {
+        "title": "Output target lock",
+        "description": "While locked, every dictation is delivered to the window you locked instead of whatever is focused.",
+        "unlockedStatus": "Not locked. Dictation follows the focused window.",
+        "lockedStatus": "Locked to {{target}}",
+        "staleStatus": "Was locked to {{target}}, but that window is gone. Dictation follows the focused window until you lock again.",
+        "unknownTarget": "a locked window",
+        "unlock": "Unlock"
+      },
       "typingTool": {
         "title": "Typing tool",
         "description": "Choose which Linux typing tool to use for Direct paste method. Auto will automatically detect and use the best available tool for your system.",
@@ -821,7 +830,12 @@
     "recording": "Recording",
     "cancel": "Cancel recording",
     "raw": "RAW",
-    "rawHint": "Raw transcript mode"
+    "rawHint": "Raw transcript mode",
+    "lockedTo": "→ {{target}}",
+    "lockedToHint": "Dictation is locked to {{target}}. Click to unlock.",
+    "lockedToUnknown": "a locked window",
+    "lockStale": "Lock lost",
+    "lockStaleHint": "The locked window closed. Click to dismiss."
   },
   "critters": {
     "frog": "Frog"

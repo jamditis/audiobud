@@ -20,6 +20,8 @@
 
 pub mod backend;
 
+use serde::{Deserialize, Serialize};
+use specta::Type;
 use std::fmt;
 use std::sync::Mutex;
 
@@ -154,6 +156,38 @@ pub enum Resolved {
     /// then let the user re-lock or re-dictate. The lock is already cleared
     /// here, so the next resolve is a plain `Deliver(Foreground)`.
     LockLost,
+}
+
+/// A lock-state snapshot as reported to the indicator surfaces (#255): the
+/// recording overlay, the tray, and settings. Mirrors the frontend's
+/// `LockSnapshot` in `src/lib/output-target-indicator.ts`:
+/// - `Unlocked`: delivery follows the foreground window.
+/// - `Locked`: a window is pinned and was alive when this was built.
+/// - `Lost`: a pinned window closed; [`Resolved::LockLost`] just dropped the
+///   lock. Event-only -- never returned by a snapshot query, since the lock is
+///   already cleared by the time this fires and a poll after that reads
+///   `Unlocked`. The frontend holds `Lost` as a latch until the user dismisses
+///   it or a new lock/unlock replaces it.
+///
+/// `app`/`title` are the raw strings the platform label lookup read (an
+/// app/process name and the window title). Either may be `None`. They are
+/// sent untruncated -- the frontend core owns truncation and name precedence
+/// so the source of the name and the source of the display cannot drift.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Type, tauri_specta::Event)]
+#[serde(tag = "kind")]
+pub enum OutputTargetLockEvent {
+    #[serde(rename = "unlocked")]
+    Unlocked,
+    #[serde(rename = "locked")]
+    Locked {
+        app: Option<String>,
+        title: Option<String>,
+    },
+    #[serde(rename = "lost")]
+    Lost {
+        app: Option<String>,
+        title: Option<String>,
+    },
 }
 
 /// Tauri-managed lock state. Registered alongside `EnigoState`; the paste path

@@ -14,7 +14,8 @@
     "showOverlay": "Mostrar sobreposição",
     "outputMode": "Modo de saída",
     "formatted": "Formatado",
-    "rawTranscript": "Transcrição bruta"
+    "rawTranscript": "Transcrição bruta",
+    "lockToWindow": "Bloquear na janela"
   },
   "sidebar": {
     "navLabel": "Seções de configurações",
@@ -349,6 +350,15 @@
           "externalScript": "Script externo"
         },
         "externalScriptPlaceholder": "/caminho/para/seu/script.sh"
+      },
+      "outputTargetLock": {
+        "title": "Bloqueio do destino de saída",
+        "description": "Enquanto bloqueado, todo ditado é enviado para a janela bloqueada em vez da janela em foco.",
+        "unlockedStatus": "Não bloqueado. O ditado segue a janela em foco.",
+        "lockedStatus": "Bloqueado em {{target}}",
+        "staleStatus": "Estava bloqueado em {{target}}, mas essa janela não existe mais. O ditado segue a janela em foco até você bloquear novamente.",
+        "unknownTarget": "uma janela bloqueada",
+        "unlock": "Desbloquear"
       },
       "typingTool": {
         "title": "Ferramenta de digitação",
@@ -802,6 +812,8 @@
     "modelLoadFailedUnknown": "modelo desconhecido",
     "pasteFailedTitle": "Falha ao colar o texto",
     "pasteFailed": "Não foi possível colar o texto no aplicativo ativo.",
+    "targetLockLostTitle": "A janela bloqueada desapareceu",
+    "targetLockLost": "A janela que você bloqueou está fechada. O AudioBud não colou o texto. Bloqueie uma janela novamente.",
     "transcriptionErrorTitle": "A transcrição falhou",
     "transcriptionErrorGeneric": "Não foi possível transcrever a gravação. Tente novamente ou escolha outro modelo.",
     "transcriptionTimeoutTitle": "Tempo esgotado na transcrição",
@@ -818,7 +830,12 @@
     "recording": "Gravando",
     "cancel": "Cancelar gravação",
     "raw": "BRUTO",
-    "rawHint": "Modo de transcrição bruta"
+    "rawHint": "Modo de transcrição bruta",
+    "lockedTo": "→ {{target}}",
+    "lockedToHint": "O ditado está bloqueado em {{target}}. Clique para desbloquear.",
+    "lockedToUnknown": "uma janela bloqueada",
+    "lockStale": "Bloqueio perdido",
+    "lockStaleHint": "A janela bloqueada foi fechada. Clique para dispensar."
   },
   "critters": {
     "frog": "Sapo"

@@ -14,7 +14,8 @@
     "showOverlay": "Pokaż nakładkę",
     "outputMode": "Tryb wyjścia",
     "formatted": "Sformatowany",
-    "rawTranscript": "Surowa transkrypcja"
+    "rawTranscript": "Surowa transkrypcja",
+    "lockToWindow": "Zablokuj na oknie"
   },
   "sidebar": {
     "navLabel": "Sekcje ustawień",
@@ -349,6 +350,15 @@
           "externalScript": "Skrypt zewnętrzny"
         },
         "externalScriptPlaceholder": "/sciezka/do/twojego/skryptu.sh"
+      },
+      "outputTargetLock": {
+        "title": "Blokada okna docelowego",
+        "description": "Gdy jest zablokowane, każde dyktowanie trafia do zablokowanego okna zamiast do aktywnego.",
+        "unlockedStatus": "Niezablokowane. Dyktowanie podąża za aktywnym oknem.",
+        "lockedStatus": "Zablokowane na {{target}}",
+        "staleStatus": "Było zablokowane na {{target}}, ale to okno już nie istnieje. Dyktowanie podąża za aktywnym oknem, dopóki nie zablokujesz ponownie.",
+        "unknownTarget": "zablokowane okno",
+        "unlock": "Odblokuj"
       },
       "typingTool": {
         "title": "Narzędzie do wpisywania",
@@ -806,6 +816,8 @@
     "modelLoadFailedUnknown": "nieznany model",
     "pasteFailedTitle": "Nie udało się wkleić tekstu",
     "pasteFailed": "Nie można było wkleić tekstu do aktywnej aplikacji.",
+    "targetLockLostTitle": "Zablokowane okno zniknęło",
+    "targetLockLost": "Okno, które zablokowałeś, jest zamknięte. AudioBud nie wkleił tekstu. Zablokuj okno ponownie.",
     "transcriptionErrorTitle": "Transkrypcja nie powiodła się",
     "transcriptionErrorGeneric": "Nie udało się transkrybować nagrania. Spróbuj ponownie lub wybierz inny model.",
     "transcriptionTimeoutTitle": "Przekroczono czas transkrypcji",
@@ -822,7 +834,12 @@
     "recording": "Nagrywanie",
     "cancel": "Anuluj nagrywanie",
     "raw": "RAW",
-    "rawHint": "Tryb surowej transkrypcji"
+    "rawHint": "Tryb surowej transkrypcji",
+    "lockedTo": "→ {{target}}",
+    "lockedToHint": "Dyktowanie jest zablokowane na {{target}}. Kliknij, aby odblokować.",
+    "lockedToUnknown": "zablokowane okno",
+    "lockStale": "Blokada utracona",
+    "lockStaleHint": "Zablokowane okno zostało zamknięte. Kliknij, aby odrzucić."
   },
   "critters": {
     "frog": "Żaba"

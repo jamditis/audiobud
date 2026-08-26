@@ -41,6 +41,15 @@ mock.module("@/bindings", () => ({
     cancelDownload: async () => cancelDownloadResult,
     deleteModel: async () => ({ status: "ok", data: null }),
   },
+  // Bun's mock.module replaces "@/bindings" for the whole test process, not
+  // just this file, so any real export another test file destructures (e.g.
+  // useOutputTargetLock.test.ts importing `events`) must have a stub here too
+  // or that later file fails with "Export named 'events' not found".
+  events: {
+    outputTargetLockEvent: {
+      listen: () => Promise.resolve(() => {}),
+    },
+  },
 }));
 
 mock.module("@/i18n", () => ({

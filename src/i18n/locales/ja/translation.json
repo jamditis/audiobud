@@ -14,7 +14,8 @@
     "showOverlay": "オーバーレイを表示",
     "outputMode": "出力モード",
     "formatted": "整形あり",
-    "rawTranscript": "未加工の文字起こし"
+    "rawTranscript": "未加工の文字起こし",
+    "lockToWindow": "ウィンドウにロック"
   },
   "sidebar": {
     "navLabel": "設定セクション",
@@ -349,6 +350,15 @@
           "externalScript": "外部スクリプト"
         },
         "externalScriptPlaceholder": "/path/to/your/script.sh"
+      },
+      "outputTargetLock": {
+        "title": "出力先のロック",
+        "description": "ロック中は、フォーカスされているウィンドウではなく、ロックしたウィンドウにすべてのディクテーションが送信されます。",
+        "unlockedStatus": "ロックされていません。ディクテーションはフォーカス中のウィンドウに従います。",
+        "lockedStatus": "{{target}} にロック中",
+        "staleStatus": "{{target}} にロックされていましたが、そのウィンドウは存在しません。再度ロックするまで、ディクテーションはフォーカス中のウィンドウに従います。",
+        "unknownTarget": "ロックされたウィンドウ",
+        "unlock": "ロック解除"
       },
       "typingTool": {
         "title": "タイピングツール",
@@ -802,6 +812,8 @@
     "modelLoadFailedUnknown": "不明なモデル",
     "pasteFailedTitle": "テキストの貼り付けに失敗しました",
     "pasteFailed": "アクティブなアプリケーションにテキストを貼り付けられませんでした。",
+    "targetLockLostTitle": "ロックしたウィンドウがなくなりました",
+    "targetLockLost": "ロックしたウィンドウは閉じられています。AudioBudはテキストを貼り付けませんでした。もう一度ウィンドウをロックしてください。",
     "transcriptionErrorTitle": "文字起こしに失敗しました",
     "transcriptionErrorGeneric": "録音を文字起こしできませんでした。もう一度試すか、別のモデルを選択してください。",
     "transcriptionTimeoutTitle": "文字起こしがタイムアウトしました",
@@ -818,7 +830,12 @@
     "recording": "録音中",
     "cancel": "録音をキャンセル",
     "raw": "RAW",
-    "rawHint": "未加工文字起こしモード"
+    "rawHint": "未加工文字起こしモード",
+    "lockedTo": "→ {{target}}",
+    "lockedToHint": "ディクテーションは {{target}} にロックされています。クリックしてロック解除。",
+    "lockedToUnknown": "ロックされたウィンドウ",
+    "lockStale": "ロックが失われました",
+    "lockStaleHint": "ロックされたウィンドウが閉じられました。クリックして閉じる。"
   },
   "critters": {
     "frog": "カエル"

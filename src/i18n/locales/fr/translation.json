@@ -14,7 +14,8 @@
     "showOverlay": "Afficher l'incrustation",
     "outputMode": "Mode de sortie",
     "formatted": "Formaté",
-    "rawTranscript": "Transcription brute"
+    "rawTranscript": "Transcription brute",
+    "lockToWindow": "Verrouiller sur la fenêtre"
   },
   "sidebar": {
     "navLabel": "Sections des paramètres",
@@ -349,6 +350,15 @@
           "externalScript": "Script externe"
         },
         "externalScriptPlaceholder": "/chemin/vers/votre/script.sh"
+      },
+      "outputTargetLock": {
+        "title": "Verrouillage de la cible de sortie",
+        "description": "Une fois verrouillée, chaque dictée est envoyée à la fenêtre verrouillée plutôt qu'à celle qui a le focus.",
+        "unlockedStatus": "Non verrouillé. La dictée suit la fenêtre active.",
+        "lockedStatus": "Verrouillé sur {{target}}",
+        "staleStatus": "Était verrouillé sur {{target}}, mais cette fenêtre n'existe plus. La dictée suit la fenêtre active jusqu'au prochain verrouillage.",
+        "unknownTarget": "une fenêtre verrouillée",
+        "unlock": "Déverrouiller"
       },
       "typingTool": {
         "title": "Outil de frappe",
@@ -802,6 +812,8 @@
     "modelLoadFailedUnknown": "modèle inconnu",
     "pasteFailedTitle": "Échec du collage du texte",
     "pasteFailed": "Le texte n'a pas pu être collé dans l'application active.",
+    "targetLockLostTitle": "La fenêtre verrouillée a disparu",
+    "targetLockLost": "La fenêtre que vous avez verrouillée est fermée. AudioBud n'a pas collé le texte. Verrouillez une fenêtre à nouveau.",
     "transcriptionErrorTitle": "Échec de la transcription",
     "transcriptionErrorGeneric": "L’enregistrement n’a pas pu être transcrit. Réessayez ou choisissez un autre modèle.",
     "transcriptionTimeoutTitle": "Délai de transcription dépassé",
@@ -818,7 +830,12 @@
     "recording": "Enregistrement",
     "cancel": "Annuler l'enregistrement",
     "raw": "BRUT",
-    "rawHint": "Mode transcription brute"
+    "rawHint": "Mode transcription brute",
+    "lockedTo": "→ {{target}}",
+    "lockedToHint": "La dictée est verrouillée sur {{target}}. Cliquez pour déverrouiller.",
+    "lockedToUnknown": "une fenêtre verrouillée",
+    "lockStale": "Verrouillage perdu",
+    "lockStaleHint": "La fenêtre verrouillée a été fermée. Cliquez pour ignorer."
   },
   "critters": {
     "frog": "Grenouille"

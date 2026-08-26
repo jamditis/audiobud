@@ -14,7 +14,8 @@
     "showOverlay": "Hiện lớp phủ",
     "outputMode": "Chế độ đầu ra",
     "formatted": "Đã định dạng",
-    "rawTranscript": "Văn bản thô"
+    "rawTranscript": "Văn bản thô",
+    "lockToWindow": "Khóa vào cửa sổ"
   },
   "sidebar": {
     "navLabel": "Các mục cài đặt",
@@ -349,6 +350,15 @@
           "externalScript": "Script bên ngoài"
         },
         "externalScriptPlaceholder": "/duong-dan/toi/script.sh"
+      },
+      "outputTargetLock": {
+        "title": "Khóa đích đầu ra",
+        "description": "Khi bị khóa, mọi lời đọc chính tả được gửi đến cửa sổ bạn đã khóa thay vì cửa sổ đang được chọn.",
+        "unlockedStatus": "Chưa khóa. Lời đọc chính tả theo cửa sổ đang được chọn.",
+        "lockedStatus": "Đã khóa vào {{target}}",
+        "staleStatus": "Đã khóa vào {{target}}, nhưng cửa sổ đó không còn nữa. Lời đọc chính tả theo cửa sổ đang được chọn cho đến khi bạn khóa lại.",
+        "unknownTarget": "một cửa sổ đã khóa",
+        "unlock": "Mở khóa"
       },
       "typingTool": {
         "title": "Công cụ gõ",
@@ -802,6 +812,8 @@
     "modelLoadFailedUnknown": "mô hình không xác định",
     "pasteFailedTitle": "Không thể dán văn bản",
     "pasteFailed": "Không thể dán văn bản vào ứng dụng đang hoạt động.",
+    "targetLockLostTitle": "Cửa sổ đã khóa biến mất",
+    "targetLockLost": "Cửa sổ bạn đã khóa đã đóng. AudioBud không dán văn bản. Hãy khóa một cửa sổ khác.",
     "transcriptionErrorTitle": "Chuyển đổi không thành công",
     "transcriptionErrorGeneric": "Không thể chuyển đổi bản ghi âm thành văn bản. Hãy thử lại hoặc chọn một mô hình khác.",
     "transcriptionTimeoutTitle": "Chuyển đổi đã quá thời gian chờ",
@@ -818,7 +830,12 @@
     "recording": "Đang ghi âm",
     "cancel": "Hủy ghi âm",
     "raw": "THÔ",
-    "rawHint": "Chế độ văn bản thô"
+    "rawHint": "Chế độ văn bản thô",
+    "lockedTo": "→ {{target}}",
+    "lockedToHint": "Lời đọc chính tả đã khóa vào {{target}}. Nhấp để mở khóa.",
+    "lockedToUnknown": "một cửa sổ đã khóa",
+    "lockStale": "Mất khóa",
+    "lockStaleHint": "Cửa sổ đã khóa đã đóng. Nhấp để bỏ qua."
   },
   "critters": {
     "frog": "Ếch"

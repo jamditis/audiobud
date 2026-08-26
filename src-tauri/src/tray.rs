@@ -266,14 +266,33 @@ pub fn update_tray_menu(app: &AppHandle, state: &TrayIconState, locale: Option<&
 
     // Target lock (#120), Windows-only for now (#119). Checked while a window is
     // locked; the `toggle:` handler in lib.rs flips it and rebuilds the menu.
+    // The label carries the locked window's name too (#255) so the tray never
+    // disagrees with the overlay/settings indicator about what is locked.
+    #[cfg(target_os = "windows")]
+    let target_lock_state = app.try_state::<crate::output_target::PinnedTarget>();
+    #[cfg(target_os = "windows")]
+    let target_lock_label = target_lock_state
+        .as_ref()
+        .and_then(|lock| lock.locked())
+        .map(|window| {
+            let (app_name, title) = crate::output_target::backend::window_label(window);
+            let name = app_name
+                .or(title)
+                .unwrap_or_else(|| strings.lock_to_window.clone());
+            format!(
+                "{} — {}",
+                strings.lock_to_window,
+                truncate_tray_label(&name, 28)
+            )
+        })
+        .unwrap_or_else(|| strings.lock_to_window.clone());
     #[cfg(target_os = "windows")]
     let toggle_target_lock_i = CheckMenuItem::with_id(
         app,
         "toggle:target_lock",
-        &strings.lock_to_window,
+        &target_lock_label,
         true,
-        app.try_state::<crate::output_target::PinnedTarget>()
-            .is_some_and(|lock| lock.is_locked()),
+        target_lock_state.is_some_and(|lock| lock.is_locked()),
         None::<&str>,
     )
     .expect("failed to create target-lock toggle item");
@@ -369,6 +388,23 @@ pub fn update_tray_menu(app: &AppHandle, state: &TrayIconState, locale: Option<&
     let _ = tray.set_tooltip(Some(version_label));
 }
 
+/// Truncate a tray label's variable portion so a long window title cannot
+/// stretch the menu row. Mirrors the spirit of the frontend indicator's
+/// `truncateName` (`output-target-indicator.ts`) without sharing code across
+/// the Rust/TS boundary -- the tray and the overlay/settings indicator only
+/// need to agree on *what* is locked, not on byte-identical truncation.
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+fn truncate_tray_label(name: &str, max_chars: usize) -> String {
+    let chars: Vec<char> = name.chars().collect();
+    if chars.len() <= max_chars {
+        name.to_string()
+    } else {
+        let mut truncated: String = chars[..max_chars].iter().collect();
+        truncated.push_str("...");
+        truncated
+    }
+}
+
 fn last_transcript_text(entry: &HistoryEntry) -> &str {
     entry
         .post_processed_text
@@ -418,8 +454,20 @@ pub fn copy_last_transcript(app: &AppHandle) {
 
 #[cfg(test)]
 mod tests {
-    use super::last_transcript_text;
+    use super::{last_transcript_text, truncate_tray_label};
     use crate::managers::history::HistoryEntry;
+
+    #[test]
+    fn truncate_tray_label_leaves_short_names_alone() {
+        assert_eq!(truncate_tray_label("Terminal", 28), "Terminal");
+    }
+
+    #[test]
+    fn truncate_tray_label_shortens_long_names() {
+        let long_name = "a".repeat(40);
+        let truncated = truncate_tray_label(&long_name, 28);
+        assert_eq!(truncated, format!("{}...", "a".repeat(28)));
+    }
 
     #[test]
     fn tray_tooltip_names_the_product_not_the_upstream_fork() {

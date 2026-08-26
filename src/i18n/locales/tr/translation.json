@@ -14,7 +14,8 @@
     "showOverlay": "Kaplamayı göster",
     "outputMode": "Çıktı modu",
     "formatted": "Biçimlendirilmiş",
-    "rawTranscript": "Ham transkript"
+    "rawTranscript": "Ham transkript",
+    "lockToWindow": "Pencereye kilitle"
   },
   "sidebar": {
     "navLabel": "Ayar bölümleri",
@@ -349,6 +350,15 @@
           "externalScript": "Harici Betik"
         },
         "externalScriptPlaceholder": "/dosya/yolu/betik.sh"
+      },
+      "outputTargetLock": {
+        "title": "Çıkış hedefi kilidi",
+        "description": "Kilitliyken her dikte, odaktaki pencere yerine kilitlediğiniz pencereye gönderilir.",
+        "unlockedStatus": "Kilitli değil. Dikte, odaktaki pencereyi izler.",
+        "lockedStatus": "{{target}} üzerine kilitli",
+        "staleStatus": "{{target}} üzerine kilitliydi, ancak o pencere artık yok. Yeniden kilitleyene kadar dikte, odaktaki pencereyi izler.",
+        "unknownTarget": "kilitli bir pencere",
+        "unlock": "Kilidi aç"
       },
       "typingTool": {
         "title": "Yazma Aracı",
@@ -802,6 +812,8 @@
     "modelLoadFailedUnknown": "bilinmeyen model",
     "pasteFailedTitle": "Metin yapıştırılamadı",
     "pasteFailed": "Metin etkin uygulamaya yapıştırılamadı.",
+    "targetLockLostTitle": "Kilitli pencere kayboldu",
+    "targetLockLost": "Kilitlediğiniz pencere kapalı. AudioBud metni yapıştırmadı. Bir pencereyi tekrar kilitleyin.",
     "transcriptionErrorTitle": "Transkripsiyon başarısız oldu",
     "transcriptionErrorGeneric": "Kayıt yazıya dökülemedi. Tekrar deneyin veya farklı bir model seçin.",
     "transcriptionTimeoutTitle": "Transkripsiyon zaman aşımına uğradı",
@@ -818,7 +830,12 @@
     "recording": "Kaydediliyor",
     "cancel": "Kaydı iptal et",
     "raw": "HAM",
-    "rawHint": "Ham transkript modu"
+    "rawHint": "Ham transkript modu",
+    "lockedTo": "→ {{target}}",
+    "lockedToHint": "Dikte {{target}} üzerine kilitli. Kilidi açmak için tıklayın.",
+    "lockedToUnknown": "kilitli bir pencere",
+    "lockStale": "Kilit kayboldu",
+    "lockStaleHint": "Kilitli pencere kapandı. Kapatmak için tıklayın."
   },
   "critters": {
     "frog": "Kurbağa"

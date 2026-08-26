@@ -14,7 +14,8 @@
     "showOverlay": "Zobrazit překryv",
     "outputMode": "Režim výstupu",
     "formatted": "Formátováno",
-    "rawTranscript": "Surový přepis"
+    "rawTranscript": "Surový přepis",
+    "lockToWindow": "Zamknout na okno"
   },
   "sidebar": {
     "navLabel": "Sekce nastavení",
@@ -349,6 +350,15 @@
           "externalScript": "Externí skript"
         },
         "externalScriptPlaceholder": "/cesta/k/vasemu/skriptu.sh"
+      },
+      "outputTargetLock": {
+        "title": "Zámek cílového okna",
+        "description": "Když je zamčeno, každý diktát se doručí do okna, které jste zamkli, místo do aktuálně aktivního okna.",
+        "unlockedStatus": "Nezamčeno. Diktát sleduje aktivní okno.",
+        "lockedStatus": "Zamčeno na {{target}}",
+        "staleStatus": "Bylo zamčeno na {{target}}, ale toto okno už neexistuje. Diktát sleduje aktivní okno, dokud znovu nezamknete.",
+        "unknownTarget": "zamčené okno",
+        "unlock": "Odemknout"
       },
       "typingTool": {
         "title": "Nástroj pro psaní",
@@ -804,6 +814,8 @@
     "modelLoadFailedUnknown": "neznámý model",
     "pasteFailedTitle": "Vložení textu se nezdařilo",
     "pasteFailed": "Text nebylo možné vložit do aktivní aplikace.",
+    "targetLockLostTitle": "Zamčené okno zmizelo",
+    "targetLockLost": "Okno, které jste zamkli, je zavřené. AudioBud text nevložil. Zamkněte okno znovu.",
     "transcriptionErrorTitle": "Přepis se nezdařil",
     "transcriptionErrorGeneric": "Nahrávku se nepodařilo přepsat. Zkuste to znovu nebo vyberte jiný model.",
     "transcriptionTimeoutTitle": "Vypršel časový limit přepisu",
@@ -820,7 +832,12 @@
     "recording": "Nahrávání",
     "cancel": "Zrušit nahrávání",
     "raw": "RAW",
-    "rawHint": "Režim surového přepisu"
+    "rawHint": "Režim surového přepisu",
+    "lockedTo": "→ {{target}}",
+    "lockedToHint": "Diktát je zamčen na {{target}}. Kliknutím odemkněte.",
+    "lockedToUnknown": "zamčené okno",
+    "lockStale": "Zámek ztracen",
+    "lockStaleHint": "Zamčené okno bylo zavřeno. Kliknutím zavřete."
   },
   "critters": {
     "frog": "Žába"

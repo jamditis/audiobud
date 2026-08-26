@@ -14,7 +14,8 @@
     "showOverlay": "إظهار التراكب",
     "outputMode": "وضع الإخراج",
     "formatted": "منسّق",
-    "rawTranscript": "نص خام"
+    "rawTranscript": "نص خام",
+    "lockToWindow": "قفل على النافذة"
   },
   "sidebar": {
     "navLabel": "أقسام الإعدادات",
@@ -349,6 +350,15 @@
           "externalScript": "نص برمجي خارجي"
         },
         "externalScriptPlaceholder": "/path/to/your/script.sh"
+      },
+      "outputTargetLock": {
+        "title": "قفل وجهة الإخراج",
+        "description": "أثناء القفل، يتم إرسال كل إملاء إلى النافذة التي قفلتها بدلاً من النافذة النشطة حاليًا.",
+        "unlockedStatus": "غير مقفل. يتبع الإملاء النافذة النشطة.",
+        "lockedStatus": "مقفل على {{target}}",
+        "staleStatus": "كان مقفلاً على {{target}}، لكن تلك النافذة لم تعد موجودة. يتبع الإملاء النافذة النشطة حتى تقفل مرة أخرى.",
+        "unknownTarget": "نافذة مقفلة",
+        "unlock": "إلغاء القفل"
       },
       "typingTool": {
         "title": "أداة الكتابة",
@@ -810,6 +820,8 @@
     "modelLoadFailedUnknown": "نموذج غير معروف",
     "pasteFailedTitle": "فشل لصق النص",
     "pasteFailed": "تعذر لصق النص في التطبيق النشط.",
+    "targetLockLostTitle": "النافذة المقفلة اختفت",
+    "targetLockLost": "النافذة التي قفلتها مغلقة. لم يلصق AudioBud النص. اقفل نافذة مرة أخرى.",
     "transcriptionErrorTitle": "فشل التفريغ",
     "transcriptionErrorGeneric": "تعذر نسخ التسجيل. حاول مرة أخرى أو اختر نموذجًا مختلفًا.",
     "transcriptionTimeoutTitle": "انتهت مهلة التفريغ",
@@ -826,7 +838,12 @@
     "recording": "جارٍ التسجيل",
     "cancel": "إلغاء التسجيل",
     "raw": "خام",
-    "rawHint": "وضع النص الخام"
+    "rawHint": "وضع النص الخام",
+    "lockedTo": "→ {{target}}",
+    "lockedToHint": "الإملاء مقفل على {{target}}. انقر لإلغاء القفل.",
+    "lockedToUnknown": "نافذة مقفلة",
+    "lockStale": "فُقد القفل",
+    "lockStaleHint": "أُغلقت النافذة المقفلة. انقر للتجاهل."
   },
   "critters": {
     "frog": "ضفدع"

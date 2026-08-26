@@ -14,7 +14,8 @@
     "showOverlay": "Overlay anzeigen",
     "outputMode": "Ausgabemodus",
     "formatted": "Formatiert",
-    "rawTranscript": "Rohtranskript"
+    "rawTranscript": "Rohtranskript",
+    "lockToWindow": "Auf Fenster sperren"
   },
   "sidebar": {
     "navLabel": "Einstellungsbereiche",
@@ -349,6 +350,15 @@
           "externalScript": "Externes Skript"
         },
         "externalScriptPlaceholder": "/pfad/zu/ihrem/skript.sh"
+      },
+      "outputTargetLock": {
+        "title": "Ausgabeziel-Sperre",
+        "description": "Solange gesperrt, wird jedes Diktat an das gesperrte Fenster gesendet statt an das gerade fokussierte.",
+        "unlockedStatus": "Nicht gesperrt. Das Diktat folgt dem fokussierten Fenster.",
+        "lockedStatus": "Gesperrt auf {{target}}",
+        "staleStatus": "War auf {{target}} gesperrt, aber dieses Fenster existiert nicht mehr. Das Diktat folgt dem fokussierten Fenster, bis du erneut sperrst.",
+        "unknownTarget": "ein gesperrtes Fenster",
+        "unlock": "Entsperren"
       },
       "typingTool": {
         "title": "Eingabetool",
@@ -802,6 +812,8 @@
     "modelLoadFailedUnknown": "unbekanntes Modell",
     "pasteFailedTitle": "Text konnte nicht eingefügt werden",
     "pasteFailed": "Der Text konnte nicht in die aktive Anwendung eingefügt werden.",
+    "targetLockLostTitle": "Gesperrtes Fenster ist verschwunden",
+    "targetLockLost": "Das von dir gesperrte Fenster ist geschlossen. AudioBud hat den Text nicht eingefügt. Sperre erneut ein Fenster.",
     "transcriptionErrorTitle": "Transkription fehlgeschlagen",
     "transcriptionErrorGeneric": "Die Aufnahme konnte nicht transkribiert werden. Versuche es erneut oder wähle ein anderes Modell.",
     "transcriptionTimeoutTitle": "Zeitüberschreitung bei der Transkription",
@@ -818,7 +830,12 @@
     "recording": "Aufnahme",
     "cancel": "Aufnahme abbrechen",
     "raw": "RAW",
-    "rawHint": "Rohtranskript-Modus"
+    "rawHint": "Rohtranskript-Modus",
+    "lockedTo": "→ {{target}}",
+    "lockedToHint": "Das Diktat ist auf {{target}} gesperrt. Klicken zum Entsperren.",
+    "lockedToUnknown": "ein gesperrtes Fenster",
+    "lockStale": "Sperre verloren",
+    "lockStaleHint": "Das gesperrte Fenster wurde geschlossen. Klicken zum Ausblenden."
   },
   "critters": {
     "frog": "Frosch"

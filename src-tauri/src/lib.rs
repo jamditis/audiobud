@@ -678,8 +678,13 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::personalization::reset_personalization,
             commands::personalization::export_personalization,
             helpers::clamshell::is_laptop,
+            output_target::backend::get_output_target_lock,
+            output_target::backend::release_output_target_lock,
         ])
-        .events(collect_events![managers::history::HistoryUpdatePayload,])
+        .events(collect_events![
+            managers::history::HistoryUpdatePayload,
+            output_target::OutputTargetLockEvent,
+        ])
 }
 
 #[cfg(any(debug_assertions, test))]

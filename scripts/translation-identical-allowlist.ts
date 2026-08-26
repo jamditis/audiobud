@@ -14,6 +14,12 @@ export type IdenticalValueAllowlist = Readonly<
 // Binding each path to its current English source makes an English rewrite
 // fail closed until the exception is reviewed again.
 export const IDENTICAL_VALUE_ALLOWLIST = {
+  // An arrow plus the {{target}} interpolation token -- no translatable words,
+  // so it is identical by construction in every locale (#255).
+  "overlay.lockedTo": {
+    source: "→ {{target}}",
+    locales: "*",
+  },
   "onboarding.models.breeze-asr.name": {
     source: "Breeze ASR",
     locales: "*",

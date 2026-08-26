@@ -14,7 +14,8 @@
     "showOverlay": "Mostrar superposición",
     "outputMode": "Modo de salida",
     "formatted": "Con formato",
-    "rawTranscript": "Transcripción sin formato"
+    "rawTranscript": "Transcripción sin formato",
+    "lockToWindow": "Bloquear a ventana"
   },
   "sidebar": {
     "navLabel": "Secciones de configuración",
@@ -349,6 +350,15 @@
           "externalScript": "Script externo"
         },
         "externalScriptPlaceholder": "/ruta/a/su/script.sh"
+      },
+      "outputTargetLock": {
+        "title": "Bloqueo del destino de salida",
+        "description": "Mientras está bloqueado, cada dictado se envía a la ventana que bloqueaste en lugar de a la que esté activa.",
+        "unlockedStatus": "No bloqueado. El dictado sigue a la ventana activa.",
+        "lockedStatus": "Bloqueado en {{target}}",
+        "staleStatus": "Estaba bloqueado en {{target}}, pero esa ventana ya no existe. El dictado sigue a la ventana activa hasta que vuelvas a bloquear.",
+        "unknownTarget": "una ventana bloqueada",
+        "unlock": "Desbloquear"
       },
       "typingTool": {
         "title": "Herramienta de Escritura",
@@ -802,6 +812,8 @@
     "modelLoadFailedUnknown": "modelo desconocido",
     "pasteFailedTitle": "Error al pegar el texto",
     "pasteFailed": "No se pudo pegar el texto en la aplicación activa.",
+    "targetLockLostTitle": "La ventana bloqueada desapareció",
+    "targetLockLost": "La ventana que bloqueaste está cerrada. AudioBud no pegó el texto. Bloquea una ventana de nuevo.",
     "transcriptionErrorTitle": "La transcripción ha fallado",
     "transcriptionErrorGeneric": "No se pudo transcribir la grabación. Inténtalo de nuevo o elige otro modelo.",
     "transcriptionTimeoutTitle": "Se agotó el tiempo de la transcripción",
@@ -818,7 +830,12 @@
     "recording": "Grabando",
     "cancel": "Cancelar grabación",
     "raw": "RAW",
-    "rawHint": "Modo de transcripción sin formato"
+    "rawHint": "Modo de transcripción sin formato",
+    "lockedTo": "→ {{target}}",
+    "lockedToHint": "El dictado está bloqueado en {{target}}. Haz clic para desbloquear.",
+    "lockedToUnknown": "una ventana bloqueada",
+    "lockStale": "Bloqueo perdido",
+    "lockStaleHint": "La ventana bloqueada se cerró. Haz clic para descartar."
   },
   "critters": {
     "frog": "Rana"
