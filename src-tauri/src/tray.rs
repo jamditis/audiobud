@@ -292,6 +292,15 @@ pub fn update_tray_menu(app: &AppHandle, state: &TrayIconState, locale: Option<&
     } else {
         None
     };
+    // Derived from presence alone, before the labels below are moved into
+    // `target_lock_menu_label` -- `Option<WindowLabel>` is not `Copy`, so the
+    // id must be read out first rather than reconstructed from the label
+    // tuples after they are gone.
+    #[cfg(target_os = "windows")]
+    let target_lock_item_id = target_lock_menu_id(
+        target_lock_locked_label.is_some(),
+        target_lock_lost_label.is_some(),
+    );
     #[cfg(target_os = "windows")]
     let (target_lock_label, target_lock_checked) = target_lock_menu_label(
         target_lock_locked_label,
@@ -299,8 +308,6 @@ pub fn update_tray_menu(app: &AppHandle, state: &TrayIconState, locale: Option<&
         &strings.lock_to_window,
         &strings.lock_lost,
     );
-    #[cfg(target_os = "windows")]
-    let target_lock_item_id = target_lock_menu_id(target_lock_locked_label, target_lock_lost_label);
     #[cfg(target_os = "windows")]
     let toggle_target_lock_i = CheckMenuItem::with_id(
         app,
@@ -472,15 +479,17 @@ fn target_lock_menu_label(
 /// be read as a request to capture a fresh lock on whatever now holds the
 /// foreground -- which is what the shared `"toggle:"` id would have done,
 /// since `toggle_target_lock` cannot tell "click meant unlock" apart from
-/// "click meant lock" once `PinnedTarget` is already empty. Fed the same
-/// already-resolved `locked`/`lost` pair as `target_lock_menu_label`, for the
-/// same reason: no window system needed to test the branch.
+/// "click meant lock" once `PinnedTarget` is already empty.
+///
+/// Takes presence only, as plain `bool`s, rather than the labels themselves:
+/// the id never depends on what the labels say, and owning
+/// `Option<WindowLabel>` here (a non-`Copy` pair of `Option<String>`) would
+/// otherwise force the caller to choose between moving the labels into this
+/// call and moving them into `target_lock_menu_label`'s -- there is only one
+/// of each to give away.
 #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
-fn target_lock_menu_id(
-    locked: Option<crate::output_target::WindowLabel>,
-    lost: Option<crate::output_target::WindowLabel>,
-) -> &'static str {
-    if locked.is_none() && lost.is_some() {
+fn target_lock_menu_id(locked_is_some: bool, lost_is_some: bool) -> &'static str {
+    if !locked_is_some && lost_is_some {
         "dismiss:target_lock_lost"
     } else {
         "toggle:target_lock"
@@ -614,24 +623,15 @@ mod tests {
 
     #[test]
     fn target_lock_menu_id_when_unlocked_and_never_lost_is_the_toggle() {
-        assert_eq!(target_lock_menu_id(None, None), "toggle:target_lock");
+        assert_eq!(target_lock_menu_id(false, false), "toggle:target_lock");
     }
 
     #[test]
     fn target_lock_menu_id_when_locked_is_the_toggle() {
         // A click on a checked, actively-locked item must still unlock through
-        // the normal toggle path, whatever `lost` happens to hold.
-        assert_eq!(
-            target_lock_menu_id(Some((Some("Terminal".to_string()), None)), None),
-            "toggle:target_lock"
-        );
-        assert_eq!(
-            target_lock_menu_id(
-                Some((Some("Terminal".to_string()), None)),
-                Some((Some("Old window".to_string()), None)),
-            ),
-            "toggle:target_lock"
-        );
+        // the normal toggle path, whatever `lost_is_some` happens to be.
+        assert_eq!(target_lock_menu_id(true, false), "toggle:target_lock");
+        assert_eq!(target_lock_menu_id(true, true), "toggle:target_lock");
     }
 
     #[test]
@@ -640,10 +640,7 @@ mod tests {
         // be dispatched through "toggle:target_lock", which would read as a
         // request to capture a fresh lock on whatever now holds the
         // foreground rather than dismiss the notice.
-        assert_eq!(
-            target_lock_menu_id(None, Some((Some("Terminal".to_string()), None))),
-            "dismiss:target_lock_lost"
-        );
+        assert_eq!(target_lock_menu_id(false, true), "dismiss:target_lock_lost");
     }
 
     #[test]
