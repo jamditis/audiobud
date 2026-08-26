@@ -681,6 +681,26 @@ fn should_send_auto_submit(auto_submit: bool, paste_method: PasteMethod) -> bool
     auto_submit && paste_method != PasteMethod::None
 }
 
+/// Whether *delivering* `paste_method`, with `auto_submit` as currently
+/// configured, needs a focused window -- as opposed to
+/// [`PasteMethod::requires_focus`], which only answers for the paste step
+/// itself and knows nothing about auto-submit.
+///
+/// `ExternalScript` doesn't touch a window to run the script, but when
+/// auto-submit is on, `paste()` still calls `send_return_key` after it
+/// (gated by [`should_send_auto_submit`]), injecting Enter/Ctrl-Enter/Cmd-
+/// Enter into whatever window is focused at that moment. So the *delivery*
+/// requires focus even though the *method* alone does not (#162). `None` is
+/// the only paste method `should_send_auto_submit` exempts from auto-submit,
+/// so it remains the only method whose delivery never requires focus.
+///
+/// Callers that decide whether a focus-dependent feature like target-lock
+/// (#120) can be honored -- rather than whether the paste step alone can --
+/// must use this, not `PasteMethod::requires_focus()` on its own.
+pub(crate) fn requires_focus_for_delivery(paste_method: PasteMethod, auto_submit: bool) -> bool {
+    paste_method.requires_focus() || should_send_auto_submit(auto_submit, paste_method)
+}
+
 pub fn paste(text: String, app_handle: AppHandle) -> Result<(), String> {
     let settings = get_settings(&app_handle);
     let paste_method = settings.paste_method;
@@ -776,5 +796,49 @@ mod tests {
         assert!(should_send_auto_submit(true, PasteMethod::Direct));
         assert!(should_send_auto_submit(true, PasteMethod::CtrlShiftV));
         assert!(should_send_auto_submit(true, PasteMethod::ShiftInsert));
+    }
+
+    #[test]
+    fn external_script_delivery_requires_focus_when_auto_submit_is_on() {
+        // The method itself never touches a window, but with auto-submit
+        // enabled, paste() still injects a return keystroke into the
+        // focused window after the script runs -- so the *delivery*
+        // requires focus even though ExternalScript::requires_focus() does
+        // not. Regression test for the case a target-lock (#120) consumer
+        // must not treat as focus-independent.
+        assert!(!PasteMethod::ExternalScript.requires_focus());
+        assert!(requires_focus_for_delivery(
+            PasteMethod::ExternalScript,
+            true
+        ));
+    }
+
+    #[test]
+    fn external_script_delivery_does_not_require_focus_without_auto_submit() {
+        assert!(!requires_focus_for_delivery(
+            PasteMethod::ExternalScript,
+            false
+        ));
+    }
+
+    #[test]
+    fn none_delivery_never_requires_focus() {
+        // should_send_auto_submit special-cases None, so it stays
+        // focus-independent even with auto-submit on.
+        assert!(!requires_focus_for_delivery(PasteMethod::None, true));
+        assert!(!requires_focus_for_delivery(PasteMethod::None, false));
+    }
+
+    #[test]
+    fn focus_requiring_methods_require_focus_for_delivery_regardless_of_auto_submit() {
+        for method in [
+            PasteMethod::Direct,
+            PasteMethod::CtrlV,
+            PasteMethod::CtrlShiftV,
+            PasteMethod::ShiftInsert,
+        ] {
+            assert!(requires_focus_for_delivery(method, true));
+            assert!(requires_focus_for_delivery(method, false));
+        }
     }
 }

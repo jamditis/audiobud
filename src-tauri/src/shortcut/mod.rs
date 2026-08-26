@@ -870,25 +870,27 @@ pub async fn change_paste_method_setting(app: AppHandle, method: String) -> Resu
             );
         }
     }
-    // A method that cannot act on a focused window (`requires_focus() ==
-    // false`, e.g. None or ExternalScript -- see #162) makes any active
-    // target-lock (#120) meaningless: there is no window left to keep pinning.
-    // Consulting the capability instead of matching `PasteMethod::None |
-    // PasteMethod::ExternalScript` here means a future no-window variant is
-    // covered automatically rather than by remembering to extend this match.
-    if !parsed.requires_focus() {
+    let mut settings = settings::get_settings(&app);
+
+    // A method whose DELIVERY cannot touch a focused window makes any active
+    // target-lock (#120) meaningless: there is no window left to keep
+    // pinning. This is `clipboard::requires_focus_for_delivery`, not
+    // `PasteMethod::requires_focus()` alone -- ExternalScript's method step
+    // is window-independent, but with auto-submit on, delivery still injects
+    // a return keystroke into the focused window afterward, so clearing the
+    // lock there would let that keystroke land in the wrong app (#162).
+    if !crate::clipboard::requires_focus_for_delivery(parsed, settings.auto_submit) {
         if let Some(pinned) = app.try_state::<output_target::PinnedTarget>() {
             if pinned.is_locked() {
                 info!(
-                    "Paste method '{}' cannot target a focused window; clearing the active target-lock",
-                    method
+                    "Paste method '{}' (auto_submit={}) cannot target a focused window; clearing the active target-lock",
+                    method, settings.auto_submit
                 );
                 pinned.unlock();
             }
         }
     }
 
-    let mut settings = settings::get_settings(&app);
     settings.paste_method = parsed;
     settings::write_settings(&app, settings);
     Ok(())
