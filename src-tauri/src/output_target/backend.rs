@@ -18,7 +18,7 @@
 //! [`CaptureError::Unsupported`], so no lock can ever be taken and the rest is
 //! unreachable; it still fails closed rather than type somewhere unasked.
 
-use log::{debug, info, warn};
+use log::{info, warn};
 use serde::{Deserialize, Serialize};
 use specta::Type;
 use tauri::{AppHandle, Emitter, Manager};
@@ -464,17 +464,15 @@ pub fn announce_delivered(app: &AppHandle, identity: WindowIdentity, source: Del
     // of the usual quick fade meant for a plain paste.
     crate::overlay::mark_delivery_confirmation_pending();
     // The window title routinely carries sensitive context -- document names,
-    // page titles, client names -- so it stays out of the persistent, default-
-    // level handy.log; only the handle and app/process name, which is already
-    // what the lock/unlock events log elsewhere, are logged at `info`. The
-    // title is still available at `debug` for anyone who has opted into that.
+    // page titles, client names -- and the app's default log_level (Debug)
+    // admits everything down to `debug!` into the persistent handy.log, so
+    // `debug!` is not an opt-in tier here (#279 review round 3): the title is
+    // left out of the log entirely, not merely demoted. Only the handle and
+    // app/process name, which is already what the lock/unlock events log
+    // elsewhere, are logged.
     info!(
         "Transcript delivered to window {:#x} (app: {:?})",
         identity.handle.0, app_name
-    );
-    debug!(
-        "Transcript delivered to window {:#x} title: {:?}",
-        identity.handle.0, title
     );
     let _ = TranscriptDeliveredEvent {
         app: app_name,

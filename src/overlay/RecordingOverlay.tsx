@@ -107,6 +107,16 @@ const RecordingOverlay: React.FC = () => {
       // tray/global-shortcut flow -- the settings window is usually closed --
       // so it is where this confirmation has to land, not only the toast in
       // App.tsx's hidden webview.
+      //
+      // This does not cover `overlay_position: "none"` (#279 review round 3):
+      // `show_overlay_state` (src-tauri/src/overlay.rs) never shows the native
+      // overlay window in that mode, so setting React state here updates a
+      // webview nothing makes visible -- no confirmation surface exists for
+      // that combination today. That is a deliberate scope limit, not a
+      // silent failure: adding one needs either a new dependency (a native OS
+      // notification plugin, not currently in this project) or a UX decision
+      // this PR is not the place to make, so it is left to and tracked by
+      // issue #274 rather than solved narrowly here.
       const unlistenDelivered = await events.transcriptDeliveredEvent.listen(
         (event) => {
           const name = truncateName(
