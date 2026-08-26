@@ -183,23 +183,11 @@ pub fn resolve_paste_target(app: &AppHandle) -> Option<Delivery> {
     // resolve() clears the lock in the same step that reports LockLost.
     let locked_before = pinned.locked();
 
+    // resolve hands back the identity it validated under its own guard, so no
+    // second read of the lock can slip a different window in between.
     match pinned.resolve(window_is_alive) {
-        super::Resolved::Deliver(super::OutputTarget::Foreground) => Some(Delivery::Foreground),
-        super::Resolved::Deliver(super::OutputTarget::Pinned(_)) => {
-            // resolve kept the lock, so the identity it just validated is still
-            // the one held. Falling back to Foreground if it somehow went is
-            // wrong -- that is the wrong-app paste this feature prevents.
-            match pinned.locked() {
-                Some(identity) => Some(Delivery::Pinned(identity)),
-                None => {
-                    let label = locked_before
-                        .map(|identity| lost_label(app, identity))
-                        .unwrap_or((None, None));
-                    announce_lock_lost(app, label);
-                    None
-                }
-            }
-        }
+        super::Resolved::Foreground => Some(Delivery::Foreground),
+        super::Resolved::Pinned(identity) => Some(Delivery::Pinned(identity)),
         super::Resolved::LockLost => {
             let label = locked_before
                 .map(|identity| lost_label(app, identity))
@@ -289,6 +277,30 @@ pub fn window_is_alive(locked: WindowIdentity) -> bool {
     super::identity_is_alive(locked, probe_identity)
 }
 
+/// Why the target could not be confirmed as the window about to receive input.
+///
+/// The two cases need opposite handling, so they are distinct: a window that has
+/// gone is a settled outcome the user has already been told about, while a
+/// window that is still there but will not come forward is a failure the user
+/// has to hear about, or a transcript disappears without a word (#120).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum FocusLost {
+    /// The target window has closed. Its lock is dropped and the notice sent.
+    TargetGone,
+    /// The window is alive, but the system would not bring it forward. The lock
+    /// still stands, so a retry can work.
+    ActivationRefused(String),
+}
+
+impl std::fmt::Display for FocusLost {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            FocusLost::TargetGone => write!(f, "the locked window closed during delivery"),
+            FocusLost::ActivationRefused(reason) => write!(f, "{}", reason),
+        }
+    }
+}
+
 /// Keeps the target in focus for the length of one delivery.
 ///
 /// Activation is a moment, not a lease: the user can click away, or a window can
@@ -310,17 +322,18 @@ impl<'a> FocusHold<'a> {
     /// Confirm the next keystroke will reach the intended window.
     ///
     /// Fails closed. If the target has closed, the lock is dropped, the notice
-    /// is sent, and this errors so the caller sends nothing more. If the target
-    /// merely lost focus, it is re-activated once; a refused activation is also
-    /// an error rather than typing into the window that took focus.
-    pub fn ensure(&self) -> Result<(), String> {
+    /// is sent, and this reports [`FocusLost::TargetGone`] so the caller sends
+    /// nothing more. If the target merely lost focus, it is re-activated once; a
+    /// refused activation is [`FocusLost::ActivationRefused`] rather than typing
+    /// into the window that took focus.
+    pub fn ensure(&self) -> Result<(), FocusLost> {
         let Some(target) = self.target else {
             return Ok(());
         };
 
         if !window_is_alive(target) {
             drop_lock_for(self.app, target);
-            return Err("the locked window closed during delivery".to_string());
+            return Err(FocusLost::TargetGone);
         }
 
         if foreground_is(target) {
@@ -328,7 +341,7 @@ impl<'a> FocusHold<'a> {
         }
 
         warn!("Target window lost focus mid-delivery; re-activating it");
-        activate_target(target)
+        activate_target(target).map_err(FocusLost::ActivationRefused)
     }
 }
 
@@ -339,18 +352,26 @@ impl<'a> FocusHold<'a> {
 /// the paste path waits on the Enigo mutex in between, and Windows recycles
 /// handle values, so a window that died in that gap could otherwise be
 /// activated by a handle that now belongs to something else (#254).
+/// A refused activation is reported as [`FocusLost::ActivationRefused`], not as
+/// a suppression: the window is still there, so the delivery failed rather than
+/// being called off, and the caller must say so instead of dropping the
+/// transcript quietly.
 pub fn borrow_focus<T>(
     app: &AppHandle,
     target: WindowIdentity,
     action: impl FnOnce() -> T,
-) -> Result<Borrowed<T>, String> {
+) -> Result<Borrowed<T>, FocusLost> {
     if !window_is_alive(target) {
         drop_lock_for(app, target);
         return Ok(Borrowed::Suppressed);
     }
 
-    let previous = foreground_window();
-    activate_target(target)?;
+    // The whole identity of the window being borrowed from, not just its
+    // handle: it can close while the transcript is being delivered, and handing
+    // the foreground back through a handle Windows has since recycled would
+    // raise a window the user never had (#254).
+    let previous = foreground_identity();
+    activate_target(target).map_err(FocusLost::ActivationRefused)?;
     let outcome = action();
     restore_foreground(previous, target);
 
@@ -359,20 +380,20 @@ pub fn borrow_focus<T>(
 
 #[cfg(windows)]
 pub use imp::{
-    activate_target, capture_foreground_window, foreground_is, foreground_window, probe_identity,
+    activate_target, capture_foreground_window, foreground_identity, foreground_is, probe_identity,
     restore_foreground,
 };
 
 #[cfg(not(windows))]
 pub use fallback::{
-    activate_target, capture_foreground_window, foreground_is, foreground_window, probe_identity,
+    activate_target, capture_foreground_window, foreground_identity, foreground_is, probe_identity,
     restore_foreground,
 };
 
 #[cfg(windows)]
 mod imp {
     use super::{CaptureError, CaptureSource, WindowIdentity, WindowLabel};
-    use crate::output_target::{is_eligible_target, WindowFacts, WindowHandle};
+    use crate::output_target::{class_fingerprint, is_eligible_target, WindowFacts, WindowHandle};
     use log::warn;
     use std::ffi::c_void;
     use std::time::Duration;
@@ -448,21 +469,23 @@ mod imp {
         }
     }
 
-    /// The process and thread that own `handle` right now, or `None` if no
-    /// window has that handle any more.
-    pub fn probe_identity(handle: WindowHandle) -> Option<(u32, u32)> {
-        identity_of(to_hwnd(handle)).map(|w| (w.process_id, w.thread_id))
+    /// The identity of whatever window holds `handle` right now, or `None` if
+    /// no window holds it any more. Shared by the target lock and the picker
+    /// (#124) so both judge a handle the same way.
+    pub fn probe_identity(handle: WindowHandle) -> Option<WindowIdentity> {
+        identity_of(to_hwnd(handle))
     }
 
-    /// The window that currently holds the foreground, if any.
-    pub fn foreground_window() -> Option<WindowHandle> {
-        let hwnd = unsafe { GetForegroundWindow() };
-        (!hwnd.0.is_null()).then(|| from_hwnd(hwnd))
+    /// The window that currently holds the foreground, with its identity, if
+    /// there is one.
+    pub fn foreground_identity() -> Option<WindowIdentity> {
+        identity_of(unsafe { GetForegroundWindow() })
     }
 
     /// Whether `target` is the window that currently holds the foreground.
     pub fn foreground_is(target: WindowIdentity) -> bool {
-        foreground_window() == Some(target.handle)
+        let hwnd = unsafe { GetForegroundWindow() };
+        !hwnd.0.is_null() && from_hwnd(hwnd) == target.handle
     }
 
     /// Bring the locked window to the foreground.
@@ -470,17 +493,25 @@ mod imp {
         activate(to_hwnd(target.handle))
     }
 
-    /// Hand the foreground back to whatever held it before the borrow. The
-    /// transcript is already delivered by this point, so a failed hand-back is
-    /// reported, not propagated.
-    pub fn restore_foreground(previous: Option<WindowHandle>, target: WindowIdentity) {
+    /// Hand the foreground back to whatever held it before the borrow.
+    ///
+    /// The window is re-validated first: it may have closed while the transcript
+    /// was being delivered, and Windows recycles handles, so activating the bare
+    /// handle could raise an unrelated window instead (#254). The transcript is
+    /// already delivered by this point, so a hand-back that is skipped or fails
+    /// is reported, not propagated.
+    pub fn restore_foreground(previous: Option<WindowIdentity>, target: WindowIdentity) {
         let Some(previous) = previous else {
             return;
         };
-        if previous == target.handle {
+        if previous.handle == target.handle {
             return;
         }
-        if let Err(e) = activate(to_hwnd(previous)) {
+        if !super::window_is_alive(previous) {
+            warn!("Previous foreground window is gone; leaving focus where it is");
+            return;
+        }
+        if let Err(e) = activate(to_hwnd(previous.handle)) {
             warn!("Failed to restore the previous foreground window: {}", e);
         }
     }
@@ -560,6 +591,9 @@ mod imp {
             handle: from_hwnd(hwnd),
             process_id,
             thread_id,
+            // Recorded here, at every capture and every probe alike, so the two
+            // are always comparable (#254).
+            class: class_fingerprint(&class_name_of(hwnd)),
         })
     }
 
@@ -658,11 +692,11 @@ mod fallback {
 
     /// Unreachable while capture is unsupported. `None` reads as "not alive",
     /// which drops any lock that somehow exists rather than pasting into it.
-    pub fn probe_identity(_handle: WindowHandle) -> Option<(u32, u32)> {
+    pub fn probe_identity(_handle: WindowHandle) -> Option<WindowIdentity> {
         None
     }
 
-    pub fn foreground_window() -> Option<WindowHandle> {
+    pub fn foreground_identity() -> Option<WindowIdentity> {
         None
     }
 
@@ -678,7 +712,7 @@ mod fallback {
         Err("window targeting is not supported on this platform".to_string())
     }
 
-    pub fn restore_foreground(_previous: Option<WindowHandle>, _target: WindowIdentity) {}
+    pub fn restore_foreground(_previous: Option<WindowIdentity>, _target: WindowIdentity) {}
 
     /// No label backend on this platform yet (#119, #255): nothing can be
     /// locked, so this is unreachable, but it reports "unknown" rather than
