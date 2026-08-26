@@ -15,7 +15,8 @@
     "outputMode": "Режим виводу",
     "formatted": "З форматуванням",
     "rawTranscript": "Сира транскрипція",
-    "lockToWindow": "Закріпити за вікном"
+    "lockToWindow": "Закріпити за вікном",
+    "lockLost": "Блокування втрачено"
   },
   "sidebar": {
     "navLabel": "Розділи налаштувань",

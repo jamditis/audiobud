@@ -15,7 +15,8 @@
     "outputMode": "Ausgabemodus",
     "formatted": "Formatiert",
     "rawTranscript": "Rohtranskript",
-    "lockToWindow": "Auf Fenster fixieren"
+    "lockToWindow": "Auf Fenster fixieren",
+    "lockLost": "Fixierung verloren"
   },
   "sidebar": {
     "navLabel": "Einstellungsbereiche",

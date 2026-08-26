@@ -15,7 +15,8 @@
     "outputMode": "Modalità di output",
     "formatted": "Formattato",
     "rawTranscript": "Trascrizione grezza",
-    "lockToWindow": "Blocca su una finestra"
+    "lockToWindow": "Blocca su una finestra",
+    "lockLost": "Blocco perso"
   },
   "sidebar": {
     "navLabel": "Sezioni delle impostazioni",

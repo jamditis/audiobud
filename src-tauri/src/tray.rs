@@ -267,32 +267,45 @@ pub fn update_tray_menu(app: &AppHandle, state: &TrayIconState, locale: Option<&
     // Target lock (#120), Windows-only for now (#119). Checked while a window is
     // locked; the `toggle:` handler in lib.rs flips it and rebuilds the menu.
     // The label carries the locked window's name too (#255) so the tray never
-    // disagrees with the overlay/settings indicator about what is locked.
+    // disagrees with the overlay/settings indicator about what is locked --
+    // including while the lock is stale (#266 review): `LostLockNotice` is
+    // consulted only when nothing is locked, so the tray keeps naming the
+    // window that was just lost instead of silently reverting to the plain
+    // unlocked item the instant `PinnedTarget` clears.
+    //
+    // `locked()` is read exactly once into `target_lock_identity` and both the
+    // label and the checkmark derive from that one value (#266 review): two
+    // separate reads here could tear if a delivery on another thread dropped
+    // the lock in between them, showing a checked item with a stale label or
+    // vice versa.
     #[cfg(target_os = "windows")]
-    let target_lock_state = app.try_state::<crate::output_target::PinnedTarget>();
+    let target_lock_identity = app
+        .try_state::<crate::output_target::PinnedTarget>()
+        .and_then(|lock| lock.locked());
     #[cfg(target_os = "windows")]
-    let target_lock_label = target_lock_state
-        .as_ref()
-        .and_then(|lock| lock.locked())
-        .map(|window| {
-            let (app_name, title) = crate::output_target::backend::window_label(window);
-            let name = app_name
-                .or(title)
-                .unwrap_or_else(|| strings.lock_to_window.clone());
-            format!(
-                "{} — {}",
-                strings.lock_to_window,
-                truncate_tray_label(&name, 28)
-            )
-        })
-        .unwrap_or_else(|| strings.lock_to_window.clone());
+    let target_lock_locked_label =
+        target_lock_identity.map(crate::output_target::backend::window_label);
+    #[cfg(target_os = "windows")]
+    let target_lock_lost_label = if target_lock_locked_label.is_none() {
+        app.try_state::<crate::output_target::LostLockNotice>()
+            .and_then(|notice| notice.get())
+    } else {
+        None
+    };
+    #[cfg(target_os = "windows")]
+    let (target_lock_label, target_lock_checked) = target_lock_menu_label(
+        target_lock_locked_label,
+        target_lock_lost_label,
+        &strings.lock_to_window,
+        &strings.lock_lost,
+    );
     #[cfg(target_os = "windows")]
     let toggle_target_lock_i = CheckMenuItem::with_id(
         app,
         "toggle:target_lock",
         &target_lock_label,
         true,
-        target_lock_state.is_some_and(|lock| lock.is_locked()),
+        target_lock_checked,
         None::<&str>,
     )
     .expect("failed to create target-lock toggle item");
@@ -405,6 +418,51 @@ fn truncate_tray_label(name: &str, max_chars: usize) -> String {
     }
 }
 
+/// Derive the target-lock tray item's label and checkmark from a single read
+/// of the lock state (#266 review).
+///
+/// Platform-independent and deliberately fed already-resolved data rather
+/// than a `WindowIdentity` or a `PinnedTarget`/`LostLockNotice` handle, so the
+/// tearing fix -- one read, both outputs derived from it -- and the lost-label
+/// composition are unit-testable without a window system.
+///
+/// `locked` is the currently-locked window's label, if any. `lost` is
+/// consulted only when nothing is locked, and is the tray's memory of the
+/// most recent loss (`LostLockNotice`): showing it keeps the tray agreeing
+/// with the overlay's stale indicator instead of silently reverting to the
+/// plain unlocked item the instant the lock is dropped.
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+fn target_lock_menu_label(
+    locked: Option<crate::output_target::WindowLabel>,
+    lost: Option<crate::output_target::WindowLabel>,
+    lock_to_window: &str,
+    lock_lost: &str,
+) -> (String, bool) {
+    fn name_or(app_name: Option<String>, title: Option<String>, fallback: &str) -> String {
+        app_name.or(title).unwrap_or_else(|| fallback.to_string())
+    }
+
+    match locked {
+        Some((app_name, title)) => {
+            let name = name_or(app_name, title, lock_to_window);
+            (
+                format!("{} — {}", lock_to_window, truncate_tray_label(&name, 28)),
+                true,
+            )
+        }
+        None => match lost {
+            Some((app_name, title)) => {
+                let name = name_or(app_name, title, lock_lost);
+                (
+                    format!("{} — {}", lock_lost, truncate_tray_label(&name, 28)),
+                    false,
+                )
+            }
+            None => (lock_to_window.to_string(), false),
+        },
+    }
+}
+
 fn last_transcript_text(entry: &HistoryEntry) -> &str {
     entry
         .post_processed_text
@@ -454,7 +512,7 @@ pub fn copy_last_transcript(app: &AppHandle) {
 
 #[cfg(test)]
 mod tests {
-    use super::{last_transcript_text, truncate_tray_label};
+    use super::{last_transcript_text, target_lock_menu_label, truncate_tray_label};
     use crate::managers::history::HistoryEntry;
 
     #[test]
@@ -467,6 +525,65 @@ mod tests {
         let long_name = "a".repeat(40);
         let truncated = truncate_tray_label(&long_name, 28);
         assert_eq!(truncated, format!("{}...", "a".repeat(28)));
+    }
+
+    #[test]
+    fn target_lock_menu_label_when_unlocked_and_never_lost() {
+        let (label, checked) = target_lock_menu_label(None, None, "Lock to window", "Lock lost");
+        assert_eq!(label, "Lock to window");
+        assert!(!checked);
+    }
+
+    #[test]
+    fn target_lock_menu_label_when_locked_ignores_any_lost_notice() {
+        // A `lost` value can only be stale leftover state here -- a fresh lock
+        // always clears the notice first (#266 review) -- but the derivation
+        // must still prefer `locked` over it rather than accidentally letting
+        // a leftover notice contradict an active lock.
+        let (label, checked) = target_lock_menu_label(
+            Some((Some("Terminal".to_string()), None)),
+            Some((Some("Old window".to_string()), None)),
+            "Lock to window",
+            "Lock lost",
+        );
+        assert_eq!(label, "Lock to window — Terminal");
+        assert!(checked);
+    }
+
+    #[test]
+    fn target_lock_menu_label_when_locked_falls_back_to_the_title() {
+        let (label, checked) = target_lock_menu_label(
+            Some((None, Some("Untitled document - Notepad".to_string()))),
+            None,
+            "Lock to window",
+            "Lock lost",
+        );
+        assert_eq!(label, "Lock to window — Untitled document - Notepad");
+        assert!(checked);
+    }
+
+    #[test]
+    fn target_lock_menu_label_when_stale_shows_the_lost_window_unchecked() {
+        // The core of #266's finding: the tray must keep naming the window
+        // that was lost, not silently revert to the plain unlocked label the
+        // instant `PinnedTarget` clears -- otherwise the tray and the
+        // overlay's stale indicator visibly disagree.
+        let (label, checked) = target_lock_menu_label(
+            None,
+            Some((Some("Terminal".to_string()), None)),
+            "Lock to window",
+            "Lock lost",
+        );
+        assert_eq!(label, "Lock lost — Terminal");
+        assert!(!checked);
+    }
+
+    #[test]
+    fn target_lock_menu_label_when_stale_with_no_name_falls_back_to_the_lost_word() {
+        let (label, checked) =
+            target_lock_menu_label(None, Some((None, None)), "Lock to window", "Lock lost");
+        assert_eq!(label, "Lock lost — Lock lost");
+        assert!(!checked);
     }
 
     #[test]

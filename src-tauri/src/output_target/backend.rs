@@ -19,7 +19,8 @@ use tauri::{AppHandle, Emitter, Manager};
 use tauri_specta::Event;
 
 use super::{
-    CaptureError, CaptureSource, LockToggle, OutputTargetLockEvent, PinnedTarget, WindowIdentity,
+    CaptureError, CaptureSource, LockToggle, LockedLabel, LostLockNotice, OutputTargetLockEvent,
+    PinnedTarget, WindowIdentity, WindowLabel,
 };
 
 /// Emitted when a pinned paste was suppressed because the locked window is gone
@@ -73,7 +74,20 @@ pub fn toggle_target_lock(app: &AppHandle, source: CaptureSource) {
                 "Output locked to window {:#x} (process {})",
                 window.handle.0, window.process_id
             );
-            let (app_name, title) = window_label(window);
+            // A fresh lock supersedes whatever the tray remembered about the
+            // last one going stale (#266 review).
+            if let Some(notice) = app.try_state::<LostLockNotice>() {
+                notice.clear();
+            }
+            // The window is guaranteed alive right now, which is the one
+            // moment its label is reliably queryable -- cache it so a later
+            // loss (#266 review) can still name it after it (and often its
+            // whole process) is gone.
+            let label = window_label(window);
+            if let Some(cache) = app.try_state::<LockedLabel>() {
+                cache.set(window, label.clone());
+            }
+            let (app_name, title) = label;
             let _ = OutputTargetLockEvent::Locked {
                 app: app_name,
                 title,
@@ -101,10 +115,22 @@ pub fn unlock_output_target(app: &AppHandle) {
     };
     if !pinned.is_locked() {
         // Nothing to release -- most often the frontend dismissing a stale
-        // ("lost") latch, which the backend already unlocked when it happened.
+        // ("lost") latch, which the backend already unlocked when it
+        // happened. The tray's own memory of that loss still needs clearing
+        // here, or it would keep showing "lock lost" after the overlay's
+        // latch was dismissed (#266 review).
+        let had_notice = app
+            .try_state::<LostLockNotice>()
+            .is_some_and(|notice| notice.clear());
+        if had_notice {
+            crate::tray::update_tray_menu(app, &crate::tray::current_tray_state(app), None);
+        }
         return;
     }
     pinned.unlock();
+    if let Some(notice) = app.try_state::<LostLockNotice>() {
+        notice.clear();
+    }
     info!("Output lock released from the indicator");
     let _ = OutputTargetLockEvent::Unlocked.emit(app);
     crate::tray::update_tray_menu(app, &crate::tray::current_tray_state(app), None);
@@ -166,14 +192,18 @@ pub fn resolve_paste_target(app: &AppHandle) -> Option<Delivery> {
             match pinned.locked() {
                 Some(identity) => Some(Delivery::Pinned(identity)),
                 None => {
-                    let label = locked_before.map(window_label).unwrap_or((None, None));
+                    let label = locked_before
+                        .map(|identity| lost_label(app, identity))
+                        .unwrap_or((None, None));
                     announce_lock_lost(app, label);
                     None
                 }
             }
         }
         super::Resolved::LockLost => {
-            let label = locked_before.map(window_label).unwrap_or((None, None));
+            let label = locked_before
+                .map(|identity| lost_label(app, identity))
+                .unwrap_or((None, None));
             announce_lock_lost(app, label);
             None
         }
@@ -191,14 +221,37 @@ pub use imp::window_label;
 #[cfg(not(windows))]
 pub use fallback::window_label;
 
+/// The label to report for a window that just turned out to be gone.
+///
+/// Prefers whatever [`LockedLabel`] cached for `identity` while the window
+/// was still alive: by the time a loss is discovered, `window_label` querying
+/// live routinely comes back `(None, None)` -- the window's `GetWindowTextW`
+/// fails outright, and often its whole owning process has exited too, so
+/// `OpenProcess` fails as well (#266 review). A live query is still the
+/// fallback for the rare case nothing was cached (state not yet managed, or
+/// this identity was never the one actually locked).
+fn lost_label(app: &AppHandle, identity: WindowIdentity) -> WindowLabel {
+    app.try_state::<LockedLabel>()
+        .and_then(|cache| cache.get(identity))
+        .unwrap_or_else(|| window_label(identity))
+}
+
 /// Tell the user the lock is gone, once, and put the tray and indicator
 /// surfaces back in step (#255).
 ///
 /// `label` is the locked window's last known app/title, read by the caller
 /// before the lock was dropped -- by the time this runs the lock is already
 /// gone, so this is the only chance to report who it was.
-fn announce_lock_lost(app: &AppHandle, label: (Option<String>, Option<String>)) {
+fn announce_lock_lost(app: &AppHandle, label: WindowLabel) {
     warn!("Locked window is gone; the transcript was not delivered to it");
+    // Remembered so the tray's own rebuild below, and every rebuild after it
+    // until the notice is dismissed or superseded, can still name the window
+    // that was lost -- otherwise the tray reverts to a plain unlocked item
+    // the instant this fires, while the overlay is still showing the same
+    // loss as a stale indicator (#266 review).
+    if let Some(notice) = app.try_state::<LostLockNotice>() {
+        notice.set(label.clone());
+    }
     let (app_name, title) = label;
     let _ = app.emit(TARGET_LOCK_LOST_EVENT, ());
     let _ = OutputTargetLockEvent::Lost {
@@ -223,12 +276,10 @@ fn drop_lock_for(app: &AppHandle, target: WindowIdentity) {
         .try_state::<PinnedTarget>()
         .is_some_and(|pinned| pinned.unlock_if(target));
     if cleared {
-        // The window died mid-delivery: best-effort re-resolve its label from
-        // the identity we still hold. GetWindowTextW will fail for a closed
-        // window, but the owning process can still be alive and named even
-        // after just its window closed, so this is worth attempting rather
-        // than reporting an unconditionally blank target.
-        announce_lock_lost(app, window_label(target));
+        // The window died mid-delivery: prefer the label cached from when it
+        // was locked (#266 review) over a fresh query, which routinely comes
+        // back empty for a window that just closed.
+        announce_lock_lost(app, lost_label(app, target));
     }
 }
 
@@ -320,7 +371,7 @@ pub use fallback::{
 
 #[cfg(windows)]
 mod imp {
-    use super::{CaptureError, CaptureSource, WindowIdentity};
+    use super::{CaptureError, CaptureSource, WindowIdentity, WindowLabel};
     use crate::output_target::{is_eligible_target, WindowFacts, WindowHandle};
     use log::warn;
     use std::ffi::c_void;
@@ -487,7 +538,7 @@ mod imp {
     /// window that closed between capture and lookup, or a process query that
     /// fails, contributes `None` for that half rather than failing the whole
     /// lookup.
-    pub fn window_label(identity: WindowIdentity) -> (Option<String>, Option<String>) {
+    pub fn window_label(identity: WindowIdentity) -> WindowLabel {
         (
             process_name(identity.process_id),
             window_title(to_hwnd(identity.handle)),
@@ -594,7 +645,7 @@ mod imp {
 
 #[cfg(not(windows))]
 mod fallback {
-    use super::{CaptureError, CaptureSource, WindowIdentity};
+    use super::{CaptureError, CaptureSource, WindowIdentity, WindowLabel};
     use crate::output_target::WindowHandle;
 
     /// No window-targeting backend on this platform yet (#119), so nothing can
@@ -632,7 +683,7 @@ mod fallback {
     /// No label backend on this platform yet (#119, #255): nothing can be
     /// locked, so this is unreachable, but it reports "unknown" rather than
     /// fabricate a name.
-    pub fn window_label(_identity: WindowIdentity) -> (Option<String>, Option<String>) {
+    pub fn window_label(_identity: WindowIdentity) -> WindowLabel {
         (None, None)
     }
 }

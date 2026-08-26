@@ -15,7 +15,8 @@
     "outputMode": "Режим вывода",
     "formatted": "С форматированием",
     "rawTranscript": "Сырая транскрипция",
-    "lockToWindow": "Закрепить за окном"
+    "lockToWindow": "Закрепить за окном",
+    "lockLost": "Блокировка потеряна"
   },
   "sidebar": {
     "navLabel": "Разделы настроек",

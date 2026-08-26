@@ -15,7 +15,8 @@
     "outputMode": "Mode de sortie",
     "formatted": "Formaté",
     "rawTranscript": "Transcription brute",
-    "lockToWindow": "Épingler à une fenêtre"
+    "lockToWindow": "Épingler à une fenêtre",
+    "lockLost": "Verrouillage perdu"
   },
   "sidebar": {
     "navLabel": "Sections des paramètres",

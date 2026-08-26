@@ -15,7 +15,8 @@
     "outputMode": "Tryb wyjścia",
     "formatted": "Sformatowany",
     "rawTranscript": "Surowa transkrypcja",
-    "lockToWindow": "Przypnij do okna"
+    "lockToWindow": "Przypnij do okna",
+    "lockLost": "Blokada utracona"
   },
   "sidebar": {
     "navLabel": "Sekcje ustawień",

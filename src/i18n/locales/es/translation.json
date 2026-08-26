@@ -15,7 +15,8 @@
     "outputMode": "Modo de salida",
     "formatted": "Con formato",
     "rawTranscript": "Transcripción sin formato",
-    "lockToWindow": "Fijar a una ventana"
+    "lockToWindow": "Fijar a una ventana",
+    "lockLost": "Bloqueo perdido"
   },
   "sidebar": {
     "navLabel": "Secciones de configuración",

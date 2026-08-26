@@ -37,12 +37,64 @@ export interface UseOutputTargetLockResult {
 }
 
 /**
+ * Wires the initial snapshot read against the live event stream without
+ * pulling in React, so the ordering guarantee is unit-testable on its own
+ * (#266 review): `query()` and `subscribe()` both cross the Tauri IPC bridge
+ * asynchronously, so firing them at the same time races -- a slow initial
+ * read can resolve after a newer event and clobber it with a stale snapshot.
+ * `subscribe` is awaited before `query` fires, closing most of that gap, and
+ * a `receivedEvent` flag discards the initial read outright once any event
+ * has arrived, closing the rest: a snapshot from `query` is only ever applied
+ * if no event beat it there.
+ *
+ * `subscribe` mirrors `events.outputTargetLockEvent.listen`'s shape --
+ * `(onEvent) => Promise<UnlistenFn>` -- so the hook can pass that function
+ * directly.
+ *
+ * Returns a cleanup function; nothing here is React-specific.
+ */
+export function subscribeToOutputTargetLock(
+  query: () => Promise<OutputTargetLockEvent>,
+  subscribe: (
+    onEvent: (event: OutputTargetLockEvent) => void,
+  ) => Promise<() => void>,
+  onSnapshot: (snapshot: LockSnapshot) => void,
+): () => void {
+  let cancelled = false;
+  let receivedEvent = false;
+
+  const unlistenPromise = subscribe((event) => {
+    receivedEvent = true;
+    if (!cancelled) onSnapshot(toSnapshot(event));
+  });
+
+  unlistenPromise
+    .then(() =>
+      query().then((event) => {
+        if (!cancelled && !receivedEvent) onSnapshot(toSnapshot(event));
+      }),
+    )
+    .catch(() => {
+      // No Tauri bridge available (e.g. a browser-only test render), or the
+      // listener itself failed to register: stay on the default snapshot
+      // rather than throw.
+    });
+
+  return () => {
+    cancelled = true;
+    unlistenPromise.then((unlisten) => unlisten()).catch(() => {});
+  };
+}
+
+/**
  * Subscribe to the output-target lock snapshot (#255: a command for the
- * state on mount, an event for every change after) and derive the single
- * indicator view-model every surface -- the recording overlay, the tray via
- * the backend, and settings -- renders through `deriveIndicator`. Because
- * they all derive from the same snapshot through the same pure function, they
- * cannot disagree about what is locked.
+ * state on mount, an event for every change after -- ordered by
+ * `subscribeToOutputTargetLock` so a slow initial read can never overwrite a
+ * newer event, #266 review) and derive the single indicator view-model every
+ * surface -- the recording overlay, the tray via the backend, and settings --
+ * renders through `deriveIndicator`. Because they all derive from the same
+ * snapshot through the same pure function, they cannot disagree about what is
+ * locked.
  *
  * A `lost` snapshot only ever arrives over the event, never the initial
  * command read (see `output_target.rs`'s `OutputTargetLockEvent` doc): the
@@ -58,28 +110,18 @@ export function useOutputTargetLock(
     kind: "unlocked",
   });
 
-  useEffect(() => {
-    let cancelled = false;
-
-    commands
-      .getOutputTargetLock()
-      .then((event) => {
-        if (!cancelled) setSnapshot(toSnapshot(event));
-      })
-      .catch(() => {
-        // No Tauri bridge available (e.g. a browser-only test render): stay
-        // unlocked rather than throw.
-      });
-
-    const unlistenPromise = events.outputTargetLockEvent.listen((event) => {
-      setSnapshot(toSnapshot(event.payload));
-    });
-
-    return () => {
-      cancelled = true;
-      unlistenPromise.then((unlisten) => unlisten()).catch(() => {});
-    };
-  }, []);
+  useEffect(
+    () =>
+      subscribeToOutputTargetLock(
+        commands.getOutputTargetLock,
+        (onEvent) =>
+          events.outputTargetLockEvent.listen((event) =>
+            onEvent(event.payload),
+          ),
+        setSnapshot,
+      ),
+    [],
+  );
 
   const unlock = useCallback(() => {
     // Dismiss a stale latch immediately rather than wait on the round trip:

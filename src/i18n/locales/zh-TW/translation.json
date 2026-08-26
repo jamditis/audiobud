@@ -15,7 +15,8 @@
     "outputMode": "輸出模式",
     "formatted": "已格式化",
     "rawTranscript": "原始轉錄文字",
-    "lockToWindow": "鎖定至視窗"
+    "lockToWindow": "鎖定至視窗",
+    "lockLost": "鎖定已遺失"
   },
   "sidebar": {
     "navLabel": "設定區塊",

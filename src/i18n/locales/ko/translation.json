@@ -15,7 +15,8 @@
     "outputMode": "출력 모드",
     "formatted": "서식 지정됨",
     "rawTranscript": "원본 전사",
-    "lockToWindow": "창에 고정"
+    "lockToWindow": "창에 고정",
+    "lockLost": "잠금 손실"
   },
   "sidebar": {
     "navLabel": "설정 섹션",

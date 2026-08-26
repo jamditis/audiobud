@@ -15,7 +15,8 @@
     "outputMode": "输出模式",
     "formatted": "已格式化",
     "rawTranscript": "原始转录",
-    "lockToWindow": "锁定到窗口"
+    "lockToWindow": "锁定到窗口",
+    "lockLost": "锁定已丢失"
   },
   "sidebar": {
     "navLabel": "设置分区",

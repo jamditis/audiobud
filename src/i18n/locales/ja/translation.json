@@ -15,7 +15,8 @@
     "outputMode": "出力モード",
     "formatted": "整形あり",
     "rawTranscript": "未加工の文字起こし",
-    "lockToWindow": "ウィンドウに固定"
+    "lockToWindow": "ウィンドウに固定",
+    "lockLost": "ロック消失"
   },
   "sidebar": {
     "navLabel": "設定セクション",

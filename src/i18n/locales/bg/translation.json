@@ -15,7 +15,8 @@
     "outputMode": "Режим на изход",
     "formatted": "Форматиран",
     "rawTranscript": "Суров транскрипт",
-    "lockToWindow": "Заключване към прозорец"
+    "lockToWindow": "Заключване към прозорец",
+    "lockLost": "Заключването е изгубено"
   },
   "sidebar": {
     "navLabel": "Раздели с настройки",

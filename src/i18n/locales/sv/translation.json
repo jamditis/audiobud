@@ -15,7 +15,8 @@
     "outputMode": "Utdataläge",
     "formatted": "Formaterad",
     "rawTranscript": "Rå transkription",
-    "lockToWindow": "Lås till fönster"
+    "lockToWindow": "Lås till fönster",
+    "lockLost": "Låsning förlorad"
   },
   "sidebar": {
     "navLabel": "Inställningsavsnitt",

@@ -216,6 +216,15 @@ pub enum Resolved {
     LockLost,
 }
 
+/// A window's human-readable label: the app (process) name and the window
+/// title, exactly as [`backend::window_label`] read them. Either half may be
+/// `None`. Shared by every place that carries or caches one of these --
+/// [`OutputTargetLockEvent`], [`LockedLabel`], [`LostLockNotice`], and the
+/// tray's own derivation -- so the "app-or-title, both optional" shape is
+/// spelled once instead of as a `(Option<String>, Option<String>)` tuple type
+/// at each call site (#266 review).
+pub type WindowLabel = (Option<String>, Option<String>);
+
 /// A lock-state snapshot as reported to the indicator surfaces (#255): the
 /// recording overlay, the tray, and settings. Mirrors the frontend's
 /// `LockSnapshot` in `src/lib/output-target-indicator.ts`:
@@ -357,6 +366,90 @@ impl PinnedTarget {
     /// the mutex and bricking every later paste with a panic on `unwrap`
     /// (AGENTS.md: avoid unwrap in production).
     fn guard(&self) -> std::sync::MutexGuard<'_, Option<WindowIdentity>> {
+        self.0
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+}
+
+/// Caches a locked window's label from the moment it was captured, keyed to
+/// its identity.
+///
+/// By the time a loss is detected, the window (often its whole owning
+/// process) is already gone, so re-querying the label live -- as the
+/// original #255 wiring did -- routinely comes back `(None, None)` and the
+/// indicator can only say "a locked window" (#266 review). Reading the label
+/// while the window was still alive, at lock time, and caching it here for
+/// [`Resolved::LockLost`] to reuse gives the loss notice back its name.
+///
+/// Keyed to the identity so a lock that was replaced before it was ever lost
+/// cannot leave a stale label behind for a *different* window that later
+/// goes stale.
+#[derive(Default)]
+pub struct LockedLabel(Mutex<Option<(WindowIdentity, WindowLabel)>>);
+
+impl LockedLabel {
+    /// Cache `label` for `identity`, replacing whatever was cached before.
+    pub fn set(&self, identity: WindowIdentity, label: WindowLabel) {
+        *self.guard() = Some((identity, label));
+    }
+
+    /// The cached label for `identity`, or `None` if nothing is cached for it
+    /// -- including when the cache holds a different, superseded window.
+    pub fn get(&self, identity: WindowIdentity) -> Option<WindowLabel> {
+        self.guard()
+            .as_ref()
+            .filter(|(cached, _)| *cached == identity)
+            .map(|(_, label)| label.clone())
+    }
+
+    /// Drop whatever is cached.
+    pub fn clear(&self) {
+        *self.guard() = None;
+    }
+
+    fn guard(&self) -> std::sync::MutexGuard<'_, Option<(WindowIdentity, WindowLabel)>> {
+        self.0
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+}
+
+/// The label of a lock that was just dropped because its window closed,
+/// remembered so the tray can keep showing "lock lost" until the notice is
+/// dismissed or a new lock replaces it -- matching the latch the frontend
+/// indicator already holds client-side (`useOutputTargetLock`, #255). Without
+/// this, `update_tray_menu` reading only [`PinnedTarget`] (cleared the moment
+/// the lock is dropped) reverts to the plain unlocked item the instant the
+/// loss happens, while the overlay is still showing the stale target: the
+/// two surfaces would visibly disagree (#266 review).
+///
+/// Registered alongside `PinnedTarget`; `(None, None)` fields mean the label
+/// lookup came back empty, same convention as [`OutputTargetLockEvent`].
+#[derive(Default)]
+pub struct LostLockNotice(Mutex<Option<WindowLabel>>);
+
+impl LostLockNotice {
+    /// Remember `label` as the most recent loss.
+    pub fn set(&self, label: WindowLabel) {
+        *self.guard() = Some(label);
+    }
+
+    /// Forget the last loss (a fresh lock or an explicit dismissal), and
+    /// report whether there was one to forget.
+    pub fn clear(&self) -> bool {
+        let mut guard = self.guard();
+        let had_one = guard.is_some();
+        *guard = None;
+        had_one
+    }
+
+    /// The last loss's label, if the tray has not moved on from it yet.
+    pub fn get(&self) -> Option<WindowLabel> {
+        self.guard().clone()
+    }
+
+    fn guard(&self) -> std::sync::MutexGuard<'_, Option<WindowLabel>> {
         self.0
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
@@ -614,5 +707,70 @@ mod tests {
             t.resolve(|_| panic!("is_alive called with no lock")),
             Resolved::Deliver(OutputTarget::Foreground)
         );
+    }
+
+    #[test]
+    fn lost_lock_notice_starts_empty() {
+        let n = LostLockNotice::default();
+        assert_eq!(n.get(), None);
+        // Nothing to forget yet.
+        assert!(!n.clear());
+    }
+
+    #[test]
+    fn lost_lock_notice_remembers_until_cleared() {
+        let n = LostLockNotice::default();
+        let label = (Some("Terminal".to_string()), None);
+        n.set(label.clone());
+        assert_eq!(n.get(), Some(label));
+        assert!(n.clear());
+        assert_eq!(n.get(), None);
+        // A second clear finds nothing left to forget.
+        assert!(!n.clear());
+    }
+
+    #[test]
+    fn lost_lock_notice_set_replaces_the_previous_label() {
+        let n = LostLockNotice::default();
+        n.set((Some("First".to_string()), None));
+        n.set((Some("Second".to_string()), None));
+        assert_eq!(n.get(), Some((Some("Second".to_string()), None)));
+    }
+
+    #[test]
+    fn locked_label_cache_starts_empty() {
+        let c = LockedLabel::default();
+        assert_eq!(c.get(win(1, 1, 1)), None);
+    }
+
+    #[test]
+    fn locked_label_cache_returns_the_label_for_the_matching_identity() {
+        let c = LockedLabel::default();
+        let w = win(1, 10, 20);
+        let label = (Some("Terminal".to_string()), Some("zsh".to_string()));
+        c.set(w, label.clone());
+        assert_eq!(c.get(w), Some(label));
+    }
+
+    #[test]
+    fn locked_label_cache_does_not_answer_for_a_different_window() {
+        // A lock that was replaced before it was ever lost must not leave its
+        // label behind for the new window (#266 review).
+        let c = LockedLabel::default();
+        let first = win(1, 10, 20);
+        let second = win(2, 30, 40);
+        c.set(first, (Some("First".to_string()), None));
+        c.set(second, (Some("Second".to_string()), None));
+        assert_eq!(c.get(first), None);
+        assert_eq!(c.get(second), Some((Some("Second".to_string()), None)));
+    }
+
+    #[test]
+    fn locked_label_cache_clear_forgets_it() {
+        let c = LockedLabel::default();
+        let w = win(1, 10, 20);
+        c.set(w, (Some("Terminal".to_string()), None));
+        c.clear();
+        assert_eq!(c.get(w), None);
     }
 }

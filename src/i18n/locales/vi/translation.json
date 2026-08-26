@@ -15,7 +15,8 @@
     "outputMode": "Chế độ đầu ra",
     "formatted": "Đã định dạng",
     "rawTranscript": "Văn bản thô",
-    "lockToWindow": "Khóa vào cửa sổ"
+    "lockToWindow": "Khóa vào cửa sổ",
+    "lockLost": "Mất khóa"
   },
   "sidebar": {
     "navLabel": "Các mục cài đặt",

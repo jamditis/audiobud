@@ -15,7 +15,8 @@
     "outputMode": "وضع الإخراج",
     "formatted": "منسّق",
     "rawTranscript": "نص خام",
-    "lockToWindow": "تثبيت على نافذة"
+    "lockToWindow": "تثبيت على نافذة",
+    "lockLost": "القفل مفقود"
   },
   "sidebar": {
     "navLabel": "أقسام الإعدادات",

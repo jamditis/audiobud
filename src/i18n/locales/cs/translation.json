@@ -15,7 +15,8 @@
     "outputMode": "Režim výstupu",
     "formatted": "Formátováno",
     "rawTranscript": "Surový přepis",
-    "lockToWindow": "Uzamknout na okno"
+    "lockToWindow": "Uzamknout na okno",
+    "lockLost": "Zámek ztracen"
   },
   "sidebar": {
     "navLabel": "Sekce nastavení",

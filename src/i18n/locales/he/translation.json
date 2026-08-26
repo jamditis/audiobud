@@ -15,7 +15,8 @@
     "outputMode": "מצב פלט",
     "formatted": "מעוצב",
     "rawTranscript": "תמלול גולמי",
-    "lockToWindow": "נעילה לחלון"
+    "lockToWindow": "נעילה לחלון",
+    "lockLost": "הנעילה אבדה"
   },
   "sidebar": {
     "navLabel": "מדורי ההגדרות",

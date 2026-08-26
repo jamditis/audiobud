@@ -15,7 +15,8 @@
     "outputMode": "Output mode",
     "formatted": "Formatted",
     "rawTranscript": "Raw transcript",
-    "lockToWindow": "Lock to window"
+    "lockToWindow": "Lock to window",
+    "lockLost": "Lock lost"
   },
   "sidebar": {
     "navLabel": "Settings sections",
