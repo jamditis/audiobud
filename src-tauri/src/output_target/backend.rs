@@ -118,11 +118,18 @@ pub fn unlock_output_target(app: &AppHandle) {
         // ("lost") latch, which the backend already unlocked when it
         // happened. The tray's own memory of that loss still needs clearing
         // here, or it would keep showing "lock lost" after the overlay's
-        // latch was dismissed (#266 review).
+        // latch was dismissed (#266 review). The dismissal must also be
+        // emitted (#266 review, finding 3): the webview that dismissed
+        // already updated itself optimistically, but a second webview
+        // showing the same stale latch (another settings window, the
+        // overlay) would otherwise never hear about the dismissal and stay
+        // stuck on "stale" until an unrelated lock/unlock event happened to
+        // pass through.
         let had_notice = app
             .try_state::<LostLockNotice>()
             .is_some_and(|notice| notice.clear());
         if had_notice {
+            let _ = OutputTargetLockEvent::Unlocked.emit(app);
             crate::tray::update_tray_menu(app, &crate::tray::current_tray_state(app), None);
         }
         return;
@@ -138,10 +145,16 @@ pub fn unlock_output_target(app: &AppHandle) {
 
 /// Read the current lock state for the indicator surfaces (#255).
 ///
-/// Never reports [`OutputTargetLockEvent::Lost`]: that kind is event-only,
-/// emitted once when [`resolve_paste_target`] drops a stale lock. A snapshot
-/// query after that loss reads `Unlocked`, matching the frontend contract in
-/// `output-target-indicator.ts`.
+/// Reports [`OutputTargetLockEvent::Lost`] when nothing is locked but
+/// [`LostLockNotice`] still remembers the last loss (#266 review, finding 1).
+/// The `Lost` kind was originally event-only, on the theory that a mount
+/// after the loss could just read `Unlocked` -- but the event fires once,
+/// to whichever webview happens to be listening at that moment, and a
+/// second webview mounting afterwards (settings opened after the overlay
+/// already showed the stale target, say) missed it entirely and quietly
+/// disagreed with the tray, which does consult the notice. Consulting it
+/// here too makes the notice authoritative across every webview, not just
+/// the one that was listening when the loss happened.
 #[tauri::command]
 #[specta::specta]
 pub fn get_output_target_lock(app: AppHandle) -> OutputTargetLockEvent {
@@ -156,7 +169,14 @@ pub fn get_output_target_lock(app: AppHandle) -> OutputTargetLockEvent {
                 title,
             }
         }
-        None => OutputTargetLockEvent::Unlocked,
+        None => app
+            .try_state::<LostLockNotice>()
+            .and_then(|notice| notice.get())
+            .map(|(app_name, title)| OutputTargetLockEvent::Lost {
+                app: app_name,
+                title,
+            })
+            .unwrap_or(OutputTargetLockEvent::Unlocked),
     }
 }
 
@@ -230,18 +250,31 @@ fn lost_label(app: &AppHandle, identity: WindowIdentity) -> WindowLabel {
 /// `label` is the locked window's last known app/title, read by the caller
 /// before the lock was dropped -- by the time this runs the lock is already
 /// gone, so this is the only chance to report who it was.
+///
+/// The bare toast (`TARGET_LOCK_LOST_EVENT`) always fires: a real paste
+/// attempt to the old target really did fail, whatever has happened since.
+/// The *persistent* state -- `LostLockNotice` and `OutputTargetLockEvent::Lost`
+/// -- is conditioned on [`super::record_lost_notice`], which checks whether a
+/// new lock has already been established elsewhere since this loss was
+/// detected (#266 review, finding 2). If so, that lock's own `Locked` event
+/// is already the truth, and persisting `Lost` here would land after it and
+/// contradict it -- the indicator would show "stale" while the backend is
+/// actually pinned to something else.
 fn announce_lock_lost(app: &AppHandle, label: WindowLabel) {
     warn!("Locked window is gone; the transcript was not delivered to it");
-    // Remembered so the tray's own rebuild below, and every rebuild after it
-    // until the notice is dismissed or superseded, can still name the window
-    // that was lost -- otherwise the tray reverts to a plain unlocked item
-    // the instant this fires, while the overlay is still showing the same
-    // loss as a stale indicator (#266 review).
-    if let Some(notice) = app.try_state::<LostLockNotice>() {
-        notice.set(label.clone());
-    }
-    let (app_name, title) = label;
     let _ = app.emit(TARGET_LOCK_LOST_EVENT, ());
+
+    let (Some(pinned), Some(notice)) = (
+        app.try_state::<PinnedTarget>(),
+        app.try_state::<LostLockNotice>(),
+    ) else {
+        return;
+    };
+    if !super::record_lost_notice(&pinned, &notice, label.clone()) {
+        return;
+    }
+
+    let (app_name, title) = label;
     let _ = OutputTargetLockEvent::Lost {
         app: app_name,
         title,

@@ -96,12 +96,15 @@ export function subscribeToOutputTargetLock(
  * snapshot through the same pure function, they cannot disagree about what is
  * locked.
  *
- * A `lost` snapshot only ever arrives over the event, never the initial
- * command read (see `output_target.rs`'s `OutputTargetLockEvent` doc): the
- * lock is already cleared by the time the backend reports it, so a mount
- * that happens after a loss reads `unlocked`. Within one mounted session the
- * "stale" state is a latch this hook holds until `unlock` is called or a new
- * `locked`/`unlocked` event replaces it.
+ * A `lost` snapshot can also arrive from the initial command read, not only
+ * the event (see `output_target.rs`'s `OutputTargetLockEvent` doc, #266
+ * review finding 1): the backend keeps its own memory of the last loss
+ * (`LostLockNotice`) for exactly this reason -- a webview that mounts after
+ * the one-shot event already fired (settings opened after the overlay showed
+ * the stale target, say) still needs to see it, or it would silently
+ * disagree with a surface that mounted earlier. Within one mounted session
+ * the "stale" state is a latch this hook holds until `unlock` is called or a
+ * new `locked`/`unlocked` event replaces it.
  */
 export function useOutputTargetLock(
   options?: DeriveOptions,

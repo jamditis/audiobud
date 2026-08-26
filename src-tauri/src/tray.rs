@@ -300,9 +300,11 @@ pub fn update_tray_menu(app: &AppHandle, state: &TrayIconState, locale: Option<&
         &strings.lock_lost,
     );
     #[cfg(target_os = "windows")]
+    let target_lock_item_id = target_lock_menu_id(target_lock_locked_label, target_lock_lost_label);
+    #[cfg(target_os = "windows")]
     let toggle_target_lock_i = CheckMenuItem::with_id(
         app,
-        "toggle:target_lock",
+        target_lock_item_id,
         &target_lock_label,
         true,
         target_lock_checked,
@@ -463,6 +465,28 @@ fn target_lock_menu_label(
     }
 }
 
+/// The tray menu id for the target-lock item (#266 review, finding 5).
+///
+/// The stale item gets an id distinct from `"toggle:target_lock"`: nothing is
+/// locked while it shows, so a click on it must dismiss the loss notice, not
+/// be read as a request to capture a fresh lock on whatever now holds the
+/// foreground -- which is what the shared `"toggle:"` id would have done,
+/// since `toggle_target_lock` cannot tell "click meant unlock" apart from
+/// "click meant lock" once `PinnedTarget` is already empty. Fed the same
+/// already-resolved `locked`/`lost` pair as `target_lock_menu_label`, for the
+/// same reason: no window system needed to test the branch.
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+fn target_lock_menu_id(
+    locked: Option<crate::output_target::WindowLabel>,
+    lost: Option<crate::output_target::WindowLabel>,
+) -> &'static str {
+    if locked.is_none() && lost.is_some() {
+        "dismiss:target_lock_lost"
+    } else {
+        "toggle:target_lock"
+    }
+}
+
 fn last_transcript_text(entry: &HistoryEntry) -> &str {
     entry
         .post_processed_text
@@ -512,7 +536,9 @@ pub fn copy_last_transcript(app: &AppHandle) {
 
 #[cfg(test)]
 mod tests {
-    use super::{last_transcript_text, target_lock_menu_label, truncate_tray_label};
+    use super::{
+        last_transcript_text, target_lock_menu_id, target_lock_menu_label, truncate_tray_label,
+    };
     use crate::managers::history::HistoryEntry;
 
     #[test]
@@ -584,6 +610,40 @@ mod tests {
             target_lock_menu_label(None, Some((None, None)), "Lock to window", "Lock lost");
         assert_eq!(label, "Lock lost — Lock lost");
         assert!(!checked);
+    }
+
+    #[test]
+    fn target_lock_menu_id_when_unlocked_and_never_lost_is_the_toggle() {
+        assert_eq!(target_lock_menu_id(None, None), "toggle:target_lock");
+    }
+
+    #[test]
+    fn target_lock_menu_id_when_locked_is_the_toggle() {
+        // A click on a checked, actively-locked item must still unlock through
+        // the normal toggle path, whatever `lost` happens to hold.
+        assert_eq!(
+            target_lock_menu_id(Some((Some("Terminal".to_string()), None)), None),
+            "toggle:target_lock"
+        );
+        assert_eq!(
+            target_lock_menu_id(
+                Some((Some("Terminal".to_string()), None)),
+                Some((Some("Old window".to_string()), None)),
+            ),
+            "toggle:target_lock"
+        );
+    }
+
+    #[test]
+    fn target_lock_menu_id_when_stale_is_the_dismissal() {
+        // The core of #266's finding 5: a click on the stale item must never
+        // be dispatched through "toggle:target_lock", which would read as a
+        // request to capture a fresh lock on whatever now holds the
+        // foreground rather than dismiss the notice.
+        assert_eq!(
+            target_lock_menu_id(None, Some((Some("Terminal".to_string()), None))),
+            "dismiss:target_lock_lost"
+        );
     }
 
     #[test]

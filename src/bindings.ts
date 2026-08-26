@@ -976,10 +976,16 @@ async isLaptop() : Promise<Result<boolean, string>> {
 /**
  * Read the current lock state for the indicator surfaces (#255).
  *
- * Never reports [`OutputTargetLockEvent::Lost`]: that kind is event-only,
- * emitted once when [`resolve_paste_target`] drops a stale lock. A snapshot
- * query after that loss reads `Unlocked`, matching the frontend contract in
- * `output-target-indicator.ts`.
+ * Reports [`OutputTargetLockEvent::Lost`] when nothing is locked but
+ * [`LostLockNotice`] still remembers the last loss (#266 review, finding 1).
+ * The `Lost` kind was originally event-only, on the theory that a mount
+ * after the loss could just read `Unlocked` -- but the event fires once,
+ * to whichever webview happens to be listening at that moment, and a
+ * second webview mounting afterwards (settings opened after the overlay
+ * already showed the stale target, say) missed it entirely and quietly
+ * disagreed with the tray, which does consult the notice. Consulting it
+ * here too makes the notice authoritative across every webview, not just
+ * the one that was listening when the loss happened.
  */
 async getOutputTargetLock() : Promise<OutputTargetLockEvent> {
     return await TAURI_INVOKE("get_output_target_lock");
@@ -1099,10 +1105,16 @@ export type OrtAcceleratorSetting = "auto" | "cpu" | "cuda" | "directml" | "rocm
  * - `Unlocked`: delivery follows the foreground window.
  * - `Locked`: a window is pinned and was alive when this was built.
  * - `Lost`: a pinned window closed; [`Resolved::LockLost`] just dropped the
- * lock. Event-only -- never returned by a snapshot query, since the lock is
- * already cleared by the time this fires and a poll after that reads
- * `Unlocked`. The frontend holds `Lost` as a latch until the user dismisses
- * it or a new lock/unlock replaces it.
+ * lock. Originally event-only, on the theory that `PinnedTarget` being
+ * already cleared by the time this fires means a poll afterwards reads
+ * `Unlocked` -- but a webview that mounts (or a settings window that
+ * opens) after the one-shot event has already fired would then silently
+ * disagree with a tray or overlay that is still showing the loss (#266
+ * review, finding 1). `backend::get_output_target_lock` now also consults
+ * `LostLockNotice`, the same persisted memory of the loss the tray reads,
+ * so a snapshot query returns `Lost` for as long as that notice stands.
+ * The frontend holds `Lost` as a latch until the user dismisses it or a
+ * new lock/unlock replaces it.
  *
  * `app`/`title` are the raw strings the platform label lookup read (an
  * app/process name and the window title). Either may be `None`. They are

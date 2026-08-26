@@ -273,10 +273,16 @@ pub type WindowLabel = (Option<String>, Option<String>);
 /// - `Unlocked`: delivery follows the foreground window.
 /// - `Locked`: a window is pinned and was alive when this was built.
 /// - `Lost`: a pinned window closed; [`Resolved::LockLost`] just dropped the
-///   lock. Event-only -- never returned by a snapshot query, since the lock is
-///   already cleared by the time this fires and a poll after that reads
-///   `Unlocked`. The frontend holds `Lost` as a latch until the user dismisses
-///   it or a new lock/unlock replaces it.
+///   lock. Originally event-only, on the theory that `PinnedTarget` being
+///   already cleared by the time this fires means a poll afterwards reads
+///   `Unlocked` -- but a webview that mounts (or a settings window that
+///   opens) after the one-shot event has already fired would then silently
+///   disagree with a tray or overlay that is still showing the loss (#266
+///   review, finding 1). `backend::get_output_target_lock` now also consults
+///   `LostLockNotice`, the same persisted memory of the loss the tray reads,
+///   so a snapshot query returns `Lost` for as long as that notice stands.
+///   The frontend holds `Lost` as a latch until the user dismisses it or a
+///   new lock/unlock replaces it.
 ///
 /// `app`/`title` are the raw strings the platform label lookup read (an
 /// app/process name and the window title). Either may be `None`. They are
@@ -499,6 +505,35 @@ impl LostLockNotice {
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
+}
+
+/// Record `label` as the tray's memory of a loss, unless a new lock has
+/// already been established by the time this runs, and report whether it
+/// was recorded (#266 review, finding 2).
+///
+/// A loss is discovered outside the mutex that cleared it: `resolve()`
+/// clears [`PinnedTarget`] and returns `LockLost` under its own guard, and
+/// only after that does the caller read a label and reach this call. In that
+/// gap another thread -- the tray item, the shortcut -- can already have
+/// locked onto a new window and emitted its own `Locked` state. Recording
+/// the loss after that would persist a `Lost` state that arrives (and
+/// disagrees with what the caller emits) after the fresher `Locked` one,
+/// leaving the indicator surfaces stuck on "stale" while the backend is
+/// actually pinned. Checking [`PinnedTarget::is_locked`] immediately before
+/// writing narrows that gap to one read; a full guarantee would need a
+/// single lock spanning the loss detection and this call, which `resolve()`
+/// deliberately does not hold open across the label lookup and event
+/// emission that follow it.
+pub fn record_lost_notice(
+    pinned: &PinnedTarget,
+    notice: &LostLockNotice,
+    label: WindowLabel,
+) -> bool {
+    if pinned.is_locked() {
+        return false;
+    }
+    notice.set(label);
+    true
 }
 
 #[cfg(test)]
@@ -829,5 +864,47 @@ mod tests {
         c.set(w, (Some("Terminal".to_string()), None));
         c.clear();
         assert_eq!(c.get(w), None);
+    }
+
+    #[test]
+    fn record_lost_notice_records_when_nothing_is_locked() {
+        let pinned = PinnedTarget::default();
+        let notice = LostLockNotice::default();
+        let label = (Some("Terminal".to_string()), None);
+
+        assert!(record_lost_notice(&pinned, &notice, label.clone()));
+        assert_eq!(notice.get(), Some(label));
+    }
+
+    #[test]
+    fn record_lost_notice_is_suppressed_by_a_lock_established_in_the_meantime() {
+        // The race #266's finding 2 describes: a delivery discovers its
+        // target is gone (PinnedTarget is already cleared by the time this
+        // runs), but a lock on a new window landed on another thread before
+        // the loss could be recorded. Persisting "lost" now would arrive
+        // after that window's own "locked" state and contradict it.
+        let pinned = PinnedTarget::default();
+        let notice = LostLockNotice::default();
+        pinned.lock_to(win(2, 30, 40));
+
+        assert!(!record_lost_notice(
+            &pinned,
+            &notice,
+            (Some("Old window".to_string()), None)
+        ));
+        assert_eq!(notice.get(), None);
+        // The new lock is untouched by the suppressed write.
+        assert!(pinned.is_locked());
+    }
+
+    #[test]
+    fn record_lost_notice_overwrites_an_earlier_unrecorded_loss() {
+        let pinned = PinnedTarget::default();
+        let notice = LostLockNotice::default();
+        notice.set((Some("Stale from before".to_string()), None));
+
+        let label = (Some("Terminal".to_string()), None);
+        assert!(record_lost_notice(&pinned, &notice, label.clone()));
+        assert_eq!(notice.get(), Some(label));
     }
 }

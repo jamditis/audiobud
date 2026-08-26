@@ -92,6 +92,31 @@ describe("subscribeToOutputTargetLock", () => {
     ]);
   });
 
+  it("applies an initial 'lost' snapshot from the query, not just the event", async () => {
+    // The backend now consults its own LostLockNotice in the snapshot
+    // command (#266 review, finding 1), so a webview that mounts after the
+    // one-shot event already fired must still see the stale state from its
+    // very first read, not just from a later event.
+    const snapshots: LockSnapshot[] = [];
+    const query = () =>
+      Promise.resolve<OutputTargetLockEvent>({
+        kind: "lost",
+        app: "Terminal",
+        title: null,
+      });
+    const subscribe = (_onEvent: (event: OutputTargetLockEvent) => void) =>
+      Promise.resolve(() => {});
+
+    subscribeToOutputTargetLock(query, subscribe, (s) => snapshots.push(s));
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(snapshots).toEqual([
+      { kind: "lost", app: "Terminal", title: undefined },
+    ]);
+  });
+
   it("discards a slow initial read that resolves after a newer event", async () => {
     // The scenario the finding described: query() is in flight (e.g. the
     // window just got locked and unlocked again before the initial read

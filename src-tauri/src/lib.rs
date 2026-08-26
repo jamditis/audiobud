@@ -409,6 +409,14 @@ fn initialize_core_logic(app_handle: &AppHandle) {
             "quit" => {
                 app.exit(0);
             }
+            // The stale target-lock item (#266 review, finding 5): distinct from
+            // "toggle:target_lock" so a click here can never be read as a fresh
+            // capture request. Nothing is actually locked while this id is on the
+            // menu (see `target_lock_menu_label` in tray.rs), so this only
+            // dismisses the tray's memory of the loss.
+            "dismiss:target_lock_lost" => {
+                output_target::backend::unlock_output_target(app);
+            }
             id if id.starts_with("model_select:") => {
                 let model_id = id.strip_prefix("model_select:").unwrap().to_string();
                 let current_model = settings::get_settings(app).selected_model;
