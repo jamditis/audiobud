@@ -568,15 +568,49 @@ pub fn copy_last_transcript(app: &AppHandle) {
         warn!("Last completed transcription is empty; skipping tray copy.");
         return;
     }
+    let text = text.to_string();
 
-    // Same transaction lock the delivery worker's paste holds across its
-    // capture/write/restore window, so this write cannot land in the middle
-    // of a paste and then get clobbered by its stale-snapshot restore (#161
-    // review, finding 2).
-    let _txn = crate::clipboard::CLIPBOARD_TXN
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    // Same transaction lock a delivery holds across its capture/write/restore
+    // window and its trailing copy (`clipboard::CLIPBOARD_TXN`), so this
+    // write cannot land in the middle of one and then get clobbered by a
+    // stale-snapshot restore, or itself get clobbered by one landing after it
+    // (#161 review, finding 2). This runs on the tray callback -- the
+    // platform event-loop thread -- which must never block waiting for that
+    // lock: `deliver_to_target` only ever acquires it after a pinned target
+    // has already been confirmed alive (a dead one is caught earlier and
+    // calls back into `update_tray_menu`, which needs this same thread), so
+    // holding this lock and needing the event loop never overlap for a
+    // delivery -- but a blocking `.lock()` here would still tie up the one
+    // thread every delivery's dead-target check depends on for however long
+    // the delivery's own critical section runs (#161 review round 3, finding
+    // 2). `try_lock` keeps the common, uncontended case immediate; on the
+    // rare contended case the write is handed to a short-lived thread that is
+    // free to block, and this callback returns right away either way.
+    match crate::clipboard::CLIPBOARD_TXN.try_lock() {
+        Ok(_txn) => write_last_transcript_to_clipboard(app, &text),
+        Err(std::sync::TryLockError::WouldBlock) => {
+            info!("Clipboard busy with a delivery; copying the last transcript in the background");
+            let app = app.clone();
+            std::thread::spawn(move || {
+                let _txn = crate::clipboard::CLIPBOARD_TXN
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner());
+                write_last_transcript_to_clipboard(&app, &text);
+            });
+        }
+        Err(std::sync::TryLockError::Poisoned(poisoned)) => {
+            // Recovered the same way the delivery path recovers it: the
+            // mutex only orders clipboard access, so continuing to use it
+            // after a caught panic elsewhere is sound.
+            let _txn = poisoned.into_inner();
+            write_last_transcript_to_clipboard(app, &text);
+        }
+    }
+}
 
+/// The actual clipboard write behind `copy_last_transcript`, shared by its
+/// immediate and deferred paths so both report failures the same way.
+fn write_last_transcript_to_clipboard(app: &AppHandle, text: &str) {
     if let Err(err) = app.clipboard().write_text(text) {
         error!("Failed to copy last transcript to clipboard: {}", err);
         return;
