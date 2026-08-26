@@ -49,6 +49,15 @@ pub fn toggle_target_lock(app: &AppHandle) {
 /// suppressed because the locked window is gone (#120). Suppression emits
 /// [`TARGET_LOCK_LOST_EVENT`] once and leaves the app unlocked.
 pub fn resolve_paste_target(app: &AppHandle) -> Option<super::OutputTarget> {
+    // A one-shot pick (#124) routes THIS transcript and is then spent, so it is
+    // consulted before the lock and overrides it for this paste only. A pick
+    // whose window has gone suppresses the paste the same way a lost lock does.
+    match crate::window_picker::backend::take_pick_target(app) {
+        Some(crate::window_picker::PickDelivery::Deliver(target)) => return Some(target),
+        Some(crate::window_picker::PickDelivery::PickLost) => return None,
+        None => {}
+    }
+
     let Some(pinned) = app.try_state::<PinnedTarget>() else {
         return Some(super::OutputTarget::Foreground);
     };

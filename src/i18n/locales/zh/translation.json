@@ -14,7 +14,8 @@
     "showOverlay": "显示悬浮窗",
     "outputMode": "输出模式",
     "formatted": "已格式化",
-    "rawTranscript": "原始转录"
+    "rawTranscript": "原始转录",
+    "sendToWindowOnce": "发送到窗口一次"
   },
   "sidebar": {
     "navLabel": "设置分区",
@@ -806,7 +807,9 @@
     "transcriptionErrorGeneric": "无法转录这段录音。请重试或选择其他模型。",
     "transcriptionTimeoutTitle": "转录超时",
     "transcriptionTimeout": "引擎在 {{seconds}} 秒后仍无响应，可能已卡住。如果此问题持续出现，请重启 AudioBud。",
-    "parakeetInputTooLong": "这段录音时长为 {{duration}}。Parakeet 无法转录超过约 6:30 的录音，之后的音频会在没有提示的情况下被省略。长录音请使用 Whisper 模型。"
+    "parakeetInputTooLong": "这段录音时长为 {{duration}}。Parakeet 无法转录超过约 6:30 的录音，之后的音频会在没有提示的情况下被省略。长录音请使用 Whisper 模型。",
+    "windowPickLostTitle": "所选窗口已不存在",
+    "windowPickLost": "你选择的窗口已关闭。AudioBud 没有粘贴文本。请重新选择窗口。"
   },
   "appLanguage": {
     "title": "应用语言",
@@ -819,6 +822,14 @@
     "cancel": "取消录制",
     "raw": "RAW",
     "rawHint": "原始转录模式"
+  },
+  "windowPicker": {
+    "title": "发送到窗口",
+    "hint": "为下一段文字选择一个窗口。按 F 使用当前窗口，按 Esc 取消。",
+    "loading": "正在查找窗口…",
+    "empty": "没有可用的窗口。",
+    "useForeground": "使用当前窗口",
+    "cancel": "取消"
   },
   "critters": {
     "frog": "青蛙"

@@ -13,21 +13,23 @@
 //!   - optionally remembers the last pick ([`LastPick`]) so a repeat route is a
 //!     single confirm.
 //!
-//! The Windows half -- enumerating windows (`EnumWindows` + `GetWindowTextW` +
-//! the owning process name), rendering the picker overlay, and running the
-//! focus-borrow on the chosen handle -- is the next child of #119 and is where
-//! [`resolve_gesture`] and [`visible_candidates`] get their first callers. That
-//! half must re-validate the chosen handle at paste time (#254): the window can
-//! close between the pick and the paste, so a live-at-pick handle is not a
-//! guarantee; the paste path must tolerate an activation that fails.
+//! [`backend`] holds the platform half -- enumerating windows (`EnumWindows` +
+//! `GetWindowTextW` + the owning process name), opening the picker window, and
+//! arming the pick the paste path consumes (#259). A pick is re-validated at
+//! paste time through the shared identity check (#254): the window can close
+//! between the pick and the paste, so a live-at-pick handle is not a guarantee.
 //!
-//! Until that caller lands, the API is exercised only by the unit tests below,
-//! so the module allows dead_code; drop the allow when the picker UI wires in.
+//! Parts of the API are convenience the UI does not use yet, so the module
+//! allows dead_code.
 #![allow(dead_code)]
+
+pub mod backend;
 
 use std::sync::{Mutex, MutexGuard};
 
-use crate::output_target::{OutputTarget, WindowHandle};
+use serde::{Deserialize, Serialize};
+
+use crate::output_target::{OutputTarget, WindowHandle, WindowIdentity};
 
 /// One window as the OS enumeration reports it, before filtering. The Windows
 /// backend fills this from `EnumWindows`: `handle` from the `HWND`, `title` from
@@ -119,6 +121,197 @@ pub fn visible_candidates(
         });
     }
     kept
+}
+
+/// A [`WindowHandle`] as it crosses the Tauri boundary: a decimal STRING, never
+/// a JS number. A handle is an `isize`, 64-bit on Win64, so a large `HWND`
+/// exceeds a JavaScript number's 2^53 safe range and would be silently rounded
+/// into a different window on the way to the paste path. The overlay carries the
+/// value opaquely and echoes it back, so a string round-trips exactly.
+pub fn handle_id(handle: WindowHandle) -> String {
+    handle.0.to_string()
+}
+
+/// Parse a handle id produced by [`handle_id`]. Returns `None` for anything that
+/// is not one, so a malformed gesture from the webview fails safe (the caller
+/// treats it as a dismissal) instead of borrowing focus to a guessed handle.
+pub fn parse_handle_id(id: &str) -> Option<WindowHandle> {
+    id.trim().parse::<isize>().ok().map(WindowHandle)
+}
+
+/// One row as the overlay renders it: the opaque handle and the label the
+/// backend already composed ([`WindowCandidate::label`]). The frontend never
+/// recomputes the label, so the row text and its source cannot drift.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+pub struct PickerWindow {
+    pub handle: String,
+    pub label: String,
+}
+
+/// Shape the offered candidates into the rows the overlay renders.
+pub fn offer_rows(candidates: &[WindowCandidate]) -> Vec<PickerWindow> {
+    candidates
+        .iter()
+        .map(|c| PickerWindow {
+            handle: handle_id(c.handle),
+            label: c.label(),
+        })
+        .collect()
+}
+
+/// The overlay's terminal gesture as it arrives over the Tauri boundary. The
+/// tag and its lowercase variant names mirror the frontend `PickerGesture`
+/// (`src/lib/window-picker-overlay.ts`) one-to-one, so the two halves share a
+/// single vocabulary and the mapping below is the only translation step.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(tag = "kind", rename_all = "lowercase")]
+pub enum PickerGesture {
+    Chose { handle: String },
+    Foreground,
+    Dismiss,
+}
+
+impl PickerGesture {
+    /// Map the wire gesture onto the core's [`PickGesture`]. A handle that is
+    /// not a valid id reads as a dismissal, which [`resolve_gesture`] turns into
+    /// [`PickOutcome::Cancel`]: a suppressed paste is the safe reading of a
+    /// gesture the backend cannot make sense of.
+    pub fn to_gesture(&self) -> PickGesture {
+        match self {
+            PickerGesture::Chose { handle } => match parse_handle_id(handle) {
+                Some(window) => PickGesture::Chose(window),
+                None => PickGesture::Dismiss,
+            },
+            PickerGesture::Foreground => PickGesture::FocusForeground,
+            PickerGesture::Dismiss => PickGesture::Dismiss,
+        }
+    }
+}
+
+/// What one resolved pick armed, for the log line and the overlay's reply.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(tag = "kind", rename_all = "lowercase")]
+pub enum PickArmed {
+    /// The next transcript goes to this window, once.
+    Window,
+    /// The next transcript follows the foreground, as usual.
+    Foreground,
+    /// Nothing was armed: the user dismissed, or the chosen window was already
+    /// gone. Either way no paste is redirected.
+    Cancelled,
+}
+
+/// Turn a resolved [`PickOutcome`] into the state to arm, resolving the chosen
+/// handle's full identity through `identify` (on Windows the owning process and
+/// thread, so a recycled handle is caught later -- #254). A window that has
+/// closed between the offer and the click cannot be identified, so it arms
+/// nothing rather than a handle the OS may hand to someone else.
+pub fn arm_pick(
+    outcome: PickOutcome,
+    identify: impl FnOnce(WindowHandle) -> Option<WindowIdentity>,
+) -> (PickArmed, Option<WindowIdentity>) {
+    match outcome.delivery_target() {
+        Some(OutputTarget::Pinned(handle)) => match identify(handle) {
+            Some(identity) => (PickArmed::Window, Some(identity)),
+            None => (PickArmed::Cancelled, None),
+        },
+        Some(OutputTarget::Foreground) => (PickArmed::Foreground, None),
+        None => (PickArmed::Cancelled, None),
+    }
+}
+
+/// The windows the picker is currently offering. Held as Tauri state so the
+/// resolve command validates the gesture against exactly the rows the user saw,
+/// which is what keeps [`resolve_gesture`] able to reject a handle that was
+/// never presented.
+#[derive(Default)]
+pub struct PickerSession(Mutex<Vec<WindowCandidate>>);
+
+impl PickerSession {
+    /// Record the rows now on offer, replacing any earlier ones.
+    pub fn offer(&self, candidates: Vec<WindowCandidate>) {
+        *self.guard() = candidates;
+    }
+
+    /// The rows currently on offer.
+    pub fn offered(&self) -> Vec<WindowCandidate> {
+        self.guard().clone()
+    }
+
+    /// Forget the offer once the pick has ended, so a late gesture cannot be
+    /// resolved against a stale window list.
+    pub fn clear(&self) {
+        self.guard().clear();
+    }
+
+    fn guard(&self) -> MutexGuard<'_, Vec<WindowCandidate>> {
+        self.0
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+}
+
+/// Where a pending one-shot pick sends the paste about to fire.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PickDelivery {
+    /// Deliver this transcript to the picked window.
+    Deliver(OutputTarget),
+    /// The picked window is gone. SUPPRESS the paste, exactly as a lost lock
+    /// does ([`crate::output_target::Resolved::LockLost`]): a recycled handle
+    /// must never receive the transcript (#254).
+    PickLost,
+}
+
+/// The window one pick armed, consumed by the next paste and then forgotten --
+/// this is what makes the picker one-shot rather than a lock. Tauri-managed
+/// state alongside [`crate::output_target::PinnedTarget`]. The full identity is
+/// stored, not just the handle, so the paste path can re-run the shared identity
+/// check before typing anything (#254).
+#[derive(Default)]
+pub struct PendingPick(Mutex<Option<WindowIdentity>>);
+
+impl PendingPick {
+    /// Route the next transcript to `window`, replacing any earlier pick.
+    pub fn arm(&self, window: WindowIdentity) {
+        *self.guard() = Some(window);
+    }
+
+    /// Drop any pending pick, so the next transcript follows the usual rules.
+    pub fn clear(&self) {
+        *self.guard() = None;
+    }
+
+    /// Whether a pick is waiting to be delivered.
+    pub fn is_armed(&self) -> bool {
+        self.guard().is_some()
+    }
+
+    /// Consume the pending pick for the paste about to fire, or `None` when no
+    /// pick is pending and the usual target rules apply.
+    ///
+    /// The pick is taken whichever way `is_alive` answers: one pick routes one
+    /// transcript, and a pick whose window died is not held back for the next
+    /// dictation. A dead window yields [`PickDelivery::PickLost`] so the caller
+    /// suppresses the paste instead of falling back to the foreground.
+    pub fn take_resolved(
+        &self,
+        is_alive: impl FnOnce(WindowIdentity) -> bool,
+    ) -> Option<PickDelivery> {
+        let picked = self.guard().take()?;
+        Some(if is_alive(picked) {
+            PickDelivery::Deliver(OutputTarget::Pinned(picked.handle))
+        } else {
+            PickDelivery::PickLost
+        })
+    }
+
+    /// Borrow the pick, recovering the guard if a previous holder panicked --
+    /// same reasoning as [`LastPick::guard`].
+    fn guard(&self) -> MutexGuard<'_, Option<WindowIdentity>> {
+        self.0
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
 }
 
 /// The user's terminal action in the picker. Kept distinct from the outcome so
@@ -425,6 +618,204 @@ mod tests {
         last.promote_to_front(&mut candidates);
         assert_eq!(candidates[0].handle, WindowHandle(1));
         assert_eq!(candidates[1].handle, WindowHandle(2));
+    }
+
+    fn identity(handle: isize, pid: u32, tid: u32) -> WindowIdentity {
+        WindowIdentity {
+            handle: WindowHandle(handle),
+            process_id: pid,
+            thread_id: tid,
+        }
+    }
+
+    #[test]
+    fn a_handle_id_round_trips_including_values_a_js_number_would_round() {
+        for handle in [0isize, 1, -1, 0x0001_2345, isize::MAX, isize::MIN] {
+            let id = handle_id(WindowHandle(handle));
+            assert_eq!(parse_handle_id(&id), Some(WindowHandle(handle)));
+        }
+        // The reason ids are strings: this HWND is past 2^53, so a JS number
+        // would hand the paste path a different window.
+        let big = WindowHandle(9_007_199_254_740_993);
+        assert_eq!(handle_id(big), "9007199254740993");
+        assert_eq!(parse_handle_id("9007199254740993"), Some(big));
+    }
+
+    #[test]
+    fn a_malformed_handle_id_is_not_a_handle() {
+        for id in ["", "  ", "0x10", "12.5", "not-a-handle"] {
+            assert_eq!(parse_handle_id(id), None);
+        }
+    }
+
+    #[test]
+    fn rows_carry_the_backend_label_and_a_string_handle() {
+        let offered = visible_candidates(
+            vec![
+                raw(9_007_199_254_740_993, "notes.txt", Some("TextEdit"), true),
+                raw(2, "Terminal", None, true),
+            ],
+            &[],
+        );
+        let rows = offer_rows(&offered);
+        assert_eq!(rows[0].handle, "9007199254740993");
+        assert_eq!(rows[0].label, "TextEdit: notes.txt");
+        assert_eq!(rows[1].handle, "2");
+        assert_eq!(rows[1].label, "Terminal");
+    }
+
+    #[test]
+    fn wire_gestures_map_onto_the_core_vocabulary() {
+        assert_eq!(
+            PickerGesture::Chose {
+                handle: "42".to_string()
+            }
+            .to_gesture(),
+            PickGesture::Chose(WindowHandle(42))
+        );
+        assert_eq!(
+            PickerGesture::Foreground.to_gesture(),
+            PickGesture::FocusForeground
+        );
+        assert_eq!(PickerGesture::Dismiss.to_gesture(), PickGesture::Dismiss);
+    }
+
+    #[test]
+    fn a_gesture_with_an_unreadable_handle_fails_safe_to_dismiss() {
+        let gesture = PickerGesture::Chose {
+            handle: "nonsense".to_string(),
+        };
+        assert_eq!(gesture.to_gesture(), PickGesture::Dismiss);
+        assert_eq!(
+            resolve_gesture(gesture.to_gesture(), &[]),
+            PickOutcome::Cancel
+        );
+    }
+
+    #[test]
+    fn wire_gestures_deserialize_from_the_overlays_shape() {
+        let chose: PickerGesture =
+            serde_json::from_str(r#"{"kind":"chose","handle":"42"}"#).expect("valid gesture");
+        assert_eq!(
+            chose,
+            PickerGesture::Chose {
+                handle: "42".to_string()
+            }
+        );
+        let foreground: PickerGesture =
+            serde_json::from_str(r#"{"kind":"foreground"}"#).expect("valid gesture");
+        assert_eq!(foreground, PickerGesture::Foreground);
+        let dismiss: PickerGesture =
+            serde_json::from_str(r#"{"kind":"dismiss"}"#).expect("valid gesture");
+        assert_eq!(dismiss, PickerGesture::Dismiss);
+    }
+
+    #[test]
+    fn arming_a_chosen_window_records_its_full_identity() {
+        let picked = identity(7, 100, 200);
+        let armed = arm_pick(
+            PickOutcome::DeliverOnce(OutputTarget::Pinned(WindowHandle(7))),
+            |h| {
+                assert_eq!(h, WindowHandle(7));
+                Some(picked)
+            },
+        );
+        assert_eq!(armed, (PickArmed::Window, Some(picked)));
+    }
+
+    #[test]
+    fn arming_a_window_that_died_between_offer_and_click_arms_nothing() {
+        let armed = arm_pick(
+            PickOutcome::DeliverOnce(OutputTarget::Pinned(WindowHandle(7))),
+            |_| None,
+        );
+        assert_eq!(armed, (PickArmed::Cancelled, None));
+    }
+
+    #[test]
+    fn arming_foreground_or_cancel_arms_no_window() {
+        assert_eq!(
+            arm_pick(PickOutcome::DeliverOnce(OutputTarget::Foreground), |_| {
+                panic!("foreground needs no identity")
+            }),
+            (PickArmed::Foreground, None)
+        );
+        assert_eq!(
+            arm_pick(PickOutcome::Cancel, |_| panic!(
+                "a cancelled pick needs no identity"
+            )),
+            (PickArmed::Cancelled, None)
+        );
+    }
+
+    #[test]
+    fn a_session_offers_then_forgets_its_rows() {
+        let session = PickerSession::default();
+        assert!(session.offered().is_empty());
+        let offered = visible_candidates(vec![raw(1, "Mail", None, true)], &[]);
+        session.offer(offered.clone());
+        assert_eq!(session.offered(), offered);
+        session.clear();
+        // A late gesture now resolves against nothing, so it cannot pick.
+        assert_eq!(
+            resolve_gesture(PickGesture::Chose(WindowHandle(1)), &session.offered()),
+            PickOutcome::Cancel
+        );
+    }
+
+    #[test]
+    fn a_pending_pick_routes_exactly_one_paste() {
+        let pending = PendingPick::default();
+        assert!(!pending.is_armed());
+        // With nothing armed, the paste falls through to the usual target rules.
+        assert_eq!(pending.take_resolved(|_| panic!("no pick to check")), None);
+
+        let picked = identity(7, 100, 200);
+        pending.arm(picked);
+        assert!(pending.is_armed());
+        assert_eq!(
+            pending.take_resolved(|w| {
+                assert_eq!(w, picked);
+                true
+            }),
+            Some(PickDelivery::Deliver(OutputTarget::Pinned(picked.handle)))
+        );
+        // One pick, one paste: the second transcript is a normal one.
+        assert!(!pending.is_armed());
+        assert_eq!(pending.take_resolved(|_| true), None);
+    }
+
+    #[test]
+    fn a_picked_window_that_closed_suppresses_the_paste() {
+        let pending = PendingPick::default();
+        pending.arm(identity(7, 100, 200));
+        // Same fail-safe as a lost lock: never fall back to the foreground.
+        assert_eq!(
+            pending.take_resolved(|_| false),
+            Some(PickDelivery::PickLost)
+        );
+        assert!(!pending.is_armed());
+    }
+
+    #[test]
+    fn a_recycled_handle_is_not_the_picked_window() {
+        // End to end through the shared identity check (#254): the handle is a
+        // window again, but a different process owns it now.
+        let pending = PendingPick::default();
+        let picked = identity(7, 100, 200);
+        pending.arm(picked);
+        let delivery = pending
+            .take_resolved(|w| crate::output_target::identity_is_alive(w, |_| Some((999, 200))));
+        assert_eq!(delivery, Some(PickDelivery::PickLost));
+    }
+
+    #[test]
+    fn clearing_a_pending_pick_returns_to_the_usual_target() {
+        let pending = PendingPick::default();
+        pending.arm(identity(7, 100, 200));
+        pending.clear();
+        assert!(!pending.is_armed());
+        assert_eq!(pending.take_resolved(|_| panic!("no pick to check")), None);
     }
 
     #[test]

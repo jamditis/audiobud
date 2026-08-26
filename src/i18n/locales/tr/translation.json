@@ -14,7 +14,8 @@
     "showOverlay": "Kaplamayı göster",
     "outputMode": "Çıktı modu",
     "formatted": "Biçimlendirilmiş",
-    "rawTranscript": "Ham transkript"
+    "rawTranscript": "Ham transkript",
+    "sendToWindowOnce": "Bir kez pencereye gönder"
   },
   "sidebar": {
     "navLabel": "Ayar bölümleri",
@@ -806,7 +807,9 @@
     "transcriptionErrorGeneric": "Kayıt yazıya dökülemedi. Tekrar deneyin veya farklı bir model seçin.",
     "transcriptionTimeoutTitle": "Transkripsiyon zaman aşımına uğradı",
     "transcriptionTimeout": "Motor {{seconds}} saniye sonra yanıt vermedi ve takılmış olabilir. Bu durum devam ederse AudioBud'u yeniden başlatın.",
-    "parakeetInputTooLong": "Bu kayıt {{duration}} uzunluğunda. Parakeet yaklaşık 6:30'dan uzun kayıtları yazıya dökemez; sonraki ses uyarı vermeden atlanır. Uzun kayıtlar için bir Whisper modeli kullanın."
+    "parakeetInputTooLong": "Bu kayıt {{duration}} uzunluğunda. Parakeet yaklaşık 6:30'dan uzun kayıtları yazıya dökemez; sonraki ses uyarı vermeden atlanır. Uzun kayıtlar için bir Whisper modeli kullanın.",
+    "windowPickLostTitle": "Seçilen pencere kayboldu",
+    "windowPickLost": "Seçtiğiniz pencere kapalı. AudioBud metni yapıştırmadı. Yeniden bir pencere seçin."
   },
   "appLanguage": {
     "title": "Uygulama Dili",
@@ -819,6 +822,14 @@
     "cancel": "Kaydı iptal et",
     "raw": "HAM",
     "rawHint": "Ham transkript modu"
+  },
+  "windowPicker": {
+    "title": "Pencereye gönder",
+    "hint": "Sonraki metniniz için bir pencere seçin. Geçerli pencere için F, iptal için Esc tuşuna basın.",
+    "loading": "Pencereler aranıyor...",
+    "empty": "Kullanılabilir pencere yok.",
+    "useForeground": "Geçerli pencereyi kullan",
+    "cancel": "İptal"
   },
   "critters": {
     "frog": "Kurbağa"

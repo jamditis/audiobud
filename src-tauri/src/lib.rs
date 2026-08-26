@@ -389,6 +389,11 @@ fn initialize_core_logic(app_handle: &AppHandle) {
             "copy_last_transcript" => {
                 tray::copy_last_transcript(app);
             }
+            // One-shot window picker (#124). Opens the picker for the next
+            // dictation only; it arms no lasting lock.
+            "pick_output_window" => {
+                window_picker::backend::open_picker(app);
+            }
             "unload_model" => {
                 let transcription_manager = app.state::<Arc<TranscriptionManager>>();
                 if !transcription_manager.is_model_loaded() {
@@ -494,6 +499,12 @@ fn initialize_core_logic(app_handle: &AppHandle) {
     // paste path reads this at send time. The tray/shortcut toggle and the
     // Windows focus-borrow that consume it are the next child of epic #119.
     app_handle.manage(output_target::PinnedTarget::default());
+    // One-shot window picker state (#124): the rows currently on offer, the
+    // pick waiting to route a single transcript, and the remembered pick the
+    // picker floats to the top next time.
+    app_handle.manage(window_picker::PickerSession::default());
+    app_handle.manage(window_picker::PendingPick::default());
+    app_handle.manage(window_picker::LastPick::default());
     app_handle.manage(delivery_queue::DeliveryQueue::default());
 
     // Initialize tray menu with idle state
@@ -677,6 +688,8 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::personalization::update_learned_words,
             commands::personalization::reset_personalization,
             commands::personalization::export_personalization,
+            commands::window_picker::list_picker_windows,
+            commands::window_picker::resolve_window_pick,
             helpers::clamshell::is_laptop,
         ])
         .events(collect_events![managers::history::HistoryUpdatePayload,])

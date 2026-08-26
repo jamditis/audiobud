@@ -192,6 +192,20 @@ function App() {
     };
   }, [t]);
 
+  // Listen for a one-shot pick whose window closed before the transcript fired
+  // (issue #124). The paste was suppressed rather than sent to whatever now
+  // holds focus; nothing stays armed.
+  useEffect(() => {
+    const unlisten = listen("window-pick-lost", () => {
+      toast.warning(t("errors.windowPickLostTitle"), {
+        description: t("errors.windowPickLost"),
+      });
+    });
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, [t]);
+
   // Listen for transcription watchdog timeouts (wedged engine, issue #58)
   // and show a toast. The Rust side has already recovered the overlay/tray.
   useEffect(() => {

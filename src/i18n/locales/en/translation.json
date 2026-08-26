@@ -15,7 +15,8 @@
     "outputMode": "Output mode",
     "formatted": "Formatted",
     "rawTranscript": "Raw transcript",
-    "lockToWindow": "Lock to window"
+    "lockToWindow": "Lock to window",
+    "sendToWindowOnce": "Send to window once"
   },
   "sidebar": {
     "navLabel": "Settings sections",
@@ -809,7 +810,9 @@
     "transcriptionErrorGeneric": "The recording could not be transcribed. Try again or choose a different model.",
     "transcriptionTimeoutTitle": "Transcription timed out",
     "transcriptionTimeout": "The engine did not respond after {{seconds}} seconds and may be stuck. Restart AudioBud if this keeps happening.",
-    "parakeetInputTooLong": "This recording is {{duration}} long. Parakeet cannot transcribe recordings longer than about 6:30 because later audio would be silently omitted. Use a Whisper model for long recordings."
+    "parakeetInputTooLong": "This recording is {{duration}} long. Parakeet cannot transcribe recordings longer than about 6:30 because later audio would be silently omitted. Use a Whisper model for long recordings.",
+    "windowPickLostTitle": "Picked window is gone",
+    "windowPickLost": "The window you picked is closed. AudioBud did not paste the text. Pick a window again."
   },
   "appLanguage": {
     "title": "Application language",
@@ -822,6 +825,14 @@
     "cancel": "Cancel recording",
     "raw": "RAW",
     "rawHint": "Raw transcript mode"
+  },
+  "windowPicker": {
+    "title": "Send to window",
+    "hint": "Choose a window for your next text. Press F for the current window, Esc to cancel.",
+    "loading": "Looking for windows...",
+    "empty": "No windows to choose.",
+    "useForeground": "Use current window",
+    "cancel": "Cancel"
   },
   "critters": {
     "frog": "Frog"

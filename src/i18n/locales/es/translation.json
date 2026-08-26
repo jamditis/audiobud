@@ -14,7 +14,8 @@
     "showOverlay": "Mostrar superposición",
     "outputMode": "Modo de salida",
     "formatted": "Con formato",
-    "rawTranscript": "Transcripción sin formato"
+    "rawTranscript": "Transcripción sin formato",
+    "sendToWindowOnce": "Enviar a una ventana una vez"
   },
   "sidebar": {
     "navLabel": "Secciones de configuración",
@@ -806,7 +807,9 @@
     "transcriptionErrorGeneric": "No se pudo transcribir la grabación. Inténtalo de nuevo o elige otro modelo.",
     "transcriptionTimeoutTitle": "Se agotó el tiempo de la transcripción",
     "transcriptionTimeout": "El motor no respondió después de {{seconds}} segundos y puede estar bloqueado. Reinicia AudioBud si esto sigue ocurriendo.",
-    "parakeetInputTooLong": "Esta grabación dura {{duration}}. Parakeet no puede transcribir grabaciones de más de unos 6:30 porque omitiría el audio posterior sin avisar. Usa un modelo Whisper para grabaciones largas."
+    "parakeetInputTooLong": "Esta grabación dura {{duration}}. Parakeet no puede transcribir grabaciones de más de unos 6:30 porque omitiría el audio posterior sin avisar. Usa un modelo Whisper para grabaciones largas.",
+    "windowPickLostTitle": "La ventana elegida ya no existe",
+    "windowPickLost": "La ventana que elegiste está cerrada. AudioBud no pegó el texto. Elige otra ventana."
   },
   "appLanguage": {
     "title": "Idioma de la aplicación",
@@ -819,6 +822,14 @@
     "cancel": "Cancelar grabación",
     "raw": "RAW",
     "rawHint": "Modo de transcripción sin formato"
+  },
+  "windowPicker": {
+    "title": "Enviar a una ventana",
+    "hint": "Elige una ventana para tu próximo texto. Pulsa F para la ventana actual y Esc para cancelar.",
+    "loading": "Buscando ventanas...",
+    "empty": "No hay ventanas disponibles.",
+    "useForeground": "Usar la ventana actual",
+    "cancel": "Cancelar"
   },
   "critters": {
     "frog": "Rana"

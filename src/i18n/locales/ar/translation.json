@@ -14,7 +14,8 @@
     "showOverlay": "إظهار التراكب",
     "outputMode": "وضع الإخراج",
     "formatted": "منسّق",
-    "rawTranscript": "نص خام"
+    "rawTranscript": "نص خام",
+    "sendToWindowOnce": "الإرسال إلى نافذة مرة واحدة"
   },
   "sidebar": {
     "navLabel": "أقسام الإعدادات",
@@ -814,7 +815,9 @@
     "transcriptionErrorGeneric": "تعذر نسخ التسجيل. حاول مرة أخرى أو اختر نموذجًا مختلفًا.",
     "transcriptionTimeoutTitle": "انتهت مهلة التفريغ",
     "transcriptionTimeout": "لم يستجب المحرك بعد {{seconds}} ثانية وقد يكون متوقفاً. أعد تشغيل AudioBud إذا استمر هذا.",
-    "parakeetInputTooLong": "مدة هذا التسجيل {{duration}}. لا يستطيع Parakeet نسخ تسجيلات أطول من نحو 6:30 لأن الصوت اللاحق سيُحذف بصمت. استخدم نموذج Whisper للتسجيلات الطويلة."
+    "parakeetInputTooLong": "مدة هذا التسجيل {{duration}}. لا يستطيع Parakeet نسخ تسجيلات أطول من نحو 6:30 لأن الصوت اللاحق سيُحذف بصمت. استخدم نموذج Whisper للتسجيلات الطويلة.",
+    "windowPickLostTitle": "النافذة المختارة لم تعد موجودة",
+    "windowPickLost": "النافذة التي اخترتها مغلقة. لم يلصق AudioBud النص. اختر نافذة مرة أخرى."
   },
   "appLanguage": {
     "title": "لغة التطبيق",
@@ -827,6 +830,14 @@
     "cancel": "إلغاء التسجيل",
     "raw": "خام",
     "rawHint": "وضع النص الخام"
+  },
+  "windowPicker": {
+    "title": "الإرسال إلى نافذة",
+    "hint": "اختر نافذة للنص التالي. اضغط F للنافذة الحالية وEsc للإلغاء.",
+    "loading": "جارٍ البحث عن النوافذ...",
+    "empty": "لا توجد نوافذ متاحة.",
+    "useForeground": "استخدام النافذة الحالية",
+    "cancel": "إلغاء"
   },
   "critters": {
     "frog": "ضفدع"

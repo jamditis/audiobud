@@ -14,7 +14,8 @@
     "showOverlay": "Overlay anzeigen",
     "outputMode": "Ausgabemodus",
     "formatted": "Formatiert",
-    "rawTranscript": "Rohtranskript"
+    "rawTranscript": "Rohtranskript",
+    "sendToWindowOnce": "Einmal an Fenster senden"
   },
   "sidebar": {
     "navLabel": "Einstellungsbereiche",
@@ -806,7 +807,9 @@
     "transcriptionErrorGeneric": "Die Aufnahme konnte nicht transkribiert werden. Versuche es erneut oder wähle ein anderes Modell.",
     "transcriptionTimeoutTitle": "Zeitüberschreitung bei der Transkription",
     "transcriptionTimeout": "Die Engine hat nach {{seconds}} Sekunden nicht reagiert und hängt möglicherweise. Starte AudioBud neu, wenn das häufiger vorkommt.",
-    "parakeetInputTooLong": "Diese Aufnahme ist {{duration}} lang. Parakeet kann Aufnahmen über etwa 6:30 nicht transkribieren, da späteres Audio unbemerkt ausgelassen würde. Verwende für lange Aufnahmen ein Whisper-Modell."
+    "parakeetInputTooLong": "Diese Aufnahme ist {{duration}} lang. Parakeet kann Aufnahmen über etwa 6:30 nicht transkribieren, da späteres Audio unbemerkt ausgelassen würde. Verwende für lange Aufnahmen ein Whisper-Modell.",
+    "windowPickLostTitle": "Gewähltes Fenster ist weg",
+    "windowPickLost": "Das gewählte Fenster ist geschlossen. AudioBud hat den Text nicht eingefügt. Wähle erneut ein Fenster."
   },
   "appLanguage": {
     "title": "Anwendungssprache",
@@ -819,6 +822,14 @@
     "cancel": "Aufnahme abbrechen",
     "raw": "RAW",
     "rawHint": "Rohtranskript-Modus"
+  },
+  "windowPicker": {
+    "title": "An Fenster senden",
+    "hint": "Wähle ein Fenster für deinen nächsten Text. F für das aktuelle Fenster, Esc zum Abbrechen.",
+    "loading": "Fenster werden gesucht ...",
+    "empty": "Keine Fenster verfügbar.",
+    "useForeground": "Aktuelles Fenster verwenden",
+    "cancel": "Abbrechen"
   },
   "critters": {
     "frog": "Frosch"

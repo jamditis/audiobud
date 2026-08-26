@@ -14,7 +14,8 @@
     "showOverlay": "הצג שכבת משוב",
     "outputMode": "מצב פלט",
     "formatted": "מעוצב",
-    "rawTranscript": "תמלול גולמי"
+    "rawTranscript": "תמלול גולמי",
+    "sendToWindowOnce": "שליחה לחלון פעם אחת"
   },
   "sidebar": {
     "navLabel": "מדורי ההגדרות",
@@ -808,7 +809,9 @@
     "transcriptionErrorGeneric": "לא ניתן היה לתמלל את ההקלטה. נסו שוב או בחרו מודל אחר.",
     "transcriptionTimeoutTitle": "התמלול חרג מהזמן",
     "transcriptionTimeout": "המנוע לא הגיב אחרי {{seconds}} שניות וייתכן שהוא תקוע. הפעל מחדש את AudioBud אם זה ממשיך לקרות.",
-    "parakeetInputTooLong": "אורך ההקלטה הוא {{duration}}. ‏Parakeet לא יכול לתמלל הקלטות ארוכות מכ־6:30, כי האודיו שבהמשך יושמט ללא התראה. יש להשתמש במודל Whisper להקלטות ארוכות."
+    "parakeetInputTooLong": "אורך ההקלטה הוא {{duration}}. ‏Parakeet לא יכול לתמלל הקלטות ארוכות מכ־6:30, כי האודיו שבהמשך יושמט ללא התראה. יש להשתמש במודל Whisper להקלטות ארוכות.",
+    "windowPickLostTitle": "החלון שנבחר נעלם",
+    "windowPickLost": "החלון שבחרת סגור. AudioBud לא הדביק את הטקסט. בחר חלון שוב."
   },
   "appLanguage": {
     "title": "שפת האפליקציה",
@@ -821,6 +824,14 @@
     "cancel": "בטל הקלטה",
     "raw": "גולמי",
     "rawHint": "מצב תמלול גולמי"
+  },
+  "windowPicker": {
+    "title": "שליחה לחלון",
+    "hint": "בחר חלון לטקסט הבא. לחץ F לחלון הנוכחי, Esc לביטול.",
+    "loading": "מחפש חלונות...",
+    "empty": "אין חלונות זמינים.",
+    "useForeground": "שימוש בחלון הנוכחי",
+    "cancel": "ביטול"
   },
   "critters": {
     "frog": "צפרדע"

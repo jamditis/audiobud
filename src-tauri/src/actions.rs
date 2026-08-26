@@ -972,6 +972,23 @@ impl ShortcutAction for ToggleTargetLockAction {
     }
 }
 
+// One-shot window picker (#124). Pressing opens the picker; choosing a window
+// routes the NEXT transcript there and nothing after it. Windows-only for now
+// (#119), like the target lock, so the binding is registered only there.
+#[cfg(target_os = "windows")]
+struct PickOutputWindowAction;
+
+#[cfg(target_os = "windows")]
+impl ShortcutAction for PickOutputWindowAction {
+    fn start(&self, app: &AppHandle, _binding_id: &str, _shortcut_str: &str) {
+        crate::window_picker::backend::open_picker(app);
+    }
+
+    fn stop(&self, _app: &AppHandle, _binding_id: &str, _shortcut_str: &str) {
+        // The picker opens on press; the release does nothing.
+    }
+}
+
 // Test Action
 struct TestAction;
 
@@ -1027,6 +1044,11 @@ pub static ACTION_MAP: Lazy<HashMap<String, Arc<dyn ShortcutAction>>> = Lazy::ne
     map.insert(
         "toggle_target_lock".to_string(),
         Arc::new(ToggleTargetLockAction) as Arc<dyn ShortcutAction>,
+    );
+    #[cfg(target_os = "windows")]
+    map.insert(
+        "pick_output_window".to_string(),
+        Arc::new(PickOutputWindowAction) as Arc<dyn ShortcutAction>,
     );
     map.insert(
         "test".to_string(),

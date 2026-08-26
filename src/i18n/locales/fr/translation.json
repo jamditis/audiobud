@@ -14,7 +14,8 @@
     "showOverlay": "Afficher l'incrustation",
     "outputMode": "Mode de sortie",
     "formatted": "Formaté",
-    "rawTranscript": "Transcription brute"
+    "rawTranscript": "Transcription brute",
+    "sendToWindowOnce": "Envoyer à une fenêtre une fois"
   },
   "sidebar": {
     "navLabel": "Sections des paramètres",
@@ -806,7 +807,9 @@
     "transcriptionErrorGeneric": "L’enregistrement n’a pas pu être transcrit. Réessayez ou choisissez un autre modèle.",
     "transcriptionTimeoutTitle": "Délai de transcription dépassé",
     "transcriptionTimeout": "Le moteur n'a pas répondu après {{seconds}} secondes et semble bloqué. Redémarrez AudioBud si cela se reproduit.",
-    "parakeetInputTooLong": "Cet enregistrement dure {{duration}}. Parakeet ne peut pas transcrire les enregistrements de plus d'environ 6:30, car la suite de l'audio serait omise sans avertissement. Utilisez un modèle Whisper pour les longs enregistrements."
+    "parakeetInputTooLong": "Cet enregistrement dure {{duration}}. Parakeet ne peut pas transcrire les enregistrements de plus d'environ 6:30, car la suite de l'audio serait omise sans avertissement. Utilisez un modèle Whisper pour les longs enregistrements.",
+    "windowPickLostTitle": "La fenêtre choisie a disparu",
+    "windowPickLost": "La fenêtre que vous avez choisie est fermée. AudioBud n'a pas collé le texte. Choisissez une autre fenêtre."
   },
   "appLanguage": {
     "title": "Langue de l'application",
@@ -819,6 +822,14 @@
     "cancel": "Annuler l'enregistrement",
     "raw": "BRUT",
     "rawHint": "Mode transcription brute"
+  },
+  "windowPicker": {
+    "title": "Envoyer à une fenêtre",
+    "hint": "Choisissez une fenêtre pour votre prochain texte. Appuyez sur F pour la fenêtre actuelle, Échap pour annuler.",
+    "loading": "Recherche des fenêtres...",
+    "empty": "Aucune fenêtre disponible.",
+    "useForeground": "Utiliser la fenêtre actuelle",
+    "cancel": "Annuler"
   },
   "critters": {
     "frog": "Grenouille"

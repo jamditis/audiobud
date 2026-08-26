@@ -14,7 +14,8 @@
     "showOverlay": "Pokaż nakładkę",
     "outputMode": "Tryb wyjścia",
     "formatted": "Sformatowany",
-    "rawTranscript": "Surowa transkrypcja"
+    "rawTranscript": "Surowa transkrypcja",
+    "sendToWindowOnce": "Wyślij do okna jeden raz"
   },
   "sidebar": {
     "navLabel": "Sekcje ustawień",
@@ -810,7 +811,9 @@
     "transcriptionErrorGeneric": "Nie udało się transkrybować nagrania. Spróbuj ponownie lub wybierz inny model.",
     "transcriptionTimeoutTitle": "Przekroczono czas transkrypcji",
     "transcriptionTimeout": "Silnik nie odpowiedział przez {{seconds}} sekund i mógł się zawiesić. Uruchom AudioBud ponownie, jeśli to się powtarza.",
-    "parakeetInputTooLong": "To nagranie ma długość {{duration}}. Parakeet nie może transkrybować nagrań dłuższych niż około 6:30, ponieważ dalszy dźwięk zostałby pominięty bez ostrzeżenia. Do długich nagrań użyj modelu Whisper."
+    "parakeetInputTooLong": "To nagranie ma długość {{duration}}. Parakeet nie może transkrybować nagrań dłuższych niż około 6:30, ponieważ dalszy dźwięk zostałby pominięty bez ostrzeżenia. Do długich nagrań użyj modelu Whisper.",
+    "windowPickLostTitle": "Wybrane okno zniknęło",
+    "windowPickLost": "Wybrane okno jest zamknięte. AudioBud nie wkleił tekstu. Wybierz okno ponownie."
   },
   "appLanguage": {
     "title": "Język aplikacji",
@@ -823,6 +826,14 @@
     "cancel": "Anuluj nagrywanie",
     "raw": "RAW",
     "rawHint": "Tryb surowej transkrypcji"
+  },
+  "windowPicker": {
+    "title": "Wyślij do okna",
+    "hint": "Wybierz okno dla następnego tekstu. Naciśnij F, aby użyć bieżącego okna, Esc, aby anulować.",
+    "loading": "Szukanie okien...",
+    "empty": "Brak dostępnych okien.",
+    "useForeground": "Użyj bieżącego okna",
+    "cancel": "Anuluj"
   },
   "critters": {
     "frog": "Żaba"
