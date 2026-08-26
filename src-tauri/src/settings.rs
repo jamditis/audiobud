@@ -1252,8 +1252,25 @@ pub fn load_or_create_app_settings(app: &AppHandle) -> AppSettings {
         // instead of caching them, so the next read retries the store rather
         // than being stuck serving defaults — and so a later write can't
         // clobber a store that recovers with defaults-plus-one-field.
+        //
+        // Known limitation: a manager that copies settings once at
+        // construction (e.g. `AudioRecordingManager::new`'s microphone mode)
+        // can still be handed these defaults if its startup read races this
+        // failure, and has no trigger to notice the store recovering later
+        // — it stays on defaults until the user changes that setting
+        // explicitly or the app restarts. Reconciling every
+        // settings-dependent manager when a failed load later recovers is
+        // beyond this settings-plumbing refactor; the pre-refactor behavior
+        // here was a hard process abort (`.expect`), so this is already a
+        // strict improvement, not a regression.
         return get_default_settings();
     };
+
+    // Tracks whether this call changed the store (a binding backfill, a
+    // post-process-defaults fill-in, a migration, or replacing corrupted
+    // data with defaults) so the final cache publish below can tell that
+    // case apart from an unmodified load.
+    let mut mutated = false;
 
     let mut settings = if let Some(settings_value) = store.get("settings") {
         // Parse the entire settings object
@@ -1277,6 +1294,7 @@ pub fn load_or_create_app_settings(app: &AppHandle) -> AppSettings {
                 if updated {
                     debug!("Settings updated with new bindings");
                     store.set("settings", serde_json::to_value(&settings).unwrap());
+                    mutated = true;
                 }
 
                 settings
@@ -1286,17 +1304,20 @@ pub fn load_or_create_app_settings(app: &AppHandle) -> AppSettings {
                 // Fall back to default settings if parsing fails
                 let default_settings = get_default_settings();
                 store.set("settings", serde_json::to_value(&default_settings).unwrap());
+                mutated = true;
                 default_settings
             }
         }
     } else {
         let default_settings = get_default_settings();
         store.set("settings", serde_json::to_value(&default_settings).unwrap());
+        mutated = true;
         default_settings
     };
 
     if ensure_post_process_defaults(&mut settings) {
         store.set("settings", serde_json::to_value(&settings).unwrap());
+        mutated = true;
     }
 
     let update_checks_migrated = store
@@ -1310,6 +1331,7 @@ pub fn load_or_create_app_settings(app: &AppHandle) -> AppSettings {
     ) {
         store.set("settings", serde_json::to_value(&settings).unwrap());
         store.set(UPDATE_CHECKS_V0_4_2_MIGRATION_KEY, true);
+        mutated = true;
         let _ = app.emit(
             "settings-changed",
             serde_json::json!({ "setting": "update_checks_enabled", "value": enabled }),
@@ -1317,11 +1339,30 @@ pub fn load_or_create_app_settings(app: &AppHandle) -> AppSettings {
         debug!("Configured signed update checks for the v0.4.2 package migration: {enabled}");
     }
 
-    // A loader's read isn't lock-protected, so a concurrent `write_settings`
-    // may have already published a newer value while this function was
-    // still reading the store: fill only if the slot is still empty, so
-    // that write is never clobbered (see `SettingsCache::fill_if_empty`).
-    SETTINGS_CACHE.fill_if_empty(&settings);
+    if mutated {
+        // This call changed the store (a migration, a backfill, or a
+        // corrupted-value fallback), so its result is the new authoritative
+        // value, exactly like an explicit write — publish it through
+        // `write_through` so the store and cache move together under one
+        // lock. A plain `fill_if_empty` would no-op here whenever something
+        // else (e.g. a `get_settings` call made before shortcut init on
+        // startup) had already warmed the cache with the pre-migration
+        // object, permanently stranding the cache on stale data that a
+        // later read-modify-write would then serialize back over the store,
+        // silently reverting the migration even though its marker is set
+        // (issue #166 follow-up).
+        SETTINGS_CACHE.write_through(
+            || store.set("settings", serde_json::to_value(&settings).unwrap()),
+            &settings,
+        );
+    } else {
+        // Nothing changed: a loader's read isn't lock-protected, so a
+        // concurrent `write_settings` may have already published a newer
+        // value while this function was still reading the store — fill only
+        // if the slot is still empty, so that write is never clobbered (see
+        // `SettingsCache::fill_if_empty`).
+        SETTINGS_CACHE.fill_if_empty(&settings);
+    }
     settings
 }
 
@@ -1339,6 +1380,11 @@ pub fn get_settings(app: &AppHandle) -> AppSettings {
         // caching them (`get_or_load` would cache unconditionally), so the
         // next read retries the store instead of being stuck serving
         // defaults for the rest of the process's life.
+        //
+        // Known limitation: see the matching comment in
+        // `load_or_create_app_settings` — a manager that copies these
+        // defaults once at construction has no trigger to reconcile itself
+        // when the store later recovers.
         return get_default_settings();
     };
     let settings = read_settings_from_open_store(&store);
@@ -1651,6 +1697,45 @@ mod tests {
         assert!(persisted, "write_through must run the persist step");
         let cached = cache.peek().expect("write_through publishes to the cache");
         assert!(cached.push_to_talk);
+    }
+
+    #[test]
+    fn a_migrating_loader_overwrites_a_cache_warmed_with_pre_migration_settings() {
+        // Models `load_or_create_app_settings`'s mutated branch: startup can
+        // call `get_settings` (warming the cache with the pre-migration
+        // object) before shortcut init runs the loader that performs a
+        // migration/backfill. A loader that changed the store must publish
+        // through `write_through` (unconditional, under the lock) rather
+        // than `fill_if_empty` (a no-op once the cache is warm), or the
+        // cache would stay pinned to the pre-migration snapshot forever —
+        // and a later read-modify-write would serialize it back over the
+        // store, reverting the migration even though its marker is set.
+        let cache = SettingsCache::new();
+
+        let pre_migration = get_default_settings();
+        cache.store(&pre_migration);
+        assert!(
+            cache.peek().is_some(),
+            "the cache must start warm, as if an earlier get_settings call populated it"
+        );
+
+        let mut migrated = get_default_settings();
+        apply_setting_value(&mut migrated, "push_to_talk", json!(true)).expect("applies");
+        assert_ne!(
+            migrated.push_to_talk, pre_migration.push_to_talk,
+            "the migrated object must actually differ from what's cached"
+        );
+
+        // The mutated branch's publish: unconditional, not fill_if_empty.
+        cache.write_through(|| {}, &migrated);
+
+        let cached = cache
+            .peek()
+            .expect("write_through must leave the cache populated");
+        assert_eq!(
+            cached.push_to_talk, migrated.push_to_talk,
+            "a mutating loader must overwrite a cache warmed with pre-migration settings"
+        );
     }
 
     #[test]

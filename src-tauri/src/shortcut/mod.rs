@@ -277,13 +277,17 @@ pub fn change_keyboard_implementation_setting(
         current_impl, new_impl
     );
 
-    // Unregister all shortcuts from the current implementation
-    unregister_all_shortcuts(&app, current_impl);
-
-    // Update the setting
-    let mut settings = settings::get_settings(&app);
+    // Persist the new implementation before touching any registrations. If
+    // this fails (e.g. the settings store is unavailable), returning here
+    // leaves the current implementation's shortcuts registered instead of
+    // unregistering them first and then failing with none registered until
+    // restart.
+    let mut settings = current_settings;
     settings.keyboard_implementation = new_impl;
     settings::write_settings(&app, settings)?;
+
+    // Unregister all shortcuts from the current implementation
+    unregister_all_shortcuts(&app, current_impl);
 
     // Initialize new implementation if needed (HandyKeys needs state)
     if new_impl == KeyboardImplementation::HandyKeys && initialize_handy_keys_with_rollback(&app)? {
