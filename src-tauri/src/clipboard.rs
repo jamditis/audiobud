@@ -822,6 +822,24 @@ mod tests {
     }
 
     #[test]
+    fn disabling_auto_submit_makes_external_script_delivery_focus_free() {
+        // The transition `clear_target_lock_if_focus_free`
+        // (shortcut::change_auto_submit_setting) must react to: a lock held
+        // while ExternalScript + auto_submit=true correctly stays (delivery
+        // still injects a keystroke), and disabling auto_submit is exactly
+        // what makes that same paste method's delivery focus-free, at which
+        // point the lock becomes stale and must be cleared.
+        assert!(requires_focus_for_delivery(
+            PasteMethod::ExternalScript,
+            true
+        ));
+        assert!(!requires_focus_for_delivery(
+            PasteMethod::ExternalScript,
+            false
+        ));
+    }
+
+    #[test]
     fn none_delivery_never_requires_focus() {
         // should_send_auto_submit special-cases None, so it stays
         // focus-independent even with auto-submit on.
