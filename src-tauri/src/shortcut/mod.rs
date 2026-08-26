@@ -20,6 +20,7 @@ use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_autostart::ManagerExt;
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 
+use crate::output_target;
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
 use crate::settings::APPLE_INTELLIGENCE_DEFAULT_MODEL_ID;
 use crate::settings::{
@@ -869,6 +870,24 @@ pub async fn change_paste_method_setting(app: AppHandle, method: String) -> Resu
             );
         }
     }
+    // A method that cannot act on a focused window (`requires_focus() ==
+    // false`, e.g. None or ExternalScript -- see #162) makes any active
+    // target-lock (#120) meaningless: there is no window left to keep pinning.
+    // Consulting the capability instead of matching `PasteMethod::None |
+    // PasteMethod::ExternalScript` here means a future no-window variant is
+    // covered automatically rather than by remembering to extend this match.
+    if !parsed.requires_focus() {
+        if let Some(pinned) = app.try_state::<output_target::PinnedTarget>() {
+            if pinned.is_locked() {
+                info!(
+                    "Paste method '{}' cannot target a focused window; clearing the active target-lock",
+                    method
+                );
+                pinned.unlock();
+            }
+        }
+    }
+
     let mut settings = settings::get_settings(&app);
     settings.paste_method = parsed;
     settings::write_settings(&app, settings);

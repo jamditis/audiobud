@@ -211,6 +211,17 @@ pub enum ModelUnloadTimeout {
     Sec15, // Debug mode only
 }
 
+/// How a finished transcript gets delivered to the target application.
+///
+/// `None` and `ExternalScript` never touch a window: `None` is a no-op, and
+/// `ExternalScript` hands the transcript to an arbitrary program on `argv[1]`
+/// (`clipboard::paste_via_external_script`). The other four -- `Direct` via
+/// `enigo.text()`, and `CtrlV` / `CtrlShiftV` / `ShiftInsert` via synthesized
+/// keystrokes -- all resolve to `SendInput`-style injection against the
+/// foreground window's input queue, so they only land correctly when that
+/// window is focused. See [`PasteMethod::requires_focus`] for the capability
+/// this drives (issue #162): target-lock (#120) is meaningless for a method
+/// that has no window to lock.
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Type)]
 #[serde(rename_all = "snake_case")]
 pub enum PasteMethod {
@@ -220,6 +231,25 @@ pub enum PasteMethod {
     ShiftInsert,
     CtrlShiftV,
     ExternalScript,
+}
+
+impl PasteMethod {
+    /// Whether this method must act on a focused window to work.
+    ///
+    /// `false` for `None` (no-op) and `ExternalScript` (runs a program, not a
+    /// window-directed injection) -- both are unaffected by which window is
+    /// focused, so a focus-borrowing feature like target-lock (#120) has
+    /// nothing to do for them. `true` for every other variant: each is a form
+    /// of keystroke/text injection into the foreground window's input queue,
+    /// so it needs that window focused to land in the right place.
+    ///
+    /// Callers should use this instead of matching on individual variants when
+    /// the question is "does this method need a focused window", so a future
+    /// variant is covered by construction rather than by remembering to add it
+    /// to every such match (#123).
+    pub fn requires_focus(&self) -> bool {
+        !matches!(self, PasteMethod::None | PasteMethod::ExternalScript)
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, Default, PartialEq, Eq, Type)]
@@ -1170,6 +1200,24 @@ mod tests {
         let out = format!("{:?}", map);
         assert!(!out.contains("secret"));
         assert!(out.contains("[REDACTED]"));
+    }
+
+    #[test]
+    fn paste_methods_with_no_window_do_not_require_focus() {
+        // None is a no-op and ExternalScript hands off to a program: neither
+        // touches a window, so target-lock has nothing to do for them (#162).
+        assert!(!PasteMethod::None.requires_focus());
+        assert!(!PasteMethod::ExternalScript.requires_focus());
+    }
+
+    #[test]
+    fn paste_methods_that_inject_into_a_window_require_focus() {
+        // Direct and the three clipboard-paste key combos all resolve to
+        // injection against the foreground window's input queue.
+        assert!(PasteMethod::Direct.requires_focus());
+        assert!(PasteMethod::CtrlV.requires_focus());
+        assert!(PasteMethod::CtrlShiftV.requires_focus());
+        assert!(PasteMethod::ShiftInsert.requires_focus());
     }
 
     #[cfg(target_os = "windows")]
