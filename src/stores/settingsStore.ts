@@ -1,7 +1,11 @@
 import { create } from "zustand";
 import { subscribeWithSelector } from "zustand/middleware";
 import { listen } from "@tauri-apps/api/event";
-import type { AppSettings as Settings, AudioDevice } from "@/bindings";
+import type {
+  AppSettings as Settings,
+  AudioDevice,
+  ModelUnloadTimeout,
+} from "@/bindings";
 import { commands } from "@/bindings";
 import { toast } from "sonner";
 import i18n from "@/i18n";
@@ -167,6 +171,8 @@ const settingUpdaters: {
   ort_accelerator: persistSetting("ort_accelerator"),
   whisper_gpu_device: persistSetting("whisper_gpu_device"),
   extra_recording_buffer_ms: persistSetting("extra_recording_buffer_ms"),
+  model_unload_timeout: (value) =>
+    commands.setModelUnloadTimeout(value as ModelUnloadTimeout),
 };
 
 export const useSettingsStore = create<SettingsStore>()(

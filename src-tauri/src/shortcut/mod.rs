@@ -180,11 +180,13 @@ pub fn change_binding(
     // optimistic value, so the shortcut actually registered must still be
     // the old one too, or the UI would show the old binding while the app
     // keeps using the unsaved new one until restart.
-    settings.bindings.insert(id, updated_binding.clone());
+    settings
+        .bindings
+        .insert(id.clone(), updated_binding.clone());
     settings::write_settings(&app, settings)?;
 
     // Unregister the existing binding
-    if let Err(e) = unregister_shortcut(&app, binding_to_modify) {
+    if let Err(e) = unregister_shortcut(&app, binding_to_modify.clone()) {
         let error_msg = format!("Failed to unregister shortcut: {}", e);
         error!("change_binding error: {}", error_msg);
     }
@@ -193,6 +195,29 @@ pub fn change_binding(
     if let Err(e) = register_shortcut(&app, updated_binding.clone()) {
         let error_msg = format!("Failed to register shortcut: {}", e);
         error!("change_binding error: {}", error_msg);
+
+        // The new binding is already persisted+cached at this point, but the
+        // OS refused to register it (e.g. owned by another app), so the live
+        // shortcut is unregistered rather than the old one. Roll back both
+        // the store and the live registration so the store, cache, live
+        // registration, and this response all agree on the old binding —
+        // otherwise the frontend would show the old binding as active (this
+        // response's success:false leaves its optimistic update rolled back)
+        // while the persisted/cached settings still hold the new one.
+        let mut rollback_settings = settings::get_settings(&app);
+        rollback_settings
+            .bindings
+            .insert(id, binding_to_modify.clone());
+        if let Err(revert_err) = settings::write_settings(&app, rollback_settings) {
+            warn!(
+                "Failed to revert binding '{}' after a registration failure: {revert_err}",
+                binding_to_modify.id
+            );
+        }
+        if let Err(reregister_err) = register_shortcut(&app, binding_to_modify) {
+            error!("Failed to re-register the old binding during rollback: {reregister_err}");
+        }
+
         return Ok(BindingResponse {
             success: false,
             binding: None,

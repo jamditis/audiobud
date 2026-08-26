@@ -12,15 +12,10 @@ pub struct ModelLoadStatus {
 
 #[tauri::command]
 #[specta::specta]
-pub fn set_model_unload_timeout(app: AppHandle, timeout: ModelUnloadTimeout) {
+pub fn set_model_unload_timeout(app: AppHandle, timeout: ModelUnloadTimeout) -> Result<(), String> {
     let mut settings = get_settings(&app);
     settings.model_unload_timeout = timeout;
-    // This command has no Result to report a write failure through (changing
-    // it to one would change the command's signature); log instead of
-    // silently discarding the error.
-    if let Err(e) = write_settings(&app, settings) {
-        log::warn!("Failed to persist model_unload_timeout: {e}");
-    }
+    write_settings(&app, settings)
 }
 
 #[tauri::command]
