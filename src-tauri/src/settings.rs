@@ -1082,6 +1082,15 @@ impl SettingsCache {
     /// write lock across that would serialize every reader behind disk I/O. A
     /// concurrent miss can therefore run `load` twice; both produce the same value,
     /// so the last write wins harmlessly.
+    ///
+    /// `load` always populates the cache with its result, so it must not be
+    /// used for a load that can fail to reach the store: `get_settings` and
+    /// `load_or_create_app_settings` handle their store-open failure directly
+    /// instead of going through this helper, so defaults from an unavailable
+    /// store are never cached (see the P2 fix for issue #166's settings
+    /// refactor). Kept for the cache-only tests below that exercise the
+    /// miss/hit/invalidate contract in isolation.
+    #[cfg(test)]
     pub(crate) fn get_or_load(&self, load: impl FnOnce() -> AppSettings) -> AppSettings {
         if let Some(cached) = self.peek() {
             return cached;
@@ -1103,6 +1112,27 @@ impl SettingsCache {
             .inner
             .write()
             .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(settings.clone());
+    }
+
+    /// Run `persist` (the store write) and publish `settings` to the cache as
+    /// one step under the cache's write lock.
+    ///
+    /// Locking rule: the store write and the cache update must happen while
+    /// the same write-guard is held. Two concurrent writers calling `store`
+    /// and then a separate cache update could interleave as store(A),
+    /// store(B), cache(B), cache(A), leaving the cache pinned to the older
+    /// value A forever even though the store holds B. Serializing both steps
+    /// under one lock makes the last writer to acquire the lock win for both
+    /// the store and the cache, together. Callers must not read the cache
+    /// (directly or via effects) until this call returns, so the read lock
+    /// taken by `peek` is never requested while this write lock is held.
+    pub(crate) fn write_through(&self, persist: impl FnOnce(), settings: &AppSettings) {
+        let mut guard = self
+            .inner
+            .write()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        persist();
+        *guard = Some(settings.clone());
     }
 
     pub(crate) fn invalidate(&self) {
@@ -1189,9 +1219,12 @@ fn normalize_after_change(settings: &mut AppSettings, key: &str, previous: &AppS
 pub fn load_or_create_app_settings(app: &AppHandle) -> AppSettings {
     // Initialize store
     let Some(store) = settings_store(app) else {
-        let defaults = get_default_settings();
-        SETTINGS_CACHE.store(&defaults);
-        return defaults;
+        // The store failed to open, which may be transient (e.g. a startup
+        // race). Return defaults for this call but leave the cache empty
+        // instead of caching them, so the next read retries the store rather
+        // than being stuck serving defaults — and so a later write can't
+        // clobber a store that recovers with defaults-plus-one-field.
+        return get_default_settings();
     };
 
     let mut settings = if let Some(settings_value) = store.get("settings") {
@@ -1266,14 +1299,22 @@ pub fn load_or_create_app_settings(app: &AppHandle) -> AppSettings {
 /// [`write_settings`], which refreshes the cache, so callers still observe their
 /// own writes.
 pub fn get_settings(app: &AppHandle) -> AppSettings {
-    SETTINGS_CACHE.get_or_load(|| read_settings_from_store(app))
-}
-
-fn read_settings_from_store(app: &AppHandle) -> AppSettings {
+    if let Some(cached) = SETTINGS_CACHE.peek() {
+        return cached;
+    }
     let Some(store) = settings_store(app) else {
+        // The store failed to open. Return defaults for this call without
+        // caching them (`get_or_load` would cache unconditionally), so the
+        // next read retries the store instead of being stuck serving
+        // defaults for the rest of the process's life.
         return get_default_settings();
     };
+    let settings = read_settings_from_open_store(&store);
+    SETTINGS_CACHE.store(&settings);
+    settings
+}
 
+fn read_settings_from_open_store(store: &Store<tauri::Wry>) -> AppSettings {
     let mut settings = if let Some(settings_value) = store.get("settings") {
         serde_json::from_value::<AppSettings>(settings_value).unwrap_or_else(|_| {
             let default_settings = get_default_settings();
@@ -1302,8 +1343,16 @@ pub fn write_settings(app: &AppHandle, settings: AppSettings) {
         return;
     };
 
-    store.set("settings", serde_json::to_value(&settings).unwrap());
-    SETTINGS_CACHE.store(&settings);
+    // The store write and the cache publish happen together under the
+    // cache's write lock (see `SettingsCache::write_through`) so concurrent
+    // writers can't interleave and strand the cache behind the store.
+    // Callers (e.g. `apply_setting_change`) only run their side effects after
+    // this function returns, so no reader ever waits on this lock from
+    // inside it.
+    SETTINGS_CACHE.write_through(
+        || store.set("settings", serde_json::to_value(&settings).unwrap()),
+        &settings,
+    );
 }
 
 pub fn get_bindings(app: &AppHandle) -> HashMap<String, ShortcutBinding> {
@@ -1537,6 +1586,69 @@ mod tests {
         assert!(
             observed.push_to_talk,
             "a reader must observe the value just written"
+        );
+    }
+
+    #[test]
+    fn write_through_persists_before_publishing_to_the_cache() {
+        let cache = SettingsCache::new();
+        let mut updated = get_default_settings();
+        apply_setting_value(&mut updated, "push_to_talk", json!(true)).expect("applies");
+
+        let mut persisted = false;
+        cache.write_through(
+            || {
+                persisted = true;
+            },
+            &updated,
+        );
+
+        assert!(persisted, "write_through must run the persist step");
+        let cached = cache.peek().expect("write_through publishes to the cache");
+        assert!(cached.push_to_talk);
+    }
+
+    #[test]
+    fn write_through_serializes_concurrent_publishers() {
+        // Simulates two overlapping `write_settings` calls: interleaving the
+        // store write and the cache publish across threads would let the
+        // slower writer's cache update win even though the faster writer's
+        // store write landed last. Holding one lock across both steps for
+        // each writer rules that out — whichever writer's `write_through`
+        // call finishes last is authoritative for both the store and the
+        // cache, together.
+        let cache = Arc::new(SettingsCache::new());
+        let mut a = get_default_settings();
+        apply_setting_value(&mut a, "push_to_talk", json!(true)).expect("applies");
+        let mut b = get_default_settings();
+        apply_setting_value(&mut b, "push_to_talk", json!(false)).expect("applies");
+
+        let order = Arc::new(std::sync::Mutex::new(Vec::new()));
+
+        let handles: Vec<_> = [('A', a), ('B', b)]
+            .into_iter()
+            .map(|(label, settings)| {
+                let cache = Arc::clone(&cache);
+                let order = Arc::clone(&order);
+                std::thread::spawn(move || {
+                    cache.write_through(|| order.lock().unwrap().push(label), &settings);
+                })
+            })
+            .collect();
+        for handle in handles {
+            handle.join().unwrap();
+        }
+
+        // Whichever writer persisted last must also be the one the cache
+        // reflects; write_through never lets the two disagree.
+        let last = *order.lock().unwrap().last().unwrap();
+        let cached = cache
+            .peek()
+            .expect("a write_through call populated the cache");
+        assert_eq!(
+            cached.push_to_talk,
+            last == 'A',
+            "the cache must match whichever writer persisted last"
         );
     }
 

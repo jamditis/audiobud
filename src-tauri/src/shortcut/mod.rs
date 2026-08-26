@@ -617,6 +617,8 @@ const SETTINGS_WITH_DEDICATED_COMMANDS: &[&str] = &[
     "post_process_prompts",
     "post_process_selected_prompt_id",
     "personalization",
+    "paste_method",
+    "external_script_path",
 ];
 
 /// Persist one setting and run whatever its change implies.
@@ -1180,11 +1182,31 @@ mod tests {
         // write that skips re-registering a shortcut or reconfiguring a device.
         assert!(SETTINGS_WITH_DEDICATED_COMMANDS.contains(&"bindings"));
         assert!(SETTINGS_WITH_DEDICATED_COMMANDS.contains(&"selected_model"));
-        // ...but never for a setting the effect table already handles.
-        for key in ["paste_method", "auto_submit", "post_process_enabled"] {
+        // ...but never for a setting the effect table already handles and that
+        // has no confirmation prompt of its own.
+        for key in ["auto_submit", "post_process_enabled"] {
             assert!(
                 !SETTINGS_WITH_DEDICATED_COMMANDS.contains(&key),
                 "'{key}' is handled by the effect table and must stay writable"
+            );
+        }
+    }
+
+    #[test]
+    fn the_generic_command_refuses_confirmation_gated_settings() {
+        // `paste_method` and `external_script_path` must go through
+        // `change_paste_method_setting` / `change_external_script_path_setting`
+        // so selecting the external-script paste method (and the program it
+        // will run) always passes through the native confirmation dialog.
+        // Reaching them through the generic `update_setting` would let a
+        // renderer arm command execution without ever prompting the user.
+        // `update_setting`'s guard check runs before it touches its `AppHandle`
+        // argument, so exercise the same `.contains` check the command makes
+        // rather than constructing a real `AppHandle` in a unit test.
+        for key in ["paste_method", "external_script_path"] {
+            assert!(
+                SETTINGS_WITH_DEDICATED_COMMANDS.contains(&key),
+                "'{key}' must stay confirmation-gated, not reachable via update_setting"
             );
         }
     }
