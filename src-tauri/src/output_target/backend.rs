@@ -413,9 +413,40 @@ fn announce_lock_lost(app: &AppHandle, pinned: &PinnedTarget, generation: u64, l
         title,
     }
     .emit(app);
+
     // The lock is already released, so the tray checkmark and the indicator
     // surfaces would otherwise keep claiming a lock that no longer exists.
-    crate::tray::update_tray_menu(app, &crate::tray::current_tray_state(app), None);
+    //
+    // Dispatched via `run_on_main_thread`, not called directly (#161 review
+    // round 7): every menu mutation `update_tray_menu` makes -- `MenuItem::
+    // with_id` and its siblings -- blocks its calling thread until the
+    // event-loop thread actually runs it and replies over a channel (tauri's
+    // `run_main_thread!`/`run_item_main_thread!` macros). This function's
+    // only callers are on the delivery worker thread (a pinned target found
+    // dead either when a delivery's target is first resolved, or -- via
+    // `borrow_focus` -- right before that delivery borrows focus, which is
+    // *before* `deliver_to_target` releases the Enigo mutex it already holds
+    // by then). Calling `update_tray_menu` synchronously there means the
+    // worker blocks on the event-loop thread while holding that mutex; if
+    // the event-loop thread is itself blocked waiting for the same mutex --
+    // which it can be, since the tray's own "Toggle Overlay Visibility" item
+    // reaches `input::get_cursor_position`, which locks it too -- both
+    // threads wait on each other forever and the whole app hangs, not just
+    // this one paste (a real ABBA cycle, verified end to end: this function
+    // ran unconditionally under the Enigo lock, `update_tray_menu` blocks on
+    // the caller identically on every platform tauri targets here, and the
+    // overlay-visibility path is reachable from the tray's own event
+    // handler). `run_on_main_thread` degrades to running its closure inline,
+    // synchronously, when it is already called from the event-loop thread
+    // (see its implementation) -- so this costs nothing extra when this
+    // whole function happens to run there already; it only genuinely defers
+    // when called from a thread that must not block on it, which is exactly
+    // the delivery worker's situation.
+    let app_for_tray_update = app.clone();
+    let tray_state = crate::tray::current_tray_state(app);
+    let _ = app.run_on_main_thread(move || {
+        crate::tray::update_tray_menu(&app_for_tray_update, &tray_state, None);
+    });
 }
 
 /// Give up on `target`, cleaning up the way its source requires.
