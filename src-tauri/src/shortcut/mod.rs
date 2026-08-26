@@ -162,13 +162,9 @@ pub fn change_binding(
         }
     }
 
-    // Unregister the existing binding
-    if let Err(e) = unregister_shortcut(&app, binding_to_modify.clone()) {
-        let error_msg = format!("Failed to unregister shortcut: {}", e);
-        error!("change_binding error: {}", error_msg);
-    }
-
     // Validate the new shortcut for the current keyboard implementation
+    // before touching anything else, so a bad shortcut string never
+    // unregisters the existing (valid) binding for nothing.
     if let Err(e) = validate_shortcut_for_implementation(&binding, settings.keyboard_implementation)
     {
         warn!("change_binding validation error: {}", e);
@@ -176,8 +172,22 @@ pub fn change_binding(
     }
 
     // Create an updated binding
-    let mut updated_binding = binding_to_modify;
+    let mut updated_binding = binding_to_modify.clone();
     updated_binding.current_binding = binding;
+
+    // Update the binding in the settings and persist BEFORE touching live
+    // registrations: on a store failure the frontend rolls back its
+    // optimistic value, so the shortcut actually registered must still be
+    // the old one too, or the UI would show the old binding while the app
+    // keeps using the unsaved new one until restart.
+    settings.bindings.insert(id, updated_binding.clone());
+    settings::write_settings(&app, settings)?;
+
+    // Unregister the existing binding
+    if let Err(e) = unregister_shortcut(&app, binding_to_modify) {
+        let error_msg = format!("Failed to unregister shortcut: {}", e);
+        error!("change_binding error: {}", error_msg);
+    }
 
     // Register the new binding
     if let Err(e) = register_shortcut(&app, updated_binding.clone()) {
@@ -189,12 +199,6 @@ pub fn change_binding(
             error: Some(error_msg),
         });
     }
-
-    // Update the binding in the settings
-    settings.bindings.insert(id, updated_binding.clone());
-
-    // Save the settings
-    settings::write_settings(&app, settings)?;
 
     // Return the updated binding
     Ok(BindingResponse {

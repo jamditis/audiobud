@@ -51,16 +51,21 @@ pub async fn delete_model(
     transcription_manager: State<'_, Arc<TranscriptionManager>>,
     model_id: String,
 ) -> Result<(), String> {
-    // If deleting the active model, unload it and clear the setting
+    // If deleting the active model, clear the setting and unload it
     let settings = get_settings(&app_handle);
     if settings.selected_model == model_id {
-        transcription_manager
-            .unload_model()
-            .map_err(|e| format!("Failed to unload model: {}", e))?;
-
+        // Persist before unloading: on a store failure this returns before
+        // the model is torn down, so settings and the live loaded model
+        // stay in agreement (both still point at the model being deleted)
+        // instead of the model being unloaded from memory while settings
+        // still claim it's selected.
         let mut settings = get_settings(&app_handle);
         settings.selected_model = String::new();
         write_settings(&app_handle, settings)?;
+
+        transcription_manager
+            .unload_model()
+            .map_err(|e| format!("Failed to unload model: {}", e))?;
     }
 
     model_manager
