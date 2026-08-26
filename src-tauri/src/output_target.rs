@@ -202,15 +202,20 @@ pub enum OutputTarget {
 /// illegal pairing (a pinned target that also lost its lock) is unrepresentable.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Resolved {
-    /// Deliver to this target: `Foreground` normally, `Pinned` when a live
-    /// window is locked.
-    Deliver(OutputTarget),
+    /// Nothing is locked: deliver to whatever window holds focus.
+    Foreground,
+    /// Deliver to this locked window. The whole identity is handed back, not
+    /// just the handle, so the caller never has to read the lock a second time
+    /// to learn what was validated -- between two reads the user can unlock, or
+    /// unlock and re-lock elsewhere, and the paste would then be aimed at a
+    /// window this resolve never checked.
+    Pinned(WindowIdentity),
     /// The locked window had closed, so the lock was dropped. Do NOT fall back
     /// to the foreground: pasting the transcript into whatever app now holds
     /// focus is the exact leak target-locking exists to prevent (#120). The
     /// caller must SUPPRESS this paste and surface the "lock lost" notice once,
     /// then let the user re-lock or re-dictate. The lock is already cleared
-    /// here, so the next resolve is a plain `Deliver(Foreground)`.
+    /// here, so the next resolve is a plain `Foreground`.
     LockLost,
 }
 
@@ -304,10 +309,13 @@ impl PinnedTarget {
     pub fn resolve(&self, is_alive: impl FnOnce(WindowIdentity) -> bool) -> Resolved {
         let mut guard = self.guard();
         match *guard {
-            None => Resolved::Deliver(OutputTarget::Foreground),
+            None => Resolved::Foreground,
             Some(window) => {
                 if is_alive(window) {
-                    Resolved::Deliver(OutputTarget::Pinned(window.handle))
+                    // Returned from under the guard: a caller that re-read the
+                    // lock afterwards could see a different window than the one
+                    // just validated.
+                    Resolved::Pinned(window)
                 } else {
                     *guard = None;
                     Resolved::LockLost
@@ -348,7 +356,7 @@ mod tests {
         assert!(!t.is_locked());
         // is_alive must not even be consulted when nothing is locked.
         let resolved = t.resolve(|_| panic!("is_alive called with no lock"));
-        assert_eq!(resolved, Resolved::Deliver(OutputTarget::Foreground));
+        assert_eq!(resolved, Resolved::Foreground);
     }
 
     #[test]
@@ -362,7 +370,7 @@ mod tests {
             assert_eq!(locked, w);
             true
         });
-        assert_eq!(resolved, Resolved::Deliver(OutputTarget::Pinned(w.handle)));
+        assert_eq!(resolved, Resolved::Pinned(w));
         // Resolving a live target must NOT clear the lock.
         assert!(t.is_locked());
     }
@@ -374,7 +382,7 @@ mod tests {
         t.unlock();
         assert!(!t.is_locked());
         let resolved = t.resolve(|_| true);
-        assert_eq!(resolved, Resolved::Deliver(OutputTarget::Foreground));
+        assert_eq!(resolved, Resolved::Foreground);
     }
 
     #[test]
@@ -388,7 +396,7 @@ mod tests {
         // is_alive is never consulted again.
         assert!(!t.is_locked());
         let again = t.resolve(|_| panic!("stale lock still consulted"));
-        assert_eq!(again, Resolved::Deliver(OutputTarget::Foreground));
+        assert_eq!(again, Resolved::Foreground);
     }
 
     #[test]
@@ -407,10 +415,7 @@ mod tests {
         // The lock is still readable and the pinned window survived the panic;
         // a normal resolve now succeeds instead of panicking on a poisoned lock.
         assert!(t.is_locked());
-        assert_eq!(
-            t.resolve(|_| true),
-            Resolved::Deliver(OutputTarget::Pinned(w.handle))
-        );
+        assert_eq!(t.resolve(|_| true), Resolved::Pinned(w));
     }
 
     #[test]
@@ -420,10 +425,7 @@ mod tests {
         let second = win(2, 2, 2);
         assert_eq!(t.lock_to(second), OutputTarget::Pinned(second.handle));
         let resolved = t.resolve(|_| true);
-        assert_eq!(
-            resolved,
-            Resolved::Deliver(OutputTarget::Pinned(second.handle))
-        );
+        assert_eq!(resolved, Resolved::Pinned(second));
     }
 
     #[test]
@@ -578,7 +580,7 @@ mod tests {
         assert!(!t.is_locked());
         assert_eq!(
             t.resolve(|_| panic!("is_alive called with no lock")),
-            Resolved::Deliver(OutputTarget::Foreground)
+            Resolved::Foreground
         );
     }
 }
