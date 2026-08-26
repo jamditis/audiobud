@@ -737,6 +737,26 @@ fn should_send_auto_submit(auto_submit: bool, paste_method: PasteMethod) -> bool
     auto_submit && paste_method != PasteMethod::None
 }
 
+/// Whether *delivering* `paste_method`, with `auto_submit` as currently
+/// configured, needs a focused window -- as opposed to
+/// [`PasteMethod::requires_focus`], which only answers for the paste step
+/// itself and knows nothing about auto-submit.
+///
+/// `ExternalScript` doesn't touch a window to run the script, but when
+/// auto-submit is on, `paste()` still calls `send_return_key` after it
+/// (gated by [`should_send_auto_submit`]), injecting Enter/Ctrl-Enter/Cmd-
+/// Enter into whatever window is focused at that moment. So the *delivery*
+/// requires focus even though the *method* alone does not (#162). `None` is
+/// the only paste method `should_send_auto_submit` exempts from auto-submit,
+/// so it remains the only method whose delivery never requires focus.
+///
+/// Callers that decide whether a focus-dependent feature like target-lock
+/// (#120) can be honored -- rather than whether the paste step alone can --
+/// must use this, not `PasteMethod::requires_focus()` on its own.
+pub(crate) fn requires_focus_for_delivery(paste_method: PasteMethod, auto_submit: bool) -> bool {
+    paste_method.requires_focus() || should_send_auto_submit(auto_submit, paste_method)
+}
+
 /// Whether the transcript is also copied to the clipboard.
 ///
 /// `delivered` is deliberately ignored: this setting is about the clipboard, so
@@ -745,21 +765,6 @@ fn should_send_auto_submit(auto_submit: bool, paste_method: PasteMethod) -> bool
 fn should_copy_to_clipboard(handling: ClipboardHandling, delivered: bool) -> bool {
     let _ = delivered;
     handling == ClipboardHandling::CopyToClipboard
-}
-
-/// Whether this delivery sends any input to a window, and so needs one to hold
-/// focus.
-///
-/// `PasteMethod::None` types nothing and suppresses auto-submit with it, so a
-/// pinned delivery would otherwise steal the user's focus, wait, and hand it
-/// back having done nothing. The auto-submit half is spelled out anyway so this
-/// stays correct if that rule ever changes.
-///
-/// This is the narrow local answer for the paste path. Issue #162 gives
-/// `PasteMethod` a capability model that says this properly, and supersedes this
-/// helper when it lands.
-fn delivery_sends_input(paste_method: PasteMethod, auto_submit: bool) -> bool {
-    paste_method != PasteMethod::None || should_send_auto_submit(auto_submit, paste_method)
 }
 
 /// Send the transcript to the resolved target, and report whether it was
@@ -841,7 +846,9 @@ fn deliver_to_target(
         Delivery::Foreground => deliver(&mut enigo),
         // Borrowing focus for a delivery that sends nothing would take the
         // user's window away from them for no reason at all.
-        Delivery::Pinned(_, _) if !delivery_sends_input(paste_method, settings.auto_submit) => {
+        Delivery::Pinned(_, _)
+            if !requires_focus_for_delivery(paste_method, settings.auto_submit) =>
+        {
             deliver(&mut enigo)
         }
         Delivery::Pinned(identity, source) => {
@@ -1008,16 +1015,21 @@ mod tests {
     }
 
     #[test]
-    fn only_a_delivery_that_types_something_needs_focus() {
-        // Copy-to-clipboard with no paste method touches no window, so taking
-        // focus for it is pure disruption.
-        assert!(!delivery_sends_input(PasteMethod::None, false));
-        // Auto-submit is suppressed for PasteMethod::None, so it cannot bring
-        // the keystroke back on its own.
-        assert!(!delivery_sends_input(PasteMethod::None, true));
-        assert!(delivery_sends_input(PasteMethod::CtrlV, false));
-        assert!(delivery_sends_input(PasteMethod::Direct, false));
-        assert!(delivery_sends_input(PasteMethod::ExternalScript, false));
+    fn a_pinned_delivery_that_types_nothing_does_not_borrow_focus() {
+        // The focus borrow exists to put keystrokes in the right window. When
+        // the delivery sends none -- copy-to-clipboard with no paste method,
+        // or a script that places the text itself -- taking the user's window
+        // away, waiting, and handing it back is pure disruption. The paste
+        // path asks the same capability question every other consumer asks
+        // (#162, #264), so all of them agree about what needs focus.
+        assert!(!requires_focus_for_delivery(PasteMethod::None, false));
+        assert!(!requires_focus_for_delivery(PasteMethod::None, true));
+        assert!(!requires_focus_for_delivery(
+            PasteMethod::ExternalScript,
+            false
+        ));
+        assert!(requires_focus_for_delivery(PasteMethod::CtrlV, false));
+        assert!(requires_focus_for_delivery(PasteMethod::Direct, false));
     }
 
     #[test]
@@ -1076,5 +1088,67 @@ mod tests {
         assert!(should_send_auto_submit(true, PasteMethod::Direct));
         assert!(should_send_auto_submit(true, PasteMethod::CtrlShiftV));
         assert!(should_send_auto_submit(true, PasteMethod::ShiftInsert));
+    }
+
+    #[test]
+    fn external_script_delivery_requires_focus_when_auto_submit_is_on() {
+        // The method itself never touches a window, but with auto-submit
+        // enabled, paste() still injects a return keystroke into the
+        // focused window after the script runs -- so the *delivery*
+        // requires focus even though ExternalScript::requires_focus() does
+        // not. Regression test for the case a target-lock (#120) consumer
+        // must not treat as focus-independent.
+        assert!(!PasteMethod::ExternalScript.requires_focus());
+        assert!(requires_focus_for_delivery(
+            PasteMethod::ExternalScript,
+            true
+        ));
+    }
+
+    #[test]
+    fn external_script_delivery_does_not_require_focus_without_auto_submit() {
+        assert!(!requires_focus_for_delivery(
+            PasteMethod::ExternalScript,
+            false
+        ));
+    }
+
+    #[test]
+    fn disabling_auto_submit_makes_external_script_delivery_focus_free() {
+        // The transition `clear_target_lock_if_focus_free`
+        // (shortcut::change_auto_submit_setting) must react to: a lock held
+        // while ExternalScript + auto_submit=true correctly stays (delivery
+        // still injects a keystroke), and disabling auto_submit is exactly
+        // what makes that same paste method's delivery focus-free, at which
+        // point the lock becomes stale and must be cleared.
+        assert!(requires_focus_for_delivery(
+            PasteMethod::ExternalScript,
+            true
+        ));
+        assert!(!requires_focus_for_delivery(
+            PasteMethod::ExternalScript,
+            false
+        ));
+    }
+
+    #[test]
+    fn none_delivery_never_requires_focus() {
+        // should_send_auto_submit special-cases None, so it stays
+        // focus-independent even with auto-submit on.
+        assert!(!requires_focus_for_delivery(PasteMethod::None, true));
+        assert!(!requires_focus_for_delivery(PasteMethod::None, false));
+    }
+
+    #[test]
+    fn focus_requiring_methods_require_focus_for_delivery_regardless_of_auto_submit() {
+        for method in [
+            PasteMethod::Direct,
+            PasteMethod::CtrlV,
+            PasteMethod::CtrlShiftV,
+            PasteMethod::ShiftInsert,
+        ] {
+            assert!(requires_focus_for_delivery(method, true));
+            assert!(requires_focus_for_delivery(method, false));
+        }
     }
 }

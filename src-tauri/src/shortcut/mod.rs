@@ -20,6 +20,7 @@ use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_autostart::ManagerExt;
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 
+use crate::output_target;
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
 use crate::settings::APPLE_INTELLIGENCE_DEFAULT_MODEL_ID;
 use crate::settings::{
@@ -840,6 +841,44 @@ async fn confirm_external_script(app: &AppHandle, message: String) -> bool {
     .unwrap_or(false)
 }
 
+/// Clear the active target-lock (#120) when delivering `paste_method` with
+/// `auto_submit` as given no longer touches a focused window.
+///
+/// This is `clipboard::requires_focus_for_delivery`, not
+/// `PasteMethod::requires_focus()` alone: ExternalScript's method step is
+/// window-independent, but with auto-submit on, delivery still injects a
+/// return keystroke into the focused window afterward, so a lock is only
+/// safe to drop once BOTH the method and the auto-submit setting agree
+/// delivery is focus-free.
+///
+/// Both settings can change independently -- the paste-method dropdown and
+/// the auto-submit toggle (settings window and tray, #12) -- so every place
+/// that changes either one must re-run this check with the OTHER setting's
+/// current value, not just its own; otherwise a stale lock survives a change
+/// that made it meaningless and can silently reactivate later if the user
+/// switches back to a focus-requiring combination (#162).
+fn clear_target_lock_if_focus_free(app: &AppHandle, paste_method: PasteMethod, auto_submit: bool) {
+    if crate::clipboard::requires_focus_for_delivery(paste_method, auto_submit) {
+        return;
+    }
+    if let Some(pinned) = app.try_state::<output_target::PinnedTarget>() {
+        if pinned.is_locked() {
+            info!(
+                "Paste method {:?} (auto_submit={}) cannot target a focused window; clearing the active target-lock",
+                paste_method, auto_submit
+            );
+        }
+    }
+    // Released through the shared unlock rather than PinnedTarget::unlock: the
+    // lock is shown in three places now (#255) -- the overlay indicator, the
+    // tray checkmark, the settings card -- and clearing it silently would leave
+    // every one of them claiming a lock the app no longer holds. This also
+    // clears a stale "lock lost" latch, which is equally meaningless once
+    // delivery cannot reach a window at all, and does nothing when there is
+    // neither a lock nor a latch.
+    output_target::backend::unlock_output_target(app);
+}
+
 #[tauri::command]
 #[specta::specta]
 pub async fn change_paste_method_setting(app: AppHandle, method: String) -> Result<(), String> {
@@ -870,6 +909,7 @@ pub async fn change_paste_method_setting(app: AppHandle, method: String) -> Resu
         }
     }
     let mut settings = settings::get_settings(&app);
+    clear_target_lock_if_focus_free(&app, parsed, settings.auto_submit);
     settings.paste_method = parsed;
     settings::write_settings(&app, settings);
     Ok(())
@@ -959,6 +999,7 @@ pub fn change_clipboard_handling_setting(app: AppHandle, handling: String) -> Re
 #[specta::specta]
 pub fn change_auto_submit_setting(app: AppHandle, enabled: bool) -> Result<(), String> {
     let mut settings = settings::get_settings(&app);
+    clear_target_lock_if_focus_free(&app, settings.paste_method, enabled);
     settings.auto_submit = enabled;
     settings::write_settings(&app, settings);
 
