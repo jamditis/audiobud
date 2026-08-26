@@ -16,6 +16,7 @@
     "formatted": "Formátováno",
     "rawTranscript": "Surový přepis",
     "lockToWindow": "Uzamknout na okno",
+    "lockLost": "Zámek ztracen",
     "sendToWindowOnce": "Odeslat do okna jednou"
   },
   "sidebar": {
@@ -359,6 +360,15 @@
           "externalScript": "Externí skript"
         },
         "externalScriptPlaceholder": "/cesta/k/vasemu/skriptu.sh"
+      },
+      "outputTargetLock": {
+        "title": "Zámek cílového okna",
+        "description": "Když je zamčeno, každý diktát se doručí do okna, které jste zamkli, místo do aktuálně aktivního okna.",
+        "unlockedStatus": "Nezamčeno. Diktát sleduje aktivní okno.",
+        "lockedStatus": "Zamčeno na {{target}}",
+        "staleStatus": "Bylo zamčeno na {{target}}, ale toto okno už neexistuje. Diktát sleduje aktivní okno, dokud znovu nezamknete.",
+        "unknownTarget": "zamčené okno",
+        "unlock": "Odemknout"
       },
       "typingTool": {
         "title": "Nástroj pro psaní",
@@ -838,7 +848,12 @@
     "recording": "Nahrávání",
     "cancel": "Zrušit nahrávání",
     "raw": "RAW",
-    "rawHint": "Režim surového přepisu"
+    "rawHint": "Režim surového přepisu",
+    "lockedTo": "→ {{target}}",
+    "lockedToHint": "Diktát je zamčen na {{target}}. Kliknutím odemkněte.",
+    "lockedToUnknown": "zamčené okno",
+    "lockStale": "Zámek ztracen",
+    "lockStaleHint": "Zamčené okno bylo zavřeno. Kliknutím zavřete."
   },
   "windowPicker": {
     "title": "Odeslat do okna",

@@ -16,6 +16,7 @@
     "formatted": "Formaterad",
     "rawTranscript": "Rå transkription",
     "lockToWindow": "Lås till fönster",
+    "lockLost": "Låsning förlorad",
     "sendToWindowOnce": "Skicka till fönster en gång"
   },
   "sidebar": {
@@ -359,6 +360,15 @@
           "externalScript": "Externt skript"
         },
         "externalScriptPlaceholder": "/sökväg/till/ditt/skript.sh"
+      },
+      "outputTargetLock": {
+        "title": "Lås utdatamål",
+        "description": "När det är låst skickas all diktering till fönstret du låste i stället för det aktiva fönstret.",
+        "unlockedStatus": "Inte låst. Dikteringen följer det aktiva fönstret.",
+        "lockedStatus": "Låst till {{target}}",
+        "staleStatus": "Var låst till {{target}}, men det fönstret finns inte längre. Dikteringen följer det aktiva fönstret tills du låser igen.",
+        "unknownTarget": "ett låst fönster",
+        "unlock": "Lås upp"
       },
       "typingTool": {
         "title": "Skrivverktyg",
@@ -836,7 +846,12 @@
     "recording": "Spelar in",
     "cancel": "Avbryt inspelning",
     "raw": "RÅ",
-    "rawHint": "Läge för rå transkription"
+    "rawHint": "Läge för rå transkription",
+    "lockedTo": "→ {{target}}",
+    "lockedToHint": "Dikteringen är låst till {{target}}. Klicka för att låsa upp.",
+    "lockedToUnknown": "ett låst fönster",
+    "lockStale": "Låset förlorat",
+    "lockStaleHint": "Det låsta fönstret stängdes. Klicka för att avfärda."
   },
   "windowPicker": {
     "title": "Skicka till fönster",

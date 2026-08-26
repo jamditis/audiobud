@@ -16,6 +16,7 @@
     "formatted": "منسّق",
     "rawTranscript": "نص خام",
     "lockToWindow": "تثبيت على نافذة",
+    "lockLost": "القفل مفقود",
     "sendToWindowOnce": "الإرسال إلى نافذة مرة واحدة"
   },
   "sidebar": {
@@ -359,6 +360,15 @@
           "externalScript": "نص برمجي خارجي"
         },
         "externalScriptPlaceholder": "/path/to/your/script.sh"
+      },
+      "outputTargetLock": {
+        "title": "قفل وجهة الإخراج",
+        "description": "أثناء القفل، يتم إرسال كل إملاء إلى النافذة التي قفلتها بدلاً من النافذة النشطة حاليًا.",
+        "unlockedStatus": "غير مقفل. يتبع الإملاء النافذة النشطة.",
+        "lockedStatus": "مقفل على {{target}}",
+        "staleStatus": "كان مقفلاً على {{target}}، لكن تلك النافذة لم تعد موجودة. يتبع الإملاء النافذة النشطة حتى تقفل مرة أخرى.",
+        "unknownTarget": "نافذة مقفلة",
+        "unlock": "إلغاء القفل"
       },
       "typingTool": {
         "title": "أداة الكتابة",
@@ -844,7 +854,12 @@
     "recording": "جارٍ التسجيل",
     "cancel": "إلغاء التسجيل",
     "raw": "خام",
-    "rawHint": "وضع النص الخام"
+    "rawHint": "وضع النص الخام",
+    "lockedTo": "→ {{target}}",
+    "lockedToHint": "الإملاء مقفل على {{target}}. انقر لإلغاء القفل.",
+    "lockedToUnknown": "نافذة مقفلة",
+    "lockStale": "فُقد القفل",
+    "lockStaleHint": "أُغلقت النافذة المقفلة. انقر للتجاهل."
   },
   "windowPicker": {
     "title": "الإرسال إلى نافذة",

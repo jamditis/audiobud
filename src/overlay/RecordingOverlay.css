@@ -128,6 +128,54 @@
   text-transform: uppercase;
 }
 
+/* Quiet indicator for the output-target lock (#121, #255). A teal chip that
+   matches the overlay's own accent while locked; it only turns amber
+   ("attention") once the lock has gone stale, per the "quiet unless stale"
+   acceptance criterion. */
+.target-lock-indicator {
+  flex-shrink: 1;
+  min-width: 0;
+  max-width: 78px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  line-height: 1;
+  padding: 2px 5px;
+  border-radius: 6px;
+  color: #a6e8dd;
+  background: rgba(85, 201, 184, 0.14);
+  border: 1px solid rgba(85, 201, 184, 0.45);
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  appearance: none;
+  cursor: pointer;
+  transition:
+    background-color 150ms ease-out,
+    border-color 150ms ease-out;
+}
+
+.target-lock-indicator:hover {
+  background: rgba(85, 201, 184, 0.24);
+}
+
+.target-lock-indicator:focus-visible {
+  outline: 2px solid #55c9b8;
+  outline-offset: 2px;
+}
+
+.target-lock-indicator.attention {
+  color: #ffdca6;
+  background: rgba(255, 178, 62, 0.18);
+  border-color: rgba(255, 178, 62, 0.55);
+}
+
+.target-lock-indicator.attention:hover {
+  background: rgba(255, 178, 62, 0.28);
+}
+
 .bar {
   width: 6px;
   background: linear-gradient(180deg, #b6f06a, #56a52d);

@@ -6,9 +6,14 @@ import { DEFAULT_CRITTER_ID, getCritter } from "../components/icons/critters";
 import "./RecordingOverlay.css";
 import { commands } from "@/bindings";
 import { usePrefersReducedMotion } from "@/hooks/useMicLevel";
+import { useOutputTargetLock } from "@/hooks/useOutputTargetLock";
 import i18n, { syncLanguageFromSettings } from "@/i18n";
 import { MIC_LEVEL_EVENT, bandsToAmplitude } from "@/lib/mic-level";
 import { getLanguageDirection } from "@/lib/utils/rtl";
+
+// The overlay is a fixed 172px pill, so the locked-target name gets a tighter
+// ceiling than the default (settings has the room for the full name).
+const OVERLAY_TARGET_NAME_MAX_LENGTH = 12;
 
 type OverlayState = "recording" | "transcribing" | "processing";
 
@@ -25,6 +30,11 @@ const RecordingOverlay: React.FC = () => {
   const smoothedLevelsRef = useRef<number[]>(Array(16).fill(0));
   const reduceMotion = usePrefersReducedMotion();
   const direction = getLanguageDirection(i18n.language);
+  const overlayIndicatorOptions = useRef({
+    maxNameLength: OVERLAY_TARGET_NAME_MAX_LENGTH,
+  }).current;
+  const { indicator: targetLockIndicator, unlock: unlockTarget } =
+    useOutputTargetLock(overlayIndicatorOptions);
 
   useEffect(() => {
     let cleanup: (() => void) | undefined;
@@ -116,6 +126,32 @@ const RecordingOverlay: React.FC = () => {
       </div>
 
       <div className="overlay-middle" role="status" aria-live="polite">
+        {targetLockIndicator.visible && (
+          <button
+            type="button"
+            className={`target-lock-indicator${
+              targetLockIndicator.tone === "attention" ? " attention" : ""
+            }`}
+            title={
+              targetLockIndicator.status === "stale"
+                ? t("overlay.lockStaleHint")
+                : t("overlay.lockedToHint", {
+                    target:
+                      targetLockIndicator.targetName ||
+                      t("overlay.lockedToUnknown"),
+                  })
+            }
+            onClick={unlockTarget}
+          >
+            {targetLockIndicator.status === "stale"
+              ? t("overlay.lockStale")
+              : t("overlay.lockedTo", {
+                  target:
+                    targetLockIndicator.targetName ||
+                    t("overlay.lockedToUnknown"),
+                })}
+          </button>
+        )}
         {isRaw && (
           <span className="raw-indicator" title={t("overlay.rawHint")}>
             {t("overlay.raw")}

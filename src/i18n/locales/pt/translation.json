@@ -16,6 +16,7 @@
     "formatted": "Formatado",
     "rawTranscript": "Transcrição bruta",
     "lockToWindow": "Fixar em uma janela",
+    "lockLost": "Bloqueio perdido",
     "sendToWindowOnce": "Enviar para uma janela uma vez"
   },
   "sidebar": {
@@ -359,6 +360,15 @@
           "externalScript": "Script externo"
         },
         "externalScriptPlaceholder": "/caminho/para/seu/script.sh"
+      },
+      "outputTargetLock": {
+        "title": "Bloqueio do destino de saída",
+        "description": "Enquanto bloqueado, todo ditado é enviado para a janela bloqueada em vez da janela em foco.",
+        "unlockedStatus": "Não bloqueado. O ditado segue a janela em foco.",
+        "lockedStatus": "Bloqueado em {{target}}",
+        "staleStatus": "Estava bloqueado em {{target}}, mas essa janela não existe mais. O ditado segue a janela em foco até você bloquear novamente.",
+        "unknownTarget": "uma janela bloqueada",
+        "unlock": "Desbloquear"
       },
       "typingTool": {
         "title": "Ferramenta de digitação",
@@ -836,7 +846,12 @@
     "recording": "Gravando",
     "cancel": "Cancelar gravação",
     "raw": "BRUTO",
-    "rawHint": "Modo de transcrição bruta"
+    "rawHint": "Modo de transcrição bruta",
+    "lockedTo": "→ {{target}}",
+    "lockedToHint": "O ditado está bloqueado em {{target}}. Clique para desbloquear.",
+    "lockedToUnknown": "uma janela bloqueada",
+    "lockStale": "Bloqueio perdido",
+    "lockStaleHint": "A janela bloqueada foi fechada. Clique para dispensar."
   },
   "windowPicker": {
     "title": "Enviar para uma janela",

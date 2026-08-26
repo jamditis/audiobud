@@ -16,6 +16,7 @@
     "formatted": "Sformatowany",
     "rawTranscript": "Surowa transkrypcja",
     "lockToWindow": "Przypnij do okna",
+    "lockLost": "Blokada utracona",
     "sendToWindowOnce": "Wyślij do okna jeden raz"
   },
   "sidebar": {
@@ -359,6 +360,15 @@
           "externalScript": "Skrypt zewnętrzny"
         },
         "externalScriptPlaceholder": "/sciezka/do/twojego/skryptu.sh"
+      },
+      "outputTargetLock": {
+        "title": "Blokada okna docelowego",
+        "description": "Gdy jest zablokowane, każde dyktowanie trafia do zablokowanego okna zamiast do aktywnego.",
+        "unlockedStatus": "Niezablokowane. Dyktowanie podąża za aktywnym oknem.",
+        "lockedStatus": "Zablokowane na {{target}}",
+        "staleStatus": "Było zablokowane na {{target}}, ale to okno już nie istnieje. Dyktowanie podąża za aktywnym oknem, dopóki nie zablokujesz ponownie.",
+        "unknownTarget": "zablokowane okno",
+        "unlock": "Odblokuj"
       },
       "typingTool": {
         "title": "Narzędzie do wpisywania",
@@ -840,7 +850,12 @@
     "recording": "Nagrywanie",
     "cancel": "Anuluj nagrywanie",
     "raw": "RAW",
-    "rawHint": "Tryb surowej transkrypcji"
+    "rawHint": "Tryb surowej transkrypcji",
+    "lockedTo": "→ {{target}}",
+    "lockedToHint": "Dyktowanie jest zablokowane na {{target}}. Kliknij, aby odblokować.",
+    "lockedToUnknown": "zablokowane okno",
+    "lockStale": "Blokada utracona",
+    "lockStaleHint": "Zablokowane okno zostało zamknięte. Kliknij, aby odrzucić."
   },
   "windowPicker": {
     "title": "Wyślij do okna",

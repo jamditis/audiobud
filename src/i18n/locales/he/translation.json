@@ -16,6 +16,7 @@
     "formatted": "מעוצב",
     "rawTranscript": "תמלול גולמי",
     "lockToWindow": "נעילה לחלון",
+    "lockLost": "הנעילה אבדה",
     "sendToWindowOnce": "שליחה לחלון פעם אחת"
   },
   "sidebar": {
@@ -359,6 +360,15 @@
           "externalScript": "סקריפט חיצוני"
         },
         "externalScriptPlaceholder": "/path/to/your/script.sh"
+      },
+      "outputTargetLock": {
+        "title": "נעילת יעד הפלט",
+        "description": "כאשר נעול, כל הכתבה נשלחת לחלון שנעלת במקום לחלון הפעיל.",
+        "unlockedStatus": "לא נעול. ההכתבה עוקבת אחר החלון הפעיל.",
+        "lockedStatus": "נעול על {{target}}",
+        "staleStatus": "היה נעול על {{target}}, אך החלון הזה כבר לא קיים. ההכתבה עוקבת אחר החלון הפעיל עד לנעילה מחדש.",
+        "unknownTarget": "חלון נעול",
+        "unlock": "בטל נעילה"
       },
       "typingTool": {
         "title": "כלי הקלדה",
@@ -838,7 +848,12 @@
     "recording": "מקליט",
     "cancel": "בטל הקלטה",
     "raw": "גולמי",
-    "rawHint": "מצב תמלול גולמי"
+    "rawHint": "מצב תמלול גולמי",
+    "lockedTo": "→ {{target}}",
+    "lockedToHint": "ההכתבה נעולה על {{target}}. לחץ כדי לבטל את הנעילה.",
+    "lockedToUnknown": "חלון נעול",
+    "lockStale": "הנעילה אבדה",
+    "lockStaleHint": "החלון הנעול נסגר. לחץ כדי לבטל."
   },
   "windowPicker": {
     "title": "שליחה לחלון",

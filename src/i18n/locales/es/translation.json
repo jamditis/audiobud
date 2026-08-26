@@ -16,6 +16,7 @@
     "formatted": "Con formato",
     "rawTranscript": "Transcripción sin formato",
     "lockToWindow": "Fijar a una ventana",
+    "lockLost": "Bloqueo perdido",
     "sendToWindowOnce": "Enviar a una ventana una vez"
   },
   "sidebar": {
@@ -359,6 +360,15 @@
           "externalScript": "Script externo"
         },
         "externalScriptPlaceholder": "/ruta/a/su/script.sh"
+      },
+      "outputTargetLock": {
+        "title": "Bloqueo del destino de salida",
+        "description": "Mientras está bloqueado, cada dictado se envía a la ventana que bloqueaste en lugar de a la que esté activa.",
+        "unlockedStatus": "No bloqueado. El dictado sigue a la ventana activa.",
+        "lockedStatus": "Bloqueado en {{target}}",
+        "staleStatus": "Estaba bloqueado en {{target}}, pero esa ventana ya no existe. El dictado sigue a la ventana activa hasta que vuelvas a bloquear.",
+        "unknownTarget": "una ventana bloqueada",
+        "unlock": "Desbloquear"
       },
       "typingTool": {
         "title": "Herramienta de Escritura",
@@ -836,7 +846,12 @@
     "recording": "Grabando",
     "cancel": "Cancelar grabación",
     "raw": "RAW",
-    "rawHint": "Modo de transcripción sin formato"
+    "rawHint": "Modo de transcripción sin formato",
+    "lockedTo": "→ {{target}}",
+    "lockedToHint": "El dictado está bloqueado en {{target}}. Haz clic para desbloquear.",
+    "lockedToUnknown": "una ventana bloqueada",
+    "lockStale": "Bloqueo perdido",
+    "lockStaleHint": "La ventana bloqueada se cerró. Haz clic para descartar."
   },
   "windowPicker": {
     "title": "Enviar a una ventana",

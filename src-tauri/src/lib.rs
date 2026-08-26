@@ -414,6 +414,14 @@ fn initialize_core_logic(app_handle: &AppHandle) {
             "quit" => {
                 app.exit(0);
             }
+            // The stale target-lock item (#266 review, finding 5): distinct from
+            // "toggle:target_lock" so a click here can never be read as a fresh
+            // capture request. Nothing is actually locked while this id is on the
+            // menu (see `target_lock_menu_label` in tray.rs), so this only
+            // dismisses the tray's memory of the loss.
+            "dismiss:target_lock_lost" => {
+                output_target::backend::unlock_output_target(app);
+            }
             id if id.starts_with("model_select:") => {
                 let model_id = id.strip_prefix("model_select:").unwrap().to_string();
                 let current_model = settings::get_settings(app).selected_model;
@@ -500,8 +508,16 @@ fn initialize_core_logic(app_handle: &AppHandle) {
 
     // Output target lock for #120. Starts unlocked (foreground delivery). Each
     // dictation reads it once, at recording start, into its DictationContext;
-    // the paste then delivers to that captured target (#160).
+    // the paste then delivers to that captured target (#160). PinnedTarget
+    // also carries the generation counter and lost-lock notice used to keep
+    // the tray and every webview's indicator from disagreeing about what is
+    // locked, even under overlapping toggles or a delivery racing a fresh
+    // lock (#255/#266 review, including round 4's atomicity fix).
     app_handle.manage(output_target::PinnedTarget::default());
+    // The window's label cached from lock time (#266 review), so a later
+    // loss notice can still name the window after it (and often its whole
+    // process) is gone and a live re-query would come back empty.
+    app_handle.manage(output_target::LockedLabel::default());
     // One-shot window picker state (#124): the rows currently on offer, the
     // pick waiting to route a single transcript, and the remembered pick the
     // picker floats to the top next time.
@@ -698,8 +714,13 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::window_picker::list_picker_windows,
             commands::window_picker::resolve_window_pick,
             helpers::clamshell::is_laptop,
+            output_target::backend::get_output_target_lock,
+            output_target::backend::release_output_target_lock,
         ])
-        .events(collect_events![managers::history::HistoryUpdatePayload,])
+        .events(collect_events![
+            managers::history::HistoryUpdatePayload,
+            output_target::OutputTargetLockEvent,
+        ])
 }
 
 #[cfg(any(debug_assertions, test))]

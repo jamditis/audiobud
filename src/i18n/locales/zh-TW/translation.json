@@ -16,6 +16,7 @@
     "formatted": "已格式化",
     "rawTranscript": "原始轉錄文字",
     "lockToWindow": "鎖定至視窗",
+    "lockLost": "鎖定已遺失",
     "sendToWindowOnce": "傳送到視窗一次"
   },
   "sidebar": {
@@ -359,6 +360,15 @@
           "externalScript": "外部腳本"
         },
         "externalScriptPlaceholder": "/path/to/your/script.sh"
+      },
+      "outputTargetLock": {
+        "title": "輸出目標鎖定",
+        "description": "鎖定期間，每次聽寫都會傳送到您鎖定的視窗，而不是目前聚焦的視窗。",
+        "unlockedStatus": "未鎖定。聽寫會跟隨目前聚焦的視窗。",
+        "lockedStatus": "已鎖定至 {{target}}",
+        "staleStatus": "曾鎖定至 {{target}}，但該視窗已不存在。在您重新鎖定之前，聽寫會跟隨目前聚焦的視窗。",
+        "unknownTarget": "已鎖定的視窗",
+        "unlock": "解除鎖定"
       },
       "typingTool": {
         "title": "輸入工具",
@@ -836,7 +846,12 @@
     "recording": "錄製中",
     "cancel": "取消錄製",
     "raw": "RAW",
-    "rawHint": "原始轉錄模式"
+    "rawHint": "原始轉錄模式",
+    "lockedTo": "→ {{target}}",
+    "lockedToHint": "聽寫已鎖定至 {{target}}。點按以解除鎖定。",
+    "lockedToUnknown": "已鎖定的視窗",
+    "lockStale": "鎖定遺失",
+    "lockStaleHint": "已鎖定的視窗已關閉。點按以關閉提示。"
   },
   "windowPicker": {
     "title": "傳送到視窗",

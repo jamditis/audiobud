@@ -16,6 +16,7 @@
     "formatted": "Formaté",
     "rawTranscript": "Transcription brute",
     "lockToWindow": "Épingler à une fenêtre",
+    "lockLost": "Verrouillage perdu",
     "sendToWindowOnce": "Envoyer à une fenêtre une fois"
   },
   "sidebar": {
@@ -359,6 +360,15 @@
           "externalScript": "Script externe"
         },
         "externalScriptPlaceholder": "/chemin/vers/votre/script.sh"
+      },
+      "outputTargetLock": {
+        "title": "Verrouillage de la cible de sortie",
+        "description": "Une fois verrouillée, chaque dictée est envoyée à la fenêtre verrouillée plutôt qu'à celle qui a le focus.",
+        "unlockedStatus": "Non verrouillé. La dictée suit la fenêtre active.",
+        "lockedStatus": "Verrouillé sur {{target}}",
+        "staleStatus": "Était verrouillé sur {{target}}, mais cette fenêtre n'existe plus. La dictée suit la fenêtre active jusqu'au prochain verrouillage.",
+        "unknownTarget": "une fenêtre verrouillée",
+        "unlock": "Déverrouiller"
       },
       "typingTool": {
         "title": "Outil de frappe",
@@ -836,7 +846,12 @@
     "recording": "Enregistrement",
     "cancel": "Annuler l'enregistrement",
     "raw": "BRUT",
-    "rawHint": "Mode transcription brute"
+    "rawHint": "Mode transcription brute",
+    "lockedTo": "→ {{target}}",
+    "lockedToHint": "La dictée est verrouillée sur {{target}}. Cliquez pour déverrouiller.",
+    "lockedToUnknown": "une fenêtre verrouillée",
+    "lockStale": "Verrouillage perdu",
+    "lockStaleHint": "La fenêtre verrouillée a été fermée. Cliquez pour ignorer."
   },
   "windowPicker": {
     "title": "Envoyer à une fenêtre",

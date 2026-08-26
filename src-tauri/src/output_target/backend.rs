@@ -20,13 +20,21 @@
 
 use log::{info, warn};
 use tauri::{AppHandle, Emitter, Manager};
+use tauri_specta::Event;
 
-use super::{CaptureError, CaptureSource, LockToggle, PinnedTarget, TargetLoss, WindowIdentity};
+use super::{
+    CaptureError, CaptureSource, LockToggle, LockedLabel, OutputTargetLockEvent, PinnedTarget,
+    TargetLoss, WindowIdentity, WindowLabel,
+};
 
 /// Emitted when a pinned paste was suppressed because the locked window is gone
 /// (#120). The frontend turns this into a brief notice; the lock is already
 /// dropped by the time it fires, so the next dictation is a normal foreground
 /// paste.
+///
+/// This is separate from [`OutputTargetLockEvent`] (#255): that one carries the
+/// full `{kind, app, title}` state for the overlay/tray/settings indicator,
+/// while this bare event exists only to trigger the toast in `App.tsx`.
 pub const TARGET_LOCK_LOST_EVENT: &str = "target-lock-lost";
 
 /// Emitted when a delivery reached no window because the window that dictation
@@ -110,23 +118,141 @@ pub enum Borrowed<T> {
 /// Locking captures the window focused at that moment; pressing again unlocks.
 /// `source` says which gesture asked, because the tray menu holds the foreground
 /// itself while its click is handled (see [`capture_foreground_window`]). The
-/// tray menu is rebuilt either way so its checkmark follows the real state.
+/// tray menu is rebuilt either way so its checkmark follows the real state,
+/// and [`OutputTargetLockEvent`] is emitted so the indicator surfaces (#255)
+/// follow along too.
+///
+/// The emission is skipped if the lock has already moved past the generation
+/// this toggle produced (#266 review round 4): two overlapping toggles --
+/// two presses of the shortcut, or the shortcut racing the tray item -- can
+/// each finish mutating before either emits, and without this check the
+/// slower one's emission could land after the faster one's and show a state
+/// the backend has already moved past (a stale "Locked" arriving after a
+/// newer "Unlocked", or vice versa). Because the generation only ever
+/// increases, only the toggle that produced the CURRENT generation passes
+/// this check, so exactly one of any two overlapping toggles gets to
+/// publish -- whichever one actually happened last.
 pub fn toggle_target_lock(app: &AppHandle, source: CaptureSource) {
     let Some(pinned) = app.try_state::<PinnedTarget>() else {
         warn!("Target lock state is not initialized");
         return;
     };
 
-    match pinned.toggle(|| capture_foreground_window(source)) {
-        LockToggle::Locked(window) => info!(
-            "Output locked to window {:#x} (process {})",
-            window.handle.0, window.process_id
-        ),
-        LockToggle::Unlocked => info!("Output lock released; delivery follows the foreground"),
+    let (toggle, generation) = pinned.toggle(|| capture_foreground_window(source));
+    match toggle {
+        LockToggle::Locked(window) => {
+            info!(
+                "Output locked to window {:#x} (process {})",
+                window.handle.0, window.process_id
+            );
+            // The window is guaranteed alive right now, which is the one
+            // moment its label is reliably queryable -- cache it so a later
+            // loss (#266 review) can still name it after it (and often its
+            // whole process) is gone.
+            let label = window_label(window);
+            if let Some(cache) = app.try_state::<LockedLabel>() {
+                cache.set(window, label.clone());
+            }
+            if pinned.generation() == generation {
+                let (app_name, title) = label;
+                let _ = OutputTargetLockEvent::Locked {
+                    app: app_name,
+                    title,
+                }
+                .emit(app);
+            }
+        }
+        LockToggle::Unlocked => {
+            info!("Output lock released; delivery follows the foreground");
+            if pinned.generation() == generation {
+                let _ = OutputTargetLockEvent::Unlocked.emit(app);
+            }
+        }
         LockToggle::NotLocked(error) => warn!("Could not lock the output target: {}", error),
     }
 
     crate::tray::update_tray_menu(app, &crate::tray::current_tray_state(app), None);
+}
+
+/// Unlock the output target unconditionally, for the indicator's quick-unlock
+/// affordance (#121). Unlike [`toggle_target_lock`], this never re-locks: the
+/// indicator only offers it while a lock is shown (live or stale), and a
+/// stale notice with no backend lock left to toggle would otherwise capture a
+/// fresh, unwanted lock on the current foreground window.
+pub fn unlock_output_target(app: &AppHandle) {
+    let Some(pinned) = app.try_state::<PinnedTarget>() else {
+        return;
+    };
+    if !pinned.is_locked() {
+        // Nothing to release -- most often the frontend dismissing a stale
+        // ("lost") latch, which the backend already unlocked when it
+        // happened. The tray's own memory of that loss still needs clearing
+        // here, or it would keep showing "lock lost" after the overlay's
+        // latch was dismissed (#266 review). The dismissal must also be
+        // emitted (#266 review, finding 3): the webview that dismissed
+        // already updated itself optimistically, but a second webview
+        // showing the same stale latch (another settings window, the
+        // overlay) would otherwise never hear about the dismissal and stay
+        // stuck on "stale" until an unrelated lock/unlock event happened to
+        // pass through.
+        if pinned.dismiss_lost_notice() {
+            let _ = OutputTargetLockEvent::Unlocked.emit(app);
+            crate::tray::update_tray_menu(app, &crate::tray::current_tray_state(app), None);
+        }
+        return;
+    }
+    // unlock() clears any lost-lock notice in the same critical section as
+    // the mutation, so there is nothing left to do about it here.
+    pinned.unlock();
+    info!("Output lock released from the indicator");
+    let _ = OutputTargetLockEvent::Unlocked.emit(app);
+    crate::tray::update_tray_menu(app, &crate::tray::current_tray_state(app), None);
+}
+
+/// Read the current lock state for the indicator surfaces (#255).
+///
+/// Reports [`OutputTargetLockEvent::Lost`] when nothing is locked but
+/// [`PinnedTarget::lost_notice`] still remembers the last loss (#266 review,
+/// finding 1). The `Lost` kind was originally event-only, on the theory that
+/// a mount after the loss could just read `Unlocked` -- but the event fires
+/// once, to whichever webview happens to be listening at that moment, and a
+/// second webview mounting afterwards (settings opened after the overlay
+/// already showed the stale target, say) missed it entirely and quietly
+/// disagreed with the tray, which does consult the notice. Consulting it
+/// here too makes the notice authoritative across every webview, not just
+/// the one that was listening when the loss happened.
+#[tauri::command]
+#[specta::specta]
+pub fn get_output_target_lock(app: AppHandle) -> OutputTargetLockEvent {
+    let Some(pinned) = app.try_state::<PinnedTarget>() else {
+        return OutputTargetLockEvent::Unlocked;
+    };
+    match pinned.locked() {
+        Some(window) => {
+            let (app_name, title) = window_label(window);
+            OutputTargetLockEvent::Locked {
+                app: app_name,
+                title,
+            }
+        }
+        None => pinned
+            .lost_notice()
+            .map(|(app_name, title)| OutputTargetLockEvent::Lost {
+                app: app_name,
+                title,
+            })
+            .unwrap_or(OutputTargetLockEvent::Unlocked),
+    }
+}
+
+/// Release the output target lock from the indicator's quick-unlock button
+/// (#121). A thin command wrapper around [`unlock_output_target`] so the
+/// frontend has an explicit "unlock", distinct from the tray's lock/unlock
+/// toggle.
+#[tauri::command]
+#[specta::specta]
+pub fn release_output_target_lock(app: AppHandle) {
+    unlock_output_target(&app);
 }
 
 /// Capture where a dictation starting now will be delivered, for its
@@ -212,12 +338,67 @@ pub fn resolve_captured_delivery(app: &AppHandle, captured: Delivery) -> Option<
     }
 }
 
-/// Tell the user the lock is gone, once, and put the tray back in step.
-fn announce_lock_lost(app: &AppHandle) {
+/// Resolve a human-readable label for a locked window (#255): the app
+/// (process) name and the window title. Best-effort -- either half can come
+/// back `None` (a window with no title, a process query the OS refuses), and
+/// the caller sends both to the frontend, which owns name precedence and
+/// truncation (`output-target-indicator.ts`'s `resolveTargetName`).
+#[cfg(windows)]
+pub use imp::window_label;
+
+#[cfg(not(windows))]
+pub use fallback::window_label;
+
+/// The label to report for a window that just turned out to be gone.
+///
+/// Prefers whatever [`LockedLabel`] cached for `identity` while the window
+/// was still alive: by the time a loss is discovered, `window_label` querying
+/// live routinely comes back `(None, None)` -- the window's `GetWindowTextW`
+/// fails outright, and often its whole owning process has exited too, so
+/// `OpenProcess` fails as well (#266 review). A live query is still the
+/// fallback for the rare case nothing was cached (state not yet managed, or
+/// this identity was never the one actually locked).
+fn lost_label(app: &AppHandle, identity: WindowIdentity) -> WindowLabel {
+    app.try_state::<LockedLabel>()
+        .and_then(|cache| cache.get(identity))
+        .unwrap_or_else(|| window_label(identity))
+}
+
+/// Tell the user the lock is gone, once, and put the tray and indicator
+/// surfaces back in step (#255).
+///
+/// `label` is the locked window's last known app/title, read by the caller
+/// before the lock was dropped -- by the time this runs the lock is already
+/// gone, so this is the only chance to report who it was. `generation` is the
+/// value [`PinnedTarget::retire_dead_target`]'s `LockCleared` produced.
+///
+/// The bare toast (`TARGET_LOCK_LOST_EVENT`) always fires: a real paste
+/// attempt to the old target really did fail, whatever has happened since.
+/// The *persistent* state -- the lost-lock notice and
+/// `OutputTargetLockEvent::Lost` -- is conditioned on
+/// [`PinnedTarget::record_lost_notice`], which atomically checks whether the
+/// lock's generation has already moved past `generation` (#266 review round
+/// 4). If so, a newer lock or unlock has already been established elsewhere
+/// since this loss was detected, that operation's own event is already the
+/// truth, and persisting `Lost` here would land after it and contradict it
+/// -- the indicator would show "stale" while the backend is actually pinned
+/// to something else (or plainly unlocked).
+fn announce_lock_lost(app: &AppHandle, pinned: &PinnedTarget, generation: u64, label: WindowLabel) {
     warn!("Locked window is gone; the transcript was not delivered to it");
     let _ = app.emit(TARGET_LOCK_LOST_EVENT, ());
-    // The lock is already released, so the tray checkmark would otherwise keep
-    // claiming a lock that no longer exists.
+
+    if !pinned.record_lost_notice(generation, label.clone()) {
+        return;
+    }
+
+    let (app_name, title) = label;
+    let _ = OutputTargetLockEvent::Lost {
+        app: app_name,
+        title,
+    }
+    .emit(app);
+    // The lock is already released, so the tray checkmark and the indicator
+    // surfaces would otherwise keep claiming a lock that no longer exists.
     crate::tray::update_tray_menu(app, &crate::tray::current_tray_state(app), None);
 }
 
@@ -245,16 +426,20 @@ fn abandon_target(app: &AppHandle, target: WindowIdentity, source: DeliverySourc
 /// trace, since a suppressed delivery is deliberately not a paste error and the
 /// default clipboard handling leaves no copy behind (#160).
 fn drop_lock_for(app: &AppHandle, target: WindowIdentity) {
-    let Some(loss) = app
-        .try_state::<PinnedTarget>()
-        .map(|pinned| pinned.retire_dead_target(target))
-    else {
+    let Some(pinned) = app.try_state::<PinnedTarget>() else {
         warn!("Target lock state is not initialized; a dead target went unreported");
         return;
     };
 
-    match loss {
-        TargetLoss::LockCleared => announce_lock_lost(app),
+    match pinned.retire_dead_target(target) {
+        // The window died mid-delivery: prefer the label cached from when it
+        // was locked (#266 review) over a fresh query, which routinely comes
+        // back empty for a window that just closed. `generation` is only
+        // meaningful for this branch -- an obsolete target never touches the
+        // indicator state at all, so it carries none.
+        TargetLoss::LockCleared(generation) => {
+            announce_lock_lost(app, &pinned, generation, lost_label(app, target));
+        }
         TargetLoss::ObsoleteTarget => announce_target_window_gone(app, target),
     }
 }
@@ -398,18 +583,23 @@ pub use fallback::{
 
 #[cfg(windows)]
 mod imp {
-    use super::{CaptureError, CaptureSource, WindowIdentity};
+    use super::{CaptureError, CaptureSource, WindowIdentity, WindowLabel};
     use crate::output_target::{class_fingerprint, is_eligible_target, WindowFacts, WindowHandle};
     use log::warn;
     use std::ffi::c_void;
     use std::time::Duration;
-    use windows::Win32::Foundation::HWND;
+    use windows::core::PWSTR;
+    use windows::Win32::Foundation::{CloseHandle, HWND};
     // AttachThreadInput lives in System::Threading in this windows-crate
     // version, not in UI::Input::KeyboardAndMouse where the docs file it.
-    use windows::Win32::System::Threading::{AttachThreadInput, GetCurrentThreadId};
+    use windows::Win32::System::Threading::{
+        AttachThreadInput, GetCurrentThreadId, OpenProcess, QueryFullProcessImageNameW,
+        PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION,
+    };
     use windows::Win32::UI::WindowsAndMessaging::{
         GetClassNameW, GetForegroundWindow, GetTopWindow, GetWindow, GetWindowTextLengthW,
-        GetWindowThreadProcessId, IsWindowVisible, SetForegroundWindow, GW_HWNDNEXT,
+        GetWindowTextW, GetWindowThreadProcessId, IsWindowVisible, SetForegroundWindow,
+        GW_HWNDNEXT,
     };
 
     /// How long the activated window gets to take focus before keystrokes are
@@ -517,6 +707,66 @@ mod imp {
         }
     }
 
+    /// The window title via `GetWindowTextW`, or `None` for a title-less or
+    /// closed window. Trimmed; an all-whitespace title also reads as `None`.
+    fn window_title(hwnd: HWND) -> Option<String> {
+        let mut buf = [0u16; 512];
+        let len = unsafe { GetWindowTextW(hwnd, &mut buf) };
+        if len <= 0 {
+            return None;
+        }
+        let title = String::from_utf16_lossy(&buf[..len as usize]);
+        let trimmed = title.trim();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed.to_string())
+        }
+    }
+
+    /// The owning process's executable name (no directory, no extension), or
+    /// `None` if the process cannot be opened or queried -- e.g. it exited, or
+    /// it runs at a privilege level `PROCESS_QUERY_LIMITED_INFORMATION` cannot
+    /// see into. `PROCESS_QUERY_LIMITED_INFORMATION` is used rather than a
+    /// broader access right because it is the least the query needs and is
+    /// available even for processes AudioBud does not own.
+    fn process_name(process_id: u32) -> Option<String> {
+        let handle =
+            unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, process_id) }.ok()?;
+        let mut buf = [0u16; 260];
+        let mut len = buf.len() as u32;
+        let queried = unsafe {
+            QueryFullProcessImageNameW(
+                handle,
+                PROCESS_NAME_WIN32,
+                PWSTR(buf.as_mut_ptr()),
+                &mut len,
+            )
+        };
+        unsafe {
+            let _ = CloseHandle(handle);
+        }
+        queried.ok()?;
+        if len == 0 {
+            return None;
+        }
+        let path = String::from_utf16_lossy(&buf[..len as usize]);
+        std::path::Path::new(&path)
+            .file_stem()
+            .map(|stem| stem.to_string_lossy().to_string())
+    }
+
+    /// Resolve a locked window's app name and title (#255). Best-effort: a
+    /// window that closed between capture and lookup, or a process query that
+    /// fails, contributes `None` for that half rather than failing the whole
+    /// lookup.
+    pub fn window_label(identity: WindowIdentity) -> WindowLabel {
+        (
+            process_name(identity.process_id),
+            window_title(to_hwnd(identity.handle)),
+        )
+    }
+
     fn identity_of(hwnd: HWND) -> Option<WindowIdentity> {
         if hwnd.0.is_null() {
             return None;
@@ -620,7 +870,7 @@ mod imp {
 
 #[cfg(not(windows))]
 mod fallback {
-    use super::{CaptureError, CaptureSource, WindowIdentity};
+    use super::{CaptureError, CaptureSource, WindowIdentity, WindowLabel};
     use crate::output_target::WindowHandle;
 
     /// No window-targeting backend on this platform yet (#119), so nothing can
@@ -654,6 +904,13 @@ mod fallback {
     }
 
     pub fn restore_foreground(_previous: Option<WindowIdentity>, _target: WindowIdentity) {}
+
+    /// No label backend on this platform yet (#119, #255): nothing can be
+    /// locked, so this is unreachable, but it reports "unknown" rather than
+    /// fabricate a name.
+    pub fn window_label(_identity: WindowIdentity) -> WindowLabel {
+        (None, None)
+    }
 }
 
 #[cfg(test)]

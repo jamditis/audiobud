@@ -16,6 +16,7 @@
     "formatted": "Đã định dạng",
     "rawTranscript": "Văn bản thô",
     "lockToWindow": "Khóa vào cửa sổ",
+    "lockLost": "Mất khóa",
     "sendToWindowOnce": "Gửi tới cửa sổ một lần"
   },
   "sidebar": {
@@ -359,6 +360,15 @@
           "externalScript": "Script bên ngoài"
         },
         "externalScriptPlaceholder": "/duong-dan/toi/script.sh"
+      },
+      "outputTargetLock": {
+        "title": "Khóa đích đầu ra",
+        "description": "Khi bị khóa, mọi lời đọc chính tả được gửi đến cửa sổ bạn đã khóa thay vì cửa sổ đang được chọn.",
+        "unlockedStatus": "Chưa khóa. Lời đọc chính tả theo cửa sổ đang được chọn.",
+        "lockedStatus": "Đã khóa vào {{target}}",
+        "staleStatus": "Đã khóa vào {{target}}, nhưng cửa sổ đó không còn nữa. Lời đọc chính tả theo cửa sổ đang được chọn cho đến khi bạn khóa lại.",
+        "unknownTarget": "một cửa sổ đã khóa",
+        "unlock": "Mở khóa"
       },
       "typingTool": {
         "title": "Công cụ gõ",
@@ -836,7 +846,12 @@
     "recording": "Đang ghi âm",
     "cancel": "Hủy ghi âm",
     "raw": "THÔ",
-    "rawHint": "Chế độ văn bản thô"
+    "rawHint": "Chế độ văn bản thô",
+    "lockedTo": "→ {{target}}",
+    "lockedToHint": "Lời đọc chính tả đã khóa vào {{target}}. Nhấp để mở khóa.",
+    "lockedToUnknown": "một cửa sổ đã khóa",
+    "lockStale": "Mất khóa",
+    "lockStaleHint": "Cửa sổ đã khóa đã đóng. Nhấp để bỏ qua."
   },
   "windowPicker": {
     "title": "Gửi tới cửa sổ",

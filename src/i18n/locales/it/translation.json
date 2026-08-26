@@ -16,6 +16,7 @@
     "formatted": "Formattato",
     "rawTranscript": "Trascrizione grezza",
     "lockToWindow": "Blocca su una finestra",
+    "lockLost": "Blocco perso",
     "sendToWindowOnce": "Invia a una finestra una volta"
   },
   "sidebar": {
@@ -359,6 +360,15 @@
           "externalScript": "Script esterno"
         },
         "externalScriptPlaceholder": "/percorso/del/tuo/script.sh"
+      },
+      "outputTargetLock": {
+        "title": "Blocco della destinazione di output",
+        "description": "Quando è bloccato, ogni dettatura viene inviata alla finestra bloccata invece che a quella attiva.",
+        "unlockedStatus": "Non bloccato. La dettatura segue la finestra attiva.",
+        "lockedStatus": "Bloccato su {{target}}",
+        "staleStatus": "Era bloccato su {{target}}, ma quella finestra non esiste più. La dettatura segue la finestra attiva finché non blocchi di nuovo.",
+        "unknownTarget": "una finestra bloccata",
+        "unlock": "Sblocca"
       },
       "typingTool": {
         "title": "Strumento di digitazione",
@@ -836,7 +846,12 @@
     "recording": "Registrazione",
     "cancel": "Annulla la registrazione",
     "raw": "RAW",
-    "rawHint": "Modalità trascrizione grezza"
+    "rawHint": "Modalità trascrizione grezza",
+    "lockedTo": "→ {{target}}",
+    "lockedToHint": "La dettatura è bloccata su {{target}}. Fai clic per sbloccare.",
+    "lockedToUnknown": "una finestra bloccata",
+    "lockStale": "Blocco perso",
+    "lockStaleHint": "La finestra bloccata è stata chiusa. Fai clic per ignorare."
   },
   "windowPicker": {
     "title": "Invia a una finestra",

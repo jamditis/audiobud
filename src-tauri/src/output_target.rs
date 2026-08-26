@@ -23,6 +23,8 @@
 
 pub mod backend;
 
+use serde::{Deserialize, Serialize};
+use specta::Type;
 use std::fmt;
 use std::sync::Mutex;
 
@@ -245,8 +247,13 @@ pub enum OutputTarget {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TargetLoss {
     /// The dead window was the one still locked, so the lock was released. The
-    /// user is told their lock is gone.
-    LockCleared,
+    /// user is told their lock is gone. Carries the generation the release
+    /// produced, for [`PinnedTarget::record_lost_notice`] (#266 review round
+    /// 4): a caller that announces the loss re-checks this against the
+    /// lock's generation immediately before persisting the notice, so a
+    /// fresher lock or unlock established in between is never contradicted
+    /// by a stale "lost" state arriving after it.
+    LockCleared(u64),
     /// The dead window had already been superseded -- unlocked, or re-locked to
     /// another window -- so whatever the user set since stands untouched. They
     /// must still be told this transcript reached no window, but NOT that a lock
@@ -255,41 +262,144 @@ pub enum TargetLoss {
     ObsoleteTarget,
 }
 
+/// A window's human-readable label: the app (process) name and the window
+/// title, exactly as [`backend::window_label`] read them. Either half may be
+/// `None`. Shared by every place that carries or caches one of these --
+/// [`OutputTargetLockEvent`], [`LockedLabel`], [`PinnedTarget`]'s lost-lock
+/// notice, and the tray's own derivation -- so the "app-or-title, both
+/// optional" shape is spelled once instead of as a
+/// `(Option<String>, Option<String>)` tuple type at each call site (#266
+/// review).
+pub type WindowLabel = (Option<String>, Option<String>);
+
+/// A lock-state snapshot as reported to the indicator surfaces (#255): the
+/// recording overlay, the tray, and settings. Mirrors the frontend's
+/// `LockSnapshot` in `src/lib/output-target-indicator.ts`:
+/// - `Unlocked`: delivery follows the foreground window.
+/// - `Locked`: a window is pinned and was alive when this was built.
+/// - `Lost`: a pinned window closed; [`TargetLoss::LockCleared`] just dropped
+///   the lock. Originally event-only, on the theory that `PinnedTarget` being
+///   already cleared by the time this fires means a poll afterwards reads
+///   `Unlocked` -- but a webview that mounts (or a settings window that
+///   opens) after the one-shot event has already fired would then silently
+///   disagree with a tray or overlay that is still showing the loss (#266
+///   review, finding 1). `backend::get_output_target_lock` now also consults
+///   [`PinnedTarget::lost_notice`], the same persisted memory of the loss the
+///   tray reads, so a snapshot query returns `Lost` for as long as that
+///   notice stands. The frontend holds `Lost` as a latch until the user
+///   dismisses it or a new lock/unlock replaces it.
+///
+/// `app`/`title` are the raw strings the platform label lookup read (an
+/// app/process name and the window title). Either may be `None`. They are
+/// sent untruncated -- the frontend core owns truncation and name precedence
+/// so the source of the name and the source of the display cannot drift.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Type, tauri_specta::Event)]
+#[serde(tag = "kind")]
+pub enum OutputTargetLockEvent {
+    #[serde(rename = "unlocked")]
+    Unlocked,
+    #[serde(rename = "locked")]
+    Locked {
+        app: Option<String>,
+        title: Option<String>,
+    },
+    #[serde(rename = "lost")]
+    Lost {
+        app: Option<String>,
+        title: Option<String>,
+    },
+}
+
+/// [`PinnedTarget`]'s guarded state: the lock itself, a generation counter,
+/// and the lost-lock notice -- all three behind the one mutex so a mutation
+/// and the decision of whether to persist a notice about it can happen
+/// atomically. See [`PinnedTarget`]'s doc for why that atomicity is the
+/// point (#266 review round 4).
+#[derive(Default)]
+struct LockState {
+    window: Option<WindowIdentity>,
+    /// Bumped on every mutation (lock, unlock, a resolve that finds the
+    /// target gone). Lets a caller that read a value out from under the
+    /// guard -- necessarily true of anything published after the guard is
+    /// released, like an event emission -- ask "is what I have still the
+    /// latest thing that happened" without re-deriving it.
+    generation: u64,
+    /// The last loss's label, kept only for as long as nothing has locked or
+    /// unlocked since. See [`PinnedTarget::record_lost_notice`].
+    lost_notice: Option<WindowLabel>,
+}
+
 /// Tauri-managed lock state. Registered alongside `EnigoState`; the paste path
 /// reads it at send time to resolve the [`OutputTarget`]. `None` means no lock
 /// is held and delivery follows the foreground.
+///
+/// Mutation and the publication that follows it (an `OutputTargetLockEvent`
+/// emission, the tray's own rebuild) are necessarily two separate steps: the
+/// mutation happens under this type's mutex, but Tauri event emission and
+/// menu rebuilding cannot happen while holding it (they touch other state,
+/// including the app handle itself, and doing IPC-adjacent work inside a
+/// std::sync::Mutex critical section is its own hazard). Two overlapping
+/// operations -- two toggle presses, or a delivery discovering a loss racing
+/// a fresh lock from the tray -- can interleave across that gap: a slower
+/// mutation's publication can land after a faster, later mutation's, showing
+/// a state the backend has already moved past (#266 review round 4).
+///
+/// The generation counter in [`LockState`] is the fix, chosen over threading
+/// a distinct "publish this" flag through every layer: every mutating method
+/// hands back the generation it produced, and a caller re-reads
+/// [`generation`](Self::generation) immediately before publishing, skipping
+/// the publish if something newer has already happened. Because the
+/// generation only ever increases, the newest mutation is always the one
+/// whose re-read still matches what it produced, so it is the one and only
+/// operation that gets to publish -- regardless of how the two operations'
+/// wall-clock timing actually interleaves. [`record_lost_notice`] goes one
+/// step further for the loss notice specifically: the compare-and-set
+/// happens under the very same guard as the check, in one critical section,
+/// closing the gap completely rather than narrowing it to "one read, then a
+/// re-read".
 #[derive(Default)]
-pub struct PinnedTarget(pub Mutex<Option<WindowIdentity>>);
+pub struct PinnedTarget(Mutex<LockState>);
 
 impl PinnedTarget {
     /// Lock delivery to `window` -- the one focused at the moment of locking --
-    /// and return the target now in force. Locking again re-pins to the new
-    /// window, so a second lock is also how you retarget.
-    pub fn lock_to(&self, window: WindowIdentity) -> OutputTarget {
-        *self.guard() = Some(window);
-        OutputTarget::Pinned(window.handle)
+    /// and return the target now in force plus the generation this produced.
+    /// Locking again re-pins to the new window, so a second lock is also how
+    /// you retarget. Clears any lost-lock notice: a fresh lock supersedes
+    /// whatever the tray remembered about an earlier one going stale.
+    pub fn lock_to(&self, window: WindowIdentity) -> (OutputTarget, u64) {
+        let mut guard = self.guard();
+        guard.window = Some(window);
+        guard.generation += 1;
+        guard.lost_notice = None;
+        (OutputTarget::Pinned(window.handle), guard.generation)
     }
 
-    /// Clear any lock and return to foreground delivery.
-    pub fn unlock(&self) {
-        *self.guard() = None;
+    /// Clear any lock and return to foreground delivery, and the generation
+    /// this produced. Also clears any lost-lock notice.
+    pub fn unlock(&self) -> u64 {
+        let mut guard = self.guard();
+        guard.window = None;
+        guard.generation += 1;
+        guard.lost_notice = None;
+        guard.generation
     }
 
-    /// Release the lock only if it still points at `expected`, and report
-    /// whether it did.
+    /// Release the lock only if it still points at `expected`, and report the
+    /// generation this produced if it did.
     ///
     /// A delivery that discovers its target has died must not clear whatever
     /// lock is held by then: a user can unlock and re-lock to another window
     /// while a paste is still running, and blindly clearing would silently drop
     /// that new lock. Comparing first keeps a stale delivery from speaking for
     /// the current one.
-    pub fn unlock_if(&self, expected: WindowIdentity) -> bool {
+    pub fn unlock_if(&self, expected: WindowIdentity) -> Option<u64> {
         let mut guard = self.guard();
-        if *guard == Some(expected) {
-            *guard = None;
-            true
+        if guard.window == Some(expected) {
+            guard.window = None;
+            guard.generation += 1;
+            Some(guard.generation)
         } else {
-            false
+            None
         }
     }
 
@@ -301,59 +411,161 @@ impl PinnedTarget {
     /// transcript that reached no window: the difference is only whether the
     /// lock the user is looking at went with it (#160).
     pub fn retire_dead_target(&self, target: WindowIdentity) -> TargetLoss {
-        if self.unlock_if(target) {
-            TargetLoss::LockCleared
-        } else {
-            TargetLoss::ObsoleteTarget
+        match self.unlock_if(target) {
+            Some(generation) => TargetLoss::LockCleared(generation),
+            None => TargetLoss::ObsoleteTarget,
         }
     }
 
     /// Whether a window is currently locked.
     pub fn is_locked(&self) -> bool {
-        self.guard().is_some()
+        self.guard().window.is_some()
     }
 
     /// The locked window, if any.
     pub fn locked(&self) -> Option<WindowIdentity> {
-        *self.guard()
+        self.guard().window
+    }
+
+    /// The current generation, for a caller about to compare a value it
+    /// produced earlier against the latest state (#266 review round 4).
+    pub fn generation(&self) -> u64 {
+        self.guard().generation
     }
 
     /// One press of the lock toggle: release an existing lock, or capture a new
-    /// target with `capture` (on Windows, the foreground window).
+    /// target with `capture` (on Windows, the foreground window). Returns the
+    /// generation the transition produced alongside it.
     ///
     /// The lock is held across `capture` so two fast presses cannot interleave
     /// into a lock the user did not ask for. A failed capture leaves the app
-    /// unlocked -- it never falls back to a stale target.
+    /// unlocked -- it never falls back to a stale target, and does not bump
+    /// the generation, since nothing changed.
     pub fn toggle(
         &self,
         capture: impl FnOnce() -> Result<WindowIdentity, CaptureError>,
-    ) -> LockToggle {
+    ) -> (LockToggle, u64) {
         let mut guard = self.guard();
-        if guard.is_some() {
-            *guard = None;
-            return LockToggle::Unlocked;
+        if guard.window.is_some() {
+            guard.window = None;
+            guard.generation += 1;
+            guard.lost_notice = None;
+            return (LockToggle::Unlocked, guard.generation);
         }
         match capture() {
             Ok(window) => {
-                *guard = Some(window);
-                LockToggle::Locked(window)
+                guard.window = Some(window);
+                guard.generation += 1;
+                guard.lost_notice = None;
+                (LockToggle::Locked(window), guard.generation)
             }
-            Err(error) => LockToggle::NotLocked(error),
+            Err(error) => (LockToggle::NotLocked(error), guard.generation),
         }
     }
 
+    /// Atomically record `label` as the lost-lock notice, but only if the
+    /// lock's generation is still `expected_generation`, and report whether it
+    /// was recorded (#266 review round 4).
+    ///
+    /// `expected_generation` comes from [`retire_dead_target`](Self::retire_dead_target)'s
+    /// `TargetLoss::LockCleared`, the only mutation that actually loses a
+    /// lock. The check and the write happen under one guard, which is what
+    /// actually closes the race a plain "check `is_locked`, then separately
+    /// write the notice" cannot: a concurrent `toggle`/`unlock`/`retire_dead_target`
+    /// either fully precedes this call (bumps the generation first, so the
+    /// compare fails and nothing is written) or fully follows it (that
+    /// mutation clears `lost_notice` itself, in the same guard it bumps the
+    /// generation in) -- there is no gap in which a lock lands and a stale
+    /// notice for the window it replaced still gets written over it.
+    pub fn record_lost_notice(&self, expected_generation: u64, label: WindowLabel) -> bool {
+        let mut guard = self.guard();
+        if guard.generation != expected_generation {
+            return false;
+        }
+        guard.lost_notice = Some(label);
+        true
+    }
+
+    /// Clear the lost-lock notice -- a dismissal, or a wrap-up after telling
+    /// the user about it -- and report whether one was actually cleared.
+    pub fn dismiss_lost_notice(&self) -> bool {
+        let mut guard = self.guard();
+        let had_one = guard.lost_notice.is_some();
+        guard.lost_notice = None;
+        had_one
+    }
+
+    /// The lost-lock notice, if the lock has not moved on from it.
+    pub fn lost_notice(&self) -> Option<WindowLabel> {
+        self.guard().lost_notice.clone()
+    }
+
     /// Borrow the lock, recovering the guard if a previous holder panicked.
-    /// The mutex only guards a `Copy` `Option<WindowIdentity>` with no
-    /// cross-field invariant, so a poisoned guard's value is always consistent.
-    /// Recovering it keeps one panic in an `is_alive` callback from poisoning
-    /// the mutex and bricking every later paste with a panic on `unwrap`
-    /// (AGENTS.md: avoid unwrap in production).
-    fn guard(&self) -> std::sync::MutexGuard<'_, Option<WindowIdentity>> {
+    /// `LockState` is a plain value with no invariant that a panic mid-mutation
+    /// could leave broken halfway (every field is written independently and
+    /// each is meaningful on its own), so a poisoned guard's value is always
+    /// safe to keep using. Recovering it keeps one panic in an `is_alive`
+    /// callback from poisoning the mutex and bricking every later paste with a
+    /// panic on `unwrap` (AGENTS.md: avoid unwrap in production).
+    fn guard(&self) -> std::sync::MutexGuard<'_, LockState> {
         self.0
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 }
+
+/// Caches a locked window's label from the moment it was captured, keyed to
+/// its identity.
+///
+/// By the time a loss is detected, the window (often its whole owning
+/// process) is already gone, so re-querying the label live -- as the
+/// original #255 wiring did -- routinely comes back `(None, None)` and the
+/// indicator can only say "a locked window" (#266 review). Reading the label
+/// while the window was still alive, at lock time, and caching it here for
+/// [`TargetLoss::LockCleared`] to reuse gives the loss notice back its name.
+///
+/// Keyed to the identity so a lock that was replaced before it was ever lost
+/// cannot leave a stale label behind for a *different* window that later
+/// goes stale.
+#[derive(Default)]
+pub struct LockedLabel(Mutex<Option<(WindowIdentity, WindowLabel)>>);
+
+impl LockedLabel {
+    /// Cache `label` for `identity`, replacing whatever was cached before.
+    pub fn set(&self, identity: WindowIdentity, label: WindowLabel) {
+        *self.guard() = Some((identity, label));
+    }
+
+    /// The cached label for `identity`, or `None` if nothing is cached for it
+    /// -- including when the cache holds a different, superseded window.
+    pub fn get(&self, identity: WindowIdentity) -> Option<WindowLabel> {
+        self.guard()
+            .as_ref()
+            .filter(|(cached, _)| *cached == identity)
+            .map(|(_, label)| label.clone())
+    }
+
+    /// Drop whatever is cached.
+    pub fn clear(&self) {
+        *self.guard() = None;
+    }
+
+    fn guard(&self) -> std::sync::MutexGuard<'_, Option<(WindowIdentity, WindowLabel)>> {
+        self.0
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+}
+
+// The lost-lock notice used to be its own Tauri-managed type (`LostLockNotice`),
+// written from a `record_lost_notice` free function that checked
+// `PinnedTarget::is_locked` and then wrote the notice as two separate mutex
+// acquisitions. That gap was exactly the race #266's review round 4 found: a
+// lock landing between the check and the write got a stale notice for the
+// window it replaced restored over it. The notice now lives inside
+// `PinnedTarget`'s own `LockState`, behind the same guard as the lock and the
+// generation counter, so `PinnedTarget::record_lost_notice` can check and
+// write in one atomic step.
 
 #[cfg(test)]
 mod tests {
@@ -387,7 +599,9 @@ mod tests {
     fn lock_pins_the_given_window() {
         let t = PinnedTarget::default();
         let w = win(42, 100, 200);
-        assert_eq!(t.lock_to(w), OutputTarget::Pinned(w.handle));
+        let (target, generation) = t.lock_to(w);
+        assert_eq!(target, OutputTarget::Pinned(w.handle));
+        assert_eq!(generation, t.generation());
         assert!(t.is_locked());
         // A dictation starting now captures the whole identity, not just the
         // handle, because that is what every later re-check needs (#254).
@@ -437,7 +651,7 @@ mod tests {
         // The state is still readable rather than panicking on a poisoned lock,
         // and nothing was locked by the failed capture.
         assert!(!t.is_locked());
-        assert_eq!(t.lock_to(w), OutputTarget::Pinned(w.handle));
+        assert_eq!(t.lock_to(w).0, OutputTarget::Pinned(w.handle));
         assert_eq!(t.locked(), Some(w));
     }
 
@@ -446,8 +660,36 @@ mod tests {
         let t = PinnedTarget::default();
         t.lock_to(win(1, 1, 1));
         let second = win(2, 2, 2);
-        assert_eq!(t.lock_to(second), OutputTarget::Pinned(second.handle));
+        assert_eq!(t.lock_to(second).0, OutputTarget::Pinned(second.handle));
         assert_eq!(t.locked(), Some(second));
+    }
+
+    #[test]
+    fn generation_advances_on_every_mutation_but_not_on_a_failed_capture() {
+        let t = PinnedTarget::default();
+        let start = t.generation();
+
+        let (_, after_lock) = t.lock_to(win(1, 1, 1));
+        assert!(after_lock > start);
+
+        let after_unlock = t.unlock();
+        assert!(after_unlock > after_lock);
+
+        // A failed capture changes nothing, so the generation does not move.
+        let (toggle, after_failed_toggle) = t.toggle(|| Err(CaptureError::OwnWindow));
+        assert_eq!(toggle, LockToggle::NotLocked(CaptureError::OwnWindow));
+        assert_eq!(after_failed_toggle, after_unlock);
+
+        let (toggle, after_toggle_lock) = t.toggle(|| Ok(win(2, 2, 2)));
+        assert!(matches!(toggle, LockToggle::Locked(_)));
+        assert!(after_toggle_lock > after_unlock);
+
+        // Retiring the now-dead target as the current lock bumps the
+        // generation again.
+        match t.retire_dead_target(win(2, 2, 2)) {
+            TargetLoss::LockCleared(after_retire) => assert!(after_retire > after_toggle_lock),
+            TargetLoss::ObsoleteTarget => panic!("expected the current lock to clear"),
+        }
     }
 
     #[test]
@@ -498,7 +740,10 @@ mod tests {
         let captured = win(42, 100, 200);
         t.lock_to(captured);
         assert!(!identity_is_alive(captured, |_| Some(win(42, 999, 200))));
-        assert_eq!(t.retire_dead_target(captured), TargetLoss::LockCleared);
+        assert!(matches!(
+            t.retire_dead_target(captured),
+            TargetLoss::LockCleared(_)
+        ));
         assert!(!t.is_locked());
     }
 
@@ -553,7 +798,10 @@ mod tests {
         let t = PinnedTarget::default();
         let w = win(9, 1, 2);
         t.lock_to(w);
-        assert_eq!(t.retire_dead_target(w), TargetLoss::LockCleared);
+        assert!(matches!(
+            t.retire_dead_target(w),
+            TargetLoss::LockCleared(_)
+        ));
         assert!(!t.is_locked());
     }
 
@@ -568,14 +816,14 @@ mod tests {
         t.lock_to(first);
         t.lock_to(second);
 
-        assert!(!t.unlock_if(first));
+        assert_eq!(t.unlock_if(first), None);
         assert_eq!(t.locked(), Some(second));
 
         // The current target still clears normally.
-        assert!(t.unlock_if(second));
+        assert!(t.unlock_if(second).is_some());
         assert!(!t.is_locked());
         // And clearing an already-empty lock reports that it did nothing.
-        assert!(!t.unlock_if(second));
+        assert_eq!(t.unlock_if(second), None);
     }
 
     #[test]
@@ -635,11 +883,11 @@ mod tests {
     fn toggle_locks_then_unlocks() {
         let t = PinnedTarget::default();
         let w = win(11, 1, 2);
-        assert_eq!(t.toggle(|| Ok(w)), LockToggle::Locked(w));
+        assert_eq!(t.toggle(|| Ok(w)).0, LockToggle::Locked(w));
         assert!(t.is_locked());
         // The second press releases; capture must not even run.
         assert_eq!(
-            t.toggle(|| panic!("captured while already locked")),
+            t.toggle(|| panic!("captured while already locked")).0,
             LockToggle::Unlocked
         );
         assert!(!t.is_locked());
@@ -649,10 +897,160 @@ mod tests {
     fn a_failed_capture_leaves_the_app_unlocked() {
         let t = PinnedTarget::default();
         assert_eq!(
-            t.toggle(|| Err(CaptureError::OwnWindow)),
+            t.toggle(|| Err(CaptureError::OwnWindow)).0,
             LockToggle::NotLocked(CaptureError::OwnWindow)
         );
         assert!(!t.is_locked());
         assert_eq!(t.locked(), None);
+    }
+
+    #[test]
+    fn locked_label_cache_starts_empty() {
+        let c = LockedLabel::default();
+        assert_eq!(c.get(win(1, 1, 1)), None);
+    }
+
+    #[test]
+    fn locked_label_cache_returns_the_label_for_the_matching_identity() {
+        let c = LockedLabel::default();
+        let w = win(1, 10, 20);
+        let label = (Some("Terminal".to_string()), Some("zsh".to_string()));
+        c.set(w, label.clone());
+        assert_eq!(c.get(w), Some(label));
+    }
+
+    #[test]
+    fn locked_label_cache_does_not_answer_for_a_different_window() {
+        // A lock that was replaced before it was ever lost must not leave its
+        // label behind for the new window (#266 review).
+        let c = LockedLabel::default();
+        let first = win(1, 10, 20);
+        let second = win(2, 30, 40);
+        c.set(first, (Some("First".to_string()), None));
+        c.set(second, (Some("Second".to_string()), None));
+        assert_eq!(c.get(first), None);
+        assert_eq!(c.get(second), Some((Some("Second".to_string()), None)));
+    }
+
+    #[test]
+    fn locked_label_cache_clear_forgets_it() {
+        let c = LockedLabel::default();
+        let w = win(1, 10, 20);
+        c.set(w, (Some("Terminal".to_string()), None));
+        c.clear();
+        assert_eq!(c.get(w), None);
+    }
+
+    #[test]
+    fn lost_notice_starts_empty() {
+        let t = PinnedTarget::default();
+        assert_eq!(t.lost_notice(), None);
+        // Nothing to dismiss yet.
+        assert!(!t.dismiss_lost_notice());
+    }
+
+    /// Retire `target` as the current lock and return the generation that
+    /// produced, panicking if it turned out to already be obsolete -- a
+    /// helper so the `record_lost_notice` tests below can focus on what
+    /// happens around the generation rather than re-deriving it each time.
+    fn retire_and_expect_cleared(t: &PinnedTarget, target: WindowIdentity) -> u64 {
+        match t.retire_dead_target(target) {
+            TargetLoss::LockCleared(generation) => generation,
+            TargetLoss::ObsoleteTarget => panic!("expected the lock to clear"),
+        }
+    }
+
+    #[test]
+    fn record_lost_notice_records_when_the_generation_still_matches() {
+        let t = PinnedTarget::default();
+        let generation = t.generation();
+        let label = (Some("Terminal".to_string()), None);
+
+        assert!(t.record_lost_notice(generation, label.clone()));
+        assert_eq!(t.lost_notice(), Some(label));
+    }
+
+    #[test]
+    fn record_lost_notice_is_suppressed_by_a_lock_established_in_the_meantime() {
+        // The race #266's review round 4 closes: a delivery discovers its
+        // target is gone (`retire_dead_target` already cleared PinnedTarget
+        // and handed back the generation that transition produced), but a
+        // lock on a new window lands on another thread before the loss can
+        // be recorded. Persisting "lost" now would arrive after that
+        // window's own "locked" state and contradict it -- so the stale
+        // generation must make the write a no-op.
+        let t = PinnedTarget::default();
+        let target = win(1, 10, 20);
+        t.lock_to(target);
+        let lost_generation = retire_and_expect_cleared(&t, target);
+
+        // A new lock lands before the loss is recorded.
+        t.lock_to(win(2, 30, 40));
+
+        assert!(!t.record_lost_notice(lost_generation, (Some("Old window".to_string()), None)));
+        assert_eq!(t.lost_notice(), None);
+        // The new lock is untouched by the suppressed write.
+        assert!(t.is_locked());
+        assert_eq!(t.locked(), Some(win(2, 30, 40)));
+    }
+
+    #[test]
+    fn record_lost_notice_overwrites_an_earlier_unrecorded_loss() {
+        let t = PinnedTarget::default();
+        let target = win(1, 1, 1);
+        t.lock_to(target);
+        let generation = retire_and_expect_cleared(&t, target);
+        t.record_lost_notice(generation, (Some("Stale from before".to_string()), None));
+
+        // A later loss at the same (still-unlocked) generation replaces it.
+        let label = (Some("Terminal".to_string()), None);
+        assert!(t.record_lost_notice(generation, label.clone()));
+        assert_eq!(t.lost_notice(), Some(label));
+    }
+
+    #[test]
+    fn a_fresh_lock_clears_any_pending_lost_notice() {
+        // Whichever operation runs last atomically clears `lost_notice`
+        // alongside its own mutation, so a compare-and-set for an earlier
+        // loss can never win the race against it (#266 review round 4).
+        let t = PinnedTarget::default();
+        let target = win(1, 1, 1);
+        t.lock_to(target);
+        let lost_generation = retire_and_expect_cleared(&t, target);
+        assert!(t.record_lost_notice(lost_generation, (Some("Gone".to_string()), None)));
+        assert_eq!(t.lost_notice(), Some((Some("Gone".to_string()), None)));
+
+        // Locking again -- the fix for the race, not just a coincidence --
+        // clears the notice in the same critical section as the mutation.
+        t.lock_to(win(2, 2, 2));
+        assert_eq!(t.lost_notice(), None);
+    }
+
+    #[test]
+    fn dismiss_lost_notice_clears_it_and_reports_whether_one_existed() {
+        let t = PinnedTarget::default();
+        assert!(!t.dismiss_lost_notice());
+
+        let target = win(1, 1, 1);
+        t.lock_to(target);
+        let generation = retire_and_expect_cleared(&t, target);
+        t.record_lost_notice(generation, (Some("Terminal".to_string()), None));
+
+        assert!(t.dismiss_lost_notice());
+        assert_eq!(t.lost_notice(), None);
+        assert!(!t.dismiss_lost_notice());
+    }
+
+    #[test]
+    fn toggle_locked_transition_clears_any_pending_lost_notice() {
+        let t = PinnedTarget::default();
+        let target = win(1, 1, 1);
+        t.lock_to(target);
+        let generation = retire_and_expect_cleared(&t, target);
+        t.record_lost_notice(generation, (Some("Gone".to_string()), None));
+        assert!(t.lost_notice().is_some());
+
+        t.toggle(|| Ok(win(2, 2, 2)));
+        assert_eq!(t.lost_notice(), None);
     }
 }

@@ -1,5 +1,6 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
+import { type } from "@tauri-apps/plugin-os";
 import { ShowOverlay } from "../ShowOverlay";
 import { ModelUnloadTimeoutSetting } from "../ModelUnloadTimeout";
 import { DictionaryGuide } from "../DictionaryGuide";
@@ -15,6 +16,7 @@ import { StartHidden } from "../StartHidden";
 import { AutostartToggle } from "../AutostartToggle";
 import { ShowTrayIcon } from "../ShowTrayIcon";
 import { PasteMethodSetting } from "../PasteMethod";
+import { OutputTargetLock } from "../OutputTargetLock";
 import { TypingToolSetting } from "../TypingTool";
 import { ClipboardHandlingSetting } from "../ClipboardHandling";
 import { AutoSubmit } from "../AutoSubmit";
@@ -33,6 +35,11 @@ export const AdvancedSettings: React.FC = () => {
   const { t } = useTranslation();
   const { getSetting } = useSettings();
   const experimentalEnabled = getSetting("experimental_enabled") || false;
+  // The target lock has a Windows backend only for now (issue #119), same as
+  // the toggle_target_lock shortcut row in GeneralSettings -- everywhere else
+  // it is always Unsupported, so the row would offer a control that can never
+  // do anything (#266 review).
+  const isWindows = type() === "windows";
 
   return (
     <div className="max-w-3xl w-full mx-auto space-y-6">
@@ -51,6 +58,9 @@ export const AdvancedSettings: React.FC = () => {
         <TypingToolSetting descriptionMode="tooltip" grouped={true} />
         <ClipboardHandlingSetting descriptionMode="tooltip" grouped={true} />
         <AutoSubmit descriptionMode="tooltip" grouped={true} />
+        {isWindows && (
+          <OutputTargetLock descriptionMode="tooltip" grouped={true} />
+        )}
       </SettingsGroup>
 
       <SettingsGroup title={t("settings.advanced.groups.transcription")}>

@@ -16,6 +16,7 @@
     "formatted": "已格式化",
     "rawTranscript": "原始转录",
     "lockToWindow": "锁定到窗口",
+    "lockLost": "锁定已丢失",
     "sendToWindowOnce": "发送到窗口一次"
   },
   "sidebar": {
@@ -359,6 +360,15 @@
           "externalScript": "外部脚本"
         },
         "externalScriptPlaceholder": "/path/to/your/script.sh"
+      },
+      "outputTargetLock": {
+        "title": "输出目标锁定",
+        "description": "锁定期间，每次听写都会发送到你锁定的窗口，而不是当前聚焦的窗口。",
+        "unlockedStatus": "未锁定。听写跟随当前聚焦的窗口。",
+        "lockedStatus": "已锁定到 {{target}}",
+        "staleStatus": "曾锁定到 {{target}}，但该窗口已不存在。在你重新锁定之前，听写将跟随当前聚焦的窗口。",
+        "unknownTarget": "已锁定的窗口",
+        "unlock": "解锁"
       },
       "typingTool": {
         "title": "输入工具",
@@ -836,7 +846,12 @@
     "recording": "录制中",
     "cancel": "取消录制",
     "raw": "RAW",
-    "rawHint": "原始转录模式"
+    "rawHint": "原始转录模式",
+    "lockedTo": "→ {{target}}",
+    "lockedToHint": "听写已锁定到 {{target}}。点击以解锁。",
+    "lockedToUnknown": "已锁定的窗口",
+    "lockStale": "锁定已丢失",
+    "lockStaleHint": "已锁定的窗口已关闭。点击以关闭提示。"
   },
   "windowPicker": {
     "title": "发送到窗口",

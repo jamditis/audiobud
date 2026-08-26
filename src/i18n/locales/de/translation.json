@@ -16,6 +16,7 @@
     "formatted": "Formatiert",
     "rawTranscript": "Rohtranskript",
     "lockToWindow": "Auf Fenster fixieren",
+    "lockLost": "Fixierung verloren",
     "sendToWindowOnce": "Einmal an Fenster senden"
   },
   "sidebar": {
@@ -359,6 +360,15 @@
           "externalScript": "Externes Skript"
         },
         "externalScriptPlaceholder": "/pfad/zu/ihrem/skript.sh"
+      },
+      "outputTargetLock": {
+        "title": "Ausgabeziel-Sperre",
+        "description": "Solange gesperrt, wird jedes Diktat an das gesperrte Fenster gesendet statt an das gerade fokussierte.",
+        "unlockedStatus": "Nicht gesperrt. Das Diktat folgt dem fokussierten Fenster.",
+        "lockedStatus": "Gesperrt auf {{target}}",
+        "staleStatus": "War auf {{target}} gesperrt, aber dieses Fenster existiert nicht mehr. Das Diktat folgt dem fokussierten Fenster, bis du erneut sperrst.",
+        "unknownTarget": "ein gesperrtes Fenster",
+        "unlock": "Entsperren"
       },
       "typingTool": {
         "title": "Eingabetool",
@@ -836,7 +846,12 @@
     "recording": "Aufnahme",
     "cancel": "Aufnahme abbrechen",
     "raw": "RAW",
-    "rawHint": "Rohtranskript-Modus"
+    "rawHint": "Rohtranskript-Modus",
+    "lockedTo": "→ {{target}}",
+    "lockedToHint": "Das Diktat ist auf {{target}} gesperrt. Klicken zum Entsperren.",
+    "lockedToUnknown": "ein gesperrtes Fenster",
+    "lockStale": "Sperre verloren",
+    "lockStaleHint": "Das gesperrte Fenster wurde geschlossen. Klicken zum Ausblenden."
   },
   "windowPicker": {
     "title": "An Fenster senden",
