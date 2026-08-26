@@ -327,6 +327,15 @@ pub fn abandon_pick(session: &PickerSession, pending: &PendingPick) {
     pending.clear();
 }
 
+/// Start a fresh offer: whatever an earlier pick armed is superseded.
+///
+/// Opening the picker again is the user starting over, so the route they armed
+/// last time must not be left waiting behind the new one. Clearing it here also
+/// closes the window where an old route could fire while a new picker is up.
+pub fn supersede_pick(pending: &PendingPick) {
+    pending.clear();
+}
+
 /// Whether a chosen row was refused -- the window died, or its handle was
 /// recycled, between being offered and being clicked.
 ///
@@ -336,6 +345,41 @@ pub fn abandon_pick(session: &PickerSession, pending: &PendingPick) {
 /// closed away as if it had worked.
 pub fn is_stale_selection(gesture: &PickerGesture, armed: PickArmed) -> bool {
     matches!(gesture, PickerGesture::Chose { .. }) && armed == PickArmed::Cancelled
+}
+
+/// What the paste path should do about a finished transcript, given what the
+/// picker looks like right now.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PasteVerdict {
+    /// A pick is under way: withhold this transcript. Nothing is consumed, so a
+    /// route armed earlier survives for whatever the user settles on.
+    WithholdForPicker,
+    /// Deliver along the route one pick armed, now spent.
+    Route(PickDelivery),
+    /// No pick has a say: deliver to the target this dictation captured.
+    Captured,
+}
+
+/// Decide between an open picker, an armed route, and the captured target.
+///
+/// ORDER MATTERS. A visible picker outranks any route armed earlier, and is
+/// checked FIRST so `take_route` is not even called: consuming a route here
+/// would spend it on a transcript that is about to be withheld, and an older
+/// `Foreground` route would aim that paste straight at the picker window the
+/// user is looking at (#164). The route is left armed instead -- a new pick
+/// supersedes it when the user makes one, and it is cleared when they open a
+/// fresh picker.
+pub fn decide_paste(
+    picker_open: bool,
+    take_route: impl FnOnce() -> Option<PickDelivery>,
+) -> PasteVerdict {
+    if picker_open {
+        return PasteVerdict::WithholdForPicker;
+    }
+    match take_route() {
+        Some(delivery) => PasteVerdict::Route(delivery),
+        None => PasteVerdict::Captured,
+    }
 }
 
 /// Whether a pick is under way, given what is known about the picker window.
@@ -1030,6 +1074,49 @@ mod tests {
         let delivery = pending
             .take_resolved(|w| crate::output_target::identity_is_alive(w, |_| Some(impostor)));
         assert_eq!(delivery, Some(PickDelivery::PickLost));
+    }
+
+    #[test]
+    fn an_open_picker_outranks_a_route_armed_earlier() {
+        // The user armed a route, then opened the picker again. A transcript
+        // finishing now must be withheld, NOT delivered along the old route: a
+        // foreground route would paste into the picker they are looking at.
+        let verdict = decide_paste(true, || {
+            panic!("an open picker must not consume the armed route")
+        });
+        assert_eq!(verdict, PasteVerdict::WithholdForPicker);
+    }
+
+    #[test]
+    fn with_no_picker_up_the_armed_route_is_taken_then_the_captured_target() {
+        let picked = identity(7, 100, 200);
+        assert_eq!(
+            decide_paste(false, || Some(PickDelivery::Deliver(picked))),
+            PasteVerdict::Route(PickDelivery::Deliver(picked))
+        );
+        assert_eq!(
+            decide_paste(false, || Some(PickDelivery::Foreground)),
+            PasteVerdict::Route(PickDelivery::Foreground)
+        );
+        assert_eq!(
+            decide_paste(false, || Some(PickDelivery::PickLost)),
+            PasteVerdict::Route(PickDelivery::PickLost)
+        );
+        // Nothing armed at all: the dictation's own captured target decides.
+        assert_eq!(decide_paste(false, || None), PasteVerdict::Captured);
+    }
+
+    #[test]
+    fn opening_a_fresh_picker_supersedes_a_route_armed_earlier() {
+        // Offering a new list is the user starting over. Whatever they pick
+        // replaces the old route, and if they back out instead, the old route
+        // must not quietly fire later.
+        let pending = PendingPick::default();
+        pending.arm(PendingRoute::Window(identity(1, 100, 200)));
+
+        supersede_pick(&pending);
+
+        assert!(!pending.is_armed());
     }
 
     #[test]

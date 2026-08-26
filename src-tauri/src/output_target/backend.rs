@@ -162,10 +162,12 @@ pub fn capture_delivery(app: &AppHandle) -> Delivery {
 /// or `None` when the paste must be suppressed because that window is gone
 /// (#120).
 ///
-/// A pending one-shot pick (#124) is consulted first and consumed here: it
-/// routes THIS transcript and is then spent, overriding both the captured target
-/// and any lock. A pick whose window has gone suppresses the paste rather than
-/// letting it fall back to whatever now holds focus.
+/// The picker speaks first (#124). A pick in progress withholds the transcript
+/// outright -- pasting into the window the user is picking from is exactly the
+/// misfire the flow exists to avoid -- and otherwise a pending one-shot route is
+/// consumed here: it routes THIS transcript and is then spent, overriding both
+/// the captured target and any lock. A pick whose window has gone suppresses the
+/// paste rather than letting it fall back to whatever now holds focus.
 ///
 /// Otherwise the lock itself is deliberately not consulted: `captured` is what
 /// this dictation was started for, so a lock toggled while the user was speaking
@@ -174,24 +176,24 @@ pub fn capture_delivery(app: &AppHandle) -> Delivery {
 /// target is dropped through [`drop_lock_for`], which clears the lock only if it
 /// still points at this same window and announces the loss either way.
 pub fn resolve_captured_delivery(app: &AppHandle, captured: Delivery) -> Option<Delivery> {
-    match crate::window_picker::backend::take_pick_target(app) {
-        Some(crate::window_picker::PickDelivery::Deliver(window)) => {
+    use crate::window_picker::{PasteVerdict, PickDelivery};
+
+    match crate::window_picker::backend::paste_verdict(app) {
+        // A pick is up, so this transcript finished mid-pick. The picker holds
+        // the foreground, and delivering now would type the transcript into
+        // AudioBud's own window (#164) -- including along a route armed before
+        // this picker was opened, which is why the guard comes first and takes
+        // nothing. Withhold the keystrokes; the text still reaches the clipboard
+        // and history.
+        PasteVerdict::WithholdForPicker => return None,
+        PasteVerdict::Route(PickDelivery::Deliver(window)) => {
             return Some(Delivery::Pinned(window, DeliverySource::Pick))
         }
         // The user explicitly chose the current window, so this transcript
         // escapes the lock -- returning here is what makes that override real.
-        Some(crate::window_picker::PickDelivery::Foreground) => return Some(Delivery::Foreground),
-        Some(crate::window_picker::PickDelivery::PickLost) => return None,
-        None => {}
-    }
-
-    // No pick is armed and the picker is still open, so this transcript finished
-    // mid-pick. The picker holds the foreground, so delivering now would type
-    // the transcript into AudioBud's own window (#164). Withhold the keystrokes;
-    // the text still reaches the clipboard and history.
-    if crate::window_picker::backend::pick_in_progress(app) {
-        crate::window_picker::backend::announce_pick_in_progress(app);
-        return None;
+        PasteVerdict::Route(PickDelivery::Foreground) => return Some(Delivery::Foreground),
+        PasteVerdict::Route(PickDelivery::PickLost) => return None,
+        PasteVerdict::Captured => {}
     }
 
     let Delivery::Pinned(identity, source) = captured else {

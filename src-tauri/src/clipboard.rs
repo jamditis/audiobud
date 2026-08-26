@@ -909,20 +909,32 @@ pub fn paste(text: String, app_handle: AppHandle, context: DictationContext) -> 
     // rather than to whatever inherited focus (#120).
     let delivery =
         target_backend::resolve_captured_delivery(&app_handle, context.delivery_target());
-    let delivered = deliver_to_target(&text, &app_handle, &settings, delivery)?;
+    // Held, not unwrapped with `?`: a delivery that FAILED needs the clipboard
+    // copy even more than one that succeeded, because a failure is exactly when
+    // the copy is the transcript's last refuge. Returning here would report the
+    // error and throw the text away with it.
+    let outcome = deliver_to_target(&text, &app_handle, &settings, delivery);
+    let delivered = matches!(outcome, Ok(true));
 
     // The clipboard copy is a setting about the clipboard, not about the window
-    // delivery, so it runs even when delivery was suppressed. Otherwise the only
-    // copy of a transcript is discarded whenever the lock is lost -- which, with
+    // delivery, so it runs whether the delivery succeeded, was suppressed, or
+    // failed. Otherwise the only copy of a transcript is discarded whenever the
+    // target is lost or refuses to come forward -- which, with
     // PasteMethod::None, is the entire output.
-    if should_copy_to_clipboard(settings.clipboard_handling, delivered) {
-        let clipboard = app_handle.clipboard();
-        clipboard
+    let copied = if should_copy_to_clipboard(settings.clipboard_handling, delivered) {
+        app_handle
+            .clipboard()
             .write_text(&text)
-            .map_err(|e| format!("Failed to copy to clipboard: {}", e))?;
-    }
+            .map_err(|e| format!("Failed to copy to clipboard: {}", e))
+    } else {
+        Ok(())
+    };
 
-    Ok(())
+    // The delivery failure is reported after the copy has been made, and takes
+    // precedence over a copy that also failed: it is the one the user is waiting
+    // to hear about, and the copy error would otherwise mask it.
+    outcome?;
+    copied
 }
 
 #[cfg(test)]
@@ -950,6 +962,31 @@ mod tests {
             DeliveryError::from(FocusLost::ActivationRefused("refused".to_string())),
             DeliveryError::Failed("refused".to_string())
         );
+    }
+
+    #[test]
+    fn a_refused_delivery_still_leaves_the_configured_copy_behind() {
+        // The recovery copy is decided by the clipboard setting alone, so a
+        // delivery that failed -- a live window refusing to come forward --
+        // must not skip it. This is the regression that made the paste path
+        // report the error and drop the transcript on the way out.
+        let refused: Result<bool, String> = delivery_outcome(Err(FocusLost::ActivationRefused(
+            "the system refused to activate the target window".to_string(),
+        )
+        .into()));
+        assert!(refused.is_err(), "a refusal is reported as an error");
+
+        let delivered = matches!(refused, Ok(true));
+        assert!(!delivered);
+        assert!(should_copy_to_clipboard(
+            ClipboardHandling::CopyToClipboard,
+            delivered
+        ));
+        // And the setting still decides: nobody asked for a copy here.
+        assert!(!should_copy_to_clipboard(
+            ClipboardHandling::DontModify,
+            delivered
+        ));
     }
 
     #[test]

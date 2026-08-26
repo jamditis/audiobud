@@ -518,6 +518,17 @@ async getAppSettings() : Promise<Result<AppSettings, string>> {
     else return { status: "error", error: e  as any };
 }
 },
+/**
+ * The app's chosen interface language, and nothing else.
+ *
+ * Every window syncs i18next against this on load, including surfaces that
+ * have no business seeing the rest of the settings: the whole `AppSettings`
+ * carries the post-processing API keys, and a one-shot picker asking "what
+ * language am I in" should not be handed those to answer it.
+ */
+async getAppLanguage() : Promise<string> {
+    return await TAURI_INVOKE("get_app_language");
+},
 async getDefaultSettings() : Promise<Result<AppSettings, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("get_default_settings") };

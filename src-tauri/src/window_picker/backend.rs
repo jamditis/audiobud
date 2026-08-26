@@ -25,9 +25,9 @@ use crate::output_target::backend as target_backend;
 use crate::output_target::{WindowHandle, WindowIdentity};
 
 use super::{
-    arm_pick, is_stale_selection, offer_rows, offered_candidates, resolve_gesture,
-    visible_candidates, LastPick, OfferedWindow, PendingPick, PendingRoute, PickArmed,
-    PickDelivery, PickerGesture, PickerSession, PickerWindow, RawWindow,
+    arm_pick, decide_paste, is_stale_selection, offer_rows, offered_candidates, resolve_gesture,
+    supersede_pick, visible_candidates, LastPick, OfferedWindow, PasteVerdict, PendingPick,
+    PendingRoute, PickArmed, PickDelivery, PickerGesture, PickerSession, PickerWindow, RawWindow,
 };
 
 /// The picker window's Tauri label.
@@ -116,6 +116,17 @@ pub fn close_picker(app: &AppHandle) {
 /// result as the session's offer so a gesture is only ever resolved against the
 /// rows the user actually saw.
 pub fn offered_rows(app: &AppHandle) -> Vec<PickerWindow> {
+    // Offering a list is the user starting a pick. Whatever an earlier pick
+    // armed is superseded now rather than left waiting behind this one, so a
+    // route they have moved on from can never fire later -- least of all into
+    // the picker they are looking at.
+    if let Some(pending) = app.try_state::<PendingPick>() {
+        if pending.is_armed() {
+            info!("A new pick supersedes the route armed earlier");
+        }
+        supersede_pick(&pending);
+    }
+
     let enumerated = enumerate_windows();
     let candidates = visible_candidates(enumerated.windows, &enumerated.excluded);
     // Each row keeps the identity enumeration read for it, so a pick can demand
@@ -290,6 +301,22 @@ pub fn take_pick_target(app: &AppHandle) -> Option<PickDelivery> {
     }
 
     Some(delivery)
+}
+
+/// What the picker says about the transcript that has just finished: withhold
+/// it, deliver it along an armed route, or stand aside for the target this
+/// dictation captured.
+///
+/// The order is [`decide_paste`]'s, and it matters: an open picker is checked
+/// before any armed route is consumed, so a route the user has moved on from is
+/// never spent on a transcript that is about to be withheld -- and never aimed
+/// at the picker window itself.
+pub fn paste_verdict(app: &AppHandle) -> PasteVerdict {
+    let verdict = decide_paste(pick_in_progress(app), || take_pick_target(app));
+    if verdict == PasteVerdict::WithholdForPicker {
+        announce_pick_in_progress(app);
+    }
+    verdict
 }
 
 /// The full identity of `handle` right now, or `None` if no window has it any

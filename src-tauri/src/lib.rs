@@ -641,6 +641,7 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::is_update_channel_available,
             commands::get_app_dir_path,
             commands::get_app_settings,
+            commands::get_app_language,
             commands::get_default_settings,
             commands::get_log_dir_path,
             commands::set_log_level,

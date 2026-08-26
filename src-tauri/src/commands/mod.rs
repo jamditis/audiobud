@@ -43,6 +43,18 @@ pub fn get_app_settings(app: AppHandle) -> Result<AppSettings, String> {
     Ok(get_settings(&app))
 }
 
+/// The app's chosen interface language, and nothing else.
+///
+/// Every window syncs i18next against this on load, including surfaces that
+/// have no business seeing the rest of the settings: the whole `AppSettings`
+/// carries the post-processing API keys, and a one-shot picker asking "what
+/// language am I in" should not be handed those to answer it.
+#[tauri::command]
+#[specta::specta]
+pub fn get_app_language(app: AppHandle) -> String {
+    get_settings(&app).app_language
+}
+
 #[tauri::command]
 #[specta::specta]
 pub fn get_default_settings() -> Result<AppSettings, String> {
