@@ -838,7 +838,10 @@
     "windowPickLostTitle": "Выбранное окно исчезло",
     "windowPickLost": "Выбранное окно закрыто. AudioBud не вставил текст. Выберите окно снова.",
     "pickerOpenTitle": "Выбор окна открыт",
-    "pickerOpen": "AudioBud не вставил этот текст, потому что был открыт выбор окна. Выберите окно и продиктуйте снова."
+    "pickerOpen": "AudioBud не вставил этот текст, потому что был открыт выбор окна. Выберите окно и продиктуйте снова.",
+    "transcriptDeliveredTitle": "Доставлено",
+    "transcriptDelivered": "Текст был вставлен в {{window}}.",
+    "transcriptDeliveredUnknown": "Текст был вставлен в заблокированное окно."
   },
   "appLanguage": {
     "title": "Язык приложения",

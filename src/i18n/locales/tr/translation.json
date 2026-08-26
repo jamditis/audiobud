@@ -834,7 +834,10 @@
     "windowPickLostTitle": "Seçilen pencere kayboldu",
     "windowPickLost": "Seçtiğiniz pencere kapalı. AudioBud metni yapıştırmadı. Yeniden bir pencere seçin.",
     "pickerOpenTitle": "Pencere seçici açık",
-    "pickerOpen": "Pencere seçici açık olduğu için AudioBud bu metni yapıştırmadı. Bir pencere seçin ve yeniden dikte edin."
+    "pickerOpen": "Pencere seçici açık olduğu için AudioBud bu metni yapıştırmadı. Bir pencere seçin ve yeniden dikte edin.",
+    "transcriptDeliveredTitle": "Teslim edildi",
+    "transcriptDelivered": "Metin {{window}} içine yapıştırıldı.",
+    "transcriptDeliveredUnknown": "Metin kilitli pencereye yapıştırıldı."
   },
   "appLanguage": {
     "title": "Uygulama Dili",

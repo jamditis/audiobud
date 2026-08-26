@@ -19,6 +19,8 @@
 //! unreachable; it still fails closed rather than type somewhere unasked.
 
 use log::{info, warn};
+use serde::{Deserialize, Serialize};
+use specta::Type;
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_specta::Event;
 
@@ -46,6 +48,24 @@ pub const TARGET_LOCK_LOST_EVENT: &str = "target-lock-lost";
 /// suppressed delivery in this case is silent, and with the default
 /// `ClipboardHandling::DontModify` the transcript is gone with it.
 pub const TARGET_WINDOW_GONE_EVENT: &str = "target-window-gone";
+
+/// Emitted after a transcript was actually typed into a pinned window (issue
+/// #165): positive confirmation naming the window it reached.
+///
+/// Only a pinned delivery -- a target lock (#120) or a one-shot pick (#124) --
+/// gets this. A plain foreground paste lands wherever the user is already
+/// looking, so a misfire there is a visible typo the moment it happens; under
+/// a lock or a pick they are deliberately looking somewhere else, and without
+/// this a silent success is indistinguishable from a silent misdelivery.
+///
+/// `app`/`title` are the raw strings [`window_label`] read, exactly like
+/// [`OutputTargetLockEvent`]'s -- untruncated, with the frontend owning name
+/// precedence and truncation.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Type, tauri_specta::Event)]
+pub struct TranscriptDeliveredEvent {
+    pub app: Option<String>,
+    pub title: Option<String>,
+}
 
 /// Who chose the window one paste is aimed at. The two are delivered exactly
 /// alike; they differ only in what a failure means, so the cleanup for a lost
@@ -378,6 +398,60 @@ fn lost_label(app: &AppHandle, identity: WindowIdentity) -> WindowLabel {
     app.try_state::<LockedLabel>()
         .and_then(|cache| cache.get(identity))
         .unwrap_or_else(|| window_label(identity))
+}
+
+/// Pick the label to report for a delivery that just succeeded (issue #165).
+///
+/// A locked window's label was already cached at lock time, while the window
+/// was reliably alive (#266 review); a `Lock` delivery reuses it rather than
+/// re-querying, so the confirmation matches whatever the indicator is already
+/// showing for the same window. A one-shot pick (#124) has no such cache -- it
+/// lives only for the length of one delivery -- so `live` is always consulted
+/// for it, and for a lock with nothing cached (state not yet managed, or this
+/// identity was never actually the one locked). `live` is safe to call in
+/// either fallback case: the delivery that just happened proves the window
+/// was alive a moment ago.
+pub fn resolve_delivered_label(
+    source: DeliverySource,
+    cached: Option<WindowLabel>,
+    live: impl FnOnce() -> WindowLabel,
+) -> WindowLabel {
+    if source.clears_the_lock() {
+        if let Some(label) = cached {
+            return label;
+        }
+    }
+    live()
+}
+
+/// Resolve [`resolve_delivered_label`] against the real cache and the real
+/// platform label lookup.
+fn delivered_label(
+    app: &AppHandle,
+    identity: WindowIdentity,
+    source: DeliverySource,
+) -> WindowLabel {
+    let cached = app
+        .try_state::<LockedLabel>()
+        .and_then(|cache| cache.get(identity));
+    resolve_delivered_label(source, cached, || window_label(identity))
+}
+
+/// Tell the user a transcript was delivered to a pinned window, naming it
+/// (issue #165). Called once a delivery to `identity` has actually happened --
+/// the paste succeeded and, per [`Delivery::target`], the window was not the
+/// plain foreground.
+pub fn announce_delivered(app: &AppHandle, identity: WindowIdentity, source: DeliverySource) {
+    let (app_name, title) = delivered_label(app, identity, source);
+    info!(
+        "Transcript delivered to window {:#x} ({:?} / {:?})",
+        identity.handle.0, app_name, title
+    );
+    let _ = TranscriptDeliveredEvent {
+        app: app_name,
+        title,
+    }
+    .emit(app);
 }
 
 /// Tell the user the lock is gone, once, and put the tray and indicator
@@ -980,5 +1054,57 @@ mod tests {
         // one entitled to clear it.
         assert!(DeliverySource::Lock.clears_the_lock());
         assert!(!DeliverySource::Pick.clears_the_lock());
+    }
+
+    #[test]
+    fn a_locked_delivery_prefers_its_cached_label() {
+        // The label cached at lock time (#266 review) is what the indicator is
+        // already showing for the same window, so a successful delivery to it
+        // must match rather than re-query and risk disagreeing (issue #165).
+        let cached = (Some("Terminal".to_string()), Some("zsh".to_string()));
+        let label = resolve_delivered_label(DeliverySource::Lock, Some(cached.clone()), || {
+            panic!("live lookup must not run when a cache entry exists")
+        });
+        assert_eq!(label, cached);
+    }
+
+    #[test]
+    fn a_locked_delivery_falls_back_to_a_live_lookup_with_no_cache_entry() {
+        // Nothing cached -- state not yet managed, or this identity was never
+        // actually the one locked -- so the live label is used instead of
+        // reporting an empty name.
+        let live = (Some("Notepad".to_string()), None);
+        let label = resolve_delivered_label(DeliverySource::Lock, None, || live.clone());
+        assert_eq!(label, live);
+    }
+
+    #[test]
+    fn a_picked_delivery_always_reads_the_label_live() {
+        // A one-shot pick (#124) caches nothing of its own, so even a
+        // (deliberately impossible in practice) cache hit must not be used --
+        // only Lock deliveries are entitled to the cache.
+        let cached = (Some("Stale".to_string()), None);
+        let live = (Some("Fresh".to_string()), None);
+        let label = resolve_delivered_label(DeliverySource::Pick, Some(cached), || live.clone());
+        assert_eq!(label, live);
+    }
+
+    #[test]
+    fn transcript_delivered_event_carries_the_resolved_label() {
+        // Payload shaping: the event mirrors the (app, title) tuple exactly,
+        // both halves optional, matching OutputTargetLockEvent's shape.
+        let event = TranscriptDeliveredEvent {
+            app: Some("Terminal".to_string()),
+            title: Some("zsh".to_string()),
+        };
+        assert_eq!(event.app.as_deref(), Some("Terminal"));
+        assert_eq!(event.title.as_deref(), Some("zsh"));
+
+        let unnamed = TranscriptDeliveredEvent {
+            app: None,
+            title: None,
+        };
+        assert_eq!(unnamed.app, None);
+        assert_eq!(unnamed.title, None);
     }
 }

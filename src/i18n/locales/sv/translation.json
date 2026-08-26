@@ -834,7 +834,10 @@
     "windowPickLostTitle": "Det valda fönstret är borta",
     "windowPickLost": "Fönstret du valde är stängt. AudioBud klistrade inte in texten. Välj ett fönster igen.",
     "pickerOpenTitle": "Väljaren är öppen",
-    "pickerOpen": "AudioBud klistrade inte in texten eftersom fönsterväljaren var öppen. Välj ett fönster och diktera igen."
+    "pickerOpen": "AudioBud klistrade inte in texten eftersom fönsterväljaren var öppen. Välj ett fönster och diktera igen.",
+    "transcriptDeliveredTitle": "Levererat",
+    "transcriptDelivered": "Texten klistrades in i {{window}}.",
+    "transcriptDeliveredUnknown": "Texten klistrades in i det låsta fönstret."
   },
   "appLanguage": {
     "title": "Applikationsspråk",

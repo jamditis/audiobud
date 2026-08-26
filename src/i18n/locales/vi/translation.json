@@ -834,7 +834,10 @@
     "windowPickLostTitle": "Cửa sổ đã chọn không còn",
     "windowPickLost": "Cửa sổ bạn chọn đã đóng. AudioBud không dán văn bản. Hãy chọn lại một cửa sổ.",
     "pickerOpenTitle": "Trình chọn cửa sổ đang mở",
-    "pickerOpen": "AudioBud không dán văn bản này vì trình chọn cửa sổ đang mở. Hãy chọn cửa sổ rồi đọc lại."
+    "pickerOpen": "AudioBud không dán văn bản này vì trình chọn cửa sổ đang mở. Hãy chọn cửa sổ rồi đọc lại.",
+    "transcriptDeliveredTitle": "Đã gửi",
+    "transcriptDelivered": "Văn bản đã được dán vào {{window}}.",
+    "transcriptDeliveredUnknown": "Văn bản đã được dán vào cửa sổ đã khóa."
   },
   "appLanguage": {
     "title": "Ngôn ngữ ứng dụng",

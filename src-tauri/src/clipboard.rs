@@ -930,6 +930,17 @@ pub fn paste(text: String, app_handle: AppHandle, context: DictationContext) -> 
     let outcome = deliver_to_target(&text, &app_handle, &settings, delivery);
     let delivered = matches!(outcome, Ok(true));
 
+    // Positive confirmation naming the window the text went to (#165). Only a
+    // pinned delivery gets this -- a plain foreground paste lands wherever the
+    // user is already looking, so it needs no announcement -- and only when
+    // something was actually typed: PasteMethod::None sends no keystrokes, so
+    // there is no window to name.
+    if delivered && settings.paste_method != PasteMethod::None {
+        if let Some(Delivery::Pinned(identity, source)) = delivery {
+            target_backend::announce_delivered(&app_handle, identity, source);
+        }
+    }
+
     // The clipboard copy is a setting about the clipboard, not about the window
     // delivery, so it runs whether the delivery succeeded, was suppressed, or
     // failed. Otherwise the only copy of a transcript is discarded whenever the

@@ -21,12 +21,13 @@ import { Sidebar, SidebarSection, SECTIONS_CONFIG } from "./components/Sidebar";
 import SwampBackground from "./components/SwampBackground";
 import { useSettings } from "./hooks/useSettings";
 import { useSettingsStore } from "./stores/settingsStore";
-import { commands } from "@/bindings";
+import { commands, events } from "@/bindings";
 import { getLanguageDirection, initializeRTL } from "@/lib/utils/rtl";
 import {
   classifyTranscriptionError,
   recordingDurationLabel,
 } from "@/lib/transcription-error";
+import { resolveTargetName, truncateName } from "@/lib/output-target-indicator";
 
 type OnboardingStep = "accessibility" | "model" | "done";
 const PRODUCT_NAME = "AudioBud";
@@ -185,6 +186,31 @@ function App() {
     const unlisten = listen("target-lock-lost", () => {
       toast.warning(t("errors.targetLockLostTitle"), {
         description: t("errors.targetLockLost"),
+      });
+    });
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, [t]);
+
+  // Listen for a successful delivery to a pinned window -- a target lock
+  // (#120) or a one-shot pick (#124) -- and confirm which window it reached
+  // (issue #165). A plain foreground paste lands wherever the user is already
+  // looking, so it gets no toast here: the point is confirming a delivery the
+  // user was deliberately not watching, not narrating every paste.
+  useEffect(() => {
+    const unlisten = events.transcriptDeliveredEvent.listen((event) => {
+      const name = truncateName(
+        resolveTargetName(
+          event.payload.app ?? undefined,
+          event.payload.title ?? undefined,
+        ),
+      );
+      toast.success(t("errors.transcriptDeliveredTitle"), {
+        description:
+          name.length > 0
+            ? t("errors.transcriptDelivered", { window: name })
+            : t("errors.transcriptDeliveredUnknown"),
       });
     });
     return () => {

@@ -836,7 +836,10 @@
     "windowPickLostTitle": "החלון שנבחר נעלם",
     "windowPickLost": "החלון שבחרת סגור. AudioBud לא הדביק את הטקסט. בחר חלון שוב.",
     "pickerOpenTitle": "בורר החלונות פתוח",
-    "pickerOpen": "AudioBud לא הדביק את הטקסט הזה כי בורר החלונות היה פתוח. בחר חלון והכתב שוב."
+    "pickerOpen": "AudioBud לא הדביק את הטקסט הזה כי בורר החלונות היה פתוח. בחר חלון והכתב שוב.",
+    "transcriptDeliveredTitle": "נמסר",
+    "transcriptDelivered": "הטקסט הודבק ב-{{window}}.",
+    "transcriptDeliveredUnknown": "הטקסט הודבק בחלון הנעול."
   },
   "appLanguage": {
     "title": "שפת האפליקציה",

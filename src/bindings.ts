@@ -1031,10 +1031,12 @@ async releaseOutputTargetLock() : Promise<void> {
 
 export const events = __makeEvents__<{
 historyUpdatePayload: HistoryUpdatePayload,
-outputTargetLockEvent: OutputTargetLockEvent
+outputTargetLockEvent: OutputTargetLockEvent,
+transcriptDeliveredEvent: TranscriptDeliveredEvent
 }>({
 historyUpdatePayload: "history-update-payload",
-outputTargetLockEvent: "output-target-lock-event"
+outputTargetLockEvent: "output-target-lock-event",
+transcriptDeliveredEvent: "transcript-delivered-event"
 })
 
 /** user-defined constants **/
@@ -1241,6 +1243,21 @@ export type RecordingRetentionPeriod = "never" | "preserve_limit" | "days_3" | "
 export type SecretMap = Partial<{ [key in string]: string }>
 export type ShortcutBinding = { id: string; name: string; description: string; default_binding: string; current_binding: string }
 export type SoundTheme = "marimba" | "pop" | "custom"
+/**
+ * Emitted after a transcript was actually typed into a pinned window (issue
+ * #165): positive confirmation naming the window it reached.
+ *
+ * Only a pinned delivery -- a target lock (#120) or a one-shot pick (#124) --
+ * gets this. A plain foreground paste lands wherever the user is already
+ * looking, so a misfire there is a visible typo the moment it happens; under
+ * a lock or a pick they are deliberately looking somewhere else, and without
+ * this a silent success is indistinguishable from a silent misdelivery.
+ *
+ * `app`/`title` are the raw strings [`window_label`] read, exactly like
+ * [`OutputTargetLockEvent`]'s -- untruncated, with the frontend owning name
+ * precedence and truncation.
+ */
+export type TranscriptDeliveredEvent = { app: string | null; title: string | null }
 export type TypingTool = "auto" | "wtype" | "kwtype" | "dotool" | "ydotool" | "xdotool"
 export type WhisperAcceleratorSetting = "auto" | "cpu" | "gpu"
 export type WindowsMicrophonePermissionStatus = { supported: boolean; overall_access: PermissionAccess; device_access: PermissionAccess; app_access: PermissionAccess; desktop_app_access: PermissionAccess }

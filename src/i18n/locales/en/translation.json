@@ -834,7 +834,10 @@
     "windowPickLostTitle": "Picked window is gone",
     "windowPickLost": "The window you picked is closed. AudioBud did not paste the text. Pick a window again.",
     "pickerOpenTitle": "Picker is open",
-    "pickerOpen": "AudioBud did not paste this text because the window picker was open. Pick a window, then dictate again."
+    "pickerOpen": "AudioBud did not paste this text because the window picker was open. Pick a window, then dictate again.",
+    "transcriptDeliveredTitle": "Delivered",
+    "transcriptDelivered": "The text was pasted into {{window}}.",
+    "transcriptDeliveredUnknown": "The text was pasted into the locked window."
   },
   "appLanguage": {
     "title": "Application language",

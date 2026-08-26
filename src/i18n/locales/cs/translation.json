@@ -836,7 +836,10 @@
     "windowPickLostTitle": "Vybrané okno zmizelo",
     "windowPickLost": "Vybrané okno je zavřené. AudioBud text nevložil. Vyberte okno znovu.",
     "pickerOpenTitle": "Výběr okna je otevřený",
-    "pickerOpen": "AudioBud tento text nevložil, protože byl otevřený výběr oken. Vyberte okno a diktujte znovu."
+    "pickerOpen": "AudioBud tento text nevložil, protože byl otevřený výběr oken. Vyberte okno a diktujte znovu.",
+    "transcriptDeliveredTitle": "Doručeno",
+    "transcriptDelivered": "Text byl vložen do {{window}}.",
+    "transcriptDeliveredUnknown": "Text byl vložen do uzamčeného okna."
   },
   "appLanguage": {
     "title": "Jazyk aplikace",

@@ -834,7 +834,10 @@
     "windowPickLostTitle": "La ventana elegida ya no existe",
     "windowPickLost": "La ventana que elegiste está cerrada. AudioBud no pegó el texto. Elige otra ventana.",
     "pickerOpenTitle": "El selector está abierto",
-    "pickerOpen": "AudioBud no pegó este texto porque el selector de ventanas estaba abierto. Elige una ventana y vuelve a dictar."
+    "pickerOpen": "AudioBud no pegó este texto porque el selector de ventanas estaba abierto. Elige una ventana y vuelve a dictar.",
+    "transcriptDeliveredTitle": "Entregado",
+    "transcriptDelivered": "El texto se pegó en {{window}}.",
+    "transcriptDeliveredUnknown": "El texto se pegó en la ventana bloqueada."
   },
   "appLanguage": {
     "title": "Idioma de la aplicación",

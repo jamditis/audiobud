@@ -834,7 +834,10 @@
     "windowPickLostTitle": "Gewähltes Fenster ist weg",
     "windowPickLost": "Das gewählte Fenster ist geschlossen. AudioBud hat den Text nicht eingefügt. Wähle erneut ein Fenster.",
     "pickerOpenTitle": "Fensterauswahl ist offen",
-    "pickerOpen": "AudioBud hat diesen Text nicht eingefügt, weil die Fensterauswahl offen war. Wähle ein Fenster und diktiere erneut."
+    "pickerOpen": "AudioBud hat diesen Text nicht eingefügt, weil die Fensterauswahl offen war. Wähle ein Fenster und diktiere erneut.",
+    "transcriptDeliveredTitle": "Zugestellt",
+    "transcriptDelivered": "Der Text wurde in {{window}} eingefügt.",
+    "transcriptDeliveredUnknown": "Der Text wurde in das gesperrte Fenster eingefügt."
   },
   "appLanguage": {
     "title": "Anwendungssprache",

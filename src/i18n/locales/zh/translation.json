@@ -834,7 +834,10 @@
     "windowPickLostTitle": "所选窗口已不存在",
     "windowPickLost": "你选择的窗口已关闭。AudioBud 没有粘贴文本。请重新选择窗口。",
     "pickerOpenTitle": "窗口选择器已打开",
-    "pickerOpen": "窗口选择器处于打开状态，AudioBud 没有粘贴这段文字。请先选择窗口，然后重新口述。"
+    "pickerOpen": "窗口选择器处于打开状态，AudioBud 没有粘贴这段文字。请先选择窗口，然后重新口述。",
+    "transcriptDeliveredTitle": "已送达",
+    "transcriptDelivered": "文字已粘贴到 {{window}}。",
+    "transcriptDeliveredUnknown": "文字已粘贴到锁定的窗口。"
   },
   "appLanguage": {
     "title": "应用语言",

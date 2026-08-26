@@ -834,7 +834,10 @@
     "windowPickLostTitle": "La finestra scelta non c'è più",
     "windowPickLost": "La finestra che hai scelto è chiusa. AudioBud non ha incollato il testo. Scegli un'altra finestra.",
     "pickerOpenTitle": "Il selettore è aperto",
-    "pickerOpen": "AudioBud non ha incollato questo testo perché il selettore di finestre era aperto. Scegli una finestra e detta di nuovo."
+    "pickerOpen": "AudioBud non ha incollato questo testo perché il selettore di finestre era aperto. Scegli una finestra e detta di nuovo.",
+    "transcriptDeliveredTitle": "Consegnato",
+    "transcriptDelivered": "Il testo è stato incollato in {{window}}.",
+    "transcriptDeliveredUnknown": "Il testo è stato incollato nella finestra bloccata."
   },
   "appLanguage": {
     "title": "Lingua Applicazione",

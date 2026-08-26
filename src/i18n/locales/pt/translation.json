@@ -834,7 +834,10 @@
     "windowPickLostTitle": "A janela escolhida sumiu",
     "windowPickLost": "A janela que você escolheu está fechada. O AudioBud não colou o texto. Escolha outra janela.",
     "pickerOpenTitle": "O seletor está aberto",
-    "pickerOpen": "O AudioBud não colou este texto porque o seletor de janelas estava aberto. Escolha uma janela e dite novamente."
+    "pickerOpen": "O AudioBud não colou este texto porque o seletor de janelas estava aberto. Escolha uma janela e dite novamente.",
+    "transcriptDeliveredTitle": "Entregue",
+    "transcriptDelivered": "O texto foi colado em {{window}}.",
+    "transcriptDeliveredUnknown": "O texto foi colado na janela bloqueada."
   },
   "appLanguage": {
     "title": "Idioma da Aplicação",

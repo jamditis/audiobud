@@ -838,7 +838,10 @@
     "windowPickLostTitle": "Wybrane okno zniknęło",
     "windowPickLost": "Wybrane okno jest zamknięte. AudioBud nie wkleił tekstu. Wybierz okno ponownie.",
     "pickerOpenTitle": "Wybór okna jest otwarty",
-    "pickerOpen": "AudioBud nie wkleił tego tekstu, ponieważ wybór okna był otwarty. Wybierz okno i podyktuj ponownie."
+    "pickerOpen": "AudioBud nie wkleił tego tekstu, ponieważ wybór okna był otwarty. Wybierz okno i podyktuj ponownie.",
+    "transcriptDeliveredTitle": "Dostarczono",
+    "transcriptDelivered": "Tekst został wklejony do {{window}}.",
+    "transcriptDeliveredUnknown": "Tekst został wklejony do zablokowanego okna."
   },
   "appLanguage": {
     "title": "Język aplikacji",
