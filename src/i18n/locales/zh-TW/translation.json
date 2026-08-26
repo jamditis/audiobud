@@ -837,7 +837,8 @@
     "pickerOpen": "視窗選擇器處於開啟狀態，AudioBud 沒有貼上這段文字。請先選擇視窗，然後重新口述。",
     "transcriptDeliveredTitle": "已送達",
     "transcriptDelivered": "文字已貼上到 {{window}}。",
-    "transcriptDeliveredUnknown": "文字已貼上到鎖定的視窗。"
+    "transcriptDeliveredUnknown": "文字已貼上到鎖定的視窗。",
+    "transcriptDeliveredUnknownPick": "文字已貼上到選取的視窗。"
   },
   "appLanguage": {
     "title": "應用程式語言",
@@ -854,7 +855,11 @@
     "lockedToHint": "聽寫已鎖定至 {{target}}。點按以解除鎖定。",
     "lockedToUnknown": "已鎖定的視窗",
     "lockStale": "鎖定遺失",
-    "lockStaleHint": "已鎖定的視窗已關閉。點按以關閉提示。"
+    "lockStaleHint": "已鎖定的視窗已關閉。點按以關閉提示。",
+    "delivered": "已送出：{{target}}",
+    "deliveredHint": "文字已貼上到 {{target}}。",
+    "deliveredUnknown": "已送出",
+    "deliveredUnknownHint": "文字已貼上。"
   },
   "windowPicker": {
     "title": "傳送到視窗",

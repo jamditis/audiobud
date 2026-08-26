@@ -837,7 +837,8 @@
     "pickerOpen": "AudioBud не постави този текст, защото изборът на прозорец беше отворен. Изберете прозорец и продиктувайте отново.",
     "transcriptDeliveredTitle": "Доставено",
     "transcriptDelivered": "Текстът беше поставен в {{window}}.",
-    "transcriptDeliveredUnknown": "Текстът беше поставен в заключения прозорец."
+    "transcriptDeliveredUnknown": "Текстът беше поставен в заключения прозорец.",
+    "transcriptDeliveredUnknownPick": "Текстът беше поставен в избрания прозорец."
   },
   "appLanguage": {
     "title": "Език на приложението",
@@ -854,7 +855,11 @@
     "lockedToHint": "Диктуването е заключено към {{target}}. Кликнете, за да отключите.",
     "lockedToUnknown": "заключен прозорец",
     "lockStale": "Заключването е загубено",
-    "lockStaleHint": "Заключеният прозорец е затворен. Кликнете, за да отхвърлите."
+    "lockStaleHint": "Заключеният прозорец е затворен. Кликнете, за да отхвърлите.",
+    "delivered": "Изпратено: {{target}}",
+    "deliveredHint": "Текстът беше поставен в {{target}}.",
+    "deliveredUnknown": "Изпратено",
+    "deliveredUnknownHint": "Текстът беше поставен."
   },
   "windowPicker": {
     "title": "Изпращане към прозорец",

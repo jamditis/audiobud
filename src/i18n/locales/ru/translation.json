@@ -841,7 +841,8 @@
     "pickerOpen": "AudioBud не вставил этот текст, потому что был открыт выбор окна. Выберите окно и продиктуйте снова.",
     "transcriptDeliveredTitle": "Доставлено",
     "transcriptDelivered": "Текст был вставлен в {{window}}.",
-    "transcriptDeliveredUnknown": "Текст был вставлен в заблокированное окно."
+    "transcriptDeliveredUnknown": "Текст был вставлен в заблокированное окно.",
+    "transcriptDeliveredUnknownPick": "Текст был вставлен в выбранное окно."
   },
   "appLanguage": {
     "title": "Язык приложения",
@@ -858,7 +859,11 @@
     "lockedToHint": "Надиктовка заблокирована на {{target}}. Нажмите, чтобы разблокировать.",
     "lockedToUnknown": "заблокированное окно",
     "lockStale": "Блокировка потеряна",
-    "lockStaleHint": "Заблокированное окно закрыто. Нажмите, чтобы закрыть."
+    "lockStaleHint": "Заблокированное окно закрыто. Нажмите, чтобы закрыть.",
+    "delivered": "Отправлено: {{target}}",
+    "deliveredHint": "Текст был вставлен в {{target}}.",
+    "deliveredUnknown": "Отправлено",
+    "deliveredUnknownHint": "Текст был вставлен."
   },
   "windowPicker": {
     "title": "Отправить в окно",

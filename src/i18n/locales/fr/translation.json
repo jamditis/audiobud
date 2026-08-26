@@ -837,7 +837,8 @@
     "pickerOpen": "AudioBud n'a pas collé ce texte car le sélecteur de fenêtres était ouvert. Choisissez une fenêtre, puis dictez à nouveau.",
     "transcriptDeliveredTitle": "Livré",
     "transcriptDelivered": "Le texte a été collé dans {{window}}.",
-    "transcriptDeliveredUnknown": "Le texte a été collé dans la fenêtre verrouillée."
+    "transcriptDeliveredUnknown": "Le texte a été collé dans la fenêtre verrouillée.",
+    "transcriptDeliveredUnknownPick": "Le texte a été collé dans la fenêtre sélectionnée."
   },
   "appLanguage": {
     "title": "Langue de l'application",
@@ -854,7 +855,11 @@
     "lockedToHint": "La dictée est verrouillée sur {{target}}. Cliquez pour déverrouiller.",
     "lockedToUnknown": "une fenêtre verrouillée",
     "lockStale": "Verrouillage perdu",
-    "lockStaleHint": "La fenêtre verrouillée a été fermée. Cliquez pour ignorer."
+    "lockStaleHint": "La fenêtre verrouillée a été fermée. Cliquez pour ignorer.",
+    "delivered": "Envoyé : {{target}}",
+    "deliveredHint": "Le texte a été collé dans {{target}}.",
+    "deliveredUnknown": "Envoyé",
+    "deliveredUnknownHint": "Le texte a été collé."
   },
   "windowPicker": {
     "title": "Envoyer à une fenêtre",

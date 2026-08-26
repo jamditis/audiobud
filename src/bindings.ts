@@ -1099,6 +1099,26 @@ export type AvailableAccelerators = { whisper: string[]; ort: string[]; gpu_devi
 export type BindingResponse = { success: boolean; binding: ShortcutBinding | null; error: string | null }
 export type ClipboardHandling = "dont_modify" | "copy_to_clipboard"
 export type CustomSounds = { start: boolean; stop: boolean }
+/**
+ * Who chose the window one paste is aimed at. The two are delivered exactly
+ * alike; they differ only in what a failure means, so the cleanup for a lost
+ * window has to know which it is holding.
+ *
+ * Serialized lowercase (`"lock"` / `"pick"`) for [`TranscriptDeliveredEvent`],
+ * matching [`OutputTargetLockEvent`]'s `kind` tag convention.
+ */
+export type DeliverySource =
+/**
+ * The target lock (#120): the window this dictation was started for, read
+ * from the lock at recording start. Losing it clears the lock and says so.
+ */
+"lock" |
+/**
+ * A one-shot pick (#124): a window chosen for this transcript only. Losing
+ * it must NOT touch the lock -- the user may hold an unrelated one -- and
+ * says the pick is gone, not the lock.
+ */
+"pick"
 export type EngineType = "Whisper" | "Parakeet" | "Moonshine" | "MoonshineStreaming" | "SenseVoice" | "GigaAM" | "Canary" | "Cohere"
 export type GpuDeviceOption = { id: number; name: string; total_vram_mb: number }
 export type HistoryEntry = { id: number; file_name: string; timestamp: number; saved: boolean; title: string; transcription_text: string; post_processed_text: string | null; post_process_prompt: string | null; post_process_requested: boolean;
@@ -1255,9 +1275,12 @@ export type SoundTheme = "marimba" | "pop" | "custom"
  *
  * `app`/`title` are the raw strings [`window_label`] read, exactly like
  * [`OutputTargetLockEvent`]'s -- untruncated, with the frontend owning name
- * precedence and truncation.
+ * precedence and truncation. `source` says whether the destination was a
+ * standing target lock or a one-shot pick, so the frontend's fallback copy
+ * (when both label lookups come back empty) can describe the right kind of
+ * destination instead of always assuming a lock (#279 review).
  */
-export type TranscriptDeliveredEvent = { app: string | null; title: string | null }
+export type TranscriptDeliveredEvent = { app: string | null; title: string | null; source: DeliverySource }
 export type TypingTool = "auto" | "wtype" | "kwtype" | "dotool" | "ydotool" | "xdotool"
 export type WhisperAcceleratorSetting = "auto" | "cpu" | "gpu"
 export type WindowsMicrophonePermissionStatus = { supported: boolean; overall_access: PermissionAccess; device_access: PermissionAccess; app_access: PermissionAccess; desktop_app_access: PermissionAccess }

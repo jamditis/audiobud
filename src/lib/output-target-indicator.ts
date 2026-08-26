@@ -115,6 +115,31 @@ export function resolveTargetName(app?: string, title?: string): string {
 }
 
 /**
+ * Format a window name for the delivered-transcript confirmation (#165 review
+ * round 1, finding 4). `resolveTargetName` above is built for the lock
+ * indicator badge -- a narrow surface that only has room for one identifier,
+ * so it picks the stabler one (the app) and drops the title. A delivery
+ * confirmation exists specifically to say *which* window received the text,
+ * so when a process has several open windows (two Chrome windows, two Word
+ * documents) the app name alone is ambiguous; this combines both when both
+ * are known, and falls back to `resolveTargetName`'s single-name precedence
+ * when only one is.
+ */
+export function formatDeliveredWindowName(
+  app?: string,
+  title?: string,
+): string {
+  const clean = (value?: string): string =>
+    (value ?? "").replace(/\s+/g, " ").trim();
+  const appName = clean(app);
+  const windowTitle = clean(title);
+  if (appName.length > 0 && windowTitle.length > 0 && appName !== windowTitle) {
+    return `${windowTitle} — ${appName}`;
+  }
+  return resolveTargetName(app, title);
+}
+
+/**
  * Truncate a display name to `max` Unicode code points, appending an ASCII
  * marker. Counting code points, not UTF-16 units, keeps an astral character
  * from being split into a broken half. A name already within the ceiling is

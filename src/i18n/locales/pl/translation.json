@@ -841,7 +841,8 @@
     "pickerOpen": "AudioBud nie wkleił tego tekstu, ponieważ wybór okna był otwarty. Wybierz okno i podyktuj ponownie.",
     "transcriptDeliveredTitle": "Dostarczono",
     "transcriptDelivered": "Tekst został wklejony do {{window}}.",
-    "transcriptDeliveredUnknown": "Tekst został wklejony do zablokowanego okna."
+    "transcriptDeliveredUnknown": "Tekst został wklejony do zablokowanego okna.",
+    "transcriptDeliveredUnknownPick": "Tekst został wklejony do wybranego okna."
   },
   "appLanguage": {
     "title": "Język aplikacji",
@@ -858,7 +859,11 @@
     "lockedToHint": "Dyktowanie jest zablokowane na {{target}}. Kliknij, aby odblokować.",
     "lockedToUnknown": "zablokowane okno",
     "lockStale": "Blokada utracona",
-    "lockStaleHint": "Zablokowane okno zostało zamknięte. Kliknij, aby odrzucić."
+    "lockStaleHint": "Zablokowane okno zostało zamknięte. Kliknij, aby odrzucić.",
+    "delivered": "Wysłano: {{target}}",
+    "deliveredHint": "Tekst został wklejony do {{target}}.",
+    "deliveredUnknown": "Wysłano",
+    "deliveredUnknownHint": "Tekst został wklejony."
   },
   "windowPicker": {
     "title": "Wyślij do okna",

@@ -837,7 +837,8 @@
     "pickerOpen": "AudioBud non ha incollato questo testo perché il selettore di finestre era aperto. Scegli una finestra e detta di nuovo.",
     "transcriptDeliveredTitle": "Consegnato",
     "transcriptDelivered": "Il testo è stato incollato in {{window}}.",
-    "transcriptDeliveredUnknown": "Il testo è stato incollato nella finestra bloccata."
+    "transcriptDeliveredUnknown": "Il testo è stato incollato nella finestra bloccata.",
+    "transcriptDeliveredUnknownPick": "Il testo è stato incollato nella finestra selezionata."
   },
   "appLanguage": {
     "title": "Lingua Applicazione",
@@ -854,7 +855,11 @@
     "lockedToHint": "La dettatura è bloccata su {{target}}. Fai clic per sbloccare.",
     "lockedToUnknown": "una finestra bloccata",
     "lockStale": "Blocco perso",
-    "lockStaleHint": "La finestra bloccata è stata chiusa. Fai clic per ignorare."
+    "lockStaleHint": "La finestra bloccata è stata chiusa. Fai clic per ignorare.",
+    "delivered": "Inviato: {{target}}",
+    "deliveredHint": "Il testo è stato incollato in {{target}}.",
+    "deliveredUnknown": "Inviato",
+    "deliveredUnknownHint": "Il testo è stato incollato."
   },
   "windowPicker": {
     "title": "Invia a una finestra",

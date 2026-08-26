@@ -837,7 +837,8 @@
     "pickerOpen": "AudioBud không dán văn bản này vì trình chọn cửa sổ đang mở. Hãy chọn cửa sổ rồi đọc lại.",
     "transcriptDeliveredTitle": "Đã gửi",
     "transcriptDelivered": "Văn bản đã được dán vào {{window}}.",
-    "transcriptDeliveredUnknown": "Văn bản đã được dán vào cửa sổ đã khóa."
+    "transcriptDeliveredUnknown": "Văn bản đã được dán vào cửa sổ đã khóa.",
+    "transcriptDeliveredUnknownPick": "Văn bản đã được dán vào cửa sổ đã chọn."
   },
   "appLanguage": {
     "title": "Ngôn ngữ ứng dụng",
@@ -854,7 +855,11 @@
     "lockedToHint": "Lời đọc chính tả đã khóa vào {{target}}. Nhấp để mở khóa.",
     "lockedToUnknown": "một cửa sổ đã khóa",
     "lockStale": "Mất khóa",
-    "lockStaleHint": "Cửa sổ đã khóa đã đóng. Nhấp để bỏ qua."
+    "lockStaleHint": "Cửa sổ đã khóa đã đóng. Nhấp để bỏ qua.",
+    "delivered": "Đã gửi: {{target}}",
+    "deliveredHint": "Văn bản đã được dán vào {{target}}.",
+    "deliveredUnknown": "Đã gửi",
+    "deliveredUnknownHint": "Văn bản đã được dán."
   },
   "windowPicker": {
     "title": "Gửi tới cửa sổ",

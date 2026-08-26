@@ -933,9 +933,13 @@ pub fn paste(text: String, app_handle: AppHandle, context: DictationContext) -> 
     // Positive confirmation naming the window the text went to (#165). Only a
     // pinned delivery gets this -- a plain foreground paste lands wherever the
     // user is already looking, so it needs no announcement -- and only when
-    // something was actually typed: PasteMethod::None sends no keystrokes, so
-    // there is no window to name.
-    if delivered && settings.paste_method != PasteMethod::None {
+    // delivery actually borrowed focus toward that window:
+    // `requires_focus_for_delivery` is the same check `deliver_to_target` uses
+    // to decide whether to borrow focus at all. An `ExternalScript` delivery
+    // (with auto-submit off) never borrows focus -- the script decides for
+    // itself where the text goes -- so a successful script exit is not proof
+    // the pinned window received anything, and must not be announced as such.
+    if delivered && requires_focus_for_delivery(settings.paste_method, settings.auto_submit) {
         if let Some(Delivery::Pinned(identity, source)) = delivery {
             target_backend::announce_delivered(&app_handle, identity, source);
         }

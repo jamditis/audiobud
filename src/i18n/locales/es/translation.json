@@ -837,7 +837,8 @@
     "pickerOpen": "AudioBud no pegó este texto porque el selector de ventanas estaba abierto. Elige una ventana y vuelve a dictar.",
     "transcriptDeliveredTitle": "Entregado",
     "transcriptDelivered": "El texto se pegó en {{window}}.",
-    "transcriptDeliveredUnknown": "El texto se pegó en la ventana bloqueada."
+    "transcriptDeliveredUnknown": "El texto se pegó en la ventana bloqueada.",
+    "transcriptDeliveredUnknownPick": "El texto se pegó en la ventana seleccionada."
   },
   "appLanguage": {
     "title": "Idioma de la aplicación",
@@ -854,7 +855,11 @@
     "lockedToHint": "El dictado está bloqueado en {{target}}. Haz clic para desbloquear.",
     "lockedToUnknown": "una ventana bloqueada",
     "lockStale": "Bloqueo perdido",
-    "lockStaleHint": "La ventana bloqueada se cerró. Haz clic para descartar."
+    "lockStaleHint": "La ventana bloqueada se cerró. Haz clic para descartar.",
+    "delivered": "Enviado: {{target}}",
+    "deliveredHint": "El texto se pegó en {{target}}.",
+    "deliveredUnknown": "Enviado",
+    "deliveredUnknownHint": "El texto se pegó."
   },
   "windowPicker": {
     "title": "Enviar a una ventana",

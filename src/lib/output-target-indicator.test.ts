@@ -1,6 +1,7 @@
 import { describe, it, expect } from "bun:test";
 import {
   deriveIndicator,
+  formatDeliveredWindowName,
   resolveTargetName,
   truncateName,
   MAX_TARGET_NAME_LENGTH,
@@ -36,6 +37,38 @@ describe("resolveTargetName", () => {
     expect(resolveTargetName(undefined, "Draft\n  second line\treview")).toBe(
       "Draft second line review",
     );
+  });
+});
+
+describe("formatDeliveredWindowName", () => {
+  it("combines the title and the app when both are known", () => {
+    expect(formatDeliveredWindowName("Chrome", "Inbox - Gmail")).toBe(
+      "Inbox - Gmail — Chrome",
+    );
+  });
+
+  it("distinguishes two windows of the same app", () => {
+    const first = formatDeliveredWindowName("Chrome", "Inbox - Gmail");
+    const second = formatDeliveredWindowName("Chrome", "Docs - Sheet1");
+    expect(first).not.toBe(second);
+  });
+
+  it("falls back to the app alone when there is no title", () => {
+    expect(formatDeliveredWindowName("Terminal", undefined)).toBe("Terminal");
+  });
+
+  it("falls back to the title alone when there is no app", () => {
+    expect(formatDeliveredWindowName(undefined, "Untitled document")).toBe(
+      "Untitled document",
+    );
+  });
+
+  it("does not repeat an identical app and title", () => {
+    expect(formatDeliveredWindowName("Notepad", "Notepad")).toBe("Notepad");
+  });
+
+  it("resolves to empty when neither name is known", () => {
+    expect(formatDeliveredWindowName(undefined, undefined)).toBe("");
   });
 });
 

@@ -841,7 +841,8 @@
     "pickerOpen": "AudioBud не вставив цей текст, бо вибір вікна був відкритий. Виберіть вікно та продиктуйте ще раз.",
     "transcriptDeliveredTitle": "Доставлено",
     "transcriptDelivered": "Текст вставлено в {{window}}.",
-    "transcriptDeliveredUnknown": "Текст вставлено в заблоковане вікно."
+    "transcriptDeliveredUnknown": "Текст вставлено в заблоковане вікно.",
+    "transcriptDeliveredUnknownPick": "Текст вставлено у вибране вікно."
   },
   "appLanguage": {
     "title": "Мова інтерфейсу",
@@ -858,7 +859,11 @@
     "lockedToHint": "Диктовку заблоковано на {{target}}. Натисніть, щоб розблокувати.",
     "lockedToUnknown": "заблоковане вікно",
     "lockStale": "Блокування втрачено",
-    "lockStaleHint": "Заблоковане вікно закрито. Натисніть, щоб закрити."
+    "lockStaleHint": "Заблоковане вікно закрито. Натисніть, щоб закрити.",
+    "delivered": "Надіслано: {{target}}",
+    "deliveredHint": "Текст вставлено в {{target}}.",
+    "deliveredUnknown": "Надіслано",
+    "deliveredUnknownHint": "Текст вставлено."
   },
   "windowPicker": {
     "title": "Надіслати у вікно",

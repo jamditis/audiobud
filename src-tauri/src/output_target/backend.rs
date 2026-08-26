@@ -18,7 +18,7 @@
 //! [`CaptureError::Unsupported`], so no lock can ever be taken and the rest is
 //! unreachable; it still fails closed rather than type somewhere unasked.
 
-use log::{info, warn};
+use log::{debug, info, warn};
 use serde::{Deserialize, Serialize};
 use specta::Type;
 use tauri::{AppHandle, Emitter, Manager};
@@ -60,17 +60,25 @@ pub const TARGET_WINDOW_GONE_EVENT: &str = "target-window-gone";
 ///
 /// `app`/`title` are the raw strings [`window_label`] read, exactly like
 /// [`OutputTargetLockEvent`]'s -- untruncated, with the frontend owning name
-/// precedence and truncation.
+/// precedence and truncation. `source` says whether the destination was a
+/// standing target lock or a one-shot pick, so the frontend's fallback copy
+/// (when both label lookups come back empty) can describe the right kind of
+/// destination instead of always assuming a lock (#279 review).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Type, tauri_specta::Event)]
 pub struct TranscriptDeliveredEvent {
     pub app: Option<String>,
     pub title: Option<String>,
+    pub source: DeliverySource,
 }
 
 /// Who chose the window one paste is aimed at. The two are delivered exactly
 /// alike; they differ only in what a failure means, so the cleanup for a lost
 /// window has to know which it is holding.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+///
+/// Serialized lowercase (`"lock"` / `"pick"`) for [`TranscriptDeliveredEvent`],
+/// matching [`OutputTargetLockEvent`]'s `kind` tag convention.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "lowercase")]
 pub enum DeliverySource {
     /// The target lock (#120): the window this dictation was started for, read
     /// from the lock at recording start. Losing it clears the lock and says so.
@@ -443,13 +451,23 @@ fn delivered_label(
 /// plain foreground.
 pub fn announce_delivered(app: &AppHandle, identity: WindowIdentity, source: DeliverySource) {
     let (app_name, title) = delivered_label(app, identity, source);
+    // The window title routinely carries sensitive context -- document names,
+    // page titles, client names -- so it stays out of the persistent, default-
+    // level handy.log; only the handle and app/process name, which is already
+    // what the lock/unlock events log elsewhere, are logged at `info`. The
+    // title is still available at `debug` for anyone who has opted into that.
     info!(
-        "Transcript delivered to window {:#x} ({:?} / {:?})",
-        identity.handle.0, app_name, title
+        "Transcript delivered to window {:#x} (app: {:?})",
+        identity.handle.0, app_name
+    );
+    debug!(
+        "Transcript delivered to window {:#x} title: {:?}",
+        identity.handle.0, title
     );
     let _ = TranscriptDeliveredEvent {
         app: app_name,
         title,
+        source,
     }
     .emit(app);
 }
@@ -1096,15 +1114,19 @@ mod tests {
         let event = TranscriptDeliveredEvent {
             app: Some("Terminal".to_string()),
             title: Some("zsh".to_string()),
+            source: DeliverySource::Lock,
         };
         assert_eq!(event.app.as_deref(), Some("Terminal"));
         assert_eq!(event.title.as_deref(), Some("zsh"));
+        assert_eq!(event.source, DeliverySource::Lock);
 
         let unnamed = TranscriptDeliveredEvent {
             app: None,
             title: None,
+            source: DeliverySource::Pick,
         };
         assert_eq!(unnamed.app, None);
         assert_eq!(unnamed.title, None);
+        assert_eq!(unnamed.source, DeliverySource::Pick);
     }
 }

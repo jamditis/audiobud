@@ -839,7 +839,8 @@
     "pickerOpen": "AudioBud לא הדביק את הטקסט הזה כי בורר החלונות היה פתוח. בחר חלון והכתב שוב.",
     "transcriptDeliveredTitle": "נמסר",
     "transcriptDelivered": "הטקסט הודבק ב-{{window}}.",
-    "transcriptDeliveredUnknown": "הטקסט הודבק בחלון הנעול."
+    "transcriptDeliveredUnknown": "הטקסט הודבק בחלון הנעול.",
+    "transcriptDeliveredUnknownPick": "הטקסט הודבק בחלון הנבחר."
   },
   "appLanguage": {
     "title": "שפת האפליקציה",
@@ -856,7 +857,11 @@
     "lockedToHint": "ההכתבה נעולה על {{target}}. לחץ כדי לבטל את הנעילה.",
     "lockedToUnknown": "חלון נעול",
     "lockStale": "הנעילה אבדה",
-    "lockStaleHint": "החלון הנעול נסגר. לחץ כדי לבטל."
+    "lockStaleHint": "החלון הנעול נסגר. לחץ כדי לבטל.",
+    "delivered": "נשלח: {{target}}",
+    "deliveredHint": "הטקסט הודבק ב-{{target}}.",
+    "deliveredUnknown": "נשלח",
+    "deliveredUnknownHint": "הטקסט הודבק."
   },
   "windowPicker": {
     "title": "שליחה לחלון",

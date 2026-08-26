@@ -837,7 +837,8 @@
     "pickerOpen": "窗口选择器处于打开状态，AudioBud 没有粘贴这段文字。请先选择窗口，然后重新口述。",
     "transcriptDeliveredTitle": "已送达",
     "transcriptDelivered": "文字已粘贴到 {{window}}。",
-    "transcriptDeliveredUnknown": "文字已粘贴到锁定的窗口。"
+    "transcriptDeliveredUnknown": "文字已粘贴到锁定的窗口。",
+    "transcriptDeliveredUnknownPick": "文字已粘贴到选定的窗口。"
   },
   "appLanguage": {
     "title": "应用语言",
@@ -854,7 +855,11 @@
     "lockedToHint": "听写已锁定到 {{target}}。点击以解锁。",
     "lockedToUnknown": "已锁定的窗口",
     "lockStale": "锁定已丢失",
-    "lockStaleHint": "已锁定的窗口已关闭。点击以关闭提示。"
+    "lockStaleHint": "已锁定的窗口已关闭。点击以关闭提示。",
+    "delivered": "已发送：{{target}}",
+    "deliveredHint": "文字已粘贴到 {{target}}。",
+    "deliveredUnknown": "已发送",
+    "deliveredUnknownHint": "文字已粘贴。"
   },
   "windowPicker": {
     "title": "发送到窗口",

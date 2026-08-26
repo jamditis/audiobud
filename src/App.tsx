@@ -27,7 +27,10 @@ import {
   classifyTranscriptionError,
   recordingDurationLabel,
 } from "@/lib/transcription-error";
-import { resolveTargetName, truncateName } from "@/lib/output-target-indicator";
+import {
+  formatDeliveredWindowName,
+  truncateName,
+} from "@/lib/output-target-indicator";
 
 type OnboardingStep = "accessibility" | "model" | "done";
 const PRODUCT_NAME = "AudioBud";
@@ -201,16 +204,23 @@ function App() {
   useEffect(() => {
     const unlisten = events.transcriptDeliveredEvent.listen((event) => {
       const name = truncateName(
-        resolveTargetName(
+        formatDeliveredWindowName(
           event.payload.app ?? undefined,
           event.payload.title ?? undefined,
         ),
       );
+      // The fallback (both label lookups failed) has to describe the right
+      // kind of destination: a one-shot pick (#124) is not a lock, and may
+      // coexist with an unrelated lock, so it must not be described as one.
+      const unknownKey =
+        event.payload.source === "pick"
+          ? "errors.transcriptDeliveredUnknownPick"
+          : "errors.transcriptDeliveredUnknown";
       toast.success(t("errors.transcriptDeliveredTitle"), {
         description:
           name.length > 0
             ? t("errors.transcriptDelivered", { window: name })
-            : t("errors.transcriptDeliveredUnknown"),
+            : t(unknownKey),
       });
     });
     return () => {

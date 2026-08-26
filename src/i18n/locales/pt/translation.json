@@ -837,7 +837,8 @@
     "pickerOpen": "O AudioBud não colou este texto porque o seletor de janelas estava aberto. Escolha uma janela e dite novamente.",
     "transcriptDeliveredTitle": "Entregue",
     "transcriptDelivered": "O texto foi colado em {{window}}.",
-    "transcriptDeliveredUnknown": "O texto foi colado na janela bloqueada."
+    "transcriptDeliveredUnknown": "O texto foi colado na janela bloqueada.",
+    "transcriptDeliveredUnknownPick": "O texto foi colado na janela selecionada."
   },
   "appLanguage": {
     "title": "Idioma da Aplicação",
@@ -854,7 +855,11 @@
     "lockedToHint": "O ditado está bloqueado em {{target}}. Clique para desbloquear.",
     "lockedToUnknown": "uma janela bloqueada",
     "lockStale": "Bloqueio perdido",
-    "lockStaleHint": "A janela bloqueada foi fechada. Clique para dispensar."
+    "lockStaleHint": "A janela bloqueada foi fechada. Clique para dispensar.",
+    "delivered": "Enviado: {{target}}",
+    "deliveredHint": "O texto foi colado em {{target}}.",
+    "deliveredUnknown": "Enviado",
+    "deliveredUnknownHint": "O texto foi colado."
   },
   "windowPicker": {
     "title": "Enviar para uma janela",
