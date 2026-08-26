@@ -1,8 +1,12 @@
 //! Platform half of the output target: capturing a window and delivering to it.
 //!
-//! Four operations sit behind one interface so the paste path never spells out
+//! These operations sit behind one interface so the paste path never spells out
 //! a platform:
 //!   - [`capture_foreground_window`] -- what the lock toggle pins to,
+//!   - [`capture_delivery`] -- the target one dictation is started for, read
+//!     once at recording start and carried on its `DictationContext` (#160),
+//!   - [`resolve_captured_delivery`] -- that captured target, re-checked
+//!     immediately before its paste,
 //!   - [`window_is_alive`] -- the identity re-check run before every pinned
 //!     paste (#254),
 //!   - [`borrow_focus`] -- run the normal paste against a pinned window, then
@@ -20,7 +24,7 @@ use tauri_specta::Event;
 
 use super::{
     CaptureError, CaptureSource, LockToggle, LockedLabel, OutputTargetLockEvent, PinnedTarget,
-    WindowIdentity, WindowLabel,
+    TargetLoss, WindowIdentity, WindowLabel,
 };
 
 /// Emitted when a pinned paste was suppressed because the locked window is gone
@@ -33,14 +37,69 @@ use super::{
 /// while this bare event exists only to trigger the toast in `App.tsx`.
 pub const TARGET_LOCK_LOST_EVENT: &str = "target-lock-lost";
 
+/// Emitted when a delivery reached no window because the window that dictation
+/// was started for had closed, while the lock the user can see has since moved
+/// on and still stands (#160).
+///
+/// Distinct from [`TARGET_LOCK_LOST_EVENT`] because the two say different things
+/// to the user: this one must NOT claim their current lock is gone. Without it a
+/// suppressed delivery in this case is silent, and with the default
+/// `ClipboardHandling::DontModify` the transcript is gone with it.
+pub const TARGET_WINDOW_GONE_EVENT: &str = "target-window-gone";
+
+/// Who chose the window one paste is aimed at. The two are delivered exactly
+/// alike; they differ only in what a failure means, so the cleanup for a lost
+/// window has to know which it is holding.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DeliverySource {
+    /// The target lock (#120): the window this dictation was started for, read
+    /// from the lock at recording start. Losing it clears the lock and says so.
+    Lock,
+    /// A one-shot pick (#124): a window chosen for this transcript only. Losing
+    /// it must NOT touch the lock -- the user may hold an unrelated one -- and
+    /// says the pick is gone, not the lock.
+    Pick,
+}
+
 /// Where one paste is delivered. Carries the whole [`WindowIdentity`], not just
 /// the handle, because every step of the delivery re-checks it (#254).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Delivery {
     /// Whatever window holds focus when the paste fires.
     Foreground,
-    /// The locked window.
-    Pinned(WindowIdentity),
+    /// A specific window, and who aimed the paste at it.
+    Pinned(WindowIdentity, DeliverySource),
+}
+
+impl DeliverySource {
+    /// Whether losing this delivery's window means the target lock is gone.
+    ///
+    /// Only the lock's own delivery does. A one-shot pick holds no lock, so
+    /// clearing one on its behalf would take down a lock the user set
+    /// separately and is still relying on, and the "locked window is gone"
+    /// notice would name something that never happened (#124).
+    pub fn clears_the_lock(self) -> bool {
+        matches!(self, DeliverySource::Lock)
+    }
+}
+
+impl Delivery {
+    /// The window this delivery is aimed at, if it is not the plain foreground.
+    pub fn target(self) -> Option<WindowIdentity> {
+        match self {
+            Delivery::Foreground => None,
+            Delivery::Pinned(window, _) => Some(window),
+        }
+    }
+
+    /// Who aimed it. The foreground path has no window to lose, so its answer is
+    /// never consulted; it reads as the lock's for want of anything to clean up.
+    pub fn source(self) -> DeliverySource {
+        match self {
+            Delivery::Foreground => DeliverySource::Lock,
+            Delivery::Pinned(_, source) => source,
+        }
+    }
 }
 
 /// The result of a focus-borrowed delivery.
@@ -196,32 +255,84 @@ pub fn release_output_target_lock(app: AppHandle) {
     unlock_output_target(&app);
 }
 
-/// Resolve where the paste about to fire is delivered, or `None` when it must be
-/// suppressed because the locked window is gone (#120). Suppression emits
-/// [`TARGET_LOCK_LOST_EVENT`] (for the toast) and [`OutputTargetLockEvent::Lost`]
-/// (for the indicator, #255) once, and leaves the app unlocked.
-pub fn resolve_paste_target(app: &AppHandle) -> Option<Delivery> {
-    let Some(pinned) = app.try_state::<PinnedTarget>() else {
+/// Capture where a dictation starting now will be delivered, for its
+/// [`DictationContext`](crate::dictation_context::DictationContext) (#160).
+///
+/// Read once, at recording start, and it carries the whole [`WindowIdentity`]:
+/// the same identity every later step re-checks, so the dictation is never
+/// resolved from a bare handle the OS may have recycled (#254). Everything
+/// downstream carries this value, so a lock toggled while the user is still
+/// speaking governs the next dictation rather than the one in flight.
+///
+/// A one-shot pick (#124) is deliberately NOT captured here. The picker is used
+/// between dictations -- pick a window, then speak -- and the pick has to
+/// outrank whatever this captured, including a lock captured before the pick was
+/// even made. It is consumed instead at delivery, in
+/// [`resolve_captured_delivery`], which is still exactly once per pick.
+pub fn capture_delivery(app: &AppHandle) -> Delivery {
+    let locked = match app.try_state::<PinnedTarget>() {
+        Some(pinned) => pinned.locked(),
+        None => {
+            warn!("Target lock state is not initialized; delivering to the foreground");
+            None
+        }
+    };
+
+    match locked {
+        Some(identity) => Delivery::Pinned(identity, DeliverySource::Lock),
+        None => Delivery::Foreground,
+    }
+}
+
+/// Resolve delivery for the target this dictation captured at recording start,
+/// or `None` when the paste must be suppressed because that window is gone
+/// (#120).
+///
+/// A pending one-shot pick (#124) is consulted first and consumed here: it
+/// routes THIS transcript and is then spent, overriding both the captured target
+/// and any lock. A pick whose window has gone suppresses the paste rather than
+/// letting it fall back to whatever now holds focus.
+///
+/// Otherwise the lock itself is deliberately not consulted: `captured` is what
+/// this dictation was started for, so a lock toggled while the user was speaking
+/// can neither redirect this paste nor rescue it. What is re-checked is the
+/// captured identity, because a window can close during a dictation. A dead
+/// target is dropped through [`drop_lock_for`], which clears the lock only if it
+/// still points at this same window and announces the loss either way.
+pub fn resolve_captured_delivery(app: &AppHandle, captured: Delivery) -> Option<Delivery> {
+    match crate::window_picker::backend::take_pick_target(app) {
+        Some(crate::window_picker::PickDelivery::Deliver(window)) => {
+            return Some(Delivery::Pinned(window, DeliverySource::Pick))
+        }
+        // The user explicitly chose the current window, so this transcript
+        // escapes the lock -- returning here is what makes that override real.
+        Some(crate::window_picker::PickDelivery::Foreground) => return Some(Delivery::Foreground),
+        Some(crate::window_picker::PickDelivery::PickLost) => return None,
+        None => {}
+    }
+
+    // No pick is armed and the picker is still open, so this transcript finished
+    // mid-pick. The picker holds the foreground, so delivering now would type
+    // the transcript into AudioBud's own window (#164). Withhold the keystrokes;
+    // the text still reaches the clipboard and history.
+    if crate::window_picker::backend::pick_in_progress(app) {
+        crate::window_picker::backend::announce_pick_in_progress(app);
+        return None;
+    }
+
+    let Delivery::Pinned(identity, source) = captured else {
         return Some(Delivery::Foreground);
     };
 
-    // Read before resolve() so a lost lock's label can still be reported --
-    // resolve() clears the lock in the same step that reports LockLost.
-    let locked_before = pinned.locked();
-
-    // resolve hands back the identity it validated under its own guard, so no
-    // second read of the lock can slip a different window in between.
-    let (resolved, generation) = pinned.resolve(window_is_alive);
-    match resolved {
-        super::Resolved::Foreground => Some(Delivery::Foreground),
-        super::Resolved::Pinned(identity) => Some(Delivery::Pinned(identity)),
-        super::Resolved::LockLost => {
-            let label = locked_before
-                .map(|identity| lost_label(app, identity))
-                .unwrap_or((None, None));
-            announce_lock_lost(app, &pinned, generation, label);
-            None
-        }
+    // The identity validated here is the one the context has carried since
+    // recording started, so there is no read of the lock to race with: the
+    // window checked is by construction the window this delivery will be aimed
+    // at.
+    if window_is_alive(identity) {
+        Some(Delivery::Pinned(identity, source))
+    } else {
+        abandon_target(app, identity, source);
+        None
     }
 }
 
@@ -256,9 +367,8 @@ fn lost_label(app: &AppHandle, identity: WindowIdentity) -> WindowLabel {
 ///
 /// `label` is the locked window's last known app/title, read by the caller
 /// before the lock was dropped -- by the time this runs the lock is already
-/// gone, so this is the only chance to report who it was. `generation` is
-/// the value the caller's mutation (`resolve()`'s `LockLost`, or
-/// `unlock_if`'s success) produced.
+/// gone, so this is the only chance to report who it was. `generation` is the
+/// value [`PinnedTarget::retire_dead_target`]'s `LockCleared` produced.
 ///
 /// The bare toast (`TARGET_LOCK_LOST_EVENT`) always fires: a real paste
 /// attempt to the old target really did fail, whatever has happened since.
@@ -290,23 +400,57 @@ fn announce_lock_lost(app: &AppHandle, pinned: &PinnedTarget, generation: u64, l
     crate::tray::update_tray_menu(app, &crate::tray::current_tray_state(app), None);
 }
 
-/// Drop the lock on `target` because its window has gone, and tell the user.
+/// Give up on `target`, cleaning up the way its source requires.
+///
+/// A lost lock is cleared and announced as such; a lost one-shot pick announces
+/// itself and leaves the lock alone, because the pick never held one and the
+/// user's separate lock is still perfectly good (#124).
+fn abandon_target(app: &AppHandle, target: WindowIdentity, source: DeliverySource) {
+    if source.clears_the_lock() {
+        drop_lock_for(app, target);
+    } else {
+        crate::window_picker::backend::announce_pick_lost(app);
+    }
+}
+
+/// Drop the lock on `target` because its window has gone, and tell the user the
+/// transcript did not reach it.
 ///
 /// Only this delivery's own target is cleared: the user may have unlocked and
 /// re-locked to another window while this paste was running, and a dead target
-/// from the older delivery must not take the newer lock down with it. When the
-/// lock has already moved on, there is nothing to announce -- the lock the user
-/// can see is still good -- but this delivery is abandoned all the same.
+/// from the older delivery must not take the newer lock down with it. That case
+/// still has to be announced, though, in its own words -- the delivery failed
+/// either way, and staying quiet about it loses a finished transcript without a
+/// trace, since a suppressed delivery is deliberately not a paste error and the
+/// default clipboard handling leaves no copy behind (#160).
 fn drop_lock_for(app: &AppHandle, target: WindowIdentity) {
     let Some(pinned) = app.try_state::<PinnedTarget>() else {
+        warn!("Target lock state is not initialized; a dead target went unreported");
         return;
     };
-    if let Some(generation) = pinned.unlock_if(target) {
+
+    match pinned.retire_dead_target(target) {
         // The window died mid-delivery: prefer the label cached from when it
         // was locked (#266 review) over a fresh query, which routinely comes
-        // back empty for a window that just closed.
-        announce_lock_lost(app, &pinned, generation, lost_label(app, target));
+        // back empty for a window that just closed. `generation` is only
+        // meaningful for this branch -- an obsolete target never touches the
+        // indicator state at all, so it carries none.
+        TargetLoss::LockCleared(generation) => {
+            announce_lock_lost(app, &pinned, generation, lost_label(app, target));
+        }
+        TargetLoss::ObsoleteTarget => announce_target_window_gone(app, target),
     }
+}
+
+/// Tell the user this transcript reached no window, without touching the lock
+/// state or the tray: the window that died is one they had already moved on
+/// from, whether by unlocking or by locking onto something else.
+fn announce_target_window_gone(app: &AppHandle, target: WindowIdentity) {
+    warn!(
+        "Window {:#x} closed before its transcript was delivered; the lock state is untouched",
+        target.handle.0
+    );
+    let _ = app.emit(TARGET_WINDOW_GONE_EVENT, ());
 }
 
 /// Whether the locked window is still the window that was locked. Wraps the
@@ -349,12 +493,18 @@ impl std::fmt::Display for FocusLost {
 pub struct FocusHold<'a> {
     app: &'a AppHandle,
     target: Option<WindowIdentity>,
+    source: DeliverySource,
 }
 
 impl<'a> FocusHold<'a> {
-    /// A hold for `target`, or for the plain foreground path when `None`.
-    pub fn new(app: &'a AppHandle, target: Option<WindowIdentity>) -> Self {
-        Self { app, target }
+    /// A hold for `delivery`: its target, if it has one, and who aimed it there
+    /// so a window lost mid-delivery is cleaned up the right way.
+    pub fn new(app: &'a AppHandle, delivery: Delivery) -> Self {
+        Self {
+            app,
+            target: delivery.target(),
+            source: delivery.source(),
+        }
     }
 
     /// Confirm the next keystroke will reach the intended window.
@@ -370,7 +520,7 @@ impl<'a> FocusHold<'a> {
         };
 
         if !window_is_alive(target) {
-            drop_lock_for(self.app, target);
+            abandon_target(self.app, target, self.source);
             return Err(FocusLost::TargetGone);
         }
 
@@ -397,10 +547,11 @@ impl<'a> FocusHold<'a> {
 pub fn borrow_focus<T>(
     app: &AppHandle,
     target: WindowIdentity,
+    source: DeliverySource,
     action: impl FnOnce() -> T,
 ) -> Result<Borrowed<T>, FocusLost> {
     if !window_is_alive(target) {
-        drop_lock_for(app, target);
+        abandon_target(app, target, source);
         return Ok(Borrowed::Suppressed);
     }
 
@@ -757,5 +908,39 @@ mod fallback {
     /// fabricate a name.
     pub fn window_label(_identity: WindowIdentity) -> WindowLabel {
         (None, None)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::output_target::{class_fingerprint, WindowHandle};
+
+    fn window() -> WindowIdentity {
+        WindowIdentity {
+            handle: WindowHandle(7),
+            process_id: 100,
+            thread_id: 200,
+            class: class_fingerprint("Test_WindowClass"),
+        }
+    }
+
+    #[test]
+    fn a_delivery_names_its_target_and_who_aimed_it() {
+        assert_eq!(Delivery::Foreground.target(), None);
+        for source in [DeliverySource::Lock, DeliverySource::Pick] {
+            let delivery = Delivery::Pinned(window(), source);
+            assert_eq!(delivery.target(), Some(window()));
+            assert_eq!(delivery.source(), source);
+        }
+    }
+
+    #[test]
+    fn only_the_locks_own_delivery_clears_the_lock() {
+        // A one-shot pick that loses its window must leave a lock the user set
+        // separately completely alone (#124); the lock's delivery is the only
+        // one entitled to clear it.
+        assert!(DeliverySource::Lock.clears_the_lock());
+        assert!(!DeliverySource::Pick.clears_the_lock());
     }
 }

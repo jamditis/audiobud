@@ -16,7 +16,8 @@
     "formatted": "已格式化",
     "rawTranscript": "原始转录",
     "lockToWindow": "锁定到窗口",
-    "lockLost": "锁定已丢失"
+    "lockLost": "锁定已丢失",
+    "sendToWindowOnce": "发送到窗口一次"
   },
   "sidebar": {
     "navLabel": "设置分区",
@@ -201,6 +202,10 @@
           "toggle_target_lock": {
             "name": "锁定到窗口快捷键",
             "description": "在您解除锁定之前，将文本发送到一个窗口的键盘快捷键。"
+          },
+          "pick_output_window": {
+            "name": "发送到窗口的快捷键",
+            "description": "为下一段文字选择窗口的键盘快捷键。"
           }
         },
         "errors": {
@@ -819,11 +824,17 @@
     "pasteFailed": "无法将文本粘贴到当前活动的应用程序中。",
     "targetLockLostTitle": "锁定的窗口已关闭",
     "targetLockLost": "您锁定的窗口已关闭。AudioBud 未粘贴文本。请重新锁定一个窗口。",
+    "targetWindowGoneTitle": "听写目标窗口已关闭",
+    "targetWindowGone": "你听写的窗口在 AudioBud 粘贴文本前已关闭。当前的锁定设置没有变化。",
     "transcriptionErrorTitle": "转录失败",
     "transcriptionErrorGeneric": "无法转录这段录音。请重试或选择其他模型。",
     "transcriptionTimeoutTitle": "转录超时",
     "transcriptionTimeout": "引擎在 {{seconds}} 秒后仍无响应，可能已卡住。如果此问题持续出现，请重启 AudioBud。",
-    "parakeetInputTooLong": "这段录音时长为 {{duration}}。Parakeet 无法转录超过约 6:30 的录音，之后的音频会在没有提示的情况下被省略。长录音请使用 Whisper 模型。"
+    "parakeetInputTooLong": "这段录音时长为 {{duration}}。Parakeet 无法转录超过约 6:30 的录音，之后的音频会在没有提示的情况下被省略。长录音请使用 Whisper 模型。",
+    "windowPickLostTitle": "所选窗口已不存在",
+    "windowPickLost": "你选择的窗口已关闭。AudioBud 没有粘贴文本。请重新选择窗口。",
+    "pickerOpenTitle": "窗口选择器已打开",
+    "pickerOpen": "窗口选择器处于打开状态，AudioBud 没有粘贴这段文字。请先选择窗口，然后重新口述。"
   },
   "appLanguage": {
     "title": "应用语言",
@@ -841,6 +852,15 @@
     "lockedToUnknown": "已锁定的窗口",
     "lockStale": "锁定已丢失",
     "lockStaleHint": "已锁定的窗口已关闭。点击以关闭提示。"
+  },
+  "windowPicker": {
+    "title": "发送到窗口",
+    "hint": "为下一段文字选择一个窗口。按 F 使用当前窗口，按 Esc 取消。",
+    "refused": "那个窗口已不存在。请选择另一个。",
+    "loading": "正在查找窗口…",
+    "empty": "没有可用的窗口。",
+    "useForeground": "使用当前窗口",
+    "cancel": "取消"
   },
   "critters": {
     "frog": "青蛙"

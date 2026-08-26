@@ -911,6 +911,20 @@ pub fn get_default_settings() -> AppSettings {
         },
     );
 
+    // One-shot window picker (#124): send just the next transcript to a window
+    // you choose. Windows-only for now (#119), like the target lock.
+    #[cfg(target_os = "windows")]
+    bindings.insert(
+        "pick_output_window".to_string(),
+        ShortcutBinding {
+            id: "pick_output_window".to_string(),
+            name: "Send to window once".to_string(),
+            description: "Pick a window for your next text only.".to_string(),
+            default_binding: "ctrl+alt+w".to_string(),
+            current_binding: "ctrl+alt+w".to_string(),
+        },
+    );
+
     bindings.insert(
         "cancel".to_string(),
         ShortcutBinding {

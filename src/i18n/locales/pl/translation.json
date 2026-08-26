@@ -16,7 +16,8 @@
     "formatted": "Sformatowany",
     "rawTranscript": "Surowa transkrypcja",
     "lockToWindow": "Przypnij do okna",
-    "lockLost": "Blokada utracona"
+    "lockLost": "Blokada utracona",
+    "sendToWindowOnce": "Wyślij do okna jeden raz"
   },
   "sidebar": {
     "navLabel": "Sekcje ustawień",
@@ -201,6 +202,10 @@
           "toggle_target_lock": {
             "name": "Skrót przypięcia do okna",
             "description": "Skrót klawiszowy, który wysyła tekst do jednego okna, dopóki go nie odepniesz."
+          },
+          "pick_output_window": {
+            "name": "Skrót wysyłania do okna",
+            "description": "Skrót klawiszowy, który wybiera okno tylko dla następnego tekstu."
           }
         },
         "errors": {
@@ -823,11 +828,17 @@
     "pasteFailed": "Nie można było wkleić tekstu do aktywnej aplikacji.",
     "targetLockLostTitle": "Przypiętego okna już nie ma",
     "targetLockLost": "Przypięte okno jest zamknięte. AudioBud nie wkleił tekstu. Przypnij okno ponownie.",
+    "targetWindowGoneTitle": "Okno dyktowania zostało zamknięte",
+    "targetWindowGone": "Okno, do którego dyktowałeś, zostało zamknięte, zanim AudioBud zdążył wkleić tekst. Twoje bieżące ustawienie przypięcia pozostaje bez zmian.",
     "transcriptionErrorTitle": "Transkrypcja nie powiodła się",
     "transcriptionErrorGeneric": "Nie udało się transkrybować nagrania. Spróbuj ponownie lub wybierz inny model.",
     "transcriptionTimeoutTitle": "Przekroczono czas transkrypcji",
     "transcriptionTimeout": "Silnik nie odpowiedział przez {{seconds}} sekund i mógł się zawiesić. Uruchom AudioBud ponownie, jeśli to się powtarza.",
-    "parakeetInputTooLong": "To nagranie ma długość {{duration}}. Parakeet nie może transkrybować nagrań dłuższych niż około 6:30, ponieważ dalszy dźwięk zostałby pominięty bez ostrzeżenia. Do długich nagrań użyj modelu Whisper."
+    "parakeetInputTooLong": "To nagranie ma długość {{duration}}. Parakeet nie może transkrybować nagrań dłuższych niż około 6:30, ponieważ dalszy dźwięk zostałby pominięty bez ostrzeżenia. Do długich nagrań użyj modelu Whisper.",
+    "windowPickLostTitle": "Wybrane okno zniknęło",
+    "windowPickLost": "Wybrane okno jest zamknięte. AudioBud nie wkleił tekstu. Wybierz okno ponownie.",
+    "pickerOpenTitle": "Wybór okna jest otwarty",
+    "pickerOpen": "AudioBud nie wkleił tego tekstu, ponieważ wybór okna był otwarty. Wybierz okno i podyktuj ponownie."
   },
   "appLanguage": {
     "title": "Język aplikacji",
@@ -845,6 +856,15 @@
     "lockedToUnknown": "zablokowane okno",
     "lockStale": "Blokada utracona",
     "lockStaleHint": "Zablokowane okno zostało zamknięte. Kliknij, aby odrzucić."
+  },
+  "windowPicker": {
+    "title": "Wyślij do okna",
+    "hint": "Wybierz okno dla następnego tekstu. Naciśnij F, aby użyć bieżącego okna, Esc, aby anulować.",
+    "refused": "Tego okna już nie ma. Wybierz inne.",
+    "loading": "Szukanie okien...",
+    "empty": "Brak dostępnych okien.",
+    "useForeground": "Użyj bieżącego okna",
+    "cancel": "Anuluj"
   },
   "critters": {
     "frog": "Żaba"

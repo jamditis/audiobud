@@ -16,7 +16,8 @@
     "formatted": "Formattato",
     "rawTranscript": "Trascrizione grezza",
     "lockToWindow": "Blocca su una finestra",
-    "lockLost": "Blocco perso"
+    "lockLost": "Blocco perso",
+    "sendToWindowOnce": "Invia a una finestra una volta"
   },
   "sidebar": {
     "navLabel": "Sezioni delle impostazioni",
@@ -201,6 +202,10 @@
           "toggle_target_lock": {
             "name": "Scorciatoia per bloccare su una finestra",
             "description": "La scorciatoia da tastiera che invia il testo a una sola finestra finché non la sblocchi."
+          },
+          "pick_output_window": {
+            "name": "Scorciatoia per inviare a una finestra",
+            "description": "La scorciatoia da tastiera che sceglie una finestra solo per il prossimo testo."
           }
         },
         "errors": {
@@ -819,11 +824,17 @@
     "pasteFailed": "Non è stato possibile incollare il testo nell'applicazione attiva.",
     "targetLockLostTitle": "La finestra bloccata non esiste più",
     "targetLockLost": "La finestra che hai bloccato è chiusa. AudioBud non ha incollato il testo. Blocca di nuovo una finestra.",
+    "targetWindowGoneTitle": "La finestra di dettatura è stata chiusa",
+    "targetWindowGone": "La finestra in cui hai dettato è stata chiusa prima che AudioBud potesse incollare il testo. La tua impostazione di blocco attuale non è cambiata.",
     "transcriptionErrorTitle": "Trascrizione non riuscita",
     "transcriptionErrorGeneric": "Non è stato possibile trascrivere la registrazione. Riprova o scegli un altro modello.",
     "transcriptionTimeoutTitle": "Tempo scaduto per la trascrizione",
     "transcriptionTimeout": "Il motore non ha risposto dopo {{seconds}} secondi e potrebbe essersi bloccato. Riavvia AudioBud se il problema si ripete.",
-    "parakeetInputTooLong": "Questa registrazione dura {{duration}}. Parakeet non può trascrivere registrazioni più lunghe di circa 6:30 perché l'audio successivo verrebbe omesso senza avviso. Usa un modello Whisper per le registrazioni lunghe."
+    "parakeetInputTooLong": "Questa registrazione dura {{duration}}. Parakeet non può trascrivere registrazioni più lunghe di circa 6:30 perché l'audio successivo verrebbe omesso senza avviso. Usa un modello Whisper per le registrazioni lunghe.",
+    "windowPickLostTitle": "La finestra scelta non c'è più",
+    "windowPickLost": "La finestra che hai scelto è chiusa. AudioBud non ha incollato il testo. Scegli un'altra finestra.",
+    "pickerOpenTitle": "Il selettore è aperto",
+    "pickerOpen": "AudioBud non ha incollato questo testo perché il selettore di finestre era aperto. Scegli una finestra e detta di nuovo."
   },
   "appLanguage": {
     "title": "Lingua Applicazione",
@@ -841,6 +852,15 @@
     "lockedToUnknown": "una finestra bloccata",
     "lockStale": "Blocco perso",
     "lockStaleHint": "La finestra bloccata è stata chiusa. Fai clic per ignorare."
+  },
+  "windowPicker": {
+    "title": "Invia a una finestra",
+    "hint": "Scegli una finestra per il prossimo testo. Premi F per la finestra attuale, Esc per annullare.",
+    "refused": "Quella finestra non c'è più. Scegline un'altra.",
+    "loading": "Ricerca finestre...",
+    "empty": "Nessuna finestra disponibile.",
+    "useForeground": "Usa la finestra attuale",
+    "cancel": "Annulla"
   },
   "critters": {
     "frog": "Rana"

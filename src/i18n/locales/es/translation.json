@@ -16,7 +16,8 @@
     "formatted": "Con formato",
     "rawTranscript": "Transcripción sin formato",
     "lockToWindow": "Fijar a una ventana",
-    "lockLost": "Bloqueo perdido"
+    "lockLost": "Bloqueo perdido",
+    "sendToWindowOnce": "Enviar a una ventana una vez"
   },
   "sidebar": {
     "navLabel": "Secciones de configuración",
@@ -201,6 +202,10 @@
           "toggle_target_lock": {
             "name": "Atajo para fijar a una ventana",
             "description": "El atajo de teclado que envía tu texto a una sola ventana hasta que la sueltes."
+          },
+          "pick_output_window": {
+            "name": "Atajo para enviar a una ventana",
+            "description": "El atajo de teclado que elige una ventana solo para tu próximo texto."
           }
         },
         "errors": {
@@ -819,11 +824,17 @@
     "pasteFailed": "No se pudo pegar el texto en la aplicación activa.",
     "targetLockLostTitle": "La ventana fijada ya no existe",
     "targetLockLost": "La ventana que fijaste está cerrada. AudioBud no pegó el texto. Fija una ventana de nuevo.",
+    "targetWindowGoneTitle": "La ventana de dictado se cerró",
+    "targetWindowGone": "La ventana en la que dictaste se cerró antes de que AudioBud pudiera pegar el texto. Tu configuración de fijación actual no ha cambiado.",
     "transcriptionErrorTitle": "La transcripción ha fallado",
     "transcriptionErrorGeneric": "No se pudo transcribir la grabación. Inténtalo de nuevo o elige otro modelo.",
     "transcriptionTimeoutTitle": "Se agotó el tiempo de la transcripción",
     "transcriptionTimeout": "El motor no respondió después de {{seconds}} segundos y puede estar bloqueado. Reinicia AudioBud si esto sigue ocurriendo.",
-    "parakeetInputTooLong": "Esta grabación dura {{duration}}. Parakeet no puede transcribir grabaciones de más de unos 6:30 porque omitiría el audio posterior sin avisar. Usa un modelo Whisper para grabaciones largas."
+    "parakeetInputTooLong": "Esta grabación dura {{duration}}. Parakeet no puede transcribir grabaciones de más de unos 6:30 porque omitiría el audio posterior sin avisar. Usa un modelo Whisper para grabaciones largas.",
+    "windowPickLostTitle": "La ventana elegida ya no existe",
+    "windowPickLost": "La ventana que elegiste está cerrada. AudioBud no pegó el texto. Elige otra ventana.",
+    "pickerOpenTitle": "El selector está abierto",
+    "pickerOpen": "AudioBud no pegó este texto porque el selector de ventanas estaba abierto. Elige una ventana y vuelve a dictar."
   },
   "appLanguage": {
     "title": "Idioma de la aplicación",
@@ -841,6 +852,15 @@
     "lockedToUnknown": "una ventana bloqueada",
     "lockStale": "Bloqueo perdido",
     "lockStaleHint": "La ventana bloqueada se cerró. Haz clic para descartar."
+  },
+  "windowPicker": {
+    "title": "Enviar a una ventana",
+    "hint": "Elige una ventana para tu próximo texto. Pulsa F para la ventana actual y Esc para cancelar.",
+    "refused": "Esa ventana ya no existe. Elige otra.",
+    "loading": "Buscando ventanas...",
+    "empty": "No hay ventanas disponibles.",
+    "useForeground": "Usar la ventana actual",
+    "cancel": "Cancelar"
   },
   "critters": {
     "frog": "Rana"
