@@ -809,6 +809,8 @@
     "pasteFailed": "Không thể dán văn bản vào ứng dụng đang hoạt động.",
     "targetLockLostTitle": "Cửa sổ đã khóa không còn nữa",
     "targetLockLost": "Cửa sổ bạn đã khóa đã đóng. AudioBud không dán văn bản. Hãy khóa lại một cửa sổ.",
+    "targetWindowGoneTitle": "Cửa sổ đọc chính tả đã đóng",
+    "targetWindowGone": "Cửa sổ bạn đọc chính tả đã đóng trước khi AudioBud kịp dán văn bản. Cài đặt ghim hiện tại của bạn không thay đổi.",
     "transcriptionErrorTitle": "Chuyển đổi không thành công",
     "transcriptionErrorGeneric": "Không thể chuyển đổi bản ghi âm thành văn bản. Hãy thử lại hoặc chọn một mô hình khác.",
     "transcriptionTimeoutTitle": "Chuyển đổi đã quá thời gian chờ",

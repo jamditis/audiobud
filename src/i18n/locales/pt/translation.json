@@ -809,6 +809,8 @@
     "pasteFailed": "Não foi possível colar o texto no aplicativo ativo.",
     "targetLockLostTitle": "A janela fixada não existe mais",
     "targetLockLost": "A janela que você fixou está fechada. O AudioBud não colou o texto. Fixe uma janela novamente.",
+    "targetWindowGoneTitle": "A janela de ditado foi fechada",
+    "targetWindowGone": "A janela em que você ditou foi fechada antes de o AudioBud colar o texto. Sua configuração de fixação atual não mudou.",
     "transcriptionErrorTitle": "A transcrição falhou",
     "transcriptionErrorGeneric": "Não foi possível transcrever a gravação. Tente novamente ou escolha outro modelo.",
     "transcriptionTimeoutTitle": "Tempo esgotado na transcrição",

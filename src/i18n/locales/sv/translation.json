@@ -809,6 +809,8 @@
     "pasteFailed": "Texten kunde inte klistras in i det aktiva programmet.",
     "targetLockLostTitle": "Det låsta fönstret finns inte längre",
     "targetLockLost": "Fönstret du låste är stängt. AudioBud klistrade inte in texten. Lås ett fönster igen.",
+    "targetWindowGoneTitle": "Dikteringsfönstret stängdes",
+    "targetWindowGone": "Fönstret du dikterade till stängdes innan AudioBud hann klistra in texten. Din nuvarande låsinställning är oförändrad.",
     "transcriptionErrorTitle": "Transkriptionen misslyckades",
     "transcriptionErrorGeneric": "Inspelningen kunde inte transkriberas. Försök igen eller välj en annan modell.",
     "transcriptionTimeoutTitle": "Transkriptionen tog för lång tid",

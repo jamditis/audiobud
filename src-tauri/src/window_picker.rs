@@ -138,9 +138,9 @@ pub enum PickGesture {
 }
 
 /// The result of one pick. A distinct type from [`OutputTarget`] -- like
-/// [`crate::output_target::Resolved`] -- so a dismissal, which must suppress the
-/// paste, cannot be dropped like a stray bool or silently become a foreground
-/// paste.
+/// [`crate::output_target::backend::Borrowed`] -- so a dismissal, which must
+/// suppress the paste, cannot be dropped like a stray bool or silently become a
+/// foreground paste.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PickOutcome {
     /// Deliver this ONE transcript to the target, then forget it: the picker
@@ -151,7 +151,7 @@ pub enum PickOutcome {
     /// The pick was cancelled. SUPPRESS the paste; do NOT fall back to the
     /// foreground -- pasting into whatever now holds focus is the exact misfire
     /// the one-shot flow exists to avoid, the same fail-safe discipline as
-    /// [`crate::output_target::Resolved::LockLost`].
+    /// [`crate::output_target::backend::Borrowed::Suppressed`].
     Cancel,
 }
 
