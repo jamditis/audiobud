@@ -161,7 +161,7 @@ impl ActiveDictations {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::output_target::{PinnedTarget, WindowHandle, WindowIdentity};
+    use crate::output_target::{class_fingerprint, PinnedTarget, WindowHandle, WindowIdentity};
 
     /// A captured window: handle `h`, owned by process `pid` / thread `tid`.
     fn win(h: isize, pid: u32, tid: u32) -> WindowIdentity {
@@ -169,6 +169,7 @@ mod tests {
             handle: WindowHandle(h),
             process_id: pid,
             thread_id: tid,
+            class: class_fingerprint("Chrome_WidgetWin_1"),
         }
     }
 
