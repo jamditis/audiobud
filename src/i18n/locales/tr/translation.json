@@ -201,6 +201,10 @@
           "toggle_target_lock": {
             "name": "Pencereye kilitleme kısayolu",
             "description": "Kilidi açana kadar metninizi tek bir pencereye gönderen klavye kısayolu."
+          },
+          "pick_output_window": {
+            "name": "Pencereye gönderme kısayolu",
+            "description": "Yalnızca sonraki metniniz için bir pencere seçen klavye kısayolu."
           }
         },
         "errors": {
@@ -816,7 +820,9 @@
     "transcriptionTimeout": "Motor {{seconds}} saniye sonra yanıt vermedi ve takılmış olabilir. Bu durum devam ederse AudioBud'u yeniden başlatın.",
     "parakeetInputTooLong": "Bu kayıt {{duration}} uzunluğunda. Parakeet yaklaşık 6:30'dan uzun kayıtları yazıya dökemez; sonraki ses uyarı vermeden atlanır. Uzun kayıtlar için bir Whisper modeli kullanın.",
     "windowPickLostTitle": "Seçilen pencere kayboldu",
-    "windowPickLost": "Seçtiğiniz pencere kapalı. AudioBud metni yapıştırmadı. Yeniden bir pencere seçin."
+    "windowPickLost": "Seçtiğiniz pencere kapalı. AudioBud metni yapıştırmadı. Yeniden bir pencere seçin.",
+    "pickerOpenTitle": "Pencere seçici açık",
+    "pickerOpen": "Pencere seçici açık olduğu için AudioBud bu metni yapıştırmadı. Bir pencere seçin ve yeniden dikte edin."
   },
   "appLanguage": {
     "title": "Uygulama Dili",

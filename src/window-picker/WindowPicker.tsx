@@ -16,6 +16,7 @@ import {
   createPickerState,
   foregroundGesture,
   handleKey,
+  targetOwnsKey,
   type PickerGesture,
   type PickerState,
 } from "@/lib/window-picker-overlay";
@@ -57,6 +58,10 @@ const WindowPicker: React.FC = () => {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      // A keydown on the footer buttons reaches this window-level listener too.
+      // Enter there means "press this button", not "take the highlighted row",
+      // so the control keeps the key (Escape always backs out, from anywhere).
+      if (targetOwnsKey(event.target as HTMLElement | null, event.key)) return;
       const step = handleKey(state, event.key);
       if (step.gesture) {
         event.preventDefault();

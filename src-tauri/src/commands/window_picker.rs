@@ -15,7 +15,7 @@ use crate::window_picker::{PickArmed, PickerGesture, PickerWindow};
 #[tauri::command]
 #[specta::specta]
 pub fn list_picker_windows(app: AppHandle) -> Vec<PickerWindow> {
-    backend::offered_windows(&app)
+    backend::offered_rows(&app)
 }
 
 /// Report the gesture that ended the pick and arm what it asked for. The picker

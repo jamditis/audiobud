@@ -6,6 +6,7 @@ import {
   foregroundGesture,
   chooseAt,
   handleKey,
+  targetOwnsKey,
   type PickerWindow,
   type PickerState,
 } from "./window-picker-overlay";
@@ -139,5 +140,31 @@ describe("handles cross the boundary as opaque lossless strings", () => {
       gesture: { kind: "chose", handle: big },
     });
     expect(String(Number(big))).not.toBe(big);
+  });
+});
+
+describe("keys on the picker's own controls belong to the control", () => {
+  it("leaves Enter to a focused button instead of arming the highlighted row", () => {
+    // The footer's "Use current window" and "Cancel" buttons are activated with
+    // Enter. The picker listens on the window, so without this the reducer would
+    // pick a row AND swallow the button press.
+    for (const tagName of ["BUTTON", "INPUT", "SELECT", "TEXTAREA", "A"]) {
+      expect(targetOwnsKey({ tagName }, "Enter")).toBe(true);
+    }
+    expect(targetOwnsKey({ isContentEditable: true }, "Enter")).toBe(true);
+  });
+
+  it("keeps Escape for the picker, even from a focused button", () => {
+    expect(targetOwnsKey({ tagName: "BUTTON" }, "Escape")).toBe(false);
+  });
+
+  it("leaves keys on the surface itself to the picker", () => {
+    expect(targetOwnsKey({ tagName: "DIV" }, "Enter")).toBe(false);
+    expect(targetOwnsKey({ tagName: "LI" }, "ArrowDown")).toBe(false);
+    expect(targetOwnsKey(null, "Enter")).toBe(false);
+  });
+
+  it("matches tag names case-insensitively, as a lowercase DOM would report", () => {
+    expect(targetOwnsKey({ tagName: "button" }, "1")).toBe(true);
   });
 });

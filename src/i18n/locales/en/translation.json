@@ -201,6 +201,10 @@
           "toggle_target_lock": {
             "name": "Lock to window shortcut",
             "description": "The keyboard shortcut that sends your text to one window until you unlock it."
+          },
+          "pick_output_window": {
+            "name": "Send to window shortcut",
+            "description": "The keyboard shortcut that picks a window for your next text only."
           }
         },
         "errors": {
@@ -816,7 +820,9 @@
     "transcriptionTimeout": "The engine did not respond after {{seconds}} seconds and may be stuck. Restart AudioBud if this keeps happening.",
     "parakeetInputTooLong": "This recording is {{duration}} long. Parakeet cannot transcribe recordings longer than about 6:30 because later audio would be silently omitted. Use a Whisper model for long recordings.",
     "windowPickLostTitle": "Picked window is gone",
-    "windowPickLost": "The window you picked is closed. AudioBud did not paste the text. Pick a window again."
+    "windowPickLost": "The window you picked is closed. AudioBud did not paste the text. Pick a window again.",
+    "pickerOpenTitle": "Picker is open",
+    "pickerOpen": "AudioBud did not paste this text because the window picker was open. Pick a window, then dictate again."
   },
   "appLanguage": {
     "title": "Application language",

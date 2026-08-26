@@ -25,14 +25,47 @@ use super::{CaptureError, CaptureSource, LockToggle, PinnedTarget, WindowIdentit
 /// paste.
 pub const TARGET_LOCK_LOST_EVENT: &str = "target-lock-lost";
 
+/// Who chose the window one paste is aimed at. The two are delivered exactly
+/// alike; they differ only in what a failure means, so the cleanup for a lost
+/// window has to know which it is holding.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DeliverySource {
+    /// The target lock (#120): a window pinned until the user unlocks. Losing it
+    /// clears the lock and says so.
+    Lock,
+    /// A one-shot pick (#124): a window chosen for this transcript only. Losing
+    /// it must NOT touch the lock -- the user may hold an unrelated one -- and
+    /// says the pick is gone, not the lock.
+    Pick,
+}
+
 /// Where one paste is delivered. Carries the whole [`WindowIdentity`], not just
 /// the handle, because every step of the delivery re-checks it (#254).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Delivery {
     /// Whatever window holds focus when the paste fires.
     Foreground,
-    /// The locked window.
-    Pinned(WindowIdentity),
+    /// A specific window, and who aimed the paste at it.
+    Pinned(WindowIdentity, DeliverySource),
+}
+
+impl Delivery {
+    /// The window this delivery is aimed at, if it is not the plain foreground.
+    pub fn target(self) -> Option<WindowIdentity> {
+        match self {
+            Delivery::Foreground => None,
+            Delivery::Pinned(window, _) => Some(window),
+        }
+    }
+
+    /// Who aimed it. The foreground path has no window to lose, so its answer is
+    /// never consulted; it reads as the lock's for want of anything to clean up.
+    pub fn source(self) -> DeliverySource {
+        match self {
+            Delivery::Foreground => DeliverySource::Lock,
+            Delivery::Pinned(_, source) => source,
+        }
+    }
 }
 
 /// The result of a focus-borrowed delivery.
@@ -79,10 +112,22 @@ pub fn resolve_paste_target(app: &AppHandle) -> Option<Delivery> {
     // whose window has gone suppresses the paste the same way a lost lock does.
     match crate::window_picker::backend::take_pick_target(app) {
         Some(crate::window_picker::PickDelivery::Deliver(window)) => {
-            return Some(Delivery::Pinned(window))
+            return Some(Delivery::Pinned(window, DeliverySource::Pick))
         }
+        // The user explicitly chose the current window, so this transcript
+        // escapes the lock -- returning here is what makes that override real.
+        Some(crate::window_picker::PickDelivery::Foreground) => return Some(Delivery::Foreground),
         Some(crate::window_picker::PickDelivery::PickLost) => return None,
         None => {}
+    }
+
+    // No pick is armed yet and the picker is still open, so this transcript
+    // finished mid-pick. The picker holds the foreground, so delivering now
+    // would type the transcript into AudioBud's own window (#164). Withhold the
+    // keystrokes; the text still reaches the clipboard and history.
+    if crate::window_picker::backend::pick_in_progress(app) {
+        crate::window_picker::backend::announce_pick_in_progress(app);
+        return None;
     }
 
     let Some(pinned) = app.try_state::<PinnedTarget>() else {
@@ -96,7 +141,7 @@ pub fn resolve_paste_target(app: &AppHandle) -> Option<Delivery> {
             // the one held. Falling back to Foreground if it somehow went is
             // wrong -- that is the wrong-app paste this feature prevents.
             match pinned.locked() {
-                Some(identity) => Some(Delivery::Pinned(identity)),
+                Some(identity) => Some(Delivery::Pinned(identity, DeliverySource::Lock)),
                 None => {
                     announce_lock_lost(app);
                     None
@@ -126,6 +171,18 @@ fn announce_lock_lost(app: &AppHandle) {
 /// from the older delivery must not take the newer lock down with it. When the
 /// lock has already moved on, there is nothing to announce -- the lock the user
 /// can see is still good -- but this delivery is abandoned all the same.
+/// Give up on `target` mid-delivery, cleaning up the way its source requires.
+///
+/// A lost lock is cleared and announced as such; a lost one-shot pick announces
+/// itself and leaves the lock alone, because the pick never held one and the
+/// user's separate lock is still perfectly good (#124).
+fn abandon_target(app: &AppHandle, target: WindowIdentity, source: DeliverySource) {
+    match source {
+        DeliverySource::Lock => drop_lock_for(app, target),
+        DeliverySource::Pick => crate::window_picker::backend::announce_pick_lost(app),
+    }
+}
+
 fn drop_lock_for(app: &AppHandle, target: WindowIdentity) {
     let cleared = app
         .try_state::<PinnedTarget>()
@@ -151,12 +208,18 @@ pub fn window_is_alive(locked: WindowIdentity) -> bool {
 pub struct FocusHold<'a> {
     app: &'a AppHandle,
     target: Option<WindowIdentity>,
+    source: DeliverySource,
 }
 
 impl<'a> FocusHold<'a> {
-    /// A hold for `target`, or for the plain foreground path when `None`.
-    pub fn new(app: &'a AppHandle, target: Option<WindowIdentity>) -> Self {
-        Self { app, target }
+    /// A hold for `delivery`: its target, if it has one, and who aimed it there
+    /// so a window lost mid-delivery is cleaned up the right way.
+    pub fn new(app: &'a AppHandle, delivery: Delivery) -> Self {
+        Self {
+            app,
+            target: delivery.target(),
+            source: delivery.source(),
+        }
     }
 
     /// Confirm the next keystroke will reach the intended window.
@@ -171,8 +234,8 @@ impl<'a> FocusHold<'a> {
         };
 
         if !window_is_alive(target) {
-            drop_lock_for(self.app, target);
-            return Err("the locked window closed during delivery".to_string());
+            abandon_target(self.app, target, self.source);
+            return Err("the target window closed during delivery".to_string());
         }
 
         if foreground_is(target) {
@@ -194,10 +257,11 @@ impl<'a> FocusHold<'a> {
 pub fn borrow_focus<T>(
     app: &AppHandle,
     target: WindowIdentity,
+    source: DeliverySource,
     action: impl FnOnce() -> T,
 ) -> Result<Borrowed<T>, String> {
     if !window_is_alive(target) {
-        drop_lock_for(app, target);
+        abandon_target(app, target, source);
         return Ok(Borrowed::Suppressed);
     }
 

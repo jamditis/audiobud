@@ -201,6 +201,10 @@
           "toggle_target_lock": {
             "name": "Atajo para fijar a una ventana",
             "description": "El atajo de teclado que envía tu texto a una sola ventana hasta que la sueltes."
+          },
+          "pick_output_window": {
+            "name": "Atajo para enviar a una ventana",
+            "description": "El atajo de teclado que elige una ventana solo para tu próximo texto."
           }
         },
         "errors": {
@@ -816,7 +820,9 @@
     "transcriptionTimeout": "El motor no respondió después de {{seconds}} segundos y puede estar bloqueado. Reinicia AudioBud si esto sigue ocurriendo.",
     "parakeetInputTooLong": "Esta grabación dura {{duration}}. Parakeet no puede transcribir grabaciones de más de unos 6:30 porque omitiría el audio posterior sin avisar. Usa un modelo Whisper para grabaciones largas.",
     "windowPickLostTitle": "La ventana elegida ya no existe",
-    "windowPickLost": "La ventana que elegiste está cerrada. AudioBud no pegó el texto. Elige otra ventana."
+    "windowPickLost": "La ventana que elegiste está cerrada. AudioBud no pegó el texto. Elige otra ventana.",
+    "pickerOpenTitle": "El selector está abierto",
+    "pickerOpen": "AudioBud no pegó este texto porque el selector de ventanas estaba abierto. Elige una ventana y vuelve a dictar."
   },
   "appLanguage": {
     "title": "Idioma de la aplicación",

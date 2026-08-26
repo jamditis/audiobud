@@ -201,6 +201,10 @@
           "toggle_target_lock": {
             "name": "Raccourci d'épinglage à une fenêtre",
             "description": "Le raccourci clavier qui envoie votre texte vers une seule fenêtre jusqu'à ce que vous la libériez."
+          },
+          "pick_output_window": {
+            "name": "Raccourci d'envoi à une fenêtre",
+            "description": "Le raccourci clavier qui choisit une fenêtre pour votre prochain texte uniquement."
           }
         },
         "errors": {
@@ -816,7 +820,9 @@
     "transcriptionTimeout": "Le moteur n'a pas répondu après {{seconds}} secondes et semble bloqué. Redémarrez AudioBud si cela se reproduit.",
     "parakeetInputTooLong": "Cet enregistrement dure {{duration}}. Parakeet ne peut pas transcrire les enregistrements de plus d'environ 6:30, car la suite de l'audio serait omise sans avertissement. Utilisez un modèle Whisper pour les longs enregistrements.",
     "windowPickLostTitle": "La fenêtre choisie a disparu",
-    "windowPickLost": "La fenêtre que vous avez choisie est fermée. AudioBud n'a pas collé le texte. Choisissez une autre fenêtre."
+    "windowPickLost": "La fenêtre que vous avez choisie est fermée. AudioBud n'a pas collé le texte. Choisissez une autre fenêtre.",
+    "pickerOpenTitle": "Le sélecteur est ouvert",
+    "pickerOpen": "AudioBud n'a pas collé ce texte car le sélecteur de fenêtres était ouvert. Choisissez une fenêtre, puis dictez à nouveau."
   },
   "appLanguage": {
     "title": "Langue de l'application",

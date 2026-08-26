@@ -34,6 +34,9 @@ export const GeneralSettings: React.FC = () => {
         {isWindows && (
           <ShortcutInput shortcutId="toggle_target_lock" grouped={true} />
         )}
+        {isWindows && (
+          <ShortcutInput shortcutId="pick_output_window" grouped={true} />
+        )}
       </SettingsGroup>
       <ModelSettingsCard />
       <SettingsGroup title={t("settings.sound.title")}>

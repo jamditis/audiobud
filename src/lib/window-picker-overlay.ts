@@ -138,6 +138,43 @@ export function chooseAt(state: PickerState, index: number): PickerStep {
 }
 
 /**
+ * The parts of a keydown target this module needs. Structural, not a DOM type,
+ * so the rule below is testable without a document.
+ */
+export interface KeyTarget {
+  readonly tagName?: string;
+  readonly isContentEditable?: boolean;
+}
+
+/** Controls that own their own keyboard behaviour. */
+const INTERACTIVE_TAGS = new Set([
+  "BUTTON",
+  "INPUT",
+  "SELECT",
+  "TEXTAREA",
+  "A",
+]);
+
+/**
+ * Whether a keydown on `target` belongs to the control it landed on rather than
+ * to the picker.
+ *
+ * The picker listens for keys on the window, so a keydown on its own footer
+ * buttons reaches the reducer too. Without this, Enter while "Use current
+ * window" or "Cancel" is focused would arm the HIGHLIGHTED ROW and swallow the
+ * button's activation -- the picker would do something the user did not ask
+ * for. Escape is the one exception: backing out has to work from anywhere,
+ * including a focused button, and no control here does anything else with it.
+ */
+export function targetOwnsKey(target: KeyTarget | null, key: string): boolean {
+  if (key === "Escape" || !target) return false;
+  return (
+    INTERACTIVE_TAGS.has((target.tagName ?? "").toUpperCase()) ||
+    target.isContentEditable === true
+  );
+}
+
+/**
  * Feed one keydown to the overlay. `key` is a KeyboardEvent.key. Returns either
  * the next state (the overlay stays open) or the gesture that ends the pick:
  * - ArrowDown / ArrowUp: move the highlight, wrapping.

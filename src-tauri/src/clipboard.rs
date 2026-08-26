@@ -754,13 +754,7 @@ fn deliver_to_target(
         .lock()
         .map_err(|e| format!("Failed to lock Enigo: {}", e))?;
 
-    let hold = FocusHold::new(
-        app_handle,
-        match delivery {
-            Delivery::Foreground => None,
-            Delivery::Pinned(identity) => Some(identity),
-        },
-    );
+    let hold = FocusHold::new(app_handle, delivery);
 
     // The paste itself, unchanged whichever window it lands in. A pinned target
     // runs it inside a focus borrow; `hold.ensure()` re-checks the target at
@@ -813,11 +807,12 @@ fn deliver_to_target(
 
     let outcome = match delivery {
         Delivery::Foreground => deliver(&mut enigo),
-        Delivery::Pinned(identity) => {
-            match target_backend::borrow_focus(app_handle, identity, || deliver(&mut enigo)) {
+        Delivery::Pinned(identity, source) => {
+            match target_backend::borrow_focus(app_handle, identity, source, || deliver(&mut enigo))
+            {
                 Ok(Borrowed::Delivered(result)) => result,
                 // The window died between resolving it and activating it, so
-                // nothing was typed and the lock is already dropped.
+                // nothing was typed and the pick or lock is already cleaned up.
                 Ok(Borrowed::Suppressed) => {
                     return Ok(false);
                 }

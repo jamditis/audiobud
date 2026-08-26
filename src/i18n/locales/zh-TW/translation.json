@@ -201,6 +201,10 @@
           "toggle_target_lock": {
             "name": "鎖定至視窗快速鍵",
             "description": "在您解除鎖定之前，將文字傳送至單一視窗的鍵盤快速鍵。"
+          },
+          "pick_output_window": {
+            "name": "傳送到視窗的快速鍵",
+            "description": "為下一段文字選擇視窗的鍵盤快速鍵。"
           }
         },
         "errors": {
@@ -816,7 +820,9 @@
     "transcriptionTimeout": "引擎在 {{seconds}} 秒後仍未回應，可能已卡住。如果持續發生，請重新啟動 AudioBud。",
     "parakeetInputTooLong": "這段錄音長度為 {{duration}}。Parakeet 無法轉錄超過約 6:30 的錄音，之後的音訊會在沒有提示的情況下被省略。長錄音請使用 Whisper 模型。",
     "windowPickLostTitle": "所選視窗已不存在",
-    "windowPickLost": "你選擇的視窗已關閉。AudioBud 沒有貼上文字。請重新選擇視窗。"
+    "windowPickLost": "你選擇的視窗已關閉。AudioBud 沒有貼上文字。請重新選擇視窗。",
+    "pickerOpenTitle": "視窗選擇器已開啟",
+    "pickerOpen": "視窗選擇器處於開啟狀態，AudioBud 沒有貼上這段文字。請先選擇視窗，然後重新口述。"
   },
   "appLanguage": {
     "title": "應用程式語言",

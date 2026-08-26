@@ -148,13 +148,53 @@ pub struct PickerWindow {
     pub label: String,
 }
 
-/// Shape the offered candidates into the rows the overlay renders.
-pub fn offer_rows(candidates: &[WindowCandidate]) -> Vec<PickerWindow> {
+/// A candidate together with the identity it had WHEN IT WAS OFFERED.
+///
+/// The identity is captured during enumeration, not when the user clicks. A
+/// window can close in between and Windows can hand its `HWND` to an unrelated
+/// new window, so identifying the handle at click time would happily capture the
+/// impostor and every later liveness check would agree with it. Holding the
+/// enumeration-time identity lets [`arm_pick`] demand that the window on the
+/// other end of the handle is still the one the user was shown (#254).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OfferedWindow {
+    pub candidate: WindowCandidate,
+    pub identity: WindowIdentity,
+}
+
+/// Pair each candidate with the identity enumeration read for it, dropping any
+/// candidate whose identity is missing -- a window that went between the two
+/// reads, which must not be offered.
+pub fn offered_windows(
+    candidates: Vec<WindowCandidate>,
+    identities: &[WindowIdentity],
+) -> Vec<OfferedWindow> {
     candidates
+        .into_iter()
+        .filter_map(|candidate| {
+            identities
+                .iter()
+                .find(|i| i.handle == candidate.handle)
+                .map(|identity| OfferedWindow {
+                    candidate,
+                    identity: *identity,
+                })
+        })
+        .collect()
+}
+
+/// The candidates behind the offered rows, for [`resolve_gesture`].
+pub fn offered_candidates(offered: &[OfferedWindow]) -> Vec<WindowCandidate> {
+    offered.iter().map(|o| o.candidate.clone()).collect()
+}
+
+/// Shape the offered rows for the overlay to render.
+pub fn offer_rows(offered: &[OfferedWindow]) -> Vec<PickerWindow> {
+    offered
         .iter()
-        .map(|c| PickerWindow {
-            handle: handle_id(c.handle),
-            label: c.label(),
+        .map(|o| PickerWindow {
+            handle: handle_id(o.candidate.handle),
+            label: o.candidate.label(),
         })
         .collect()
 }
@@ -201,21 +241,38 @@ pub enum PickArmed {
     Cancelled,
 }
 
-/// Turn a resolved [`PickOutcome`] into the state to arm, resolving the chosen
-/// handle's full identity through `identify` (on Windows the owning process and
-/// thread, so a recycled handle is caught later -- #254). A window that has
-/// closed between the offer and the click cannot be identified, so it arms
-/// nothing rather than a handle the OS may hand to someone else.
+/// Turn a resolved [`PickOutcome`] into the route to arm.
+///
+/// A chosen window is honored only when the handle STILL BELONGS TO THE WINDOW
+/// THAT WAS OFFERED: `identify` reads the owner now, and it must match the
+/// identity enumeration recorded for that row. A window that closed under the
+/// user's click fails that test, and so does one whose handle Windows has
+/// already recycled into another application -- the case a click-time capture
+/// would wave through, because the impostor is perfectly alive (#254). Either
+/// way the pick is refused rather than pointed at a window the user never saw.
+///
+/// An explicit foreground send arms a route too, not nothing: it has to survive
+/// as a pending state so it can override a target lock for this one transcript,
+/// which is what the user asked for by choosing "use the current window".
 pub fn arm_pick(
     outcome: PickOutcome,
+    offered: &[OfferedWindow],
     identify: impl FnOnce(WindowHandle) -> Option<WindowIdentity>,
-) -> (PickArmed, Option<WindowIdentity>) {
+) -> (PickArmed, Option<PendingRoute>) {
     match outcome.delivery_target() {
-        Some(OutputTarget::Pinned(handle)) => match identify(handle) {
-            Some(identity) => (PickArmed::Window, Some(identity)),
-            None => (PickArmed::Cancelled, None),
-        },
-        Some(OutputTarget::Foreground) => (PickArmed::Foreground, None),
+        Some(OutputTarget::Pinned(handle)) => {
+            let offered_identity = offered
+                .iter()
+                .find(|o| o.candidate.handle == handle)
+                .map(|o| o.identity);
+            match (offered_identity, identify(handle)) {
+                (Some(offered), Some(current)) if offered == current => {
+                    (PickArmed::Window, Some(PendingRoute::Window(current)))
+                }
+                _ => (PickArmed::Cancelled, None),
+            }
+        }
+        Some(OutputTarget::Foreground) => (PickArmed::Foreground, Some(PendingRoute::Foreground)),
         None => (PickArmed::Cancelled, None),
     }
 }
@@ -225,17 +282,24 @@ pub fn arm_pick(
 /// which is what keeps [`resolve_gesture`] able to reject a handle that was
 /// never presented.
 #[derive(Default)]
-pub struct PickerSession(Mutex<Vec<WindowCandidate>>);
+pub struct PickerSession(Mutex<Vec<OfferedWindow>>);
 
 impl PickerSession {
     /// Record the rows now on offer, replacing any earlier ones.
-    pub fn offer(&self, candidates: Vec<WindowCandidate>) {
-        *self.guard() = candidates;
+    pub fn offer(&self, offered: Vec<OfferedWindow>) {
+        *self.guard() = offered;
     }
 
-    /// The rows currently on offer.
-    pub fn offered(&self) -> Vec<WindowCandidate> {
+    /// The rows currently on offer, each with the identity it was offered with.
+    pub fn offered(&self) -> Vec<OfferedWindow> {
         self.guard().clone()
+    }
+
+    /// Whether a pick is in progress. A finishing transcript must not be pasted
+    /// while it is: the picker holds the foreground, so the paste would land in
+    /// AudioBud's own window (#164).
+    pub fn is_open(&self) -> bool {
+        !self.guard().is_empty()
     }
 
     /// Forget the offer once the pick has ended, so a late gesture cannot be
@@ -244,11 +308,26 @@ impl PickerSession {
         self.guard().clear();
     }
 
-    fn guard(&self) -> MutexGuard<'_, Vec<WindowCandidate>> {
+    fn guard(&self) -> MutexGuard<'_, Vec<OfferedWindow>> {
         self.0
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
+}
+
+/// What one pick armed for the next transcript.
+///
+/// The foreground is a route in its own right, not the absence of one. A user
+/// who picks "use the current window" while a target lock is held is asking for
+/// THIS transcript to escape the lock; representing that as "nothing armed"
+/// would drop it straight back into the locked window (#120).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PendingRoute {
+    /// Send the next transcript to this window.
+    Window(WindowIdentity),
+    /// Send the next transcript to whatever holds the foreground, overriding any
+    /// lock for that one transcript.
+    Foreground,
 }
 
 /// Where a pending one-shot pick sends the paste about to fire.
@@ -258,6 +337,8 @@ pub enum PickDelivery {
     /// identity, not just the handle, because every later step of the delivery
     /// re-checks it (#254).
     Deliver(WindowIdentity),
+    /// Deliver this transcript to the foreground window, ignoring any lock.
+    Foreground,
     /// The picked window is gone. SUPPRESS the paste, exactly as a lost lock
     /// does ([`crate::output_target::Resolved::LockLost`]): a recycled handle
     /// must never receive the transcript (#254).
@@ -270,12 +351,12 @@ pub enum PickDelivery {
 /// stored, not just the handle, so the paste path can re-run the shared identity
 /// check before typing anything (#254).
 #[derive(Default)]
-pub struct PendingPick(Mutex<Option<WindowIdentity>>);
+pub struct PendingPick(Mutex<Option<PendingRoute>>);
 
 impl PendingPick {
-    /// Route the next transcript to `window`, replacing any earlier pick.
-    pub fn arm(&self, window: WindowIdentity) {
-        *self.guard() = Some(window);
+    /// Route the next transcript along `route`, replacing any earlier pick.
+    pub fn arm(&self, route: PendingRoute) {
+        *self.guard() = Some(route);
     }
 
     /// Drop any pending pick, so the next transcript follows the usual rules.
@@ -299,17 +380,21 @@ impl PendingPick {
         &self,
         is_alive: impl FnOnce(WindowIdentity) -> bool,
     ) -> Option<PickDelivery> {
-        let picked = self.guard().take()?;
-        Some(if is_alive(picked) {
-            PickDelivery::Deliver(picked)
-        } else {
-            PickDelivery::PickLost
+        Some(match self.guard().take()? {
+            PendingRoute::Foreground => PickDelivery::Foreground,
+            PendingRoute::Window(picked) => {
+                if is_alive(picked) {
+                    PickDelivery::Deliver(picked)
+                } else {
+                    PickDelivery::PickLost
+                }
+            }
         })
     }
 
     /// Borrow the pick, recovering the guard if a previous holder panicked --
     /// same reasoning as [`LastPick::guard`].
-    fn guard(&self) -> MutexGuard<'_, Option<WindowIdentity>> {
+    fn guard(&self) -> MutexGuard<'_, Option<PendingRoute>> {
         self.0
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
@@ -415,15 +500,28 @@ impl LastPick {
     /// forget it rather than keep pointing at a gone handle. A no-op when nothing
     /// is remembered or it is already first.
     pub fn promote_to_front(&self, candidates: &mut Vec<WindowCandidate>) {
+        self.promote(candidates, |c| c.handle);
+    }
+
+    /// [`LastPick::promote_to_front`] for the rows the backend actually offers,
+    /// which carry their enumeration-time identity alongside the candidate.
+    pub fn promote_offered(&self, offered: &mut Vec<OfferedWindow>) {
+        self.promote(offered, |o| o.candidate.handle);
+    }
+
+    /// Shared body of the two promotions above, over anything that can name its
+    /// window handle, so the "remembered but no longer offered means forget it"
+    /// rule lives in one place.
+    fn promote<T>(&self, items: &mut Vec<T>, handle_of: impl Fn(&T) -> WindowHandle) {
         let mut guard = self.guard();
         let Some(remembered) = *guard else {
             return;
         };
-        match candidates.iter().position(|c| c.handle == remembered) {
+        match items.iter().position(|item| handle_of(item) == remembered) {
             Some(0) => {}
             Some(i) => {
-                let c = candidates.remove(i);
-                candidates.insert(0, c);
+                let item = items.remove(i);
+                items.insert(0, item);
             }
             None => *guard = None,
         }
@@ -595,6 +693,21 @@ mod tests {
     }
 
     #[test]
+    fn promote_offered_moves_the_remembered_row_to_the_front() {
+        let last = LastPick::default();
+        last.remember(WindowHandle(2));
+        let mut offered = offer(vec![
+            raw(1, "First", None, true),
+            raw(2, "Second", None, true),
+            raw(3, "Third", None, true),
+        ]);
+        last.promote_offered(&mut offered);
+        assert_eq!(offered[0].candidate.handle, WindowHandle(2));
+        assert_eq!(offered[0].identity.handle, WindowHandle(2));
+        assert_eq!(offered[1].candidate.handle, WindowHandle(1));
+    }
+
+    #[test]
     fn promote_forgets_a_pick_no_longer_offered() {
         let last = LastPick::default();
         last.remember(WindowHandle(9));
@@ -650,15 +763,22 @@ mod tests {
         }
     }
 
+    /// The rows the backend would offer for `raws`, with each window's identity
+    /// as enumeration read it (process and thread stand in for the real ones).
+    fn offer(raws: Vec<RawWindow>) -> Vec<OfferedWindow> {
+        let identities: Vec<WindowIdentity> = raws
+            .iter()
+            .map(|w| identity(w.handle.0, 100, 200))
+            .collect();
+        offered_windows(visible_candidates(raws, &[]), &identities)
+    }
+
     #[test]
     fn rows_carry_the_backend_label_and_a_string_handle() {
-        let offered = visible_candidates(
-            vec![
-                raw(9_007_199_254_740_993, "notes.txt", Some("TextEdit"), true),
-                raw(2, "Terminal", None, true),
-            ],
-            &[],
-        );
+        let offered = offer(vec![
+            raw(9_007_199_254_740_993, "notes.txt", Some("TextEdit"), true),
+            raw(2, "Terminal", None, true),
+        ]);
         let rows = offer_rows(&offered);
         assert_eq!(rows[0].handle, "9007199254740993");
         assert_eq!(rows[0].label, "TextEdit: notes.txt");
@@ -713,37 +833,83 @@ mod tests {
     }
 
     #[test]
-    fn arming_a_chosen_window_records_its_full_identity() {
-        let picked = identity(7, 100, 200);
+    fn arming_a_chosen_window_records_the_identity_it_was_offered_with() {
+        let offered = offer(vec![raw(7, "Mail", Some("Mail"), true)]);
+        let picked = offered[0].identity;
         let armed = arm_pick(
             PickOutcome::DeliverOnce(OutputTarget::Pinned(WindowHandle(7))),
+            &offered,
             |h| {
                 assert_eq!(h, WindowHandle(7));
                 Some(picked)
             },
         );
-        assert_eq!(armed, (PickArmed::Window, Some(picked)));
+        assert_eq!(
+            armed,
+            (PickArmed::Window, Some(PendingRoute::Window(picked)))
+        );
     }
 
     #[test]
     fn arming_a_window_that_died_between_offer_and_click_arms_nothing() {
+        let offered = offer(vec![raw(7, "Mail", Some("Mail"), true)]);
         let armed = arm_pick(
             PickOutcome::DeliverOnce(OutputTarget::Pinned(WindowHandle(7))),
+            &offered,
             |_| None,
         );
         assert_eq!(armed, (PickArmed::Cancelled, None));
     }
 
     #[test]
-    fn arming_foreground_or_cancel_arms_no_window() {
+    fn arming_refuses_a_handle_recycled_since_it_was_offered() {
+        // The click-time owner is alive and would pass every later liveness
+        // check -- but it is a different window wearing the offered window's
+        // handle (#254). Only the identity captured at enumeration can catch it.
+        let offered = offer(vec![raw(7, "Mail", Some("Mail"), true)]);
+        let impostor = identity(7, 999, 200);
+        assert_ne!(offered[0].identity, impostor);
         assert_eq!(
-            arm_pick(PickOutcome::DeliverOnce(OutputTarget::Foreground), |_| {
-                panic!("foreground needs no identity")
-            }),
-            (PickArmed::Foreground, None)
+            arm_pick(
+                PickOutcome::DeliverOnce(OutputTarget::Pinned(WindowHandle(7))),
+                &offered,
+                |_| Some(impostor),
+            ),
+            (PickArmed::Cancelled, None)
         );
+    }
+
+    #[test]
+    fn arming_refuses_a_handle_that_was_never_offered() {
+        let offered = offer(vec![raw(7, "Mail", Some("Mail"), true)]);
         assert_eq!(
-            arm_pick(PickOutcome::Cancel, |_| panic!(
+            arm_pick(
+                PickOutcome::DeliverOnce(OutputTarget::Pinned(WindowHandle(8))),
+                &offered,
+                |_| Some(identity(8, 100, 200)),
+            ),
+            (PickArmed::Cancelled, None)
+        );
+    }
+
+    #[test]
+    fn arming_foreground_arms_a_route_of_its_own() {
+        // Not "nothing armed": the foreground send has to outrank a target lock
+        // for this one transcript, which only a pending route can do.
+        assert_eq!(
+            arm_pick(
+                PickOutcome::DeliverOnce(OutputTarget::Foreground),
+                &[],
+                |_| panic!("foreground needs no identity"),
+            ),
+            (PickArmed::Foreground, Some(PendingRoute::Foreground))
+        );
+    }
+
+    #[test]
+    fn arming_a_cancelled_pick_arms_nothing() {
+        assert_eq!(
+            arm_pick(PickOutcome::Cancel, &[], |_| panic!(
                 "a cancelled pick needs no identity"
             )),
             (PickArmed::Cancelled, None)
@@ -751,16 +917,35 @@ mod tests {
     }
 
     #[test]
+    fn offered_windows_drop_a_candidate_with_no_identity() {
+        // Enumeration read the window, then it closed before its identity could
+        // be taken. Offering it would hand out a handle with nothing behind it.
+        let candidates = visible_candidates(
+            vec![raw(1, "Mail", None, true), raw(2, "Notes", None, true)],
+            &[],
+        );
+        let offered = offered_windows(candidates, &[identity(1, 100, 200)]);
+        assert_eq!(offered.len(), 1);
+        assert_eq!(offered[0].candidate.handle, WindowHandle(1));
+    }
+
+    #[test]
     fn a_session_offers_then_forgets_its_rows() {
         let session = PickerSession::default();
         assert!(session.offered().is_empty());
-        let offered = visible_candidates(vec![raw(1, "Mail", None, true)], &[]);
+        assert!(!session.is_open());
+        let offered = offer(vec![raw(1, "Mail", None, true)]);
         session.offer(offered.clone());
         assert_eq!(session.offered(), offered);
+        assert!(session.is_open());
         session.clear();
+        assert!(!session.is_open());
         // A late gesture now resolves against nothing, so it cannot pick.
         assert_eq!(
-            resolve_gesture(PickGesture::Chose(WindowHandle(1)), &session.offered()),
+            resolve_gesture(
+                PickGesture::Chose(WindowHandle(1)),
+                &offered_candidates(&session.offered()),
+            ),
             PickOutcome::Cancel
         );
     }
@@ -773,7 +958,7 @@ mod tests {
         assert_eq!(pending.take_resolved(|_| panic!("no pick to check")), None);
 
         let picked = identity(7, 100, 200);
-        pending.arm(picked);
+        pending.arm(PendingRoute::Window(picked));
         assert!(pending.is_armed());
         assert_eq!(
             pending.take_resolved(|w| {
@@ -790,7 +975,7 @@ mod tests {
     #[test]
     fn a_picked_window_that_closed_suppresses_the_paste() {
         let pending = PendingPick::default();
-        pending.arm(identity(7, 100, 200));
+        pending.arm(PendingRoute::Window(identity(7, 100, 200)));
         // Same fail-safe as a lost lock: never fall back to the foreground.
         assert_eq!(
             pending.take_resolved(|_| false),
@@ -805,16 +990,32 @@ mod tests {
         // window again, but a different process owns it now.
         let pending = PendingPick::default();
         let picked = identity(7, 100, 200);
-        pending.arm(picked);
+        pending.arm(PendingRoute::Window(picked));
         let delivery = pending
             .take_resolved(|w| crate::output_target::identity_is_alive(w, |_| Some((999, 200))));
         assert_eq!(delivery, Some(PickDelivery::PickLost));
     }
 
     #[test]
+    fn a_foreground_pick_overrides_a_lock_for_exactly_one_transcript() {
+        // The user picked "use the current window" while a lock was held, so
+        // this transcript must escape the lock -- and only this one.
+        let pending = PendingPick::default();
+        pending.arm(PendingRoute::Foreground);
+        assert!(pending.is_armed());
+        assert_eq!(
+            pending.take_resolved(|_| panic!("the foreground has no identity to check")),
+            Some(PickDelivery::Foreground)
+        );
+        assert!(!pending.is_armed());
+        // The next transcript follows the usual rules again, lock included.
+        assert_eq!(pending.take_resolved(|_| true), None);
+    }
+
+    #[test]
     fn clearing_a_pending_pick_returns_to_the_usual_target() {
         let pending = PendingPick::default();
-        pending.arm(identity(7, 100, 200));
+        pending.arm(PendingRoute::Window(identity(7, 100, 200)));
         pending.clear();
         assert!(!pending.is_armed());
         assert_eq!(pending.take_resolved(|_| panic!("no pick to check")), None);

@@ -206,6 +206,20 @@ function App() {
     };
   }, [t]);
 
+  // Listen for a transcript that finished while the window picker was open
+  // (issue #124). The picker holds the foreground, so pasting would have typed
+  // into AudioBud itself; the text was withheld instead.
+  useEffect(() => {
+    const unlisten = listen("window-pick-in-progress", () => {
+      toast.warning(t("errors.pickerOpenTitle"), {
+        description: t("errors.pickerOpen"),
+      });
+    });
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, [t]);
+
   // Listen for transcription watchdog timeouts (wedged engine, issue #58)
   // and show a toast. The Rust side has already recovered the overlay/tray.
   useEffect(() => {

@@ -25,8 +25,9 @@ use crate::output_target::backend as target_backend;
 use crate::output_target::{WindowHandle, WindowIdentity};
 
 use super::{
-    arm_pick, offer_rows, resolve_gesture, visible_candidates, LastPick, PendingPick, PickArmed,
-    PickDelivery, PickerGesture, PickerSession, PickerWindow, RawWindow,
+    arm_pick, offer_rows, offered_candidates, resolve_gesture, visible_candidates, LastPick,
+    OfferedWindow, PendingPick, PendingRoute, PickArmed, PickDelivery, PickerGesture,
+    PickerSession, PickerWindow, RawWindow,
 };
 
 /// The picker window's Tauri label.
@@ -36,6 +37,11 @@ pub const PICKER_WINDOW: &str = "window_picker";
 /// the paste was suppressed rather than sent to whatever inherited the handle
 /// (#254). The frontend turns this into a brief notice.
 pub const WINDOW_PICK_LOST_EVENT: &str = "window-pick-lost";
+
+/// Emitted when a transcript finished while the picker was open, so it was not
+/// pasted: the picker holds the foreground, and a foreground paste would land in
+/// AudioBud's own window (#164).
+pub const PICKER_OPEN_EVENT: &str = "window-pick-in-progress";
 
 const PICKER_WIDTH: f64 = 420.0;
 const PICKER_HEIGHT: f64 = 360.0;
@@ -97,17 +103,20 @@ pub fn close_picker(app: &AppHandle) {
 /// the last pick to row 0 so a repeat route is a single confirm, and records the
 /// result as the session's offer so a gesture is only ever resolved against the
 /// rows the user actually saw.
-pub fn offered_windows(app: &AppHandle) -> Vec<PickerWindow> {
-    let (raw, own) = enumerate_windows();
-    let mut candidates = visible_candidates(raw, &own);
+pub fn offered_rows(app: &AppHandle) -> Vec<PickerWindow> {
+    let enumerated = enumerate_windows();
+    let candidates = visible_candidates(enumerated.windows, &enumerated.excluded);
+    // Each row keeps the identity enumeration read for it, so a pick can demand
+    // that the handle still belongs to the window the user was shown (#254).
+    let mut offered = super::offered_windows(candidates, &enumerated.identities);
 
     if let Some(last) = app.try_state::<LastPick>() {
-        last.promote_to_front(&mut candidates);
+        last.promote_offered(&mut offered);
     }
 
-    let rows = offer_rows(&candidates);
+    let rows = offer_rows(&offered);
     if let Some(session) = app.try_state::<PickerSession>() {
-        session.offer(candidates);
+        session.offer(offered);
     }
     rows
 }
@@ -119,43 +128,77 @@ pub fn offered_windows(app: &AppHandle) -> Vec<PickerWindow> {
 /// (#254), and the picker closes either way. Nothing here creates a lasting
 /// lock: the armed pick routes one transcript and is then forgotten.
 pub fn resolve_pick(app: &AppHandle, gesture: PickerGesture) -> PickArmed {
-    let offered = app
+    let offered: Vec<OfferedWindow> = app
         .try_state::<PickerSession>()
         .map(|session| session.offered())
         .unwrap_or_default();
 
-    let outcome = resolve_gesture(gesture.to_gesture(), &offered);
-    let (armed, window) = arm_pick(outcome, identify_window);
+    let outcome = resolve_gesture(gesture.to_gesture(), &offered_candidates(&offered));
+    let (armed, route) = arm_pick(outcome, &offered, identify_window);
 
     if let Some(pending) = app.try_state::<PendingPick>() {
-        match window {
-            Some(identity) => pending.arm(identity),
-            // A dismissal, a foreground send, or a window that closed under the
-            // user's click all clear any earlier pick rather than leave one
-            // armed that the user did not just confirm.
+        match route {
+            // A foreground send is armed too, so it outranks a target lock for
+            // this one transcript (#120).
+            Some(route) => pending.arm(route),
+            // A dismissal, or a window that closed or was recycled under the
+            // user's click, clears any earlier pick rather than leave one armed
+            // that the user did not just confirm.
             None => pending.clear(),
         }
     }
 
-    if let (Some(last), Some(identity)) = (app.try_state::<LastPick>(), window) {
-        last.remember(identity.handle);
+    if let (Some(last), Some(PendingRoute::Window(window))) = (app.try_state::<LastPick>(), route) {
+        last.remember(window.handle);
     }
 
     if let Some(session) = app.try_state::<PickerSession>() {
         session.clear();
     }
 
-    match armed {
-        PickArmed::Window => info!(
-            "Next transcript goes to window {:#x}",
-            window.map(|w| w.handle.0).unwrap_or_default()
-        ),
-        PickArmed::Foreground => info!("Next transcript follows the foreground"),
-        PickArmed::Cancelled => info!("Window pick cancelled; nothing was armed"),
+    match route {
+        Some(PendingRoute::Window(window)) => {
+            info!("Next transcript goes to window {:#x}", window.handle.0)
+        }
+        Some(PendingRoute::Foreground) => {
+            info!("Next transcript follows the foreground, whatever is locked")
+        }
+        None => info!("Window pick cancelled; nothing was armed"),
     }
 
     close_picker(app);
     armed
+}
+
+/// Whether a pick is in progress, so the paste path can hold off (#164).
+///
+/// The picker window itself is the authority: it holds the foreground for as
+/// long as it is up, including when it offered no rows at all. The session is
+/// checked too, for the moment between resolving a pick and the window closing.
+pub fn pick_in_progress(app: &AppHandle) -> bool {
+    app.get_webview_window(PICKER_WINDOW).is_some()
+        || app
+            .try_state::<PickerSession>()
+            .is_some_and(|session| session.is_open())
+}
+
+/// Tell the user a transcript was not pasted because the picker was open, and
+/// say so in the log. The transcript still reaches the clipboard and history;
+/// only the keystrokes are withheld.
+pub fn announce_pick_in_progress(app: &AppHandle) {
+    warn!("The window picker is open; the transcript was not pasted");
+    let _ = app.emit(PICKER_OPEN_EVENT, ());
+}
+
+/// Tell the user a picked window went away mid-delivery.
+///
+/// The lock's own cleanup is deliberately NOT reused here: a one-shot pick holds
+/// no lock, so clearing [`crate::output_target::PinnedTarget`] would take down a
+/// lock the user set separately and is still relying on, and the "locked window
+/// is gone" notice would be a lie.
+pub fn announce_pick_lost(app: &AppHandle) {
+    warn!("The picked window is gone; the transcript was not pasted");
+    let _ = app.emit(WINDOW_PICK_LOST_EVENT, ());
 }
 
 /// Consume a pending one-shot pick for the paste about to fire.
@@ -169,8 +212,7 @@ pub fn take_pick_target(app: &AppHandle) -> Option<PickDelivery> {
     let delivery = pending.take_resolved(target_backend::window_is_alive)?;
 
     if delivery == PickDelivery::PickLost {
-        warn!("The picked window is gone; the transcript was not pasted");
-        let _ = app.emit(WINDOW_PICK_LOST_EVENT, ());
+        announce_pick_lost(app);
     }
 
     Some(delivery)
@@ -188,8 +230,19 @@ fn identify_window(handle: WindowHandle) -> Option<WindowIdentity> {
     })
 }
 
-/// Every top-level window worth offering, plus the handles of the ones the
-/// shared eligibility rule rejected, which [`visible_candidates`] excludes.
+/// One pass of the OS window list.
+#[derive(Default)]
+pub struct Enumerated {
+    /// The windows worth offering.
+    pub windows: Vec<RawWindow>,
+    /// Their identities AS READ DURING THIS PASS, one per window. A pick is
+    /// honored only if the handle still carries the same identity later (#254).
+    pub identities: Vec<WindowIdentity>,
+    /// Handles the shared eligibility rule rejected, for [`visible_candidates`]
+    /// to exclude as well.
+    pub excluded: Vec<WindowHandle>,
+}
+
 #[cfg(windows)]
 pub use imp::enumerate_windows;
 
@@ -198,7 +251,7 @@ pub use fallback::enumerate_windows;
 
 #[cfg(windows)]
 mod imp {
-    use super::{identify_window, RawWindow, WindowHandle};
+    use super::{identify_window, Enumerated, RawWindow, WindowHandle};
     use crate::output_target::{is_eligible_target, WindowFacts};
     // BOOL lives in windows::core in windows 0.61, not in Win32::Foundation
     // where the docs file it.
@@ -212,32 +265,24 @@ mod imp {
         EnumWindows, GetClassNameW, GetWindowTextLengthW, GetWindowTextW, IsWindowVisible,
     };
 
-    /// What the enumeration callback collects: the offerable windows and the
-    /// handles of the ineligible ones -- AudioBud's own (#164) and the shell's
-    /// surfaces -- which the core filter excludes.
-    #[derive(Default)]
-    struct Collected {
-        windows: Vec<RawWindow>,
-        excluded: Vec<WindowHandle>,
-    }
-
     /// Walk the top-level windows with `EnumWindows`, reading each one's title,
-    /// visibility and owning application. Filtering is left to the core's
-    /// [`super::visible_candidates`] so the rules stay in one tested place.
-    pub fn enumerate_windows() -> (Vec<RawWindow>, Vec<WindowHandle>) {
-        let mut collected = Collected::default();
-        let lparam = LPARAM(&mut collected as *mut Collected as isize);
+    /// visibility, owning application AND identity. Filtering is left to the
+    /// core's [`super::visible_candidates`] so the rules stay in one tested
+    /// place.
+    pub fn enumerate_windows() -> Enumerated {
+        let mut collected = Enumerated::default();
+        let lparam = LPARAM(&mut collected as *mut Enumerated as isize);
         // A failed enumeration is not fatal: the picker shows its empty state.
         if let Err(e) = unsafe { EnumWindows(Some(collect), lparam) } {
             log::warn!("Could not enumerate windows for the picker: {}", e);
         }
-        (collected.windows, collected.excluded)
+        collected
     }
 
     unsafe extern "system" fn collect(hwnd: HWND, lparam: LPARAM) -> BOOL {
-        // Safety: `lparam` is the `Collected` this call passed to EnumWindows,
+        // Safety: `lparam` is the `Enumerated` this call passed to EnumWindows,
         // which outlives the enumeration and is not shared with another thread.
-        let collected = &mut *(lparam.0 as *mut Collected);
+        let collected = &mut *(lparam.0 as *mut Enumerated);
         let handle = WindowHandle(hwnd.0 as isize);
 
         // A window whose identity cannot be read has already closed.
@@ -268,6 +313,7 @@ mod imp {
             app: app_name(identity.process_id),
             visible,
         });
+        collected.identities.push(identity);
         TRUE
     }
 
@@ -330,11 +376,11 @@ mod imp {
 
 #[cfg(not(windows))]
 mod fallback {
-    use super::{RawWindow, WindowHandle};
+    use super::Enumerated;
 
     /// No window enumeration on this platform yet (#119). An empty list makes
     /// the picker show its empty state rather than offer rows it cannot honor.
-    pub fn enumerate_windows() -> (Vec<RawWindow>, Vec<WindowHandle>) {
-        (Vec::new(), Vec::new())
+    pub fn enumerate_windows() -> Enumerated {
+        Enumerated::default()
     }
 }

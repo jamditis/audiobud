@@ -201,6 +201,10 @@
           "toggle_target_lock": {
             "name": "Kurzbefehl zum Fixieren auf ein Fenster",
             "description": "Der Kurzbefehl, der Ihren Text an ein Fenster sendet, bis Sie die Fixierung aufheben."
+          },
+          "pick_output_window": {
+            "name": "Kurzbefehl „An Fenster senden“",
+            "description": "Der Kurzbefehl, der nur für deinen nächsten Text ein Fenster wählt."
           }
         },
         "errors": {
@@ -816,7 +820,9 @@
     "transcriptionTimeout": "Die Engine hat nach {{seconds}} Sekunden nicht reagiert und hängt möglicherweise. Starte AudioBud neu, wenn das häufiger vorkommt.",
     "parakeetInputTooLong": "Diese Aufnahme ist {{duration}} lang. Parakeet kann Aufnahmen über etwa 6:30 nicht transkribieren, da späteres Audio unbemerkt ausgelassen würde. Verwende für lange Aufnahmen ein Whisper-Modell.",
     "windowPickLostTitle": "Gewähltes Fenster ist weg",
-    "windowPickLost": "Das gewählte Fenster ist geschlossen. AudioBud hat den Text nicht eingefügt. Wähle erneut ein Fenster."
+    "windowPickLost": "Das gewählte Fenster ist geschlossen. AudioBud hat den Text nicht eingefügt. Wähle erneut ein Fenster.",
+    "pickerOpenTitle": "Fensterauswahl ist offen",
+    "pickerOpen": "AudioBud hat diesen Text nicht eingefügt, weil die Fensterauswahl offen war. Wähle ein Fenster und diktiere erneut."
   },
   "appLanguage": {
     "title": "Anwendungssprache",
