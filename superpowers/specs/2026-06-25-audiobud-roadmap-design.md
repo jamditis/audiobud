@@ -11,7 +11,7 @@
 
 This spec defines AudioBud's release roadmap and a public roadmap page on the GitHub Pages site. It turns the backlog into a sequence of versioned milestones and publishes that sequence as `docs/roadmap.html`, styled to the frog/swamp brand.
 
-The original 2026-06-25 plan proposed seven numbered milestones (v0.3.0 through v0.7.0, plus v1.0.0). Real work changed that sequence: a release-integrity milestone (v0.4.1) was inserted that the original plan did not anticipate, the stability/reliability milestone moved from v0.5.0 to v0.8.0, and v0.5.0 was reassigned to output routing and window targeting. The **"Milestone breakdown"** section below describes the milestones as they exist on GitHub today. The **"Original plan (2026-06-25) and how it diverged"** section keeps the original reasoning for reference, marked against what actually happened.
+The original 2026-06-25 plan proposed seven numbered milestones (v0.3.0 through v0.7.0, plus v1.0.0). Real work changed that sequence: a release-integrity milestone (v0.4.1) was inserted that the original plan did not anticipate, the stability/reliability milestone moved from v0.5.0 to v0.8.0, and v0.5.0 was reassigned to output routing and window targeting. The **"Milestone breakdown"** section below describes the milestones as they exist on GitHub today. The **"Original plan (2026-06-25) and how it diverged"** section keeps the original reasoning for reference, marked against what actually happened, and the **"Original research findings (2026-06-25, preserved)"** section keeps the four research scans that grounded that reasoning.
 
 ## Organizing principle
 
@@ -56,7 +56,7 @@ Pin dictation output to a window the user chose, and keep working somewhere else
 - #259 — wire the one-shot picker end to end: enumerate windows, render the overlay, deliver the pick.
 - #228 (closed) — produce and host the Microsoft Store candidate MSI. Housekeeping riding along in this milestone rather than feature work.
 
-**No design spec exists yet for output routing.** Issue #197 flags this: 14 issues carry the feature with no shared design document behind them. Writing that spec is separate follow-up work, not part of this roadmap revision.
+**No design spec exists yet for output routing.** Issue #197 flags this: at filing time (before #254, #255, and #259 were added to the milestone), 14 issues carried the feature with no shared design document behind them. As of this revision (2026-08-26), the milestone carries 17 open issues (the list above). Writing that design spec is separate follow-up work, not part of this roadmap revision.
 
 ### v0.6.0 — transcription quality (planned)
 
@@ -168,12 +168,21 @@ What actually happened, and why:
 - Two parts: a theme-level status board (Shipped / In progress / Planned / Exploring), and a changelog-style "what shipped" list below it (version + date, action-verb phrasing).
 - The status board renders each milestone as a card: version number, theme one-liner, a status pill, and a link to the matching GitHub milestone.
 - Theme-and-status altitude only — no issue numbers, no dates, no individual issue content restated. Issue detail lives on GitHub, linked.
-- The page currently shows v0.5.0 through v1.0.0 as `planned` cards and every version through v0.4.4 as `shipped`, which matches the milestone breakdown above.
+- The page currently shows v0.5.0 as `in progress`, v0.6.0 through v1.0.0 as `planned`, and every version through v0.4.4 as `shipped`, which matches the milestone breakdown above.
 
 ## GitHub milestone bookkeeping notes
 
 - Milestones live on GitHub: `v0.2.0` and `v0.2.x` (closed, retired into v0.3.0), `v0.3.0` through `v0.4.1` (closed/shipped), `v0.5.0` (open, in progress), `v0.6.0`, `v0.7.0`, `v0.8.0`, `v1.0.0` (open, planned), and an unmilestoned `Future` label/bucket for exploring-stage items.
 - This spec does not reassign issues between milestones. It describes the assignments as they exist on GitHub at revision time (2026-08-26). Milestone membership is expected to keep moving; treat the numbered list above as a snapshot, and GitHub milestones as the live answer when the two disagree.
+
+## Original research findings (2026-06-25, preserved)
+
+The original plan was grounded in four parallel subagent scans run 2026-06-25. Findings were weighted by convergence — where two independent scans agreed, the change was treated as high-confidence. This section is kept verbatim for reference; it explains why the original decisions above were made, even where later work changed the sequence.
+
+- **Demand scan (upstream cjpais/Handy, 24.9k stars, 403 discussions, 174 issues).** Feature requests live in Discussions, not Issues. Strongest signals: local audio-file transcription (#299, 48 upvotes — the single highest); model support (75 discussions); LLM post-processing/cleanup (32 discussions, flagship #168); real-time preview (11 discussions); custom vocabulary (10 discussions — already parity). Handy is under an explicit feature freeze ("bug fixes are the top priority"). Inherited-bug pain: #1213 is `critical`-labeled (14 comments, two unmerged fixes); #1332 has no fix and is a Parakeet/ONNX ceiling; #921's fix was closed unmerged.
+- **Competitive scan (Whispering, WhisperWriter, Vibe, VoiceInk, OpenWhispr, Buzz, superwhisper, MacWhisper, Aqua, Wispr Flow, Talon, etc.).** Custom vocabulary is table-stakes. The most-praised differentiator across the field is AI transcript cleanup, which Handy lacks; the privacy-honest apps do it with a local LLM (Ollama / llama.cpp). Wake word is shipped by essentially no one in this category. Windows-first + Parakeet + offline cleanup is open white space. Roadmap-page pattern: theme-level Now/Next/Later or Shipped/In-progress/Planned/Exploring + a changelog section, no dates (models: GitHub's public roadmap; superwhisper's changelog).
+- **Biasing feasibility scan.** Issue #22 (CTC biasing on Parakeet) is technically mis-specified — Parakeet-TDT is a transducer with no CTC head in the ONNX export. Issue #23 (sherpa-onnx ContextGraph) is feasible but means adopting sherpa-onnx as the engine; viable for offline Parakeet-TDT only since Feb 2026. Text-level phonetic + N-best/vocabulary-aware correction captures most of the benefit cheaply and overlaps with the AI-cleanup feature.
+- **Code-signing scan.** EV no longer buys instant SmartScreen reputation (2024 change); nothing does. Azure Artifact Signing reopened to US/Canada individuals (~$10/month, no hardware token, CI-friendly) — the best fit; identity validation has a days-to-weeks lead time. Runner-up: Certum open-source cert (own name, ~$108/year). Fallback: SignPath (free OSS, but signs under "SignPath Foundation"). The repo's updater config (`createUpdaterArtifacts: false`, no `plugins.updater` block, `UPDATER_FEED_READY = false`) had to be repointed off upstream for v0.4.0.
 
 ## Revision history
 

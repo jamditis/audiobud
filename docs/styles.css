@@ -1401,6 +1401,12 @@ main > .section:first-child:not(.hero) {
   color: var(--water);
 }
 
+.status-in-progress {
+  border-color: rgba(255, 185, 79, 0.34);
+  background: rgba(255, 185, 79, 0.1);
+  color: var(--amber);
+}
+
 .status-exploring {
   border-color: rgba(255, 113, 103, 0.34);
   background: rgba(255, 113, 103, 0.1);
