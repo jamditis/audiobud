@@ -19,8 +19,8 @@ use tauri::{AppHandle, Emitter, Manager};
 use tauri_specta::Event;
 
 use super::{
-    CaptureError, CaptureSource, LockToggle, LockedLabel, LostLockNotice, OutputTargetLockEvent,
-    PinnedTarget, WindowIdentity, WindowLabel,
+    CaptureError, CaptureSource, LockToggle, LockedLabel, OutputTargetLockEvent, PinnedTarget,
+    WindowIdentity, WindowLabel,
 };
 
 /// Emitted when a pinned paste was suppressed because the locked window is gone
@@ -62,23 +62,30 @@ pub enum Borrowed<T> {
 /// tray menu is rebuilt either way so its checkmark follows the real state,
 /// and [`OutputTargetLockEvent`] is emitted so the indicator surfaces (#255)
 /// follow along too.
+///
+/// The emission is skipped if the lock has already moved past the generation
+/// this toggle produced (#266 review round 4): two overlapping toggles --
+/// two presses of the shortcut, or the shortcut racing the tray item -- can
+/// each finish mutating before either emits, and without this check the
+/// slower one's emission could land after the faster one's and show a state
+/// the backend has already moved past (a stale "Locked" arriving after a
+/// newer "Unlocked", or vice versa). Because the generation only ever
+/// increases, only the toggle that produced the CURRENT generation passes
+/// this check, so exactly one of any two overlapping toggles gets to
+/// publish -- whichever one actually happened last.
 pub fn toggle_target_lock(app: &AppHandle, source: CaptureSource) {
     let Some(pinned) = app.try_state::<PinnedTarget>() else {
         warn!("Target lock state is not initialized");
         return;
     };
 
-    match pinned.toggle(|| capture_foreground_window(source)) {
+    let (toggle, generation) = pinned.toggle(|| capture_foreground_window(source));
+    match toggle {
         LockToggle::Locked(window) => {
             info!(
                 "Output locked to window {:#x} (process {})",
                 window.handle.0, window.process_id
             );
-            // A fresh lock supersedes whatever the tray remembered about the
-            // last one going stale (#266 review).
-            if let Some(notice) = app.try_state::<LostLockNotice>() {
-                notice.clear();
-            }
             // The window is guaranteed alive right now, which is the one
             // moment its label is reliably queryable -- cache it so a later
             // loss (#266 review) can still name it after it (and often its
@@ -87,16 +94,20 @@ pub fn toggle_target_lock(app: &AppHandle, source: CaptureSource) {
             if let Some(cache) = app.try_state::<LockedLabel>() {
                 cache.set(window, label.clone());
             }
-            let (app_name, title) = label;
-            let _ = OutputTargetLockEvent::Locked {
-                app: app_name,
-                title,
+            if pinned.generation() == generation {
+                let (app_name, title) = label;
+                let _ = OutputTargetLockEvent::Locked {
+                    app: app_name,
+                    title,
+                }
+                .emit(app);
             }
-            .emit(app);
         }
         LockToggle::Unlocked => {
             info!("Output lock released; delivery follows the foreground");
-            let _ = OutputTargetLockEvent::Unlocked.emit(app);
+            if pinned.generation() == generation {
+                let _ = OutputTargetLockEvent::Unlocked.emit(app);
+            }
         }
         LockToggle::NotLocked(error) => warn!("Could not lock the output target: {}", error),
     }
@@ -125,19 +136,15 @@ pub fn unlock_output_target(app: &AppHandle) {
         // overlay) would otherwise never hear about the dismissal and stay
         // stuck on "stale" until an unrelated lock/unlock event happened to
         // pass through.
-        let had_notice = app
-            .try_state::<LostLockNotice>()
-            .is_some_and(|notice| notice.clear());
-        if had_notice {
+        if pinned.dismiss_lost_notice() {
             let _ = OutputTargetLockEvent::Unlocked.emit(app);
             crate::tray::update_tray_menu(app, &crate::tray::current_tray_state(app), None);
         }
         return;
     }
+    // unlock() clears any lost-lock notice in the same critical section as
+    // the mutation, so there is nothing left to do about it here.
     pinned.unlock();
-    if let Some(notice) = app.try_state::<LostLockNotice>() {
-        notice.clear();
-    }
     info!("Output lock released from the indicator");
     let _ = OutputTargetLockEvent::Unlocked.emit(app);
     crate::tray::update_tray_menu(app, &crate::tray::current_tray_state(app), None);
@@ -146,10 +153,10 @@ pub fn unlock_output_target(app: &AppHandle) {
 /// Read the current lock state for the indicator surfaces (#255).
 ///
 /// Reports [`OutputTargetLockEvent::Lost`] when nothing is locked but
-/// [`LostLockNotice`] still remembers the last loss (#266 review, finding 1).
-/// The `Lost` kind was originally event-only, on the theory that a mount
-/// after the loss could just read `Unlocked` -- but the event fires once,
-/// to whichever webview happens to be listening at that moment, and a
+/// [`PinnedTarget::lost_notice`] still remembers the last loss (#266 review,
+/// finding 1). The `Lost` kind was originally event-only, on the theory that
+/// a mount after the loss could just read `Unlocked` -- but the event fires
+/// once, to whichever webview happens to be listening at that moment, and a
 /// second webview mounting afterwards (settings opened after the overlay
 /// already showed the stale target, say) missed it entirely and quietly
 /// disagreed with the tray, which does consult the notice. Consulting it
@@ -169,9 +176,8 @@ pub fn get_output_target_lock(app: AppHandle) -> OutputTargetLockEvent {
                 title,
             }
         }
-        None => app
-            .try_state::<LostLockNotice>()
-            .and_then(|notice| notice.get())
+        None => pinned
+            .lost_notice()
             .map(|(app_name, title)| OutputTargetLockEvent::Lost {
                 app: app_name,
                 title,
@@ -205,14 +211,15 @@ pub fn resolve_paste_target(app: &AppHandle) -> Option<Delivery> {
 
     // resolve hands back the identity it validated under its own guard, so no
     // second read of the lock can slip a different window in between.
-    match pinned.resolve(window_is_alive) {
+    let (resolved, generation) = pinned.resolve(window_is_alive);
+    match resolved {
         super::Resolved::Foreground => Some(Delivery::Foreground),
         super::Resolved::Pinned(identity) => Some(Delivery::Pinned(identity)),
         super::Resolved::LockLost => {
             let label = locked_before
                 .map(|identity| lost_label(app, identity))
                 .unwrap_or((None, None));
-            announce_lock_lost(app, label);
+            announce_lock_lost(app, &pinned, generation, label);
             None
         }
     }
@@ -249,28 +256,26 @@ fn lost_label(app: &AppHandle, identity: WindowIdentity) -> WindowLabel {
 ///
 /// `label` is the locked window's last known app/title, read by the caller
 /// before the lock was dropped -- by the time this runs the lock is already
-/// gone, so this is the only chance to report who it was.
+/// gone, so this is the only chance to report who it was. `generation` is
+/// the value the caller's mutation (`resolve()`'s `LockLost`, or
+/// `unlock_if`'s success) produced.
 ///
 /// The bare toast (`TARGET_LOCK_LOST_EVENT`) always fires: a real paste
 /// attempt to the old target really did fail, whatever has happened since.
-/// The *persistent* state -- `LostLockNotice` and `OutputTargetLockEvent::Lost`
-/// -- is conditioned on [`super::record_lost_notice`], which checks whether a
-/// new lock has already been established elsewhere since this loss was
-/// detected (#266 review, finding 2). If so, that lock's own `Locked` event
-/// is already the truth, and persisting `Lost` here would land after it and
-/// contradict it -- the indicator would show "stale" while the backend is
-/// actually pinned to something else.
-fn announce_lock_lost(app: &AppHandle, label: WindowLabel) {
+/// The *persistent* state -- the lost-lock notice and
+/// `OutputTargetLockEvent::Lost` -- is conditioned on
+/// [`PinnedTarget::record_lost_notice`], which atomically checks whether the
+/// lock's generation has already moved past `generation` (#266 review round
+/// 4). If so, a newer lock or unlock has already been established elsewhere
+/// since this loss was detected, that operation's own event is already the
+/// truth, and persisting `Lost` here would land after it and contradict it
+/// -- the indicator would show "stale" while the backend is actually pinned
+/// to something else (or plainly unlocked).
+fn announce_lock_lost(app: &AppHandle, pinned: &PinnedTarget, generation: u64, label: WindowLabel) {
     warn!("Locked window is gone; the transcript was not delivered to it");
     let _ = app.emit(TARGET_LOCK_LOST_EVENT, ());
 
-    let (Some(pinned), Some(notice)) = (
-        app.try_state::<PinnedTarget>(),
-        app.try_state::<LostLockNotice>(),
-    ) else {
-        return;
-    };
-    if !super::record_lost_notice(&pinned, &notice, label.clone()) {
+    if !pinned.record_lost_notice(generation, label.clone()) {
         return;
     }
 
@@ -293,14 +298,14 @@ fn announce_lock_lost(app: &AppHandle, label: WindowLabel) {
 /// lock has already moved on, there is nothing to announce -- the lock the user
 /// can see is still good -- but this delivery is abandoned all the same.
 fn drop_lock_for(app: &AppHandle, target: WindowIdentity) {
-    let cleared = app
-        .try_state::<PinnedTarget>()
-        .is_some_and(|pinned| pinned.unlock_if(target));
-    if cleared {
+    let Some(pinned) = app.try_state::<PinnedTarget>() else {
+        return;
+    };
+    if let Some(generation) = pinned.unlock_if(target) {
         // The window died mid-delivery: prefer the label cached from when it
         // was locked (#266 review) over a fresh query, which routinely comes
         // back empty for a window that just closed.
-        announce_lock_lost(app, lost_label(app, target));
+        announce_lock_lost(app, &pinned, generation, lost_label(app, target));
     }
 }
 

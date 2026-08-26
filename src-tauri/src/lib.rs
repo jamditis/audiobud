@@ -504,15 +504,16 @@ fn initialize_core_logic(app_handle: &AppHandle) {
     // Output target lock for #120. Starts unlocked (foreground delivery); the
     // paste path reads this at send time. The tray/shortcut toggle and the
     // Windows focus-borrow that consume it are the next child of epic #119.
+    // PinnedTarget also carries the generation counter and lost-lock notice
+    // used to keep the tray and every webview's indicator from disagreeing
+    // about what is locked, even under overlapping toggles or a delivery
+    // racing a fresh lock (#255/#266 review, including round 4's atomicity
+    // fix).
     app_handle.manage(output_target::PinnedTarget::default());
     // The window's label cached from lock time (#266 review), so a later
     // loss notice can still name the window after it (and often its whole
     // process) is gone and a live re-query would come back empty.
     app_handle.manage(output_target::LockedLabel::default());
-    // The tray's memory of the most recent lock loss (#255/#266), so it can
-    // keep agreeing with the overlay's stale indicator instead of reverting
-    // to a plain unlocked item the instant the lock is dropped.
-    app_handle.manage(output_target::LostLockNotice::default());
     app_handle.manage(delivery_queue::DeliveryQueue::default());
 
     // Initialize tray menu with idle state

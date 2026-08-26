@@ -977,10 +977,10 @@ async isLaptop() : Promise<Result<boolean, string>> {
  * Read the current lock state for the indicator surfaces (#255).
  *
  * Reports [`OutputTargetLockEvent::Lost`] when nothing is locked but
- * [`LostLockNotice`] still remembers the last loss (#266 review, finding 1).
- * The `Lost` kind was originally event-only, on the theory that a mount
- * after the loss could just read `Unlocked` -- but the event fires once,
- * to whichever webview happens to be listening at that moment, and a
+ * [`PinnedTarget::lost_notice`] still remembers the last loss (#266 review,
+ * finding 1). The `Lost` kind was originally event-only, on the theory that
+ * a mount after the loss could just read `Unlocked` -- but the event fires
+ * once, to whichever webview happens to be listening at that moment, and a
  * second webview mounting afterwards (settings opened after the overlay
  * already showed the stale target, say) missed it entirely and quietly
  * disagreed with the tray, which does consult the notice. Consulting it
@@ -1111,10 +1111,10 @@ export type OrtAcceleratorSetting = "auto" | "cpu" | "cuda" | "directml" | "rocm
  * opens) after the one-shot event has already fired would then silently
  * disagree with a tray or overlay that is still showing the loss (#266
  * review, finding 1). `backend::get_output_target_lock` now also consults
- * `LostLockNotice`, the same persisted memory of the loss the tray reads,
- * so a snapshot query returns `Lost` for as long as that notice stands.
- * The frontend holds `Lost` as a latch until the user dismisses it or a
- * new lock/unlock replaces it.
+ * [`PinnedTarget::lost_notice`], the same persisted memory of the loss the
+ * tray reads, so a snapshot query returns `Lost` for as long as that
+ * notice stands. The frontend holds `Lost` as a latch until the user
+ * dismisses it or a new lock/unlock replaces it.
  *
  * `app`/`title` are the raw strings the platform label lookup read (an
  * app/process name and the window title). Either may be `None`. They are

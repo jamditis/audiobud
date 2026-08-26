@@ -268,27 +268,37 @@ pub fn update_tray_menu(app: &AppHandle, state: &TrayIconState, locale: Option<&
     // locked; the `toggle:` handler in lib.rs flips it and rebuilds the menu.
     // The label carries the locked window's name too (#255) so the tray never
     // disagrees with the overlay/settings indicator about what is locked --
-    // including while the lock is stale (#266 review): `LostLockNotice` is
-    // consulted only when nothing is locked, so the tray keeps naming the
-    // window that was just lost instead of silently reverting to the plain
-    // unlocked item the instant `PinnedTarget` clears.
+    // including while the lock is stale (#266 review): the lost-lock notice
+    // carried on `PinnedTarget` is consulted only when nothing is locked, so
+    // the tray keeps naming the window that was just lost instead of
+    // silently reverting to the plain unlocked item the instant the lock
+    // clears.
     //
-    // `locked()` is read exactly once into `target_lock_identity` and both the
-    // label and the checkmark derive from that one value (#266 review): two
-    // separate reads here could tear if a delivery on another thread dropped
-    // the lock in between them, showing a checked item with a stale label or
-    // vice versa.
+    // `PinnedTarget` is read exactly once, into `target_lock_state`, and the
+    // locked label, the lost label, and the checkmark all derive from that
+    // one snapshot (#266 review, rounds 3 and 4): separate reads here could
+    // tear if a delivery on another thread mutated the lock in between them,
+    // showing a checked item with a stale label or vice versa. `locked()`
+    // and `lost_notice()` on `PinnedTarget` still each take their own mutex
+    // acquisition internally, but the *tray* only ever needs "was there a
+    // notice at the moment I looked", never "is this notice still valid
+    // against the lock I read a moment earlier" -- that atomicity lives
+    // entirely inside `PinnedTarget` itself (`toggle`/`unlock`/`resolve`
+    // clear the notice in the same guard as their own mutation), so there is
+    // no cross-field invariant left for the tray to protect by reading both
+    // under one borrow.
     #[cfg(target_os = "windows")]
-    let target_lock_identity = app
-        .try_state::<crate::output_target::PinnedTarget>()
-        .and_then(|lock| lock.locked());
+    let target_lock_state = app.try_state::<crate::output_target::PinnedTarget>();
+    #[cfg(target_os = "windows")]
+    let target_lock_identity = target_lock_state.as_ref().and_then(|lock| lock.locked());
     #[cfg(target_os = "windows")]
     let target_lock_locked_label =
         target_lock_identity.map(crate::output_target::backend::window_label);
     #[cfg(target_os = "windows")]
     let target_lock_lost_label = if target_lock_locked_label.is_none() {
-        app.try_state::<crate::output_target::LostLockNotice>()
-            .and_then(|notice| notice.get())
+        target_lock_state
+            .as_ref()
+            .and_then(|lock| lock.lost_notice())
     } else {
         None
     };
@@ -351,24 +361,33 @@ pub fn update_tray_menu(app: &AppHandle, state: &TrayIconState, locale: Option<&
 
     let menu = match state {
         TrayIconState::Recording | TrayIconState::Transcribing => {
+            // Built as a list rather than one array literal for the same
+            // reason as the Idle arm below: the target-lock toggle is
+            // Windows-only. It belongs here too (#266 review, finding 1) --
+            // recording or transcribing is exactly when a user most wants to
+            // confirm or release where the transcript is headed, and the
+            // omission meant the item (and the stale-lock notice it can show)
+            // disappeared from the menu the moment a dictation started.
             let cancel_i = MenuItem::with_id(app, "cancel", &strings.cancel, true, None::<&str>)
                 .expect("failed to create cancel item");
-            Menu::with_items(
-                app,
-                &[
-                    &version_i,
-                    &separator(),
-                    &cancel_i,
-                    &separator(),
-                    &copy_last_transcript_i,
-                    &separator(),
-                    &settings_i,
-                    &check_updates_i,
-                    &separator(),
-                    &quit_i,
-                ],
-            )
-            .expect("failed to create menu")
+            // Bound to a local, like the Idle arm below, so every separator
+            // outlives the borrows collected into `items` -- one created
+            // inline per use would be dropped at the end of its own
+            // statement, before `Menu::with_items` reads the Vec.
+            let separators: Vec<_> = (0..4).map(|_| separator()).collect();
+            let mut items: Vec<&dyn tauri::menu::IsMenuItem<tauri::Wry>> =
+                vec![&version_i, &separators[0], &cancel_i, &separators[1]];
+            #[cfg(target_os = "windows")]
+            items.push(&toggle_target_lock_i);
+            items.extend([
+                &copy_last_transcript_i as &dyn tauri::menu::IsMenuItem<tauri::Wry>,
+                &separators[2],
+                &settings_i,
+                &check_updates_i,
+                &separators[3],
+                &quit_i,
+            ]);
+            Menu::with_items(app, &items).expect("failed to create menu")
         }
         TrayIconState::Idle => {
             // Built as a list rather than one array literal because the
@@ -431,15 +450,15 @@ fn truncate_tray_label(name: &str, max_chars: usize) -> String {
 /// of the lock state (#266 review).
 ///
 /// Platform-independent and deliberately fed already-resolved data rather
-/// than a `WindowIdentity` or a `PinnedTarget`/`LostLockNotice` handle, so the
-/// tearing fix -- one read, both outputs derived from it -- and the lost-label
-/// composition are unit-testable without a window system.
+/// than a `WindowIdentity` or a `PinnedTarget` handle, so the tearing fix --
+/// one read, both outputs derived from it -- and the lost-label composition
+/// are unit-testable without a window system.
 ///
 /// `locked` is the currently-locked window's label, if any. `lost` is
 /// consulted only when nothing is locked, and is the tray's memory of the
-/// most recent loss (`LostLockNotice`): showing it keeps the tray agreeing
-/// with the overlay's stale indicator instead of silently reverting to the
-/// plain unlocked item the instant the lock is dropped.
+/// most recent loss (`PinnedTarget::lost_notice`): showing it keeps the tray
+/// agreeing with the overlay's stale indicator instead of silently
+/// reverting to the plain unlocked item the instant the lock is dropped.
 #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
 fn target_lock_menu_label(
     locked: Option<crate::output_target::WindowLabel>,
