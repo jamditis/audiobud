@@ -11,10 +11,49 @@ use crate::settings::TypingTool;
 use crate::settings::{get_settings, AppSettings, AutoSubmitKey, ClipboardHandling, PasteMethod};
 use enigo::{Direction, Enigo, Key, Keyboard};
 use log::{info, warn};
+use std::cell::RefCell;
 use std::process::Command;
+use std::sync::{Mutex, MutexGuard};
 use std::time::Duration;
 use tauri::{AppHandle, Manager};
 use tauri_plugin_clipboard_manager::ClipboardExt;
+
+/// Serializes every clipboard-touching operation that must not interleave
+/// with a paste's capture/write/restore window: the delivery worker's own
+/// paste, its final "leave a copy behind" write, and the tray's
+/// `copy_last_transcript`. Paste now runs off the main thread (#161), so
+/// these are no longer implicitly serialized by all running on it; without
+/// this lock a tray copy landing between `paste_via_clipboard`'s capture and
+/// its restore gets clobbered by the stale snapshot restore (#161 review,
+/// finding 2).
+///
+/// One delivery holds this across exactly one continuous span, from
+/// `paste_via_clipboard`'s capture through `paste()`'s trailing
+/// "leave a copy behind" write, so a tray copy can never land in the gap
+/// between them (#161 review round 3, finding 1) -- see `deliver_to_target`'s
+/// `take_txn` for where that span starts. It is deliberately narrower than
+/// "the whole delivery": acquired only once the delivery is committed to
+/// actually touching the clipboard, which for a pinned target is always
+/// *after* `output_target::backend::borrow_focus` has already decided the
+/// target is alive. A dead target discovered there calls back into
+/// `tray::update_tray_menu`, which needs the event-loop thread, so this lock
+/// must never be held across that call (#161 review round 3, finding 2) --
+/// nor, symmetrically, may the event-loop thread ever block trying to
+/// acquire it (see `tray::copy_last_transcript`, which only `try_lock`s).
+/// Held across the paste's delays deliberately: correctness matters more
+/// than shaving latency off one delivery, and that is what the old
+/// main-thread serialization cost too.
+pub(crate) static CLIPBOARD_TXN: Mutex<()> = Mutex::new(());
+
+/// Recover a poisoned `CLIPBOARD_TXN` the same way the Enigo lock is
+/// recovered (#161 review round 2, finding 3): the mutex only orders access
+/// to the OS clipboard, so continuing to use it after a caught panic
+/// elsewhere is sound.
+fn lock_clipboard_txn() -> MutexGuard<'static, ()> {
+    CLIPBOARD_TXN
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
 
 #[cfg(target_os = "linux")]
 use crate::utils::{is_kde_wayland, is_wayland};
@@ -70,6 +109,12 @@ impl From<FocusLost> for DeliveryError {
 }
 
 /// Pastes text using the clipboard: saves current content, writes text, sends paste keystroke, restores clipboard.
+///
+/// The caller must already hold `CLIPBOARD_TXN` -- see `deliver_to_target`'s
+/// `take_txn`, which acquires it once for the whole delivery so this
+/// function's capture/restore and `paste()`'s trailing copy form a single
+/// critical section (#161 review round 3, finding 1). This function does not
+/// lock it itself.
 fn paste_via_clipboard(
     enigo: &mut Enigo,
     text: &str,
@@ -122,6 +167,36 @@ fn paste_via_clipboard(
 
     write_result?;
 
+    // Restores the captured snapshot on the way out of this function's
+    // scope, whether that is a normal return or a panic unwinding through
+    // the paste-delay wait, the keystroke, or the post-paste wait below --
+    // so a panic in any of that cannot leave the transcript sitting on the
+    // user's clipboard in place of what they had copied (#161 review round
+    // 6, finding 2; the plain post-keystroke call this replaces only ran on
+    // normal return, the same gap the focus hand-back in
+    // `output_target::backend::borrow_focus` had). This function is only
+    // ever called while its caller (`deliver_to_target`'s `deliver` closure)
+    // already holds `CLIPBOARD_TXN` for the whole delivery, so this guard's
+    // `Drop` -- which fires as this function's own scope ends, one way or
+    // the other -- always runs strictly before that lock is released: this
+    // is an inner scope nested entirely within the txn hold, not a sibling
+    // of it, so no explicit ordering between the two is needed here.
+    struct RestoreClipboardOnExit<'a> {
+        saved: &'a SavedClipboard,
+        backend: Option<&'a mut ArboardBackend>,
+        app_handle: &'a AppHandle,
+    }
+    impl Drop for RestoreClipboardOnExit<'_> {
+        fn drop(&mut self) {
+            restore_saved_clipboard(self.saved, self.backend.take(), self.app_handle);
+        }
+    }
+    let _restore_clipboard_on_exit = RestoreClipboardOnExit {
+        saved: &saved_clipboard,
+        backend: snapshot_backend.as_mut(),
+        app_handle,
+    };
+
     std::thread::sleep(Duration::from_millis(paste_delay_ms));
 
     // The clipboard write and the delay above give focus time to move, so the
@@ -132,11 +207,6 @@ fn paste_via_clipboard(
     };
 
     std::thread::sleep(std::time::Duration::from_millis(50));
-
-    // Restore original clipboard content. This runs even when the keystroke was
-    // abandoned, so an aborted delivery does not leave the transcript sitting on
-    // the user's clipboard in place of what they had copied.
-    restore_saved_clipboard(&saved_clipboard, snapshot_backend.as_mut(), app_handle);
 
     pasted
 }
@@ -792,28 +862,57 @@ fn should_copy_to_clipboard(handling: ClipboardHandling, delivered: bool) -> boo
 /// Send the transcript to the resolved target, and report whether it was
 /// delivered. `delivery` is `None` when the target lock was lost, in which case
 /// nothing is typed anywhere.
+///
+/// The second element of the return value is `CLIPBOARD_TXN`'s guard when
+/// this delivery's paste method acquired it (`PasteMethod::CtrlV` and its
+/// variants); `None` otherwise. `paste()` reuses it for the trailing
+/// clipboard-handling write, or acquires its own if this delivery never
+/// touched the clipboard, so exactly one `CLIPBOARD_TXN.lock()` call happens
+/// per delivery either way (#161 review round 3, finding 1).
 fn deliver_to_target(
     text: &str,
     app_handle: &AppHandle,
     settings: &AppSettings,
     delivery: Option<Delivery>,
-) -> Result<bool, String> {
+) -> (Result<bool, String>, Option<MutexGuard<'static, ()>>) {
     let Some(delivery) = delivery else {
-        return Ok(false);
+        return (Ok(false), None);
     };
 
     let paste_method = settings.paste_method;
 
-    // Get the managed Enigo instance
-    let enigo_state = app_handle
+    // Get the managed Enigo instance. A panic while an earlier delivery held
+    // this lock -- caught by the delivery worker so it cannot take the whole
+    // thread down (#161) -- would otherwise poison the mutex and fail every
+    // later delivery with "Failed to lock Enigo" forever (#161 review round
+    // 2, finding 3). The lock only protects the `Enigo` handle itself, not
+    // any OS-level key state, so recovering it and reusing the same instance
+    // is sound: the alternative, failing here, is strictly worse.
+    let enigo_state = match app_handle
         .try_state::<EnigoState>()
-        .ok_or("Enigo state not initialized")?;
+        .ok_or_else(|| "Enigo state not initialized".to_string())
+    {
+        Ok(state) => state,
+        Err(e) => return (Err(e), None),
+    };
     let mut enigo = enigo_state
         .0
         .lock()
-        .map_err(|e| format!("Failed to lock Enigo: {}", e))?;
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
 
     let hold = FocusHold::new(app_handle, delivery);
+
+    // Filled in by `deliver` the moment it actually needs `CLIPBOARD_TXN`
+    // (the `PasteMethod::CtrlV`-family branch), then carried out to the
+    // caller below so `paste()`'s trailing copy can extend the same critical
+    // section instead of opening a second one (finding 1). Deliberately not
+    // acquired any earlier than this closure: by the time it runs, a pinned
+    // target's dead-window check in `output_target::backend::borrow_focus`
+    // has already either aborted the delivery (calling back into
+    // `tray::update_tray_menu`, which needs the event-loop thread) or
+    // confirmed the window is alive, so the lock is never held while that
+    // call could happen (#161 review round 3, finding 2).
+    let txn: RefCell<Option<MutexGuard<'static, ()>>> = RefCell::new(None);
 
     // The paste itself, unchanged whichever window it lands in. A pinned target
     // runs it inside a focus borrow; `hold.ensure()` re-checks the target at
@@ -834,6 +933,7 @@ fn deliver_to_target(
                 )?;
             }
             PasteMethod::CtrlV | PasteMethod::CtrlShiftV | PasteMethod::ShiftInsert => {
+                txn.borrow_mut().get_or_insert_with(lock_clipboard_txn);
                 paste_via_clipboard(
                     enigo,
                     text,
@@ -879,15 +979,16 @@ fn deliver_to_target(
                 Ok(Borrowed::Delivered(result)) => result,
                 // The window died between resolving it and activating it, so
                 // nothing was typed and the pick or lock is already cleaned up.
+                // Nothing touched the clipboard, so `txn` is still `None` here.
                 Ok(Borrowed::Suppressed) => {
-                    return Ok(false);
+                    return (Ok(false), txn.into_inner());
                 }
                 Err(lost) => Err(lost.into()),
             }
         }
     };
 
-    delivery_outcome(outcome)
+    (delivery_outcome(outcome), txn.into_inner())
 }
 
 /// Turn one delivery's result into "was it delivered", or a real error.
@@ -945,7 +1046,7 @@ pub fn paste(text: String, app_handle: AppHandle, context: DictationContext) -> 
     // copy even more than one that succeeded, because a failure is exactly when
     // the copy is the transcript's last refuge. Returning here would report the
     // error and throw the text away with it.
-    let outcome = deliver_to_target(&text, &app_handle, &settings, delivery);
+    let (outcome, txn) = deliver_to_target(&text, &app_handle, &settings, delivery);
     let delivered = matches!(outcome, Ok(true));
 
     // The clipboard copy is a setting about the clipboard, not about the window
@@ -954,6 +1055,13 @@ pub fn paste(text: String, app_handle: AppHandle, context: DictationContext) -> 
     // target is lost or refuses to come forward -- which, with
     // PasteMethod::None, is the entire output.
     let copied = if should_copy_to_clipboard(settings.clipboard_handling, delivered) {
+        // Extend the same critical section `deliver_to_target` already opened
+        // (a `PasteMethod::CtrlV`-family paste), or open the one and only one
+        // this delivery needs if it never touched the clipboard itself (e.g.
+        // `PasteMethod::Direct`/`None`/`ExternalScript`). Either way this is
+        // the single continuous span a concurrent tray copy cannot land
+        // inside of (#161 review round 3, finding 1).
+        let _txn = txn.unwrap_or_else(lock_clipboard_txn);
         app_handle
             .clipboard()
             .write_text(&text)
@@ -999,6 +1107,135 @@ mod tests {
     fn auto_submit_requires_setting_enabled() {
         assert!(!should_send_auto_submit(false, PasteMethod::CtrlV));
         assert!(!should_send_auto_submit(false, PasteMethod::Direct));
+    }
+
+    #[test]
+    fn a_poisoned_lock_recovers_instead_of_failing_every_later_delivery() {
+        // Regression for #161 review round 2, finding 3: a panic while an
+        // earlier delivery held the Enigo lock -- caught by the delivery
+        // worker so it cannot take the thread down (#161) -- must not leave
+        // the mutex permanently poisoned. `deliver_to_target` recovers it the
+        // same way this test does, via `unwrap_or_else(|p| p.into_inner())`,
+        // rather than the old `.map_err(...)?` that turned a poisoned lock
+        // into a delivery failure forever.
+        let lock = std::sync::Mutex::new(0u32);
+        let poison_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _guard = lock.lock().unwrap();
+            panic!("simulated panic while the lock is held");
+        }));
+        assert!(poison_result.is_err());
+        assert!(lock.is_poisoned());
+
+        // The recovery idiom `deliver_to_target` uses: still yields the inner
+        // value instead of failing.
+        let recovered = lock.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        assert_eq!(*recovered, 0);
+    }
+
+    #[test]
+    fn a_clipboard_restore_guard_runs_exactly_once_whether_the_paste_panics_or_not() {
+        // `paste_via_clipboard` restores the captured clipboard snapshot from
+        // a `Drop` guard, not a plain post-keystroke call, specifically so a
+        // panic mid-paste still restores it (#161 review round 6, finding
+        // 2) -- mirroring the focus hand-back fix in
+        // `output_target::backend::borrow_focus` (round 5, finding C).
+        // `paste_via_clipboard` itself can't be exercised directly here (no
+        // display server, no live `AppHandle`), so this proves the
+        // mechanism instead: exactly one restore either way, using the same
+        // "take the borrowed backend out in `Drop`" shape the real guard
+        // uses.
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        struct RestoreOnDrop<'a>(&'a AtomicUsize, Option<()>);
+        impl Drop for RestoreOnDrop<'_> {
+            fn drop(&mut self) {
+                if self.1.take().is_some() {
+                    self.0.fetch_add(1, Ordering::SeqCst);
+                }
+            }
+        }
+
+        let restores = AtomicUsize::new(0);
+        {
+            let _guard = RestoreOnDrop(&restores, Some(()));
+        }
+        assert_eq!(restores.load(Ordering::SeqCst), 1, "normal return");
+
+        let restores_on_panic = AtomicUsize::new(0);
+        let panicked = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _guard = RestoreOnDrop(&restores_on_panic, Some(()));
+            panic!("simulated panic mid-paste, before the plain restore call this replaces");
+        }));
+        assert!(panicked.is_err());
+        assert_eq!(restores_on_panic.load(Ordering::SeqCst), 1, "unwind");
+    }
+
+    #[test]
+    fn a_contended_copy_defers_until_the_delivery_releases_clipboard_txn() {
+        // Regression for #161 review round 3, findings 1 and 2: mirrors
+        // `tray::copy_last_transcript`'s pattern -- `try_lock` first, and
+        // only fall back to a blocking `lock()` on a background thread when
+        // that is contended -- against a simulated delivery holding
+        // `CLIPBOARD_TXN` for its whole critical section (capture through the
+        // trailing copy, now one continuous span per finding 1). Proves the
+        // deferred write only ever runs after the delivery releases the
+        // lock, never inside its critical section.
+        //
+        // Synchronized with channels, not a guessed sleep (#161 review round
+        // 4, finding 4): `holding_rx` only unblocks once the delivery thread
+        // has actually acquired the lock, and the delivery thread only
+        // releases it once this test explicitly tells it to via
+        // `release_tx`, so there is no window where either side is guessing
+        // at the other's timing.
+        use std::sync::{mpsc, Arc};
+
+        let order: Arc<Mutex<Vec<&'static str>>> = Arc::new(Mutex::new(Vec::new()));
+        let (holding_tx, holding_rx) = mpsc::channel::<()>();
+        let (release_tx, release_rx) = mpsc::channel::<()>();
+
+        let delivery_order = Arc::clone(&order);
+        let delivery = std::thread::spawn(move || {
+            let _txn = lock_clipboard_txn();
+            delivery_order.lock().unwrap().push("delivery holds txn");
+            holding_tx.send(()).unwrap();
+            // Waits for the test's explicit go-ahead rather than a fixed
+            // delay, so releasing the lock and the test observing contention
+            // on it can never race each other.
+            release_rx.recv().unwrap();
+            delivery_order.lock().unwrap().push("delivery released txn");
+        });
+
+        // Blocks until the delivery thread has genuinely taken the lock.
+        holding_rx.recv().unwrap();
+
+        match CLIPBOARD_TXN.try_lock() {
+            Ok(_) => panic!("expected the delivery thread to be holding CLIPBOARD_TXN"),
+            Err(std::sync::TryLockError::WouldBlock) => {
+                let deferred_order = Arc::clone(&order);
+                let deferred = std::thread::spawn(move || {
+                    let _txn = lock_clipboard_txn();
+                    deferred_order.lock().unwrap().push("tray copy ran");
+                });
+                // Only now let the simulated delivery finish and release the
+                // lock; the deferred thread above is already blocked on it.
+                release_tx.send(()).unwrap();
+                deferred.join().unwrap();
+            }
+            Err(std::sync::TryLockError::Poisoned(_)) => {
+                panic!("did not expect CLIPBOARD_TXN to already be poisoned")
+            }
+        }
+
+        delivery.join().unwrap();
+
+        assert_eq!(
+            *order.lock().unwrap(),
+            vec![
+                "delivery holds txn",
+                "delivery released txn",
+                "tray copy ran",
+            ]
+        );
     }
 
     #[test]

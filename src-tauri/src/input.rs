@@ -4,6 +4,13 @@ use tauri::{AppHandle, Manager};
 
 /// Wrapper for Enigo to store in Tauri's managed state.
 /// Enigo is wrapped in a Mutex since it requires mutable access.
+///
+/// The lock protects the instance, not the order deliveries take it in:
+/// `std::sync::Mutex` makes no fairness promise, so two transcripts racing for
+/// it could be typed out in either order. Delivery order is guaranteed a step
+/// earlier instead -- [`crate::delivery_queue`] releases one transcript at a
+/// time and [`crate::delivery_worker`] runs them on a single thread, so
+/// overlapping dictations never contend for this lock at all (#161, #122).
 pub struct EnigoState(pub Mutex<Enigo>);
 
 impl EnigoState {

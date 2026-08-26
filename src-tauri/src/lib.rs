@@ -14,6 +14,7 @@ mod clipboard_snapshot;
 mod command;
 mod commands;
 mod delivery_queue;
+mod delivery_worker;
 mod dictation_context;
 mod helpers;
 mod input;
@@ -170,6 +171,18 @@ async fn install_available_update(
     Ok(true)
 }
 
+/// Drain the delivery worker (#161) before exiting the process, so no exit
+/// path -- tray quit, an update-restart, or any other -- can truncate a
+/// transcript that is mid-delivery. `DeliveryWorker::shutdown` is bounded and
+/// idempotent, so calling this from any thread, including more than once
+/// across a process's lifetime, is safe (#161 review round 2, finding 2).
+fn exit_after_draining_delivery(app: &AppHandle, code: i32) {
+    if let Some(worker) = app.try_state::<delivery_worker::DeliveryWorker>() {
+        worker.shutdown();
+    }
+    app.exit(code);
+}
+
 fn spawn_update_install(
     app: AppHandle,
     exit_when_current: bool,
@@ -180,13 +193,13 @@ fn spawn_update_install(
             Ok(applied) => {
                 log::info!("Signed updater finished; update applied: {applied}");
                 if exit_when_current {
-                    app.exit(0);
+                    exit_after_draining_delivery(&app, 0);
                 }
             }
             Err(error) => {
                 log::error!("{error}");
                 if exit_when_current {
-                    app.exit(1);
+                    exit_after_draining_delivery(&app, 1);
                 }
             }
         }
@@ -412,7 +425,7 @@ fn initialize_core_logic(app_handle: &AppHandle) {
                 cancel_current_operation(app);
             }
             "quit" => {
-                app.exit(0);
+                exit_after_draining_delivery(app, 0);
             }
             // The stale target-lock item (#266 review, finding 5): distinct from
             // "toggle:target_lock" so a click here can never be read as a fresh
@@ -531,6 +544,12 @@ fn initialize_core_logic(app_handle: &AppHandle) {
     app_handle.manage(dictation_context::DictationSequence::default());
     let delivery_queue: delivery_queue::DeliveryQueue = delivery_queue::DeliveryQueue::default();
     app_handle.manage(delivery_queue);
+    // The thread the queue's transcripts are actually pasted on. A paste blocks
+    // for hundreds of milliseconds -- the paste delay, the keystroke holds, the
+    // clipboard restore, and a pinned target's foreground switch on top -- so it
+    // must not run on the main thread, where it would freeze the overlay and the
+    // tray for the whole delivery (#161).
+    app_handle.manage(delivery_worker::DeliveryWorker::new());
 
     // Initialize tray menu with idle state
     utils::update_tray_menu(app_handle, &utils::TrayIconState::Idle, None);
