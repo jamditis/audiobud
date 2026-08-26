@@ -7,6 +7,7 @@ use crate::audio_toolkit::{
     is_no_input_device_error, strip_to_raw_text,
 };
 use crate::delivery_queue::{DeliveryQueue, EnqueueResult, TranscriptDelivery};
+use crate::delivery_worker::DeliveryWorker;
 use crate::dictation_context::{ActiveDictations, DictationContext};
 use crate::managers::audio::AudioRecordingManager;
 use crate::managers::engine_limits::{MODEL_AUTO_LOAD_FAILED_ERROR, WEDGED_ENGINE_ERROR};
@@ -102,9 +103,29 @@ fn enqueue_transcript_delivery(
     }
 }
 
+/// Hands the delivery worker to the next queued transcript when this one is
+/// done -- including when the paste panics, so one bad delivery cannot leave the
+/// queue believing a delivery is still in flight and strand every transcript
+/// behind it.
+struct DeliveryHandoff(AppHandle);
+impl Drop for DeliveryHandoff {
+    fn drop(&mut self) {
+        finish_transcript_delivery(self.0.clone());
+    }
+}
+
+/// Send one transcript down the delivery thread (#161).
+///
+/// Not the main thread: a paste blocks for the paste delay, the keystroke
+/// holds, the clipboard restore, and -- with a pinned target -- a foreground
+/// switch and hand-back on top, all of which froze the overlay and the tray for
+/// as long as it took. Ordering is unaffected, because the queue still releases
+/// one transcript at a time and the worker runs them in the order it receives
+/// them.
 fn schedule_transcript_delivery(app: AppHandle, delivery: TranscriptDelivery) {
     let app_for_delivery = app.clone();
-    let scheduled = app.run_on_main_thread(move || {
+    let job = move || {
+        let _handoff = DeliveryHandoff(app_for_delivery.clone());
         let paste_time = Instant::now();
         // The queued context, not a fresh read: by the time a queued transcript
         // is pasted the user may already be dictating somewhere else (#160).
@@ -115,13 +136,16 @@ fn schedule_transcript_delivery(app: AppHandle, delivery: TranscriptDelivery) {
                 let _ = app_for_delivery.emit("paste-error", ());
             }
         }
-        finish_transcript_delivery(app_for_delivery);
-    });
+    };
 
-    if let Err(error) = scheduled {
-        error!("Failed to run paste on main thread: {:?}", error);
-        let _ = app.emit("paste-error", ());
-        finish_transcript_delivery(app);
+    match app.try_state::<DeliveryWorker>() {
+        Some(worker) => worker.run(Box::new(job)),
+        None => {
+            // Deliver it here rather than throw the transcript away: this is
+            // the transcription thread, so the UI still stays responsive.
+            error!("Delivery worker is not initialized; delivering on this thread");
+            job();
+        }
     }
 }
 

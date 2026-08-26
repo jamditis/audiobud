@@ -14,6 +14,7 @@ mod clipboard_snapshot;
 mod command;
 mod commands;
 mod delivery_queue;
+mod delivery_worker;
 mod dictation_context;
 mod helpers;
 mod input;
@@ -534,6 +535,12 @@ fn initialize_core_logic(app_handle: &AppHandle) {
     app_handle.manage(dictation_context::DictationSequence::default());
     let delivery_queue: delivery_queue::DeliveryQueue = delivery_queue::DeliveryQueue::default();
     app_handle.manage(delivery_queue);
+    // The thread the queue's transcripts are actually pasted on. A paste blocks
+    // for hundreds of milliseconds -- the paste delay, the keystroke holds, the
+    // clipboard restore, and a pinned target's foreground switch on top -- so it
+    // must not run on the main thread, where it would freeze the overlay and the
+    // tray for the whole delivery (#161).
+    app_handle.manage(delivery_worker::DeliveryWorker::new());
 
     // Initialize tray menu with idle state
     utils::update_tray_menu(app_handle, &utils::TrayIconState::Idle, None);
