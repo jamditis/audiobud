@@ -422,12 +422,25 @@ fn lost_label(app: &AppHandle, identity: WindowIdentity) -> WindowLabel {
 /// since that is the only source with a cache to fall back to; a one-shot
 /// pick (#124) has none, so a failed live lookup for it reports unknown
 /// rather than borrowing an unrelated lock's cached name.
+///
+/// `is_alive` guards the live lookup itself (#279 review round 5): between
+/// the last focus check and this call the window can close, and the OS can
+/// recycle its handle for an unrelated window before `live` runs.
+/// `window_label`/`GetWindowTextW` would then read that replacement window's
+/// title while the process name still comes from the identity's captured
+/// PID, producing a false hybrid (a Chrome app name paired with a Notepad
+/// title). `is_alive` re-validates the *whole* identity -- not just whether
+/// the handle still resolves to *some* window -- immediately before `live`
+/// runs, so a recycled handle is treated exactly like a live lookup that
+/// came back empty: the cache is consulted instead, per the same rules as
+/// above.
 pub fn resolve_delivered_label(
     source: DeliverySource,
     cached: Option<WindowLabel>,
+    is_alive: impl FnOnce() -> bool,
     live: impl FnOnce() -> WindowLabel,
 ) -> WindowLabel {
-    let live_label = live();
+    let live_label = if is_alive() { live() } else { (None, None) };
     if live_label != (None, None) {
         return live_label;
     }
@@ -439,8 +452,8 @@ pub fn resolve_delivered_label(
     live_label
 }
 
-/// Resolve [`resolve_delivered_label`] against the real cache and the real
-/// platform label lookup.
+/// Resolve [`resolve_delivered_label`] against the real cache, the real
+/// identity probe, and the real platform label lookup.
 fn delivered_label(
     app: &AppHandle,
     identity: WindowIdentity,
@@ -449,7 +462,12 @@ fn delivered_label(
     let cached = app
         .try_state::<LockedLabel>()
         .and_then(|cache| cache.get(identity));
-    resolve_delivered_label(source, cached, || window_label(identity))
+    resolve_delivered_label(
+        source,
+        cached,
+        || window_is_alive(identity),
+        || window_label(identity),
+    )
 }
 
 /// Tell the user a transcript was delivered to a pinned window, naming it
@@ -1095,7 +1113,8 @@ mod tests {
             Some("Terminal".to_string()),
             Some("vim - notes.md".to_string()),
         );
-        let label = resolve_delivered_label(DeliverySource::Lock, Some(cached), || live.clone());
+        let label =
+            resolve_delivered_label(DeliverySource::Lock, Some(cached), || true, || live.clone());
         assert_eq!(label, live);
     }
 
@@ -1105,8 +1124,12 @@ mod tests {
         // there (a transient OS refusal); the label cached at lock time
         // (#266 review) is still better than reporting nothing.
         let cached = (Some("Terminal".to_string()), Some("zsh".to_string()));
-        let label =
-            resolve_delivered_label(DeliverySource::Lock, Some(cached.clone()), || (None, None));
+        let label = resolve_delivered_label(
+            DeliverySource::Lock,
+            Some(cached.clone()),
+            || true,
+            || (None, None),
+        );
         assert_eq!(label, cached);
     }
 
@@ -1116,7 +1139,7 @@ mod tests {
         // actually the one locked -- so the live label is used instead of
         // reporting an empty name.
         let live = (Some("Notepad".to_string()), None);
-        let label = resolve_delivered_label(DeliverySource::Lock, None, || live.clone());
+        let label = resolve_delivered_label(DeliverySource::Lock, None, || true, || live.clone());
         assert_eq!(label, live);
     }
 
@@ -1127,7 +1150,8 @@ mod tests {
         // only Lock deliveries are entitled to the cache.
         let cached = (Some("Stale".to_string()), None);
         let live = (Some("Fresh".to_string()), None);
-        let label = resolve_delivered_label(DeliverySource::Pick, Some(cached), || live.clone());
+        let label =
+            resolve_delivered_label(DeliverySource::Pick, Some(cached), || true, || live.clone());
         assert_eq!(label, live);
     }
 
@@ -1138,7 +1162,40 @@ mod tests {
         // present, or the confirmation would name a window the pick never
         // touched.
         let cached = (Some("Unrelated Lock".to_string()), None);
-        let label = resolve_delivered_label(DeliverySource::Pick, Some(cached), || (None, None));
+        let label =
+            resolve_delivered_label(DeliverySource::Pick, Some(cached), || true, || (None, None));
+        assert_eq!(label, (None, None));
+    }
+
+    #[test]
+    fn a_recycled_handle_is_never_read_as_the_delivered_window() {
+        // Between the last focus check and this lookup the window can close
+        // and the OS can recycle its handle for an unrelated window (#279
+        // review round 5). `is_alive` catches that: when it says the handle
+        // no longer belongs to the identity that was delivered to, `live`
+        // must not run at all, so a Notepad title can never be read onto a
+        // Chrome app name captured from the identity's stale PID.
+        let cached = (Some("Terminal".to_string()), Some("zsh".to_string()));
+        let label = resolve_delivered_label(
+            DeliverySource::Lock,
+            Some(cached.clone()),
+            || false,
+            || panic!("live must not run once is_alive says the identity no longer matches"),
+        );
+        assert_eq!(label, cached);
+    }
+
+    #[test]
+    fn a_recycled_handle_with_no_cache_reports_unknown() {
+        // A one-shot pick (#124) has no cache to fall back to, so a recycled
+        // handle for it must report unknown rather than read the
+        // replacement window's label.
+        let label = resolve_delivered_label(
+            DeliverySource::Pick,
+            None,
+            || false,
+            || panic!("live must not run once is_alive says the identity no longer matches"),
+        );
         assert_eq!(label, (None, None));
     }
 

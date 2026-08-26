@@ -54,6 +54,16 @@ const RecordingOverlay: React.FC = () => {
   const confirmationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
+  // Whether a *new* dictation is actively recording right now (#279 review
+  // round 5). The transcription worker for an older dictation can finish --
+  // freeing the coordinator to let the user start recording again -- before
+  // that older dictation's own scheduled paste (a focus borrow, a configured
+  // paste delay) has actually run and emitted its delivery confirmation. If
+  // that confirmation then arrives while this flag is set, it is stale by
+  // definition: whatever it names, it is not what the user is looking at
+  // right now, a live recording in progress, so the listener below drops it
+  // instead of overwriting the new recording's bars with an old "Sent" chip.
+  const isRecordingActiveRef = useRef(false);
   const reduceMotion = usePrefersReducedMotion();
   const direction = getLanguageDirection(i18n.language);
   const overlayIndicatorOptions = useRef({
@@ -86,6 +96,7 @@ const RecordingOverlay: React.FC = () => {
         confirmationActiveRef.current = false;
         pendingHideRef.current = false;
         setDeliveryConfirmation(null);
+        isRecordingActiveRef.current = payload.state === "recording";
         setState(payload.state);
         setIsRaw(payload.raw);
         setIsVisible(true);
@@ -93,6 +104,7 @@ const RecordingOverlay: React.FC = () => {
 
       // Listen for hide-overlay event from Rust
       const unlistenHide = await listen("hide-overlay", () => {
+        isRecordingActiveRef.current = false;
         if (confirmationActiveRef.current) {
           // A delivery confirmation (#165) is still on screen -- the paste
           // that triggered it finishes, and the overlay's own hide, in the
@@ -123,6 +135,18 @@ const RecordingOverlay: React.FC = () => {
       // issue #274 rather than solved narrowly here.
       const unlistenDelivered = await events.transcriptDeliveredEvent.listen(
         (event) => {
+          if (isRecordingActiveRef.current) {
+            // A newer dictation is already recording (#279 review round 5):
+            // this confirmation belongs to an older one whose paste was still
+            // in flight when the new recording started, so it is stale by
+            // definition. The event carries no dictation sequence to compare
+            // against (see TranscriptDeliveredEvent in src/bindings.ts) --
+            // dropping it outright while a new recording is active is the
+            // smaller fix, and covers the timing window the review raised
+            // (a slow focus borrow or paste delay outlasting the transcription
+            // worker) without touching the Rust event shape.
+            return;
+          }
           const fullName = formatDeliveredWindowName(
             event.payload.app ?? undefined,
             event.payload.title ?? undefined,
@@ -136,6 +160,14 @@ const RecordingOverlay: React.FC = () => {
           // tail is wider than truncateMiddle's own default so it reliably
           // covers the whole "— app" suffix plus a little of the title right
           // before it, which is where a distinguishing word most often sits.
+          //
+          // This is still a fixed-length compromise, not a general fix (#279
+          // review round 5): a title whose distinguishing part falls outside
+          // both the kept head and the kept tail still collapses two chips to
+          // the same compact label. The hint above carries the full,
+          // untruncated name for exactly that reason; redesigning the chip's
+          // own presentation budget is a product question tracked by issue
+          // #274, not solved further here.
           const compactName = truncateMiddle(fullName, 6, 10);
           confirmationActiveRef.current = true;
           pendingHideRef.current = false;
