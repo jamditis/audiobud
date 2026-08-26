@@ -4,17 +4,52 @@ import { Cog, FlaskConical, History, Info, Sparkles, Cpu } from "lucide-react";
 import HandyTextLogo from "./icons/HandyTextLogo";
 import HandyHand from "./icons/HandyHand";
 import { useSettings } from "../hooks/useSettings";
-import {
-  GeneralSettings,
-  AdvancedSettings,
-  HistorySettings,
-  DebugSettings,
-  AboutSettings,
-  PostProcessingSettings,
-  ModelsSettings,
-} from "./settings";
+import { GeneralSettings } from "./settings/general/GeneralSettings";
 
-export type SidebarSection = keyof typeof SECTIONS_CONFIG;
+const ModelsSettings = React.lazy(async () => {
+  const module = await import("./settings/models/ModelsSettings");
+  return { default: module.ModelsSettings };
+});
+
+const AdvancedSettings = React.lazy(async () => {
+  const module = await import("./settings/advanced/AdvancedSettings");
+  return { default: module.AdvancedSettings };
+});
+
+const HistorySettings = React.lazy(async () => {
+  const module = await import("./settings/history/HistorySettings");
+  return { default: module.HistorySettings };
+});
+
+const PostProcessingSettings = React.lazy(async () => {
+  const module = await import(
+    "./settings/post-processing/PostProcessingSettings"
+  );
+  return { default: module.PostProcessingSettings };
+});
+
+const DebugSettings = React.lazy(async () => {
+  const module = await import("./settings/debug/DebugSettings");
+  return { default: module.DebugSettings };
+});
+
+const AboutSettings = React.lazy(async () => {
+  const module = await import("./settings/about/AboutSettings");
+  return { default: module.AboutSettings };
+});
+
+export type SidebarSection =
+  | "general"
+  | "models"
+  | "advanced"
+  | "history"
+  | "postprocessing"
+  | "debug"
+  | "about";
+
+export interface SettingsSectionProps {
+  onNavigate?: (section: SidebarSection) => void;
+}
 
 interface IconProps {
   width?: number | string;
@@ -27,7 +62,9 @@ interface IconProps {
 interface SectionConfig {
   labelKey: string;
   icon: React.ComponentType<IconProps>;
-  component: React.ComponentType;
+  component:
+    | React.ComponentType<SettingsSectionProps>
+    | React.LazyExoticComponent<React.ComponentType<SettingsSectionProps>>;
   enabled: (settings: any) => boolean;
 }
 
@@ -74,7 +111,7 @@ export const SECTIONS_CONFIG = {
     component: AboutSettings,
     enabled: () => true,
   },
-} as const satisfies Record<string, SectionConfig>;
+} as const satisfies Record<SidebarSection, SectionConfig>;
 
 interface SidebarProps {
   activeSection: SidebarSection;
