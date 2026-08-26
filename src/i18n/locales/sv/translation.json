@@ -370,6 +370,20 @@
         "unknownTarget": "ett låst fönster",
         "unlock": "Lås upp"
       },
+      "outputProfiles": {
+        "title": "Utmatningsinställningar per app",
+        "description": "Ge en app egna utmatningsinställningar. Skriv programmets namn (till exempel WindowsTerminal eller code) och välj vad AudioBud ska göra där. Allt som lämnas på ”Använd global inställning” följer dina vanliga inställningar. Appar utan post ändras inte.",
+        "appNamePlaceholder": "App- eller programnamn",
+        "add": "Lägg till",
+        "useGlobal": "Använd global inställning",
+        "pasteMethod": "Inklistringsmetod",
+        "autoSubmit": "Skicka-tangent",
+        "clipboard": "Urklipp",
+        "duplicate": "”{{app}}” har redan egna utmatningsinställningar",
+        "capReached": "Listan är full ({{cap}} appar). Ta bort en för att lägga till en till.",
+        "tooLong": "Appnamnet måste vara kortare än {{max}} tecken",
+        "remove": "Ta bort utmatningsinställningar för {{app}}"
+      },
       "typingTool": {
         "title": "Skrivverktyg",
         "description": "Välj vilket Linux-skrivverktyg som ska användas för metoden Direkt klistra in. Auto kommer automatiskt att upptäcka och använda det bästa tillgängliga verktyget för ditt system.",

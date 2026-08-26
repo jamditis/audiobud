@@ -393,6 +393,23 @@ pub use imp::window_label;
 #[cfg(not(windows))]
 pub use fallback::window_label;
 
+/// The application one delivery is about to reach, for the per-application
+/// output settings (#123): the pinned or picked window's program name, or the
+/// program name of whatever window holds focus for a plain foreground delivery.
+///
+/// Read live, at delivery time, because that is the moment the answer has to be
+/// true -- the same moment `deliver_to_target` is deciding what to type. `None`
+/// means no profile can apply and the global settings stand: a delivery that was
+/// suppressed, a window whose program the OS will not name, and every delivery
+/// on the platforms with no window backend yet (#119).
+pub fn delivery_app_name(delivery: Option<Delivery>) -> Option<String> {
+    let identity = match delivery? {
+        Delivery::Pinned(identity, _) => identity,
+        Delivery::Foreground => foreground_identity()?,
+    };
+    window_label(identity).0
+}
+
 /// The label to report for a window that just turned out to be gone.
 ///
 /// Prefers whatever [`LockedLabel`] cached for `identity` while the window

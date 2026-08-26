@@ -370,6 +370,20 @@
         "unknownTarget": "zamčené okno",
         "unlock": "Odemknout"
       },
+      "outputProfiles": {
+        "title": "Nastavení výstupu pro aplikaci",
+        "description": "Dejte jedné aplikaci vlastní nastavení výstupu. Zadejte název programu (například WindowsTerminal nebo code) a vyberte, co má AudioBud v této aplikaci dělat. Vše, co ponecháte na „Použít globální nastavení“, se řídí běžným nastavením. Aplikace bez záznamu se nemění.",
+        "appNamePlaceholder": "Název aplikace nebo programu",
+        "add": "Přidat",
+        "useGlobal": "Použít globální nastavení",
+        "pasteMethod": "Způsob vložení",
+        "autoSubmit": "Klávesa odeslání",
+        "clipboard": "Schránka",
+        "duplicate": "„{{app}}“ už má vlastní nastavení výstupu",
+        "capReached": "Seznam je plný ({{cap}} aplikací). Odeberte jednu, abyste mohli přidat další.",
+        "tooLong": "Název aplikace musí mít méně než {{max}} znaků",
+        "remove": "Odebrat nastavení výstupu pro {{app}}"
+      },
       "typingTool": {
         "title": "Nástroj pro psaní",
         "description": "Vyberte, který linuxový nástroj pro psaní použít pro metodu přímého vložení. Auto automaticky zjistí a použije nejlepší dostupný nástroj pro váš systém.",

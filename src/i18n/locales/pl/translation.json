@@ -370,6 +370,20 @@
         "unknownTarget": "zablokowane okno",
         "unlock": "Odblokuj"
       },
+      "outputProfiles": {
+        "title": "Ustawienia wyjścia dla aplikacji",
+        "description": "Nadaj jednej aplikacji własne ustawienia wyjścia. Wpisz nazwę programu (na przykład WindowsTerminal lub code), a potem wybierz, co AudioBud ma tam robić. Wszystko, co pozostawisz na „Użyj ustawienia globalnego”, działa według zwykłych ustawień. Aplikacje bez wpisu pozostają bez zmian.",
+        "appNamePlaceholder": "Nazwa aplikacji lub programu",
+        "add": "Dodaj",
+        "useGlobal": "Użyj ustawienia globalnego",
+        "pasteMethod": "Metoda wklejania",
+        "autoSubmit": "Klawisz wysyłania",
+        "clipboard": "Schowek",
+        "duplicate": "„{{app}}” ma już własne ustawienia wyjścia",
+        "capReached": "Lista jest pełna ({{cap}} aplikacji). Usuń jedną, aby dodać kolejną.",
+        "tooLong": "Nazwa aplikacji musi mieć mniej niż {{max}} znaków",
+        "remove": "Usuń ustawienia wyjścia dla {{app}}"
+      },
       "typingTool": {
         "title": "Narzędzie do wpisywania",
         "description": "Wybierz, którego narzędzia do wpisywania w Linuxie użyć dla metody bezpośredniego wklejania. Auto automatycznie wykryje i użyje najlepszego dostępnego narzędzia dla Twojego systemu.",

@@ -3,6 +3,7 @@ use crate::clipboard_snapshot::ClipboardBackend;
 use crate::clipboard_snapshot::{self, ArboardBackend, ClipboardContent, ClipboardHistory};
 use crate::dictation_context::DictationContext;
 use crate::input::{self, EnigoState};
+use crate::output_profile::EffectiveOutput;
 use crate::output_target::backend::{
     self as target_backend, Borrowed, Delivery, FocusHold, FocusLost,
 };
@@ -792,17 +793,23 @@ fn should_copy_to_clipboard(handling: ClipboardHandling, delivered: bool) -> boo
 /// Send the transcript to the resolved target, and report whether it was
 /// delivered. `delivery` is `None` when the target lock was lost, in which case
 /// nothing is typed anywhere.
+///
+/// `effective` is what this one delivery types with: the global output settings,
+/// or the destination application's own profile folded over them (#123).
+/// `settings` still supplies everything a profile cannot change -- the paste
+/// delay, the Linux typing tool, the external script's path.
 fn deliver_to_target(
     text: &str,
     app_handle: &AppHandle,
     settings: &AppSettings,
+    effective: EffectiveOutput,
     delivery: Option<Delivery>,
 ) -> Result<bool, String> {
     let Some(delivery) = delivery else {
         return Ok(false);
     };
 
-    let paste_method = settings.paste_method;
+    let paste_method = effective.paste_method;
 
     // Get the managed Enigo instance
     let enigo_state = app_handle
@@ -855,10 +862,10 @@ fn deliver_to_target(
             }
         }
 
-        if should_send_auto_submit(settings.auto_submit, paste_method) {
+        if should_send_auto_submit(effective.auto_submit, paste_method) {
             std::thread::sleep(Duration::from_millis(50));
             hold.ensure()?;
-            send_return_key(enigo, settings.auto_submit_key)?;
+            send_return_key(enigo, effective.auto_submit_key)?;
         }
 
         Ok(())
@@ -869,7 +876,7 @@ fn deliver_to_target(
         // Borrowing focus for a delivery that sends nothing would take the
         // user's window away from them for no reason at all.
         Delivery::Pinned(_, _)
-            if !requires_focus_for_delivery(paste_method, settings.auto_submit) =>
+            if !requires_focus_for_delivery(paste_method, effective.auto_submit) =>
         {
             deliver(&mut enigo)
         }
@@ -917,7 +924,6 @@ fn delivery_outcome(outcome: Result<(), DeliveryError>) -> Result<bool, String> 
 /// this dictation asked for.
 pub fn paste(text: String, app_handle: AppHandle, context: DictationContext) -> Result<(), String> {
     let settings = get_settings(&app_handle);
-    let paste_method = settings.paste_method;
     let paste_delay_ms = settings.paste_delay_ms;
 
     // Append trailing space if setting is enabled
@@ -926,11 +932,6 @@ pub fn paste(text: String, app_handle: AppHandle, context: DictationContext) -> 
     } else {
         text
     };
-
-    info!(
-        "Using paste method: {:?}, delay: {}ms",
-        paste_method, paste_delay_ms
-    );
 
     // Where this transcript goes: the target this dictation captured when its
     // recording started (#160) -- the foreground window, or the window that was
@@ -941,11 +942,30 @@ pub fn paste(text: String, app_handle: AppHandle, context: DictationContext) -> 
         context.delivery_target(),
         context.sequence(),
     );
+
+    // What THIS delivery types with (#123): the destination application's own
+    // profile folded over the global output settings, resolved once here from
+    // the target that was just settled above -- the pinned or picked window, or
+    // the window holding focus for a foreground delivery. Every decision below
+    // reads it, so the focus-capability question (#162) and the delivery
+    // confirmation (#279) see the same paste method and auto-submit the
+    // keystrokes actually use. Nothing is written back to the settings store: a
+    // profile steers one delivery, it does not change what the user configured.
+    let effective = EffectiveOutput::resolve(
+        &settings,
+        target_backend::delivery_app_name(delivery).as_deref(),
+    );
+
+    info!(
+        "Using paste method: {:?}, delay: {}ms",
+        effective.paste_method, paste_delay_ms
+    );
+
     // Held, not unwrapped with `?`: a delivery that FAILED needs the clipboard
     // copy even more than one that succeeded, because a failure is exactly when
     // the copy is the transcript's last refuge. Returning here would report the
     // error and throw the text away with it.
-    let outcome = deliver_to_target(&text, &app_handle, &settings, delivery);
+    let outcome = deliver_to_target(&text, &app_handle, &settings, effective, delivery);
     let delivered = matches!(outcome, Ok(true));
 
     // The clipboard copy is a setting about the clipboard, not about the window
@@ -953,7 +973,7 @@ pub fn paste(text: String, app_handle: AppHandle, context: DictationContext) -> 
     // failed. Otherwise the only copy of a transcript is discarded whenever the
     // target is lost or refuses to come forward -- which, with
     // PasteMethod::None, is the entire output.
-    let copied = if should_copy_to_clipboard(settings.clipboard_handling, delivered) {
+    let copied = if should_copy_to_clipboard(effective.clipboard_handling, delivered) {
         app_handle
             .clipboard()
             .write_text(&text)
@@ -977,7 +997,7 @@ pub fn paste(text: String, app_handle: AppHandle, context: DictationContext) -> 
     // confirmation is withheld for that one race rather than contradicting it.
     if delivered
         && copied.is_ok()
-        && delivery_is_directed_at_target(settings.paste_method, settings.auto_submit)
+        && delivery_is_directed_at_target(effective.paste_method, effective.auto_submit)
     {
         if let Some(Delivery::Pinned(identity, source)) = delivery {
             target_backend::announce_delivered(&app_handle, identity, source);
@@ -1231,6 +1251,46 @@ mod tests {
             assert!(delivery_is_directed_at_target(method, true));
             assert!(delivery_is_directed_at_target(method, false));
         }
+    }
+
+    #[test]
+    fn a_profile_decides_the_focus_and_confirmation_questions_for_its_own_app() {
+        // The two questions every delivery asks -- does this need a focused
+        // window (#162), and did the text really land in the pinned one (#279)
+        // -- must be asked about what THIS delivery types with, not about the
+        // global settings. A profile that turns the paste method off for one
+        // application makes both answers "no" there while the global settings
+        // still say "yes" everywhere else (#123).
+        let mut settings = crate::settings::get_default_settings();
+        settings.paste_method = PasteMethod::CtrlV;
+        settings.auto_submit = false;
+        settings.output_profiles = vec![crate::settings::OutputProfile {
+            app_name: "notes".to_string(),
+            paste_method: Some(PasteMethod::None),
+            auto_submit: None,
+            auto_submit_key: None,
+            clipboard_handling: None,
+        }];
+
+        let profiled = EffectiveOutput::resolve(&settings, Some("notes"));
+        assert!(!requires_focus_for_delivery(
+            profiled.paste_method,
+            profiled.auto_submit
+        ));
+        assert!(!delivery_is_directed_at_target(
+            profiled.paste_method,
+            profiled.auto_submit
+        ));
+
+        let unprofiled = EffectiveOutput::resolve(&settings, Some("chrome"));
+        assert!(requires_focus_for_delivery(
+            unprofiled.paste_method,
+            unprofiled.auto_submit
+        ));
+        assert!(delivery_is_directed_at_target(
+            unprofiled.paste_method,
+            unprofiled.auto_submit
+        ));
     }
 
     #[test]
