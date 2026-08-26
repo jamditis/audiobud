@@ -490,6 +490,17 @@ fn show_overlay_state(app_handle: &AppHandle, state: &str, raw: bool) {
     // would have done is stale, whether it is mid-fade or mid-confirmation.
     OVERLAY_VISIBILITY_EPOCH.fetch_add(1, Ordering::SeqCst);
 
+    // A pending confirmation flag left over from an older, superseded
+    // delivery must not extend *this* dictation's hide to the long delay
+    // meant for a confirmation this show has nothing to do with (#279 review
+    // round 6): the older delivery's own confirmation was already dropped by
+    // the frontend's active-recording guard, so left set the flag would just
+    // be consumed by whichever unrelated hide runs next, keeping the
+    // invisible native window alive (and click-intercepting on Windows) for
+    // 2.2s instead of the normal 300ms. A show clears it; `announce_delivered`
+    // re-arms it only for the confirmation that is actually about to follow.
+    PENDING_DELIVERY_CONFIRMATION.store(false, Ordering::SeqCst);
+
     update_overlay_position(app_handle);
 
     if let Some(overlay_window) = app_handle.get_webview_window("recording_overlay") {

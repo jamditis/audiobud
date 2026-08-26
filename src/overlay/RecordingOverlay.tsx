@@ -63,6 +63,17 @@ const RecordingOverlay: React.FC = () => {
   // definition: whatever it names, it is not what the user is looking at
   // right now, a live recording in progress, so the listener below drops it
   // instead of overwriting the new recording's bars with an old "Sent" chip.
+  //
+  // Deliberately scoped to `state === "recording"` only, not also
+  // "transcribing"/"processing" (#279 review round 6): those two states are
+  // when a dictation's *own* legitimate confirmation normally arrives, so
+  // gating on them would silently break the ordinary single-dictation case.
+  // That leaves one known gap unfixed: an older paste completing while a
+  // *newer* dictation is itself transcribing or processing (not recording)
+  // still passes this guard and shows a stale chip for up to 1.8s. Closing
+  // that gap needs the events to carry a dictation sequence to compare
+  // against instead of inferring "newer" from overlay state, which is
+  // tracked as issue #298 rather than solved with a bigger state guess here.
   const isRecordingActiveRef = useRef(false);
   const reduceMotion = usePrefersReducedMotion();
   const direction = getLanguageDirection(i18n.language);
@@ -144,7 +155,10 @@ const RecordingOverlay: React.FC = () => {
             // dropping it outright while a new recording is active is the
             // smaller fix, and covers the timing window the review raised
             // (a slow focus borrow or paste delay outlasting the transcription
-            // worker) without touching the Rust event shape.
+            // worker) without touching the Rust event shape. It does not cover
+            // every ordering -- see the `isRecordingActiveRef` declaration
+            // above and issue #298 for the gap that remains and why closing
+            // it needs the sequence this event doesn't carry yet.
             return;
           }
           const fullName = formatDeliveredWindowName(
