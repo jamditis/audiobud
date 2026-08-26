@@ -254,8 +254,10 @@ impl PickerSession {
 /// Where a pending one-shot pick sends the paste about to fire.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PickDelivery {
-    /// Deliver this transcript to the picked window.
-    Deliver(OutputTarget),
+    /// Deliver this transcript to the picked window. Carries the whole
+    /// identity, not just the handle, because every later step of the delivery
+    /// re-checks it (#254).
+    Deliver(WindowIdentity),
     /// The picked window is gone. SUPPRESS the paste, exactly as a lost lock
     /// does ([`crate::output_target::Resolved::LockLost`]): a recycled handle
     /// must never receive the transcript (#254).
@@ -299,7 +301,7 @@ impl PendingPick {
     ) -> Option<PickDelivery> {
         let picked = self.guard().take()?;
         Some(if is_alive(picked) {
-            PickDelivery::Deliver(OutputTarget::Pinned(picked.handle))
+            PickDelivery::Deliver(picked)
         } else {
             PickDelivery::PickLost
         })
@@ -778,7 +780,7 @@ mod tests {
                 assert_eq!(w, picked);
                 true
             }),
-            Some(PickDelivery::Deliver(OutputTarget::Pinned(picked.handle)))
+            Some(PickDelivery::Deliver(picked))
         );
         // One pick, one paste: the second transcript is a normal one.
         assert!(!pending.is_armed());

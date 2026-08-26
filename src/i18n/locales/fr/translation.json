@@ -15,6 +15,7 @@
     "outputMode": "Mode de sortie",
     "formatted": "Formaté",
     "rawTranscript": "Transcription brute",
+    "lockToWindow": "Épingler à une fenêtre",
     "sendToWindowOnce": "Envoyer à une fenêtre une fois"
   },
   "sidebar": {
@@ -803,6 +804,8 @@
     "modelLoadFailedUnknown": "modèle inconnu",
     "pasteFailedTitle": "Échec du collage du texte",
     "pasteFailed": "Le texte n'a pas pu être collé dans l'application active.",
+    "targetLockLostTitle": "La fenêtre épinglée a disparu",
+    "targetLockLost": "La fenêtre que vous avez épinglée est fermée. AudioBud n'a pas collé le texte. Épinglez à nouveau une fenêtre.",
     "transcriptionErrorTitle": "Échec de la transcription",
     "transcriptionErrorGeneric": "L’enregistrement n’a pas pu être transcrit. Réessayez ou choisissez un autre modèle.",
     "transcriptionTimeoutTitle": "Délai de transcription dépassé",

@@ -22,7 +22,7 @@ use log::{debug, info, warn};
 use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 
 use crate::output_target::backend as target_backend;
-use crate::output_target::{accept_capture, WindowHandle, WindowIdentity};
+use crate::output_target::{WindowHandle, WindowIdentity};
 
 use super::{
     arm_pick, offer_rows, resolve_gesture, visible_candidates, LastPick, PendingPick, PickArmed,
@@ -188,14 +188,8 @@ fn identify_window(handle: WindowHandle) -> Option<WindowIdentity> {
     })
 }
 
-/// Whether `identity` belongs to AudioBud, reusing the target lock's rule (#164)
-/// so the picker can never offer a row that pastes back into the picker.
-fn is_own(identity: WindowIdentity) -> bool {
-    accept_capture(identity, std::process::id()).is_err()
-}
-
-/// Every top-level window the OS is showing, plus the handles of AudioBud's own
-/// windows for [`visible_candidates`] to exclude.
+/// Every top-level window worth offering, plus the handles of the ones the
+/// shared eligibility rule rejected, which [`visible_candidates`] excludes.
 #[cfg(windows)]
 pub use imp::enumerate_windows;
 
@@ -204,7 +198,8 @@ pub use fallback::enumerate_windows;
 
 #[cfg(windows)]
 mod imp {
-    use super::{identify_window, is_own, RawWindow, WindowHandle};
+    use super::{identify_window, RawWindow, WindowHandle};
+    use crate::output_target::{is_eligible_target, WindowFacts};
     // BOOL lives in windows::core in windows 0.61, not in Win32::Foundation
     // where the docs file it.
     use windows::core::{BOOL, PWSTR};
@@ -214,15 +209,16 @@ mod imp {
         PROCESS_QUERY_LIMITED_INFORMATION,
     };
     use windows::Win32::UI::WindowsAndMessaging::{
-        EnumWindows, GetWindowTextLengthW, GetWindowTextW, IsWindowVisible,
+        EnumWindows, GetClassNameW, GetWindowTextLengthW, GetWindowTextW, IsWindowVisible,
     };
 
     /// What the enumeration callback collects: the offerable windows and the
-    /// handles of AudioBud's own, which the core filter excludes (#164).
+    /// handles of the ineligible ones -- AudioBud's own (#164) and the shell's
+    /// surfaces -- which the core filter excludes.
     #[derive(Default)]
     struct Collected {
         windows: Vec<RawWindow>,
-        own: Vec<WindowHandle>,
+        excluded: Vec<WindowHandle>,
     }
 
     /// Walk the top-level windows with `EnumWindows`, reading each one's title,
@@ -235,7 +231,7 @@ mod imp {
         if let Err(e) = unsafe { EnumWindows(Some(collect), lparam) } {
             log::warn!("Could not enumerate windows for the picker: {}", e);
         }
-        (collected.windows, collected.own)
+        (collected.windows, collected.excluded)
     }
 
     unsafe extern "system" fn collect(hwnd: HWND, lparam: LPARAM) -> BOOL {
@@ -248,16 +244,29 @@ mod imp {
         let Some(identity) = identify_window(handle) else {
             return TRUE;
         };
-        if is_own(identity) {
-            collected.own.push(handle);
+
+        // The same eligibility rule the target lock uses, so the picker offers
+        // exactly what can be locked onto: no AudioBud windows (#164), no shell
+        // surfaces, nothing hidden or untitled.
+        let title = window_title(hwnd);
+        let class_name = class_name_of(hwnd);
+        let visible = unsafe { IsWindowVisible(hwnd) }.as_bool();
+        let facts = WindowFacts {
+            identity,
+            class_name: &class_name,
+            has_title: !title.trim().is_empty(),
+            visible,
+        };
+        if !is_eligible_target(&facts, std::process::id()) {
+            collected.excluded.push(handle);
             return TRUE;
         }
 
         collected.windows.push(RawWindow {
             handle,
-            title: window_title(hwnd),
+            title,
             app: app_name(identity.process_id),
-            visible: unsafe { IsWindowVisible(hwnd) }.as_bool(),
+            visible,
         });
         TRUE
     }
@@ -276,6 +285,18 @@ mod imp {
             return String::new();
         }
         String::from_utf16_lossy(&buffer[..copied as usize])
+    }
+
+    /// The window's class name, empty when it cannot be read. Only the shared
+    /// eligibility rule reads it, to spot the shell's own surfaces.
+    fn class_name_of(hwnd: HWND) -> String {
+        // 256 matches the documented maximum length of a registered class name.
+        let mut buffer = [0u16; 256];
+        let written = unsafe { GetClassNameW(hwnd, &mut buffer) };
+        if written <= 0 {
+            return String::new();
+        }
+        String::from_utf16_lossy(&buffer[..written as usize])
     }
 
     /// The owning application's name -- the executable's file stem, so rows read

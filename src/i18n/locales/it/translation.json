@@ -15,6 +15,7 @@
     "outputMode": "Modalità di output",
     "formatted": "Formattato",
     "rawTranscript": "Trascrizione grezza",
+    "lockToWindow": "Blocca su una finestra",
     "sendToWindowOnce": "Invia a una finestra una volta"
   },
   "sidebar": {
@@ -803,6 +804,8 @@
     "modelLoadFailedUnknown": "modello sconosciuto",
     "pasteFailedTitle": "Impossibile incollare il testo",
     "pasteFailed": "Non è stato possibile incollare il testo nell'applicazione attiva.",
+    "targetLockLostTitle": "La finestra bloccata non esiste più",
+    "targetLockLost": "La finestra che hai bloccato è chiusa. AudioBud non ha incollato il testo. Blocca di nuovo una finestra.",
     "transcriptionErrorTitle": "Trascrizione non riuscita",
     "transcriptionErrorGeneric": "Non è stato possibile trascrivere la registrazione. Riprova o scegli un altro modello.",
     "transcriptionTimeoutTitle": "Tempo scaduto per la trascrizione",

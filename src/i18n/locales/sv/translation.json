@@ -15,6 +15,7 @@
     "outputMode": "Utdataläge",
     "formatted": "Formaterad",
     "rawTranscript": "Rå transkription",
+    "lockToWindow": "Lås till fönster",
     "sendToWindowOnce": "Skicka till fönster en gång"
   },
   "sidebar": {
@@ -803,6 +804,8 @@
     "modelLoadFailedUnknown": "okänd modell",
     "pasteFailedTitle": "Det gick inte att klistra in texten",
     "pasteFailed": "Texten kunde inte klistras in i det aktiva programmet.",
+    "targetLockLostTitle": "Det låsta fönstret finns inte längre",
+    "targetLockLost": "Fönstret du låste är stängt. AudioBud klistrade inte in texten. Lås ett fönster igen.",
     "transcriptionErrorTitle": "Transkriptionen misslyckades",
     "transcriptionErrorGeneric": "Inspelningen kunde inte transkriberas. Försök igen eller välj en annan modell.",
     "transcriptionTimeoutTitle": "Transkriptionen tog för lång tid",

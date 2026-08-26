@@ -15,6 +15,7 @@
     "outputMode": "Режим вывода",
     "formatted": "С форматированием",
     "rawTranscript": "Сырая транскрипция",
+    "lockToWindow": "Закрепить за окном",
     "sendToWindowOnce": "Отправить в окно один раз"
   },
   "sidebar": {
@@ -807,6 +808,8 @@
     "modelLoadFailedUnknown": "неизвестная модель",
     "pasteFailedTitle": "Не удалось вставить текст",
     "pasteFailed": "Не удалось вставить текст в активное приложение.",
+    "targetLockLostTitle": "Закреплённое окно закрыто",
+    "targetLockLost": "Окно, которое вы закрепили, закрыто. AudioBud не вставил текст. Закрепите окно снова.",
     "transcriptionErrorTitle": "Не удалось выполнить транскрипцию",
     "transcriptionErrorGeneric": "Не удалось расшифровать запись. Повторите попытку или выберите другую модель.",
     "transcriptionTimeoutTitle": "Время ожидания транскрипции истекло",
