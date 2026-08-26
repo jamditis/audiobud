@@ -17,6 +17,7 @@ import {
   createPickerState,
   foregroundGesture,
   handleKey,
+  handleKeyWhileLoading,
   pickWasRefused,
   targetOwnsKey,
   type PickerGesture,
@@ -24,6 +25,9 @@ import {
 } from "@/lib/window-picker-overlay";
 import { getLanguageDirection } from "@/lib/utils/rtl";
 import "./WindowPicker.css";
+
+// The DOM id of the row at `index`, for aria-activedescendant to point at.
+const rowId = (index: number) => `picker-row-${index}`;
 
 const WindowPicker: React.FC = () => {
   const { t } = useTranslation();
@@ -90,8 +94,21 @@ const WindowPicker: React.FC = () => {
     const onKeyDown = (event: KeyboardEvent) => {
       // A keydown on the footer buttons reaches this window-level listener too.
       // Enter there means "press this button", not "take the highlighted row",
-      // so the control keeps the key (Escape always backs out, from anywhere).
+      // so the control keeps that key (Escape always backs out, from anywhere).
       if (targetOwnsKey(event.target as HTMLElement | null, event.key)) return;
+
+      // Before the rows arrive there is nothing to choose, and an empty list
+      // reads as a dismissal -- so an eager Enter would end the pick and clear
+      // whatever route was already armed. Only Escape acts while loading.
+      if (loading) {
+        const early = handleKeyWhileLoading(event.key);
+        if (early?.gesture) {
+          event.preventDefault();
+          void send(early.gesture);
+        }
+        return;
+      }
+
       const step = handleKey(state, event.key);
       if (step.gesture) {
         event.preventDefault();
@@ -105,7 +122,7 @@ const WindowPicker: React.FC = () => {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [state, send]);
+  }, [state, send, loading]);
 
   // Keep the highlighted row in view when the list is longer than the surface.
   useEffect(() => {
@@ -114,6 +131,17 @@ const WindowPicker: React.FC = () => {
       row.scrollIntoView({ block: "nearest" });
     }
   }, [state.highlighted]);
+
+  // Focus the list itself once it has rows. A listbox that never holds focus is
+  // never announced, so a screen-reader user hears nothing as the highlight
+  // moves; with focus here, aria-activedescendant below names the active row on
+  // every move. Keys are handled on the window either way, so this changes what
+  // is announced, not what works.
+  useEffect(() => {
+    if (!loading && state.windows.length > 0) {
+      listRef.current?.focus();
+    }
+  }, [loading, state.windows.length]);
 
   const onRowClick = (index: number) => {
     const step = chooseAt(state, index);
@@ -139,12 +167,17 @@ const WindowPicker: React.FC = () => {
         <ul
           className="picker-list"
           role="listbox"
+          tabIndex={0}
           aria-label={t("windowPicker.title")}
+          aria-activedescendant={
+            state.highlighted >= 0 ? rowId(state.highlighted) : undefined
+          }
           ref={listRef}
         >
           {state.windows.map((win, index) => (
             <li
               key={win.handle}
+              id={rowId(index)}
               role="option"
               aria-selected={index === state.highlighted}
               className={`picker-row ${index === state.highlighted ? "highlighted" : ""}`}

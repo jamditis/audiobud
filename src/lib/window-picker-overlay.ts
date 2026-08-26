@@ -182,6 +182,14 @@ const INTERACTIVE_TAGS = new Set([
 ]);
 
 /**
+ * The only keys a focused control actually acts on: Enter and Space activate a
+ * button, a link, a checkbox. Everything else -- arrows, digits, f, Home, End --
+ * means nothing to them, so the picker keeps it and the list stays drivable from
+ * the footer buttons.
+ */
+const CONTROL_KEYS = new Set(["Enter", " ", "Spacebar"]);
+
+/**
  * Whether a keydown on `target` belongs to the control it landed on rather than
  * to the picker.
  *
@@ -189,15 +197,29 @@ const INTERACTIVE_TAGS = new Set([
  * buttons reaches the reducer too. Without this, Enter while "Use current
  * window" or "Cancel" is focused would arm the HIGHLIGHTED ROW and swallow the
  * button's activation -- the picker would do something the user did not ask
- * for. Escape is the one exception: backing out has to work from anywhere,
- * including a focused button, and no control here does anything else with it.
+ * for. Only the keys the control itself handles are given up; Escape is never
+ * one of them, because backing out has to work from anywhere.
  */
 export function targetOwnsKey(target: KeyTarget | null, key: string): boolean {
-  if (key === "Escape" || !target) return false;
+  if (!target || !CONTROL_KEYS.has(key)) return false;
   return (
     INTERACTIVE_TAGS.has((target.tagName ?? "").toUpperCase()) ||
     target.isContentEditable === true
   );
+}
+
+/**
+ * Feed one keydown to a picker whose rows have not arrived yet.
+ *
+ * Nothing can be chosen from a list that has not loaded, and the reducer reads
+ * an empty list as "nothing to deliver to", so plain [`handleKey`] would turn an
+ * eager Enter into a DISMISSAL -- ending the pick and clearing whatever route
+ * was already armed. So while loading, only Escape does anything: it backs out,
+ * which is what the user pressing it means either way. Every other key returns
+ * `null` and is ignored.
+ */
+export function handleKeyWhileLoading(key: string): PickerStep | null {
+  return key === "Escape" ? { gesture: { kind: "dismiss" } } : null;
 }
 
 /**

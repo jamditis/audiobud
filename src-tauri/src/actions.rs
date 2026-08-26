@@ -1011,6 +1011,14 @@ struct CancelAction;
 
 impl ShortcutAction for CancelAction {
     fn start(&self, app: &AppHandle, _binding_id: &str, _shortcut_str: &str) {
+        // The cancel binding defaults to Escape, which is also how the one-shot
+        // picker is dismissed (#124) -- and a global shortcut fires whatever the
+        // focused window does with the key, so backing out of the picker would
+        // otherwise throw away the recording underneath it. While a pick is up,
+        // the picker owns the gesture: it closes, and the recording keeps going.
+        if crate::window_picker::backend::dismiss_open_picker(app) {
+            return;
+        }
         utils::cancel_current_operation(app);
     }
 
@@ -1036,6 +1044,23 @@ impl ShortcutAction for ToggleTargetLockAction {
 
     fn stop(&self, _app: &AppHandle, _binding_id: &str, _shortcut_str: &str) {
         // The lock flips on press; the release does nothing.
+    }
+}
+
+// One-shot window picker (#124). Pressing opens the picker; choosing a window
+// routes the NEXT transcript there and nothing after it. Windows-only for now
+// (#119), like the target lock, so the binding is registered only there.
+#[cfg(target_os = "windows")]
+struct PickOutputWindowAction;
+
+#[cfg(target_os = "windows")]
+impl ShortcutAction for PickOutputWindowAction {
+    fn start(&self, app: &AppHandle, _binding_id: &str, _shortcut_str: &str) {
+        crate::window_picker::backend::open_picker(app);
+    }
+
+    fn stop(&self, _app: &AppHandle, _binding_id: &str, _shortcut_str: &str) {
+        // The picker opens on press; the release does nothing.
     }
 }
 
@@ -1094,6 +1119,11 @@ pub static ACTION_MAP: Lazy<HashMap<String, Arc<dyn ShortcutAction>>> = Lazy::ne
     map.insert(
         "toggle_target_lock".to_string(),
         Arc::new(ToggleTargetLockAction) as Arc<dyn ShortcutAction>,
+    );
+    #[cfg(target_os = "windows")]
+    map.insert(
+        "pick_output_window".to_string(),
+        Arc::new(PickOutputWindowAction) as Arc<dyn ShortcutAction>,
     );
     map.insert(
         "test".to_string(),

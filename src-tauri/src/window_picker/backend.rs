@@ -201,6 +201,25 @@ pub fn forget_offer(app: &AppHandle) {
     }
 }
 
+/// Dismiss the picker if one is up, and say whether there was one.
+///
+/// The cancel shortcut calls this first: it is bound to Escape by default, and
+/// a global shortcut fires no matter which window has focus, so without this,
+/// closing the picker with Escape would also cancel the recording the user
+/// started before opening it. A pick in progress therefore claims the gesture --
+/// the picker closes and nothing is armed, exactly as the overlay's own Escape
+/// does -- and the recording is left alone. With no picker up this does nothing
+/// and answers `false`, so cancel behaves as it always has.
+pub fn dismiss_open_picker(app: &AppHandle) -> bool {
+    if !pick_in_progress(app) {
+        return false;
+    }
+    info!("The cancel shortcut dismissed the window picker; the recording stands");
+    abandon_pick(app);
+    close_picker(app);
+    true
+}
+
 /// End a pick that was abandoned rather than answered -- the picker window went
 /// away without a gesture (Alt+F4, the window menu). Leaves nothing armed and no
 /// session standing, so the next transcript follows the usual rules.

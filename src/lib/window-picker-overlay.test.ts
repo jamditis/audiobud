@@ -6,6 +6,7 @@ import {
   foregroundGesture,
   chooseAt,
   handleKey,
+  handleKeyWhileLoading,
   pickWasRefused,
   targetOwnsKey,
   type PickerWindow,
@@ -145,14 +146,23 @@ describe("handles cross the boundary as opaque lossless strings", () => {
 });
 
 describe("keys on the picker's own controls belong to the control", () => {
-  it("leaves Enter to a focused button instead of arming the highlighted row", () => {
+  it("leaves the activation keys to a focused button", () => {
     // The footer's "Use current window" and "Cancel" buttons are activated with
-    // Enter. The picker listens on the window, so without this the reducer would
-    // pick a row AND swallow the button press.
+    // Enter or Space. The picker listens on the window, so without this the
+    // reducer would pick a row AND swallow the button press.
     for (const tagName of ["BUTTON", "INPUT", "SELECT", "TEXTAREA", "A"]) {
       expect(targetOwnsKey({ tagName }, "Enter")).toBe(true);
+      expect(targetOwnsKey({ tagName }, " ")).toBe(true);
     }
     expect(targetOwnsKey({ isContentEditable: true }, "Enter")).toBe(true);
+  });
+
+  it("keeps every key a button does nothing with, so the list stays drivable", () => {
+    // Focus sitting on a footer button must not deaden navigation: a button has
+    // no use for arrows, digits, Home/End or f, so the picker keeps them.
+    for (const key of ["ArrowDown", "ArrowUp", "Home", "End", "1", "9", "f"]) {
+      expect(targetOwnsKey({ tagName: "BUTTON" }, key)).toBe(false);
+    }
   });
 
   it("keeps Escape for the picker, even from a focused button", () => {
@@ -166,7 +176,31 @@ describe("keys on the picker's own controls belong to the control", () => {
   });
 
   it("matches tag names case-insensitively, as a lowercase DOM would report", () => {
-    expect(targetOwnsKey({ tagName: "button" }, "1")).toBe(true);
+    expect(targetOwnsKey({ tagName: "button" }, "Enter")).toBe(true);
+  });
+});
+
+describe("keys pressed before the rows arrive", () => {
+  it("ignores Enter rather than reading an empty list as a dismissal", () => {
+    // The regression: handleKey on an empty list dismisses, which would end the
+    // pick and clear a route the user had already armed -- all because they
+    // pressed Enter a moment early.
+    expect(handleKeyWhileLoading("Enter")).toBeNull();
+    expect(handleKey(createPickerState([]), "Enter")).toEqual({
+      gesture: { kind: "dismiss" },
+    });
+  });
+
+  it("ignores navigation and the foreground send until there is a list", () => {
+    for (const key of ["ArrowDown", "ArrowUp", "Home", "End", "1", "f"]) {
+      expect(handleKeyWhileLoading(key)).toBeNull();
+    }
+  });
+
+  it("still lets Escape back out", () => {
+    expect(handleKeyWhileLoading("Escape")).toEqual({
+      gesture: { kind: "dismiss" },
+    });
   });
 });
 
