@@ -27,9 +27,12 @@ interface FileSize {
 interface EntrySize {
   entry: string;
   source: string;
-  files: FileSize[];
-  bytes: number;
-  gzipBytes: number;
+  initialFiles: FileSize[];
+  initialBytes: number;
+  initialGzipBytes: number;
+  deferredAssets: FileSize[];
+  deferredBytes: number;
+  deferredGzipBytes: number;
 }
 
 const rootDir = process.cwd();
@@ -64,6 +67,14 @@ function findEntryKey(
   return match[0];
 }
 
+// The initial payload is what a webview actually fetches to reach an
+// interactive first paint: the entry chunk, its CSS, and everything reached
+// by walking the statically-imported JS/CSS graph. `entry.assets` (images,
+// fonts, audio) are resources a chunk *references* by URL, not resources the
+// browser is guaranteed to fetch on load -- e.g. src/lib/ribbit.ts imports
+// ribbit.wav to get its bundled URL, but the file itself is only requested
+// when playRibbit() constructs an Audio element after a click. Counting
+// those against the initial payload overstates what startup costs.
 function collectInitialFiles(
   manifest: Record<string, ManifestEntry>,
   entryKey: string,
@@ -80,12 +91,36 @@ function collectInitialFiles(
 
   if (entry.file) files.add(entry.file);
   for (const file of entry.css ?? []) files.add(file);
-  for (const file of entry.assets ?? []) files.add(file);
   for (const importedEntry of entry.imports ?? []) {
     collectInitialFiles(manifest, importedEntry, visitedEntries, files);
   }
 
   return files;
+}
+
+// Referenced-but-deferred assets: everything `collectInitialFiles` skips,
+// gathered from the same reachable chunk graph so they stay visible without
+// inflating the initial-payload number.
+function collectDeferredAssets(
+  manifest: Record<string, ManifestEntry>,
+  entryKey: string,
+  visitedEntries = new Set<string>(),
+  assets = new Set<string>(),
+): Set<string> {
+  if (visitedEntries.has(entryKey)) return assets;
+  visitedEntries.add(entryKey);
+
+  const entry = manifest[entryKey];
+  if (!entry) {
+    throw new Error(`Vite manifest import is missing: ${entryKey}`);
+  }
+
+  for (const file of entry.assets ?? []) assets.add(file);
+  for (const importedEntry of entry.imports ?? []) {
+    collectDeferredAssets(manifest, importedEntry, visitedEntries, assets);
+  }
+
+  return assets;
 }
 
 async function getFileSize(file: string): Promise<FileSize> {
@@ -152,17 +187,31 @@ async function main(): Promise<void> {
   const entrySizes: EntrySize[] = [];
   for (const [entry, source] of Object.entries(entrySources)) {
     const entryKey = findEntryKey(manifest, source);
-    const files = await Promise.all(
+    const initialFiles = await Promise.all(
       [...collectInitialFiles(manifest, entryKey)].map(getFileSize),
     );
-    files.sort((left, right) => right.bytes - left.bytes);
+    initialFiles.sort((left, right) => right.bytes - left.bytes);
+
+    const deferredAssets = await Promise.all(
+      [...collectDeferredAssets(manifest, entryKey)].map(getFileSize),
+    );
+    deferredAssets.sort((left, right) => right.bytes - left.bytes);
 
     entrySizes.push({
       entry,
       source,
-      files,
-      bytes: files.reduce((sum, file) => sum + file.bytes, 0),
-      gzipBytes: files.reduce((sum, file) => sum + file.gzipBytes, 0),
+      initialFiles,
+      initialBytes: initialFiles.reduce((sum, file) => sum + file.bytes, 0),
+      initialGzipBytes: initialFiles.reduce(
+        (sum, file) => sum + file.gzipBytes,
+        0,
+      ),
+      deferredAssets,
+      deferredBytes: deferredAssets.reduce((sum, file) => sum + file.bytes, 0),
+      deferredGzipBytes: deferredAssets.reduce(
+        (sum, file) => sum + file.gzipBytes,
+        0,
+      ),
     });
   }
 
@@ -206,7 +255,21 @@ async function main(): Promise<void> {
   const entryRows = entrySizes
     .map(
       (entry) =>
-        `| ${entry.entry} | ${entry.files.length} | ${formatBytes(entry.bytes)} | ${formatBytes(entry.gzipBytes)} |`,
+        `| ${entry.entry} | ${entry.initialFiles.length} | ${formatBytes(entry.initialBytes)} | ${formatBytes(entry.initialGzipBytes)} |`,
+    )
+    .join("\n");
+  const deferredRows = entrySizes
+    .map(
+      (entry) =>
+        `| ${entry.entry} | ${entry.deferredAssets.length} | ${formatBytes(entry.deferredBytes)} | ${formatBytes(entry.deferredGzipBytes)} |`,
+    )
+    .join("\n");
+  const deferredFileRows = entrySizes
+    .flatMap((entry) =>
+      entry.deferredAssets.map(
+        (file) =>
+          `| ${entry.entry} | \`${file.file}\` | ${formatBytes(file.bytes)} | ${formatBytes(file.gzipBytes)} |`,
+      ),
     )
     .join("\n");
   const fileRows = allFiles
@@ -224,10 +287,24 @@ async function main(): Promise<void> {
 
 ## Initial frontend payloads
 
+Resources fetched to reach an interactive first paint: each entry's chunk,
+its CSS, and the statically-imported JS/CSS graph reachable from it.
+
 | Entry | Files | Raw size | Gzip size |
 | --- | ---: | ---: | ---: |
 ${entryRows}
 
+## Deferred assets (referenced, not loaded at startup)
+
+Images, fonts, and audio a chunk references by URL but does not fetch until
+something at runtime asks for them (e.g. a click that plays a sound). Listed
+separately so they stay visible without inflating the initial payload above.
+
+| Entry | Files | Raw size | Gzip size |
+| --- | ---: | ---: | ---: |
+${deferredRows}
+
+${deferredFileRows ? `| Entry | File | Raw size | Gzip size |\n| --- | --- | ---: | ---: |\n${deferredFileRows}\n` : ""}
 ## Frontend distribution
 
 - Files: ${report.dist.files}
