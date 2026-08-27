@@ -87,22 +87,6 @@
           <div class="roadmap-grid">
             <article class="roadmap-card" data-reveal>
               <div class="roadmap-card-head">
-                <h3>v0.5.0 &mdash; output routing</h3>
-                <span class="status-pill status-in-progress">in progress</span>
-              </div>
-              <p>
-                Pin dictation to a window you chose and keep working somewhere
-                else. Underneath it, the pipeline learns to carry what you asked
-                for from the moment you start speaking through to the paste.
-              </p>
-              <a
-                class="roadmap-link"
-                href="https://github.com/jamditis/audiobud/milestone/6"
-                >View milestone &rarr;</a
-              >
-            </article>
-            <article class="roadmap-card" data-reveal data-reveal-delay="1">
-              <div class="roadmap-card-head">
                 <h3>v0.6.0 &mdash; transcription quality</h3>
                 <span class="status-pill status-planned">planned</span>
               </div>
@@ -117,7 +101,7 @@
                 >View milestone &rarr;</a
               >
             </article>
-            <article class="roadmap-card" data-reveal>
+            <article class="roadmap-card" data-reveal data-reveal-delay="1">
               <div class="roadmap-card-head">
                 <h3>v0.7.0 &mdash; interaction &amp; personality</h3>
                 <span class="status-pill status-planned">planned</span>
@@ -132,7 +116,7 @@
                 >View milestone &rarr;</a
               >
             </article>
-            <article class="roadmap-card" data-reveal data-reveal-delay="1">
+            <article class="roadmap-card" data-reveal>
               <div class="roadmap-card-head">
                 <h3>v0.8.0 &mdash; reliability &amp; accessibility</h3>
                 <span class="status-pill status-planned">planned</span>
@@ -148,7 +132,7 @@
                 >View milestone &rarr;</a
               >
             </article>
-            <article class="roadmap-card" data-reveal>
+            <article class="roadmap-card" data-reveal data-reveal-delay="1">
               <div class="roadmap-card-head">
                 <h3>v1.0.0 &mdash; platform decision</h3>
                 <span class="status-pill status-planned">planned</span>
@@ -178,6 +162,26 @@
             </p>
           </div>
           <div class="roadmap-grid">
+            <article class="roadmap-card">
+              <div class="roadmap-card-head">
+                <h3>v0.5.0</h3>
+                <span class="status-pill status-shipped">shipped</span>
+              </div>
+              <p>
+                Output routing: pin dictation to a window you chose and keep
+                working somewhere else, or send a single dictation to a chosen
+                window without locking. Deliveries now run off the main thread,
+                a successful delivery names the window it reached, and
+                per-application output profiles override paste behavior for apps
+                that need it. The settings system behind all of it moved to one
+                generic command instead of dozens of one-off ones.
+              </p>
+              <a
+                class="roadmap-link"
+                href="https://github.com/jamditis/audiobud/releases/tag/v0.5.0"
+                >Release notes &rarr;</a
+              >
+            </article>
             <article class="roadmap-card">
               <div class="roadmap-card-head">
                 <h3>Microsoft Store</h3>
@@ -368,9 +372,11 @@
         <div class="wrap">
           <div class="notice">
             <p>
-              <strong>Exploring, not scheduled:</strong> wake-word activation
-              and local audio-file transcription are research bets with no
-              milestone yet. They join the roadmap only once they prove out.
+              <strong>Exploring, not scheduled:</strong> wake-word activation,
+              local audio-file transcription, and suggesting output profiles
+              automatically instead of hand-configuring them are research bets
+              with no milestone yet. They join the roadmap only once they prove
+              out.
             </p>
             <a class="button" href="https://github.com/jamditis/audiobud/issues"
               >All issues</a
