@@ -4,9 +4,9 @@ import { useTranslation } from "react-i18next";
 import { listen } from "@tauri-apps/api/event";
 import { platform } from "@tauri-apps/plugin-os";
 import {
-  checkAccessibilityPermission,
-  checkMicrophonePermission,
-} from "tauri-plugin-macos-permissions-api";
+  checkMacOSAccessibilityPermission,
+  checkMacOSMicrophonePermission,
+} from "@/lib/macos-permissions";
 import {
   ModelStateEvent,
   RecordingErrorEvent,
@@ -358,8 +358,8 @@ function App() {
         if (currentPlatform === "macos") {
           try {
             const [hasAccessibility, hasMicrophone] = await Promise.all([
-              checkAccessibilityPermission(),
-              checkMicrophonePermission(),
+              checkMacOSAccessibilityPermission(),
+              checkMacOSMicrophonePermission(),
             ]);
             if (!hasAccessibility || !hasMicrophone) {
               await revealMainWindowForPermissions();
