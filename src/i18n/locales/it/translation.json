@@ -370,6 +370,20 @@
         "unknownTarget": "una finestra bloccata",
         "unlock": "Sblocca"
       },
+      "outputProfiles": {
+        "title": "Impostazioni di output per app",
+        "description": "Assegna a un'app impostazioni di output proprie. Scrivi il nome del programma (ad esempio WindowsTerminal o code), poi scegli cosa deve fare AudioBud in quell'app. Tutto ciò che resta su «Usa impostazione globale» segue le impostazioni normali. Le app senza voce restano invariate.",
+        "appNamePlaceholder": "Nome dell'app o del programma",
+        "add": "Aggiungi",
+        "useGlobal": "Usa impostazione globale",
+        "pasteMethod": "Metodo di incollaggio",
+        "autoSubmit": "Tasto di invio",
+        "clipboard": "Appunti",
+        "duplicate": "«{{app}}» ha già impostazioni di output proprie",
+        "capReached": "L'elenco è pieno ({{cap}} app). Rimuovine una per aggiungerne un'altra.",
+        "tooLong": "Il nome dell'app deve avere meno di {{max}} caratteri",
+        "remove": "Rimuovi le impostazioni di output per {{app}}"
+      },
       "typingTool": {
         "title": "Strumento di digitazione",
         "description": "Scegli quale strumento di digitazione Linux usare per il metodo di incolla diretto. Auto rileverà e userà automaticamente lo strumento migliore disponibile per il tuo sistema.",

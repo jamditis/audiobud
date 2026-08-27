@@ -370,6 +370,20 @@
         "unknownTarget": "kilitli bir pencere",
         "unlock": "Kilidi aç"
       },
+      "outputProfiles": {
+        "title": "Uygulamaya özel çıkış ayarları",
+        "description": "Bir uygulamaya kendi çıkış ayarlarını verin. Programın adını yazın (örneğin WindowsTerminal veya code), sonra AudioBud'ın orada ne yapacağını seçin. “Genel ayarı kullan” olarak bırakılan her şey normal ayarlarınıza uyar. Kaydı olmayan uygulamalar değişmez.",
+        "appNamePlaceholder": "Uygulama veya program adı",
+        "add": "Ekle",
+        "useGlobal": "Genel ayarı kullan",
+        "pasteMethod": "Yapıştırma yöntemi",
+        "autoSubmit": "Gönderme tuşu",
+        "clipboard": "Pano",
+        "duplicate": "“{{app}}” için zaten çıkış ayarları var",
+        "capReached": "Listeniz dolu ({{cap}} uygulama). Yenisini eklemek için birini kaldırın.",
+        "tooLong": "Uygulama adı {{max}} karakterden kısa olmalı",
+        "remove": "{{app}} için çıkış ayarlarını kaldır"
+      },
       "typingTool": {
         "title": "Yazma Aracı",
         "description": "Doğrudan yapıştırma yöntemi için hangi Linux yazma aracının kullanılacağını seçin. Auto, sisteminiz için mevcut en iyi aracı otomatik olarak algılar ve kullanır.",

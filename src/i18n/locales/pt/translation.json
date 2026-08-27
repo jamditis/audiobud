@@ -370,6 +370,20 @@
         "unknownTarget": "uma janela bloqueada",
         "unlock": "Desbloquear"
       },
+      "outputProfiles": {
+        "title": "Definições de saída por aplicação",
+        "description": "Dê a uma aplicação as suas próprias definições de saída. Escreva o nome do programa (por exemplo, WindowsTerminal ou code) e escolha o que o AudioBud deve fazer aí. Tudo o que ficar em «Usar definição global» segue as suas definições normais. As aplicações sem entrada não mudam.",
+        "appNamePlaceholder": "Nome da aplicação ou do programa",
+        "add": "Adicionar",
+        "useGlobal": "Usar definição global",
+        "pasteMethod": "Método de colagem",
+        "autoSubmit": "Tecla de envio",
+        "clipboard": "Área de transferência",
+        "duplicate": "«{{app}}» já tem definições de saída próprias",
+        "capReached": "A lista está cheia ({{cap}} aplicações). Remova uma para adicionar outra.",
+        "tooLong": "O nome da aplicação deve ter menos de {{max}} caracteres",
+        "remove": "Remover as definições de saída de {{app}}"
+      },
       "typingTool": {
         "title": "Ferramenta de digitação",
         "description": "Escolha qual ferramenta de digitação do Linux usar para o método de colagem direta. Auto detectará e usará automaticamente a melhor ferramenta disponível para o seu sistema.",

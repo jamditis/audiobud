@@ -370,6 +370,20 @@
         "unknownTarget": "ロックされたウィンドウ",
         "unlock": "ロック解除"
       },
+      "outputProfiles": {
+        "title": "アプリごとの出力設定",
+        "description": "特定のアプリだけに専用の出力設定を割り当てます。プログラム名（例: WindowsTerminal や code）を入力し、そのアプリで AudioBud が行う動作を選びます。「全体の設定を使う」のままにした項目は通常の設定に従います。登録のないアプリはこれまでどおりです。",
+        "appNamePlaceholder": "アプリ名またはプログラム名",
+        "add": "追加",
+        "useGlobal": "全体の設定を使う",
+        "pasteMethod": "貼り付け方法",
+        "autoSubmit": "送信キー",
+        "clipboard": "クリップボード",
+        "duplicate": "「{{app}}」には既に専用の出力設定があります",
+        "capReached": "リストが上限に達しました（{{cap}} 件）。追加するには 1 件削除してください。",
+        "tooLong": "アプリ名は {{max}} 文字未満にしてください",
+        "remove": "{{app}} の出力設定を削除"
+      },
       "typingTool": {
         "title": "タイピングツール",
         "description": "直接貼り付け方式で使用する Linux のタイピングツールを選択します。Auto は自動的に最適なツールを検出して使用します。",

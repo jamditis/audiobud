@@ -370,6 +370,20 @@
         "unknownTarget": "잠긴 창",
         "unlock": "잠금 해제"
       },
+      "outputProfiles": {
+        "title": "앱별 출력 설정",
+        "description": "특정 앱에만 별도의 출력 설정을 지정합니다. 프로그램 이름(예: WindowsTerminal 또는 code)을 입력한 다음 해당 앱에서 AudioBud가 할 동작을 고르세요. '전체 설정 사용'으로 둔 항목은 평소 설정을 따릅니다. 등록하지 않은 앱은 그대로입니다.",
+        "appNamePlaceholder": "앱 또는 프로그램 이름",
+        "add": "추가",
+        "useGlobal": "전체 설정 사용",
+        "pasteMethod": "붙여넣기 방식",
+        "autoSubmit": "전송 키",
+        "clipboard": "클립보드",
+        "duplicate": "'{{app}}'에는 이미 출력 설정이 있습니다",
+        "capReached": "목록이 가득 찼습니다(앱 {{cap}}개). 하나를 삭제한 뒤 추가하세요.",
+        "tooLong": "앱 이름은 {{max}}자 미만이어야 합니다",
+        "remove": "{{app}}의 출력 설정 삭제"
+      },
       "typingTool": {
         "title": "타이핑 도구",
         "description": "직접 붙여넣기 방식에 사용할 Linux 타이핑 도구를 선택하세요. Auto는 시스템에서 사용 가능한 최적의 도구를 자동으로 감지해 사용합니다.",

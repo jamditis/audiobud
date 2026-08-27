@@ -370,6 +370,20 @@
         "unknownTarget": "已锁定的窗口",
         "unlock": "解锁"
       },
+      "outputProfiles": {
+        "title": "按应用设置输出",
+        "description": "为单个应用指定专属的输出设置。填写程序名称（例如 WindowsTerminal 或 code），再选择 AudioBud 在该应用中的行为。保持“使用全局设置”的项目仍按常规设置执行；未添加的应用不受影响。",
+        "appNamePlaceholder": "应用或程序名称",
+        "add": "添加",
+        "useGlobal": "使用全局设置",
+        "pasteMethod": "粘贴方式",
+        "autoSubmit": "发送键",
+        "clipboard": "剪贴板",
+        "duplicate": "“{{app}}”已有专属的输出设置",
+        "capReached": "列表已满（{{cap}} 个应用）。请先删除一个再添加。",
+        "tooLong": "应用名称需少于 {{max}} 个字符",
+        "remove": "删除 {{app}} 的输出设置"
+      },
       "typingTool": {
         "title": "输入工具",
         "description": "选择在直接粘贴方式下使用的 Linux 输入工具。Auto 会自动检测并使用系统中可用的最佳工具。",

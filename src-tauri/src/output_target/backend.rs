@@ -394,6 +394,38 @@ pub use imp::window_label;
 #[cfg(not(windows))]
 pub use fallback::window_label;
 
+/// The application one delivery is about to reach, for the per-application
+/// output settings (#123): the pinned or picked window's program name, or the
+/// program name of whatever window holds focus for a plain foreground delivery.
+///
+/// Read live, at delivery time, because that is the moment the answer has to be
+/// true -- the same moment `deliver_to_target` is deciding what to type. `None`
+/// means no profile can apply and the global settings stand: a delivery that was
+/// suppressed, a window whose program the OS will not name, and every delivery
+/// on the platforms with no window backend yet (#119).
+pub fn delivery_app_name(delivery: Option<Delivery>) -> Option<String> {
+    let identity = match delivery? {
+        Delivery::Pinned(identity, _) => identity,
+        Delivery::Foreground => foreground_identity()?,
+    };
+    window_label(identity).0
+}
+
+/// The application a delivery was aimed at when its window turned out to be
+/// gone, for the per-application output settings (#123).
+///
+/// A suppressed delivery types nothing, but the transcript still has to be
+/// handled -- and the clipboard copy is exactly what the user needs most when
+/// the destination died. Reading the dead window's application live routinely
+/// comes back empty (its process has usually exited too), so this prefers the
+/// label [`LockedLabel`] cached while the window was still alive, the same
+/// memory the lost-lock notice reads. `None` for a delivery that was aimed at
+/// the plain foreground, which pins no application to fall back to.
+pub fn lost_target_app_name(app: &AppHandle, captured: Delivery) -> Option<String> {
+    let identity = captured.target()?;
+    lost_label(app, identity).0
+}
+
 /// The label to report for a window that just turned out to be gone.
 ///
 /// Prefers whatever [`LockedLabel`] cached for `identity` while the window
@@ -1038,25 +1070,46 @@ mod imp {
     fn process_name(process_id: u32) -> Option<String> {
         let handle =
             unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, process_id) }.ok()?;
-        let mut buf = [0u16; 260];
-        let mut len = buf.len() as u32;
-        let queried = unsafe {
-            QueryFullProcessImageNameW(
-                handle,
-                PROCESS_NAME_WIN32,
-                PWSTR(buf.as_mut_ptr()),
-                &mut len,
-            )
+
+        // A `MAX_PATH` buffer is not enough on its own: an executable installed
+        // deep enough -- a per-user install under a long profile name, a package
+        // path -- has a longer full path, and `QueryFullProcessImageNameW` then
+        // fails with "insufficient buffer" instead of truncating. That used to
+        // cost only the app's display name in a notice; with per-application
+        // output settings (#123) it would silently cost that application its
+        // profile, so the buffer grows on failure up to the path length Windows
+        // itself allows. Any other failure -- the process exited, the OS refuses
+        // the query -- fails the same way at every size, so the retries cost at
+        // most a handful of cheap calls before the loop gives up (#123 review).
+        const FIRST_CAPACITY: usize = 260;
+        const MAX_CAPACITY: usize = 32_768;
+        let mut capacity = FIRST_CAPACITY;
+        let path = loop {
+            let mut buf = vec![0u16; capacity];
+            let mut len = buf.len() as u32;
+            let queried = unsafe {
+                QueryFullProcessImageNameW(
+                    handle,
+                    PROCESS_NAME_WIN32,
+                    PWSTR(buf.as_mut_ptr()),
+                    &mut len,
+                )
+            };
+            match queried {
+                Ok(()) if len == 0 => break None,
+                Ok(()) => break Some(String::from_utf16_lossy(&buf[..len as usize])),
+                Err(_) if capacity < MAX_CAPACITY => {
+                    capacity = (capacity * 2).min(MAX_CAPACITY);
+                }
+                Err(_) => break None,
+            }
         };
+
         unsafe {
             let _ = CloseHandle(handle);
         }
-        queried.ok()?;
-        if len == 0 {
-            return None;
-        }
-        let path = String::from_utf16_lossy(&buf[..len as usize]);
-        std::path::Path::new(&path)
+
+        std::path::Path::new(&path?)
             .file_stem()
             .map(|stem| stem.to_string_lossy().to_string())
     }
