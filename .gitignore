@@ -39,6 +39,9 @@ recording_*
 # Nix build output
 result
 
+# Generated reports
+/artifacts/
+
 # AudioBud additions
 /target/
 node_modules/

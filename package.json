@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "report:size": "bunx vite build --manifest && bun scripts/report-size.ts",
     "preview": "vite preview",
     "tauri": "tauri",
     "bundle:store": "tauri bundle --verbose --bundles nsis,msi --config src-tauri/tauri.signing.conf.json --config src-tauri/tauri.microsoftstore.conf.json --ci",
