@@ -225,6 +225,7 @@ See the [Troubleshooting](README.md#troubleshooting) section in README.md.
 
 ## Partner center submission notes
 
+- For release-blocking Windows delivery fixes, test ordinary and target-locked delivery separately, then rebuild and install the candidate before opening a PR.
 - For user-approved metadata-only release corrections, bypass the full PR review gate and avoid redundant CI reruns; verify the diff and final release SHA.
 - On the Partner Center package validation page, expanded validation sections may have been opened by the user. Do not infer that automation expanded them or that their helper text is the final validation result. Wait for the overall package validation run to leave `In progress` before deciding whether follow-up work is needed.
 - Joe's AudioBud workflow is press once to start recording, then press again to stop and send the transcript. Do not describe his workflow as "hold the hotkey." If docs need to describe default app behavior, verify the current `push_to_talk` default first.

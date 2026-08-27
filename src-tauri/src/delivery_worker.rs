@@ -31,6 +31,8 @@ use std::sync::mpsc::{self, Sender};
 use std::sync::Mutex;
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
+#[cfg(all(test, windows))]
+use std::{sync::atomic::AtomicU32, sync::Arc};
 
 /// How long [`DeliveryWorker::shutdown`] waits for the worker thread before
 /// giving up on joining it. A real paste is short (milliseconds to low
@@ -45,6 +47,20 @@ const SHUTDOWN_POLL_INTERVAL: Duration = Duration::from_millis(20);
 
 /// One unit of delivery work: the paste, plus whatever hand-off follows it.
 pub type DeliveryJob = Box<dyn FnOnce() + Send + 'static>;
+
+/// Create the delivery thread's Windows input queue before it ever needs to
+/// borrow the foreground window's queue for target activation.
+#[cfg(windows)]
+fn initialize_windows_input_queue() {
+    use windows::Win32::UI::WindowsAndMessaging::{PeekMessageW, MSG, PM_NOREMOVE};
+
+    // Windows creates a thread's input queue on its first User32 call. There
+    // may be no message to read, and PM_NOREMOVE preserves one if there is.
+    let mut message = MSG::default();
+    unsafe {
+        let _ = PeekMessageW(&mut message, None, 0, 0, PM_NOREMOVE);
+    }
+}
 
 /// Owns the delivery thread and the channel that feeds it.
 pub struct DeliveryWorker {
@@ -69,6 +85,11 @@ pub struct DeliveryWorker {
     /// [`run`]: DeliveryWorker::run
     /// [`shutdown`]: DeliveryWorker::shutdown
     shutting_down: AtomicBool,
+    /// Test-only probe for the worker's Windows thread. Set before it begins
+    /// receiving jobs so the queue can be observed without a job itself making
+    /// a User32 call.
+    #[cfg(all(test, windows))]
+    worker_thread_id: Arc<AtomicU32>,
 }
 
 impl Default for DeliveryWorker {
@@ -80,10 +101,21 @@ impl Default for DeliveryWorker {
 impl DeliveryWorker {
     pub fn new() -> Self {
         let (jobs, receiver) = mpsc::channel::<DeliveryJob>();
+        #[cfg(all(test, windows))]
+        let worker_thread_id = Arc::new(AtomicU32::new(0));
+        #[cfg(all(test, windows))]
+        let worker_thread_id_for_thread = Arc::clone(&worker_thread_id);
 
         let spawned = thread::Builder::new()
             .name("audiobud-delivery".to_string())
             .spawn(move || {
+                #[cfg(windows)]
+                initialize_windows_input_queue();
+                #[cfg(all(test, windows))]
+                worker_thread_id_for_thread.store(
+                    unsafe { windows::Win32::System::Threading::GetCurrentThreadId() },
+                    Ordering::SeqCst,
+                );
                 for job in receiver {
                     // A delivery that panics must not cost every later
                     // transcript its delivery thread. The job's own drop guard
@@ -99,6 +131,8 @@ impl DeliveryWorker {
                 jobs: Mutex::new(Some(jobs)),
                 handle: Mutex::new(Some(handle)),
                 shutting_down: AtomicBool::new(false),
+                #[cfg(all(test, windows))]
+                worker_thread_id,
             },
             Err(e) => {
                 // Without a thread the caller's own thread does the work. It is
@@ -110,6 +144,8 @@ impl DeliveryWorker {
                     jobs: Mutex::new(None),
                     handle: Mutex::new(None),
                     shutting_down: AtomicBool::new(false),
+                    #[cfg(all(test, windows))]
+                    worker_thread_id,
                 }
             }
         }
@@ -245,11 +281,16 @@ impl DeliveryWorker {
 mod tests {
     use super::{DeliveryWorker, SHUTDOWN_TIMEOUT};
     use crate::delivery_queue::{DeliveryQueue, EnqueueResult};
-    use std::sync::atomic::AtomicBool;
+    use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::mpsc;
     use std::sync::{Arc, Mutex};
     use std::thread::ThreadId;
     use std::time::{Duration, Instant};
+
+    #[cfg(windows)]
+    use windows::Win32::Foundation::{LPARAM, WPARAM};
+    #[cfg(windows)]
+    use windows::Win32::UI::WindowsAndMessaging::{PostThreadMessageW, WM_APP};
 
     fn wait_until(mut done: impl FnMut() -> bool) {
         let deadline = Instant::now() + Duration::from_secs(5);
@@ -260,6 +301,24 @@ mod tests {
             std::thread::sleep(Duration::from_millis(5));
         }
         panic!("the delivery worker did not finish in time");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn delivery_worker_creates_an_input_queue_for_target_activation() {
+        // `AttachThreadInput` needs input queues on both threads. Posting to a
+        // thread is the direct observable check that its queue exists, before a
+        // delivery job has a chance to make any User32 call of its own.
+        let worker = DeliveryWorker::new();
+        wait_until(|| worker.worker_thread_id.load(Ordering::SeqCst) != 0);
+        let worker_thread_id = worker.worker_thread_id.load(Ordering::SeqCst);
+        let queued = unsafe { PostThreadMessageW(worker_thread_id, WM_APP, WPARAM(0), LPARAM(0)) };
+        worker.shutdown();
+
+        assert!(
+            queued.is_ok(),
+            "the worker must create an input queue before target activation"
+        );
     }
 
     #[test]
@@ -431,6 +490,8 @@ mod tests {
             jobs: Mutex::new(None),
             handle: Mutex::new(None),
             shutting_down: AtomicBool::new(false),
+            #[cfg(all(test, windows))]
+            worker_thread_id: Arc::new(std::sync::atomic::AtomicU32::new(0)),
         };
 
         let ran = Arc::new(Mutex::new(false));
