@@ -1,14 +1,14 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { platform } from "@tauri-apps/plugin-os";
-import {
-  checkAccessibilityPermission,
-  requestAccessibilityPermission,
-  checkMicrophonePermission,
-  requestMicrophonePermission,
-} from "tauri-plugin-macos-permissions-api";
 import { toast } from "sonner";
 import { commands } from "@/bindings";
+import {
+  checkMacOSAccessibilityPermission,
+  checkMacOSMicrophonePermission,
+  requestMacOSAccessibilityPermission,
+  requestMacOSMicrophonePermission,
+} from "@/lib/macos-permissions";
 import { useSettingsStore } from "@/stores/settingsStore";
 import HandyTextLogo from "../icons/HandyTextLogo";
 import { Keyboard, Mic, Check, Loader2 } from "lucide-react";
@@ -96,8 +96,8 @@ const AccessibilityOnboarding: React.FC<AccessibilityOnboardingProps> = ({
       if (nextPlatform === "macos") {
         try {
           const [accessibilityGranted, microphoneGranted] = await Promise.all([
-            checkAccessibilityPermission(),
-            checkMicrophonePermission(),
+            checkMacOSAccessibilityPermission(),
+            checkMacOSMicrophonePermission(),
           ]);
 
           // If accessibility is granted, initialize Enigo and shortcuts
@@ -183,8 +183,8 @@ const AccessibilityOnboarding: React.FC<AccessibilityOnboardingProps> = ({
         }
 
         const [accessibilityGranted, microphoneGranted] = await Promise.all([
-          checkAccessibilityPermission(),
-          checkMicrophonePermission(),
+          checkMacOSAccessibilityPermission(),
+          checkMacOSMicrophonePermission(),
         ]);
 
         setPermissions((prev) => {
@@ -249,7 +249,7 @@ const AccessibilityOnboarding: React.FC<AccessibilityOnboardingProps> = ({
 
   const handleGrantAccessibility = async () => {
     try {
-      await requestAccessibilityPermission();
+      await requestMacOSAccessibilityPermission();
       setPermissions((prev) => ({ ...prev, accessibility: "waiting" }));
       startPolling();
     } catch (error) {
@@ -263,7 +263,7 @@ const AccessibilityOnboarding: React.FC<AccessibilityOnboardingProps> = ({
       if (isWindows) {
         await commands.openMicrophonePrivacySettings();
       } else {
-        await requestMicrophonePermission();
+        await requestMacOSMicrophonePermission();
       }
 
       setPermissions((prev) => ({ ...prev, microphone: "waiting" }));

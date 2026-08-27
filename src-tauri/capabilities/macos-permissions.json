@@ -1,0 +1,8 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "macos-permissions",
+  "description": "Permission API for AudioBud windows on macOS",
+  "windows": ["main", "recording_overlay"],
+  "platforms": ["macOS"],
+  "permissions": ["macos-permissions:default"]
+}
