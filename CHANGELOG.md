@@ -10,6 +10,78 @@ restate Handy's own history. AudioBud versions independently of Handy, starting 
 
 ## Unreleased
 
+## 0.5.0 - 2026-08-27
+
+An output routing release. AudioBud can now pin a dictation's destination to
+one window, or send a single dictation to a chosen window without locking, and
+the settings system that backs every one of these changes was rebuilt on a
+single generic command instead of dozens of one-off ones. Windows (x64)
+remains the validated target; the macOS and Linux code is inherited and
+untested.
+
+### Added
+
+- Target lock: pin transcript delivery to a chosen window, so a dictation
+  delivered by clipboard paste or typing goes there regardless of what is
+  focused when it fires (the external-script and no-paste methods decide
+  their own destination and are unaffected). The lock re-checks the window's
+  identity before every paste, which catches most windows closed out from
+  under it, and a lost target shows a notice instead of a silent misdelivery.
+  A lock indicator with quick unlock is on the tray, the overlay, and settings
+  (#120, #121, #255, #265).
+- A one-shot window picker: send a single dictation to a chosen window without
+  locking anything (#124, #259).
+- Per-dictation context: the delivery destination is captured once at
+  recording start and carried unchanged to paste time, even if focus moves
+  again before the transcript is ready (#160).
+- Delivery confirmation: a successful pinned or picked delivery names the
+  window it landed in -- a toast in settings, a timed chip on the overlay.
+  Window titles never reach the log file (#165, #279).
+- Per-application output profiles: override paste method, auto-submit, and
+  clipboard handling for a named application -- a terminal that wants
+  Shift+Insert with no send key, a chat box that wants Ctrl+V and Enter.
+  Hand-configured only, in Advanced settings (Windows). Profiles cannot select
+  the external-script paste method (#123, #302).
+- Target readiness and bounded retry: a minimized target is restored before
+  delivery, a hung one fails fast instead of hanging the app, and a focus
+  switch that doesn't land gets retried twice at 120ms (#122, #303).
+
+### Changed
+
+- Deliveries now run on a dedicated worker thread instead of Tauri's main
+  thread, so the overlay and tray stay responsive during a paste. Overlapping
+  dictations deliver in the order they were recorded, and quitting waits
+  briefly for in-flight deliveries to finish, instead of cutting one off
+  mid-paste the instant the app closes (#161, #275).
+- A single generic `update_setting` command replaces 33 near-identical
+  per-setting commands. Each setting's side effects now come from one declared
+  table, reads are cached, and a save is only followed by its side effects
+  once it has actually persisted -- a save the app can tell failed (the
+  settings store itself being unavailable) is reported instead of silently
+  running the change anyway (#166, #284).
+
+### Fixed
+
+- Quitting the app now waits briefly for a paste already in progress instead
+  of cutting it off mid-keystroke.
+- A delivery that fails partway through restores your clipboard and hands
+  focus back, instead of leaving either one stranded.
+- A settings save the app can tell failed now reports that instead of
+  pretending it applied.
+
+### Performance
+
+- A frontend bundle-size report now runs in CI on every change, so a
+  regression is caught before it ships (#293).
+- Audio feedback playback was trimmed to WAV-only, dropping the decoders for
+  formats AudioBud never plays (#294).
+- macOS permission code is now compiled only on macOS builds (#295).
+- Six unused JavaScript packages and a build-only dependency were removed
+  (#296).
+- Locale bundles now load per-language instead of all at once. Initial payload
+  is down roughly 73% for the small webviews (overlay, onboarding) and 46% for
+  the main settings window (#297).
+
 ## 0.4.4 - 2026-08-01
 
 A signed updater packaging fix. The v0.4.3 feed validation downloaded and

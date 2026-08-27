@@ -66,11 +66,17 @@ Handy is a cross-platform desktop speech-to-text application built with Tauri 2.
   - `vad/` - Voice Activity Detection (Silero VAD)
 - `commands/` - Tauri command handlers for frontend communication
 - `cli.rs` - CLI argument definitions (clap derive)
-- `shortcut.rs` - Global keyboard shortcut handling
-- `settings.rs` - Application settings management
+- `shortcut/` - Global keyboard shortcut handling, including the generic `update_setting` command
+- `settings.rs` - Application settings management: `apply_setting_value` type-checks a JSON value against `AppSettings`, `update_setting` persists it and runs that key's declared side effects, and a process-wide cache backs `get_settings` so reads don't hit the store plugin every time
 - `overlay.rs` - Recording overlay window (platform-specific)
 - `signal_handle.rs` - `send_transcription_input()` reusable function
 - `utils.rs` - Platform detection helpers
+- `output_target.rs` + `output_target/backend.rs` - Target lock: pin transcript delivery to a chosen window (Windows). The platform-independent lock/unlock state machine, window-identity re-validation, and self-window exclusion live in `output_target.rs`; the focus-borrow paste (save foreground, activate the pinned window, paste, restore) is Windows-only, in `backend.rs`
+- `window_picker.rs` + `window_picker/backend.rs` - One-shot window picker: route a single transcript to a chosen window without locking. Same split as `output_target`: platform-independent candidate filtering and pick lifecycle in `window_picker.rs`, window enumeration and the picker UI in `backend.rs`
+- `output_profile.rs` - Per-application output profiles: which profile applies to a delivery, and what that delivery's paste method, auto-submit, and clipboard handling become as a result. Profiles are hand-configured only and never written back into settings
+- `dictation_context.rs` - Per-dictation context: the output target and other delivery intent are captured once at recording start and carried unchanged to paste time, rather than re-read from live settings
+- `delivery_queue.rs` - Bounded FIFO coordination for finished transcripts waiting on the delivery worker
+- `delivery_worker.rs` - The dedicated thread deliveries (pastes) run on, so a long paste -- especially a pinned target's foreground switch -- never blocks the overlay or tray. Panics in one delivery are caught so they can't take down the worker
 
 ### Frontend Structure (src/)
 
@@ -125,6 +131,9 @@ Settings are stored using Tauri's store plugin with reactive updates:
 - Audio devices (microphone/output selection)
 - Model preferences (Small/Medium/Turbo/Large Whisper variants)
 - Audio feedback and translation options
+- Output targeting (target lock, output profiles) and delivery options
+
+A single generic `update_setting(key, value)` command replaced roughly 33 bespoke per-setting commands. It type-checks the incoming value against `AppSettings`, persists it, and then runs that key's side effects from a declared table -- so writes are fallible (a failed persist is reported instead of silently applied) and always persist before their effects run. A few settings that need to prompt the user first (`paste_method`, `external_script_path`) or that live outside `AppSettings` keep their own dedicated commands.
 
 ### Single Instance Architecture
 

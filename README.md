@@ -39,10 +39,19 @@ Beginning with v0.4.2, installed Windows NSIS builds check AudioBud's signed Git
 - **Models:** Parakeet, Whisper, Moonshine, SenseVoice, GigaAM, Canary, Cohere, and custom Whisper GGML `.bin` files.
 - **Text output:** spoken-number formatting (digits, currency, and percentages), a tray switch between formatted and raw transcript output, language selection where supported, translation where supported, trailing spaces, paste method, clipboard handling, and raw lowercased output.
 - **Vocabulary:** custom words plus deterministic word replacements for names, jargon, and common mishears.
+- **Output targeting (Windows):** lock dictation to one window so every transcript goes there no matter what you click on next, or send a single dictation to a chosen window without locking. A tray, overlay, and settings indicator shows the active lock with one-click unlock, and a successful delivery names the window it landed in. Per-application output profiles let you override paste method, auto-submit, and clipboard handling for specific apps -- set up by hand in Advanced settings.
 - **Personalization (opt-in):** on-device learning from your own dictation history -- frequently used words offered as suggestions you accept or dismiss and then applied to later dictations, with view, export, and reset controls for everything it has learned.
 - **Post-processing:** optional cleanup through OpenAI, Anthropic, Z.AI, OpenRouter, Groq, Cerebras, AWS Bedrock via Mantle, or a custom OpenAI-compatible endpoint. API keys stay in local settings.
 - **History:** recent transcriptions, recording retention, retry, and saved entries.
 - **Advanced controls:** autostart, tray icon, overlay position, model unload timeout, Whisper acceleration, ONNX acceleration, GPU selection, logging, and debug paths.
+
+## Output targeting
+
+Windows only, for now. Applies when your paste method actually sends text to a window -- clipboard paste or typing; `ExternalScript` and `None` decide their own destination and ignore the lock. Lock dictation to a window from the tray or its shortcut, and every transcript goes there until you unlock it, even after you click into something else -- the overlay and settings indicators show the active lock and offer a quick unlock, but don't create one themselves. AudioBud re-checks the pinned window's identity right before it pastes, so most windows closed out from under a lock are caught before the paste lands. If the pinned window has died, you get a lost-target notice instead of a paste into the wrong place. Prefer a one-off? The window picker sends a single dictation to a chosen window without locking anything.
+
+Deliveries run on their own worker thread, so the overlay and tray stay responsive while a paste is in flight, and dictations queue in order if you fire off more than one back to back. A successful pinned or picked delivery names the window it landed in -- a toast in settings, a timed chip on the overlay -- without ever writing that window's title to the log file.
+
+Per-application output profiles (Advanced settings) let you override paste method, auto-submit, and clipboard handling for a named application -- a terminal that wants Shift+Insert with no send key, a chat box that wants Ctrl+V and Enter. Profiles are hand-configured only; nothing detects or suggests one for you yet, and profiles cannot select the external-script paste method.
 
 ## Personalization
 

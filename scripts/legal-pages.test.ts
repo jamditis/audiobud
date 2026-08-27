@@ -1150,6 +1150,23 @@ describe("AudioBud public policy pages", () => {
     expect(roadmap).not.toContain("v0.4.0 &mdash; signed &amp; distributable");
   });
 
+  it("marks the output-routing 0.5.0 milestone as shipped", () => {
+    const roadmap = read("roadmap.html").replace(/\s+/g, " ");
+
+    expect(roadmap).toMatch(
+      /<h3>v0\.5\.0<\/h3> <span class="status-pill status-shipped">shipped<\/span>/,
+    );
+    expect(roadmap).toContain(
+      'href="https://github.com/jamditis/audiobud/releases/tag/v0.5.0"',
+    );
+    // Shipped, so it no longer belongs in the upcoming-milestones grid under
+    // its planning-stage heading or with a link to the (now closed) milestone.
+    expect(roadmap).not.toContain("v0.5.0 &mdash; output routing");
+    expect(roadmap).not.toContain(
+      'href="https://github.com/jamditis/audiobud/milestone/6"',
+    );
+  });
+
   it("links every open milestone and describes each one by its contents", () => {
     const roadmap = read("roadmap.html").replace(/\s+/g, " ");
 
@@ -1157,7 +1174,9 @@ describe("AudioBud public policy pages", () => {
     // "stability & reliability" while that milestone held only the
     // output-routing epic, so the site misdescribed the next release and the
     // two milestones holding the reliability work were not linked at all.
-    for (const milestone of [6, 7, 8, 11, 9]) {
+    // v0.5.0 (milestone 6) shipped and moved to "What has shipped" above, so
+    // it is no longer part of this open-milestone check.
+    for (const milestone of [7, 8, 11, 9]) {
       expect(roadmap).toContain(
         `href="https://github.com/jamditis/audiobud/milestone/${milestone}"`,
       );
@@ -1168,7 +1187,6 @@ describe("AudioBud public policy pages", () => {
       "The U.S. Microsoft Store listing now delivers v0.4.4 as a signed NSIS package",
     );
     expect(roadmap).toContain("AudioBud's signed update feed");
-    expect(roadmap).toContain("v0.5.0 &mdash; output routing");
     expect(roadmap).toContain("v0.8.0 &mdash; reliability &amp; accessibility");
     expect(roadmap).not.toContain("v0.5.0 &mdash; stability");
   });

@@ -1,7 +1,7 @@
 # AudioBud roadmap design spec
 
 - Date: 2026-06-25
-- Revised: 2026-08-26, to match the actual GitHub milestones (issue #197). See "Revision history" at the end.
+- Revised: 2026-08-26, to match the actual GitHub milestones (issue #197). 2026-08-27, to mark v0.5.0 shipped. See "Revision history" at the end.
 - Status: superseded by GitHub milestones for the current sequence. This file records the plan's origin and reasoning; GitHub milestones are the live source of truth for issue assignment.
 - Owner: Joe Amditis
 - Repo: `github.com/jamditis/audiobud` (public)
@@ -24,21 +24,22 @@ Both derive from the milestone breakdown below. Rendering the site at the higher
 
 Status vocabulary (both surfaces): `shipped`, `in progress`, `planned`, `exploring` (for research bets whose outcome is uncertain).
 
-## Milestone breakdown (current, 2026-08-26)
+## Milestone breakdown (current, 2026-08-27)
 
-### Shipped: v0.1.0 through v0.4.4
+### Shipped: v0.1.0 through v0.5.0
 
 - `v0.1.0` — first working local prototype, forked from Handy with the frog/swamp identity.
 - `v0.2.0` — self-contained installer, portable build, overlay placement grid, tray quick-toggles.
 - `v0.3.0` through `v0.3.4` — on-device personalization, a stability patch for the default engine, translation completeness, app naming, and spoken-number formatting.
 - `v0.4.0` — signed and timestamped Windows installers, verified packaged executables, a protected release pipeline, public publisher-domain pages.
 - `v0.4.1` (milestone, closed 2026-08-01) — **release integrity**: make CI compile and test what actually ships, publish checkable provenance for every artifact, and turn on auto-update so a bad build can be fixed after it leaves. This milestone did not exist in the original 2026-06-25 plan; it was created and closed between v0.4.0 and v0.5.0. It shipped as CHANGELOG versions 0.4.1 through 0.4.4: SHA256SUMS.txt and build provenance attestations, CI that compiles and tests the real Windows transcription engine, a signed updater feed pointed at AudioBud's own releases (not upstream Handy's), and self-hosted fonts (closing out a v0.4.0 commitment that had been missed — see "What v0.4.0 missed" below). A handful of its issues carried over into later milestones rather than closing with it; the milestone itself is closed.
+- `v0.5.0` (milestone, closed 2026-08-27) — **output routing and window targeting**: see below.
 
 ### v0.4.1 — release integrity (closed)
 
 Covered above under "Shipped." Kept here as its own heading because it is the milestone the original plan did not predict.
 
-### v0.5.0 — output routing and window targeting (in progress)
+### v0.5.0 — output routing and window targeting (shipped, 2026-08-27)
 
 Pin dictation output to a window the user chose, and keep working somewhere else while it is pinned. This did not exist in the original plan, which had reliability/accessibility work in this version slot. The real v0.5.0 is a routing feature, not a stability release.
 
@@ -168,11 +169,11 @@ What actually happened, and why:
 - Two parts: a theme-level status board (Shipped / In progress / Planned / Exploring), and a changelog-style "what shipped" list below it (version + date, action-verb phrasing).
 - The status board renders each milestone as a card: version number, theme one-liner, a status pill, and a link to the matching GitHub milestone.
 - Theme-and-status altitude only — no issue numbers, no dates, no individual issue content restated. Issue detail lives on GitHub, linked.
-- The page currently shows v0.5.0 as `in progress`, v0.6.0 through v1.0.0 as `planned`, and every version through v0.4.4 as `shipped`, which matches the milestone breakdown above.
+- The page shows v0.5.0 and every version through v0.4.4 as `shipped`, and v0.6.0 through v1.0.0 as `planned`, which matches the milestone breakdown above.
 
 ## GitHub milestone bookkeeping notes
 
-- Milestones live on GitHub: `v0.2.0` and `v0.2.x` (closed, retired into v0.3.0), `v0.3.0` through `v0.4.1` (closed/shipped), `v0.5.0` (open, in progress), `v0.6.0`, `v0.7.0`, `v0.8.0`, `v1.0.0` (open, planned), and an unmilestoned `Future` label/bucket for exploring-stage items.
+- Milestones live on GitHub: `v0.2.0` and `v0.2.x` (closed, retired into v0.3.0), `v0.3.0` through `v0.5.0` (closed/shipped), `v0.6.0`, `v0.7.0`, `v0.8.0`, `v1.0.0` (open, planned), and an unmilestoned `Future` label/bucket for exploring-stage items.
 - This spec does not reassign issues between milestones. It describes the assignments as they exist on GitHub at revision time (2026-08-26). Milestone membership is expected to keep moving; treat the numbered list above as a snapshot, and GitHub milestones as the live answer when the two disagree.
 
 ## Original research findings (2026-06-25, preserved)
@@ -188,3 +189,4 @@ The original plan was grounded in four parallel subagent scans run 2026-06-25. F
 
 - 2026-06-25 — original spec, research-grounded, seven milestones plus a future bucket.
 - 2026-08-26 — revised per issue #197 to match the actual milestone structure: v0.4.1 inserted, v0.5.0 reassigned to output routing, reliability/accessibility moved to v0.8.0, v1.0.0 reframed as a platform decision gate. `docs/roadmap.html` was already close to this structure and needed no card-level rewrite; see the commit that accompanies this revision for the specific corrections made to it.
+- 2026-08-27 — v0.5.0 shipped. Marked shipped here and moved on `docs/roadmap.html` from the milestone grid into "What has shipped," alongside the v0.5.0 changelog entry and release.
