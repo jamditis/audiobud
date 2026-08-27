@@ -21,12 +21,14 @@ untested.
 
 ### Added
 
-- Target lock: pin transcript delivery to a chosen window, so every dictation
-  goes there regardless of what is focused when it fires. The lock re-checks
-  the window's identity before every paste, so a closed window whose handle
-  gets recycled by something new is never pasted into, and a lost target shows
-  a notice instead of a silent misdelivery. A lock indicator with quick unlock
-  is on the tray, the overlay, and settings (#120, #121, #255, #265).
+- Target lock: pin transcript delivery to a chosen window, so a dictation
+  delivered by clipboard paste or typing goes there regardless of what is
+  focused when it fires (the external-script and no-paste methods decide
+  their own destination and are unaffected). The lock re-checks the window's
+  identity before every paste, which catches most windows closed out from
+  under it, and a lost target shows a notice instead of a silent misdelivery.
+  A lock indicator with quick unlock is on the tray, the overlay, and settings
+  (#120, #121, #255, #265).
 - A one-shot window picker: send a single dictation to a chosen window without
   locking anything (#124, #259).
 - Per-dictation context: the delivery destination is captured once at
@@ -48,23 +50,24 @@ untested.
 
 - Deliveries now run on a dedicated worker thread instead of Tauri's main
   thread, so the overlay and tray stay responsive during a paste. Overlapping
-  dictations deliver in the order they were recorded, and the queue drains
-  before the app quits rather than dropping whatever was in flight (#161,
-  #275).
+  dictations deliver in the order they were recorded, and quitting waits
+  briefly for in-flight deliveries to finish, instead of cutting one off
+  mid-paste the instant the app closes (#161, #275).
 - A single generic `update_setting` command replaces 33 near-identical
   per-setting commands. Each setting's side effects now come from one declared
-  table, reads are cached, and writes persist before their effects run, so a
-  save that failed to persist can never be followed by a change that behaves
-  as if it had (#166, #284).
+  table, reads are cached, and a save is only followed by its side effects
+  once it has actually persisted -- a save the app can tell failed (the
+  settings store itself being unavailable) is reported instead of silently
+  running the change anyway (#166, #284).
 
 ### Fixed
 
-- Quitting the app no longer truncates a paste that was already in progress --
-  the delivery queue drains first.
+- Quitting the app now waits briefly for a paste already in progress instead
+  of cutting it off mid-keystroke.
 - A delivery that fails partway through restores your clipboard and hands
   focus back, instead of leaving either one stranded.
-- A settings save that fails now reports the failure instead of pretending it
-  applied.
+- A settings save the app can tell failed now reports that instead of
+  pretending it applied.
 
 ### Performance
 
