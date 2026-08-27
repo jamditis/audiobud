@@ -17,6 +17,7 @@ import { AutostartToggle } from "../AutostartToggle";
 import { ShowTrayIcon } from "../ShowTrayIcon";
 import { PasteMethodSetting } from "../PasteMethod";
 import { OutputTargetLock } from "../OutputTargetLock";
+import { OutputProfiles } from "../OutputProfiles";
 import { TypingToolSetting } from "../TypingTool";
 import { ClipboardHandlingSetting } from "../ClipboardHandling";
 import { AutoSubmit } from "../AutoSubmit";
@@ -60,6 +61,12 @@ export const AdvancedSettings: React.FC = () => {
         <AutoSubmit descriptionMode="tooltip" grouped={true} />
         {isWindows && (
           <OutputTargetLock descriptionMode="tooltip" grouped={true} />
+        )}
+        {/* Per-app output settings (#123) need the window backend to know which
+            app a transcript is going to, and that is Windows-only for now
+            (#119), so the list is hidden where it could never take effect. */}
+        {isWindows && (
+          <OutputProfiles descriptionMode="tooltip" grouped={true} />
         )}
       </SettingsGroup>
 

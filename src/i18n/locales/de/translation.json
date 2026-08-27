@@ -370,6 +370,20 @@
         "unknownTarget": "ein gesperrtes Fenster",
         "unlock": "Entsperren"
       },
+      "outputProfiles": {
+        "title": "Ausgabeeinstellungen pro App",
+        "description": "Geben Sie einer App eigene Ausgabeeinstellungen. Geben Sie den Programmnamen der App ein (zum Beispiel WindowsTerminal oder code) und wählen Sie dann, was AudioBud dort tun soll. Alles, was auf „Globale Einstellung verwenden“ steht, folgt Ihren normalen Einstellungen. Apps ohne Eintrag bleiben unverändert.",
+        "appNamePlaceholder": "App- oder Programmname",
+        "add": "Hinzufügen",
+        "useGlobal": "Globale Einstellung verwenden",
+        "pasteMethod": "Einfügemethode",
+        "autoSubmit": "Sendetaste",
+        "clipboard": "Zwischenablage",
+        "duplicate": "„{{app}}“ hat bereits eigene Ausgabeeinstellungen",
+        "capReached": "Ihre Liste ist voll ({{cap}} Apps). Entfernen Sie eine, um eine weitere hinzuzufügen.",
+        "tooLong": "Der App-Name darf höchstens {{max}} Zeichen lang sein",
+        "remove": "Ausgabeeinstellungen für {{app}} entfernen"
+      },
       "typingTool": {
         "title": "Eingabetool",
         "description": "Wähle, welches Linux-Eingabetool für die Direkt-Einfügen-Methode verwendet werden soll. Auto erkennt und verwendet automatisch das beste verfügbare Tool für dein System.",

@@ -123,6 +123,37 @@ pub struct WordReplacement {
     pub preserve_replacement_case: bool,
 }
 
+/// One application's own output settings (issue #123).
+///
+/// A profile is written by hand: the user names an application and picks which
+/// output settings that application should use instead of the global ones.
+/// Nothing here is detected, learned, or suggested.
+///
+/// Every override is optional, and `None` means "use the global setting", so a
+/// profile can change one thing (a terminal that wants Shift+Insert) without
+/// restating the rest. See [`crate::output_profile`] for how a delivery picks
+/// the profile that applies and folds it over the global settings.
+#[derive(Serialize, Deserialize, Debug, Clone, Type)]
+pub struct OutputProfile {
+    /// The application this profile is for, as its program name -- the same
+    /// name AudioBud reads from the window it delivers to ("code",
+    /// "WindowsTerminal"). Matched without regard to case, and a typed ".exe"
+    /// is ignored, so "Code.exe" and "code" are the same application.
+    pub app_name: String,
+    /// How the transcript is put into this application.
+    #[serde(default)]
+    pub paste_method: Option<PasteMethod>,
+    /// Whether AudioBud presses a send key after pasting into this application.
+    #[serde(default)]
+    pub auto_submit: Option<bool>,
+    /// Which send key it presses, when auto-submit is on for this application.
+    #[serde(default)]
+    pub auto_submit_key: Option<AutoSubmitKey>,
+    /// Whether the transcript is also left on the clipboard.
+    #[serde(default)]
+    pub clipboard_handling: Option<ClipboardHandling>,
+}
+
 /// Opt-in, on-device personalization data (issue #16, Tier 1).
 ///
 /// Kept in a separate store from the user-authored `custom_words`/`word_replacements` so it can be
@@ -554,6 +585,12 @@ pub struct AppSettings {
     /// [`PersonalizationData`].
     #[serde(default)]
     pub personalization: PersonalizationData,
+    /// Hand-written per-application output settings (issue #123). Empty by
+    /// default, and empty means every delivery uses the global output settings
+    /// exactly as before. `serde(default)` so settings saved by an older
+    /// version still load.
+    #[serde(default)]
+    pub output_profiles: Vec<OutputProfile>,
 }
 
 fn default_model() -> String {
@@ -1032,6 +1069,7 @@ pub fn get_default_settings() -> AppSettings {
         whisper_gpu_device: default_whisper_gpu_device(),
         extra_recording_buffer_ms: 0,
         personalization: PersonalizationData::default(),
+        output_profiles: Vec::new(),
     }
 }
 
@@ -1226,6 +1264,20 @@ pub fn apply_setting_value(
 /// These are the adjustments the hand-written commands made around their one
 /// assignment; they live here so the generic mutator reproduces them exactly.
 fn normalize_after_change(settings: &mut AppSettings, key: &str, previous: &AppSettings) {
+    if key == "output_profiles" {
+        // Choosing the external-script paste method globally goes through
+        // `change_paste_method_setting`, which asks the user to confirm running
+        // their own program on every paste before anything is written. A
+        // profile is persisted through the generic mutator, which has no way to
+        // ask, so a profile must never be able to arm that method behind the
+        // gate's back (#123). Such an override is dropped and the application
+        // falls back to the global paste method.
+        for profile in &mut settings.output_profiles {
+            if profile.paste_method == Some(PasteMethod::ExternalScript) {
+                profile.paste_method = None;
+            }
+        }
+    }
     if key == "overlay_position" {
         // Keep the restore slot (read by the tray show/hide toggle) in sync so it
         // always holds the most recent visible placement. Choosing Top/Bottom
@@ -1577,6 +1629,64 @@ mod tests {
         assert_eq!(settings.custom_words, vec!["AudioBud", "Tauri"]);
         assert_eq!(settings.paste_method, PasteMethod::ShiftInsert);
         assert_eq!(settings.external_script_path, None);
+    }
+
+    #[test]
+    fn settings_saved_before_output_profiles_still_load() {
+        // The field is new in #123, so every settings file written by an older
+        // version is missing it. It has to read as "no profiles", which is the
+        // behavior everyone had before.
+        let stored = json!({ "bindings": {}, "push_to_talk": false, "audio_feedback": false });
+        let settings: AppSettings =
+            serde_json::from_value(stored).expect("older settings still deserialize");
+        assert!(settings.output_profiles.is_empty());
+    }
+
+    #[test]
+    fn the_whole_profile_list_is_written_in_one_update() {
+        // Add, edit, and remove are all the same wholesale write of one field,
+        // which is what lets profiles ride the generic mutator (#123).
+        let mut settings = get_default_settings();
+        apply_setting_value(
+            &mut settings,
+            "output_profiles",
+            json!([{ "app_name": "WindowsTerminal", "paste_method": "shift_insert", "auto_submit": false }]),
+        )
+        .expect("a profile list applies");
+
+        assert_eq!(settings.output_profiles.len(), 1);
+        let profile = &settings.output_profiles[0];
+        assert_eq!(profile.app_name, "WindowsTerminal");
+        assert_eq!(profile.paste_method, Some(PasteMethod::ShiftInsert));
+        assert_eq!(profile.auto_submit, Some(false));
+        // Overrides nobody set stay unset, so those settings keep following the
+        // global ones.
+        assert_eq!(profile.auto_submit_key, None);
+        assert_eq!(profile.clipboard_handling, None);
+
+        apply_setting_value(&mut settings, "output_profiles", json!([]))
+            .expect("removing the last profile applies");
+        assert!(settings.output_profiles.is_empty());
+    }
+
+    #[test]
+    fn a_profile_cannot_arm_the_external_script_paste_method() {
+        // Choosing external-script globally asks the user to confirm running
+        // their own program on every paste. A profile is persisted through the
+        // generic mutator, which cannot ask, so the override is dropped rather
+        // than letting a written-by-hand profile slip past that gate (#123).
+        let mut settings = get_default_settings();
+        apply_setting_value(
+            &mut settings,
+            "output_profiles",
+            json!([{ "app_name": "code", "paste_method": "external_script", "auto_submit": true }]),
+        )
+        .expect("the list still applies");
+
+        assert_eq!(settings.output_profiles[0].paste_method, None);
+        // The rest of the profile is kept -- only the method the user cannot be
+        // asked about is dropped.
+        assert_eq!(settings.output_profiles[0].auto_submit, Some(true));
     }
 
     #[test]

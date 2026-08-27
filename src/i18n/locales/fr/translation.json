@@ -370,6 +370,20 @@
         "unknownTarget": "une fenêtre verrouillée",
         "unlock": "Déverrouiller"
       },
+      "outputProfiles": {
+        "title": "Réglages de sortie par application",
+        "description": "Donnez à une application ses propres réglages de sortie. Saisissez le nom du programme (par exemple WindowsTerminal ou code), puis choisissez ce qu'AudioBud doit y faire. Tout ce qui reste sur « Utiliser le réglage global » suit vos réglages habituels. Les applications sans entrée ne changent pas.",
+        "appNamePlaceholder": "Nom de l'application ou du programme",
+        "add": "Ajouter",
+        "useGlobal": "Utiliser le réglage global",
+        "pasteMethod": "Méthode de collage",
+        "autoSubmit": "Touche d'envoi",
+        "clipboard": "Presse-papiers",
+        "duplicate": "« {{app}} » a déjà ses propres réglages de sortie",
+        "capReached": "Votre liste est pleine ({{cap}} applications). Retirez-en une pour en ajouter une autre.",
+        "tooLong": "Le nom de l'application doit faire moins de {{max}} caractères",
+        "remove": "Retirer les réglages de sortie de {{app}}"
+      },
       "typingTool": {
         "title": "Outil de frappe",
         "description": "Choisissez quel outil de frappe Linux utiliser pour la méthode de collage direct. Auto détectera et utilisera automatiquement le meilleur outil disponible pour votre système.",

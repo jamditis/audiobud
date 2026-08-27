@@ -153,6 +153,9 @@ const settingUpdaters: {
   clipboard_handling: persistSetting("clipboard_handling"),
   auto_submit: persistSetting("auto_submit"),
   auto_submit_key: persistSetting("auto_submit_key"),
+  // The whole per-app profile list is one plain field, so add, edit, and remove
+  // are all the same wholesale write (#123).
+  output_profiles: persistSetting("output_profiles"),
   history_limit: (value) => commands.updateHistoryLimit(value as number),
   post_process_enabled: persistSetting("post_process_enabled"),
   post_process_selected_prompt_id: (value) =>

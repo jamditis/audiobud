@@ -370,6 +370,20 @@
         "unknownTarget": "una ventana bloqueada",
         "unlock": "Desbloquear"
       },
+      "outputProfiles": {
+        "title": "Ajustes de salida por aplicación",
+        "description": "Da a una aplicación sus propios ajustes de salida. Escribe el nombre del programa (por ejemplo, WindowsTerminal o code) y elige qué debe hacer AudioBud allí. Todo lo que quede en «Usar ajuste global» sigue tus ajustes normales. Las aplicaciones sin entrada no cambian.",
+        "appNamePlaceholder": "Nombre de la aplicación o del programa",
+        "add": "Añadir",
+        "useGlobal": "Usar ajuste global",
+        "pasteMethod": "Método de pegado",
+        "autoSubmit": "Tecla de envío",
+        "clipboard": "Portapapeles",
+        "duplicate": "«{{app}}» ya tiene sus propios ajustes de salida",
+        "capReached": "Tu lista está llena ({{cap}} aplicaciones). Quita una para añadir otra.",
+        "tooLong": "El nombre de la aplicación debe tener menos de {{max}} caracteres",
+        "remove": "Quitar los ajustes de salida de {{app}}"
+      },
       "typingTool": {
         "title": "Herramienta de Escritura",
         "description": "Elige qué herramienta de escritura de Linux usar para el método de pegado directo. Auto detectará y usará automáticamente la mejor herramienta disponible para tu sistema.",

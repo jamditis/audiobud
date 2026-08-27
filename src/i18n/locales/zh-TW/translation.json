@@ -370,6 +370,20 @@
         "unknownTarget": "已鎖定的視窗",
         "unlock": "解除鎖定"
       },
+      "outputProfiles": {
+        "title": "各應用程式的輸出設定",
+        "description": "為單一應用程式指定專屬的輸出設定。填入程式名稱（例如 WindowsTerminal 或 code），再選擇 AudioBud 在該應用程式中的行為。維持「使用全域設定」的項目仍依照一般設定；未加入的應用程式不受影響。",
+        "appNamePlaceholder": "應用程式或程式名稱",
+        "add": "新增",
+        "useGlobal": "使用全域設定",
+        "pasteMethod": "貼上方式",
+        "autoSubmit": "傳送鍵",
+        "clipboard": "剪貼簿",
+        "duplicate": "「{{app}}」已有專屬的輸出設定",
+        "capReached": "清單已滿（{{cap}} 個應用程式）。請先移除一個再新增。",
+        "tooLong": "應用程式名稱需少於 {{max}} 個字元",
+        "remove": "移除 {{app}} 的輸出設定"
+      },
       "typingTool": {
         "title": "輸入工具",
         "description": "選擇在直接貼上方式下使用的 Linux 輸入工具。選擇自動會自動偵測並使用系統中可用的最佳工具",

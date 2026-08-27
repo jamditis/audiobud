@@ -853,7 +853,14 @@ format_raw_output?: boolean; app_language?: string; experimental_enabled?: boole
  * Opt-in, on-device personalization (issue #16, Tier 1). Off by default. See
  * [`PersonalizationData`].
  */
-personalization?: PersonalizationData }
+personalization?: PersonalizationData;
+/**
+ * Hand-written per-application output settings (issue #123). Empty by
+ * default, and empty means every delivery uses the global output settings
+ * exactly as before. `serde(default)` so settings saved by an older
+ * version still load.
+ */
+output_profiles?: OutputProfile[] }
 export type AudioDevice = { index: string; name: string; is_default: boolean }
 export type AutoSubmitKey = "enter" | "ctrl_enter" | "cmd_enter"
 export type AvailableAccelerators = { whisper: string[]; ort: string[]; gpu_devices: GpuDeviceOption[] }
@@ -906,6 +913,42 @@ export type ModelInfo = { id: string; name: string; description: string; filenam
 export type ModelLoadStatus = { is_loaded: boolean; current_model: string | null }
 export type ModelUnloadTimeout = "never" | "immediately" | "min_2" | "min_5" | "min_10" | "min_15" | "hour_1" | "sec_15"
 export type OrtAcceleratorSetting = "auto" | "cpu" | "cuda" | "directml" | "rocm"
+/**
+ * One application's own output settings (issue #123).
+ *
+ * A profile is written by hand: the user names an application and picks which
+ * output settings that application should use instead of the global ones.
+ * Nothing here is detected, learned, or suggested.
+ *
+ * Every override is optional, and `None` means "use the global setting", so a
+ * profile can change one thing (a terminal that wants Shift+Insert) without
+ * restating the rest. See [`crate::output_profile`] for how a delivery picks
+ * the profile that applies and folds it over the global settings.
+ */
+export type OutputProfile = {
+/**
+ * The application this profile is for, as its program name -- the same
+ * name AudioBud reads from the window it delivers to ("code",
+ * "WindowsTerminal"). Matched without regard to case, and a typed ".exe"
+ * is ignored, so "Code.exe" and "code" are the same application.
+ */
+app_name: string;
+/**
+ * How the transcript is put into this application.
+ */
+paste_method?: PasteMethod | null;
+/**
+ * Whether AudioBud presses a send key after pasting into this application.
+ */
+auto_submit?: boolean | null;
+/**
+ * Which send key it presses, when auto-submit is on for this application.
+ */
+auto_submit_key?: AutoSubmitKey | null;
+/**
+ * Whether the transcript is also left on the clipboard.
+ */
+clipboard_handling?: ClipboardHandling | null }
 /**
  * A lock-state snapshot as reported to the indicator surfaces (#255): the
  * recording overlay, the tray, and settings. Mirrors the frontend's

@@ -560,6 +560,10 @@ pub(crate) fn effects_for_setting(key: &str) -> &'static [SettingEffect] {
         // so either one changing can strand a target-lock (#162).
         "auto_submit" => &[ClearTargetLockIfFocusFree, EmitChanged],
         "paste_method" => &[ClearTargetLockIfFocusFree],
+        // A profile can decide the same two things for the locked window's own
+        // application, so editing the list can strand a lock exactly as
+        // changing the global settings can (#123).
+        "output_profiles" => &[ClearTargetLockIfFocusFree, EmitChanged],
         "post_process_enabled" => &[SyncPostProcessShortcut],
         "app_language" => &[RefreshTrayMenu],
         "show_tray_icon" => &[SetTrayVisibility],
@@ -628,7 +632,7 @@ fn run_setting_effects(
                 }
             }
             SettingEffect::ClearTargetLockIfFocusFree => {
-                clear_target_lock_if_focus_free(app, settings.paste_method, settings.auto_submit)
+                clear_target_lock_if_focus_free(app, settings)
             }
         }
     }
@@ -842,8 +846,14 @@ async fn confirm_external_script(app: &AppHandle, message: String) -> bool {
     .unwrap_or(false)
 }
 
-/// Clear the active target-lock (#120) when delivering `paste_method` with
-/// `auto_submit` as given no longer touches a focused window.
+/// Clear the active target-lock (#120) when delivery to the locked window no
+/// longer touches a focused window.
+///
+/// The paste method and auto-submit setting judged here are the ones the locked
+/// window would actually be delivered with: its own application's output profile
+/// folded over the global settings (#123). Judging the globals alone would drop a
+/// lock whose application has a profile that still needs focus, and keep one
+/// whose profile made delivery focus-free.
 ///
 /// This is `clipboard::requires_focus_for_delivery`, not
 /// `PasteMethod::requires_focus()` alone: ExternalScript's method step is
@@ -858,17 +868,22 @@ async fn confirm_external_script(app: &AppHandle, message: String) -> bool {
 /// current value, not just its own; otherwise a stale lock survives a change
 /// that made it meaningless and can silently reactivate later if the user
 /// switches back to a focus-requiring combination (#162).
-fn clear_target_lock_if_focus_free(app: &AppHandle, paste_method: PasteMethod, auto_submit: bool) {
-    if crate::clipboard::requires_focus_for_delivery(paste_method, auto_submit) {
+fn clear_target_lock_if_focus_free(app: &AppHandle, settings: &settings::AppSettings) {
+    let locked = app
+        .try_state::<output_target::PinnedTarget>()
+        .and_then(|pinned| pinned.locked());
+    let locked_app = locked.and_then(|identity| output_target::backend::window_label(identity).0);
+    let effective =
+        crate::output_profile::EffectiveOutput::resolve(settings, locked_app.as_deref());
+    if crate::clipboard::requires_focus_for_delivery(effective.paste_method, effective.auto_submit)
+    {
         return;
     }
-    if let Some(pinned) = app.try_state::<output_target::PinnedTarget>() {
-        if pinned.is_locked() {
-            info!(
-                "Paste method {:?} (auto_submit={}) cannot target a focused window; clearing the active target-lock",
-                paste_method, auto_submit
-            );
-        }
+    if locked.is_some() {
+        info!(
+            "Paste method {:?} (auto_submit={}) cannot target a focused window; clearing the active target-lock",
+            effective.paste_method, effective.auto_submit
+        );
     }
     // Released through the shared unlock rather than PinnedTarget::unlock: the
     // lock is shown in three places now (#255) -- the overlay indicator, the
@@ -1289,12 +1304,25 @@ mod tests {
         // both must keep dropping a lock that can no longer be used (#162).
         // Collapsing their commands into the generic mutator moved this from
         // two hand-written call sites into the effect table.
-        for key in ["paste_method", "auto_submit"] {
+        // A per-application profile decides the same two things for one
+        // application, so editing the list can strand the lock the same way
+        // (#123).
+        for key in ["paste_method", "auto_submit", "output_profiles"] {
             assert!(
                 effects_for_setting(key).contains(&SettingEffect::ClearTargetLockIfFocusFree),
                 "changing '{key}' must re-check the target-lock"
             );
         }
+    }
+
+    #[test]
+    fn output_profiles_are_written_through_the_generic_mutator() {
+        // The whole list is one plain `AppSettings` field, so add, edit, and
+        // remove are all the same wholesale write. Keeping it off the
+        // dedicated-command list is what lets the settings UI persist it with
+        // `update_setting` like any other list setting (#123).
+        assert!(!SETTINGS_WITH_DEDICATED_COMMANDS.contains(&"output_profiles"));
+        assert!(effects_for_setting("output_profiles").contains(&SettingEffect::EmitChanged));
     }
 
     #[test]

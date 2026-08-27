@@ -370,6 +370,20 @@
         "unknownTarget": "a locked window",
         "unlock": "Unlock"
       },
+      "outputProfiles": {
+        "title": "Per-app output settings",
+        "description": "Give one app its own output settings. Type the app's program name (for example, WindowsTerminal or code), then pick what AudioBud should do there. Anything left on \"Use global setting\" follows your normal settings, and apps with no entry are unchanged.",
+        "appNamePlaceholder": "App or program name",
+        "add": "Add",
+        "useGlobal": "Use global setting",
+        "pasteMethod": "Paste method",
+        "autoSubmit": "Send key",
+        "clipboard": "Clipboard",
+        "duplicate": "\"{{app}}\" already has its own output settings",
+        "capReached": "Your list is full ({{cap}} apps). Remove one to add another.",
+        "tooLong": "Keep the app name under {{max}} characters",
+        "remove": "Remove output settings for {{app}}"
+      },
       "typingTool": {
         "title": "Typing tool",
         "description": "Choose which Linux typing tool to use for Direct paste method. Auto will automatically detect and use the best available tool for your system.",

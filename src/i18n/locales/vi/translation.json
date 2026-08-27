@@ -370,6 +370,20 @@
         "unknownTarget": "một cửa sổ đã khóa",
         "unlock": "Mở khóa"
       },
+      "outputProfiles": {
+        "title": "Cài đặt đầu ra theo ứng dụng",
+        "description": "Cho một ứng dụng dùng cài đặt đầu ra riêng. Nhập tên chương trình (ví dụ WindowsTerminal hoặc code), rồi chọn điều AudioBud sẽ làm trong ứng dụng đó. Mục nào để ở “Dùng cài đặt chung” sẽ theo cài đặt thông thường. Ứng dụng không có mục nào thì giữ nguyên.",
+        "appNamePlaceholder": "Tên ứng dụng hoặc chương trình",
+        "add": "Thêm",
+        "useGlobal": "Dùng cài đặt chung",
+        "pasteMethod": "Cách dán",
+        "autoSubmit": "Phím gửi",
+        "clipboard": "Bảng nhớ tạm",
+        "duplicate": "“{{app}}” đã có cài đặt đầu ra riêng",
+        "capReached": "Danh sách đã đầy ({{cap}} ứng dụng). Hãy xoá một mục để thêm mục mới.",
+        "tooLong": "Tên ứng dụng phải ngắn hơn {{max}} ký tự",
+        "remove": "Xoá cài đặt đầu ra cho {{app}}"
+      },
       "typingTool": {
         "title": "Công cụ gõ",
         "description": "Chọn công cụ gõ trên Linux cho phương thức dán trực tiếp. Auto sẽ tự động phát hiện và dùng công cụ tốt nhất có sẵn cho hệ thống của bạn.",

@@ -20,6 +20,7 @@ mod helpers;
 mod input;
 mod llm_client;
 mod managers;
+mod output_profile;
 mod output_target;
 mod overlay;
 pub mod portable;
