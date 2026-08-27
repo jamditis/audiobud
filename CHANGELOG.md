@@ -10,7 +10,7 @@ restate Handy's own history. AudioBud versions independently of Handy, starting 
 
 ## Unreleased
 
-## 0.5.0 - 2026-08-26
+## 0.5.0 - 2026-08-27
 
 An output routing release. AudioBud can now pin a dictation's destination to
 one window, or send a single dictation to a chosen window without locking, and
