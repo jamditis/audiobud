@@ -21,3 +21,10 @@ export function pasteMethodsForOs(osType: OSType): PasteMethod[] {
 
   return methods;
 }
+
+/** Paste methods that a per-application profile can safely override. */
+export function profilePasteMethodsForOs(osType: OSType): PasteMethod[] {
+  return pasteMethodsForOs(osType).filter(
+    (method) => method !== "external_script",
+  );
+}

@@ -31,6 +31,9 @@ describe("signed macOS release workflow", () => {
     expect(macOS).toContain("attestations: write");
     expect(macOS).toContain("contents: read");
     expect(macOS).toContain("inputs.store_candidate != true");
+    expect(macOS).toContain(
+      "DEVELOPER_DIR: /Applications/Xcode_26.0.1.app/Contents/Developer",
+    );
 
     const windows = jobBlock("build-windows");
     expect(windows).toContain("group: release-windows");
@@ -46,6 +49,7 @@ describe("signed macOS release workflow", () => {
       "Install Rust stable",
       "Restore Rust cache",
       "Install macOS build tools",
+      "Require Apple Intelligence SDK",
       "Install frontend dependencies",
       "Download Silero VAD model",
       "Run frontend checks",
@@ -60,6 +64,8 @@ describe("signed macOS release workflow", () => {
     }
 
     expect(macOS).toContain("bun install --frozen-lockfile");
+    expect(macOS).toContain("FoundationModels.framework");
+    expect(macOS).toContain("Select Xcode 26 or newer before releasing");
     expect(macOS).toContain("bun run lint");
     expect(macOS).toContain("bun run format:check");
     expect(macOS).toContain("bun run test");

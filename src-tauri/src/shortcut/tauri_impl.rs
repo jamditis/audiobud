@@ -18,7 +18,7 @@ pub fn init_shortcuts(app: &AppHandle) -> Result<(), String> {
     let bindings = super::configured_initial_bindings(app);
     super::register_initial_bindings(
         bindings,
-        |binding| register_shortcut(app, binding.clone()),
+        |binding| register_shortcut_attempt(app, binding.clone()),
         |binding| unregister_shortcut(app, binding.clone()),
     )
 }
@@ -55,13 +55,20 @@ pub fn validate_shortcut(raw: &str) -> Result<(), String> {
 
 /// Register a shortcut using Tauri's global-shortcut plugin
 pub fn register_shortcut(app: &AppHandle, binding: ShortcutBinding) -> Result<(), String> {
+    register_shortcut_attempt(app, binding).map_err(|error| error.into_message())
+}
+
+fn register_shortcut_attempt(
+    app: &AppHandle,
+    binding: ShortcutBinding,
+) -> Result<(), super::ShortcutRegistrationError> {
     // Validate for Tauri requirements
     if let Err(e) = validate_shortcut(&binding.current_binding) {
         warn!(
             "register_tauri_shortcut validation error for binding '{}': {}",
             binding.current_binding, e
         );
-        return Err(e);
+        return Err(super::ShortcutRegistrationError::before_activation(e));
     }
 
     // Parse shortcut and return error if it fails
@@ -73,7 +80,9 @@ pub fn register_shortcut(app: &AppHandle, binding: ShortcutBinding) -> Result<()
                 binding.current_binding, e
             );
             error!("register_tauri_shortcut parse error: {}", error_msg);
-            return Err(error_msg);
+            return Err(super::ShortcutRegistrationError::before_activation(
+                error_msg,
+            ));
         }
     };
 
@@ -81,7 +90,9 @@ pub fn register_shortcut(app: &AppHandle, binding: ShortcutBinding) -> Result<()
     if app.global_shortcut().is_registered(shortcut) {
         let error_msg = format!("Shortcut '{}' is already in use", binding.current_binding);
         warn!("register_tauri_shortcut duplicate error: {}", error_msg);
-        return Err(error_msg);
+        return Err(super::ShortcutRegistrationError::before_activation(
+            error_msg,
+        ));
     }
 
     // Clone binding.id for use in the closure
@@ -106,7 +117,7 @@ pub fn register_shortcut(app: &AppHandle, binding: ShortcutBinding) -> Result<()
                 binding.current_binding, e
             );
             error!("register_tauri_shortcut registration error: {}", error_msg);
-            error_msg
+            super::ShortcutRegistrationError::state_may_have_changed(error_msg)
         })?;
 
     Ok(())

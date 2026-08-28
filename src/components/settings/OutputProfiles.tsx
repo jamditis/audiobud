@@ -8,6 +8,8 @@ import type {
   PasteMethod,
 } from "@/bindings";
 import { useSettings } from "../../hooks/useSettings";
+import { useOsType } from "../../hooks/useOsType";
+import { profilePasteMethodsForOs } from "@/lib/paste-methods";
 import { Input } from "../ui/Input";
 import { Button } from "../ui/Button";
 import { Dropdown } from "../ui/Dropdown";
@@ -28,23 +30,13 @@ const APP_NAME_MAX_LEN = 100;
 // is stored.
 const INHERIT = "inherit";
 
-// Left out on purpose: the external-script method asks the user to confirm
-// running their own program before it is armed, and a profile is saved without
-// that prompt, so the backend drops such an override as well.
-const PROFILE_PASTE_METHODS: PasteMethod[] = [
-  "ctrl_v",
-  "ctrl_shift_v",
-  "shift_insert",
-  "direct",
-  "none",
-];
-
 type AutoSubmitChoice = "inherit" | "off" | AutoSubmitKey;
 
 export const OutputProfiles: React.FC<OutputProfilesProps> = React.memo(
   ({ descriptionMode = "tooltip", grouped = false }) => {
     const { t } = useTranslation();
     const { getSetting, updateSetting, isUpdating } = useSettings();
+    const osType = useOsType();
     const [appName, setAppName] = useState("");
 
     const profiles = getSetting("output_profiles") || [];
@@ -139,7 +131,7 @@ export const OutputProfiles: React.FC<OutputProfilesProps> = React.memo(
 
     const pasteMethodOptions = [
       inheritOption,
-      ...PROFILE_PASTE_METHODS.map((method) => ({
+      ...profilePasteMethodsForOs(osType).map((method) => ({
         value: method,
         label: pasteMethodLabels[method],
       })),

@@ -34,6 +34,31 @@ use crate::tray;
 const UNCERTAIN_SHORTCUT_STATE: &str = "shortcut state may remain active";
 const PRIMARY_SHORTCUT_ID: &str = "transcribe";
 
+pub(crate) struct ShortcutRegistrationError {
+    message: String,
+    cleanup_required: bool,
+}
+
+impl ShortcutRegistrationError {
+    fn before_activation(message: String) -> Self {
+        Self {
+            message,
+            cleanup_required: false,
+        }
+    }
+
+    fn state_may_have_changed(message: String) -> Self {
+        Self {
+            message,
+            cleanup_required: true,
+        }
+    }
+
+    fn into_message(self) -> String {
+        self.message
+    }
+}
+
 pub(crate) fn initialization_error_allows_retry(error: &str) -> bool {
     !error.contains(UNCERTAIN_SHORTCUT_STATE)
 }
@@ -102,7 +127,7 @@ pub(super) fn register_initial_bindings<Register, Unregister>(
     mut unregister: Unregister,
 ) -> Result<(), String>
 where
-    Register: FnMut(&ShortcutBinding) -> Result<(), String>,
+    Register: FnMut(&ShortcutBinding) -> Result<(), ShortcutRegistrationError>,
     Unregister: FnMut(&ShortcutBinding) -> Result<(), String>,
 {
     let primary_index = bindings
@@ -112,7 +137,13 @@ where
     let (primary_id, primary_binding) = bindings.remove(primary_index);
 
     if let Err(error) = register(&primary_binding) {
-        let registration_error = format!("Failed to register shortcut '{primary_id}': {error}");
+        let registration_error = format!(
+            "Failed to register shortcut '{primary_id}': {}",
+            error.message
+        );
+        if !error.cleanup_required {
+            return Err(registration_error);
+        }
         if let Err(cleanup_error) = unregister(&primary_binding) {
             warn!(
                 "Failed to clean up shortcut '{}': {}",
@@ -128,7 +159,18 @@ where
 
     for (id, binding) in bindings {
         if let Err(error) = register(&binding) {
-            warn!("Failed to register optional shortcut '{id}': {error}");
+            warn!(
+                "Failed to register optional shortcut '{id}': {}",
+                error.message
+            );
+            if error.cleanup_required {
+                if let Err(cleanup_error) = unregister(&binding) {
+                    return Err(format!(
+                        "Failed to register optional shortcut '{id}': {}; cleanup failed for '{}': {cleanup_error}; {UNCERTAIN_SHORTCUT_STATE}; restart AudioBud before retrying shortcut initialization",
+                        error.message, binding.id
+                    ));
+                }
+            }
         }
     }
 
@@ -1367,13 +1409,18 @@ mod tests {
     }
 
     impl ShortcutBackendModel {
-        fn register(&mut self, binding: &ShortcutBinding) -> Result<(), String> {
+        fn register(&mut self, binding: &ShortcutBinding) -> Result<(), ShortcutRegistrationError> {
             if self.fail_next_registration.as_deref() == Some(binding.id.as_str()) {
                 self.fail_next_registration = None;
                 if self.activate_before_failure {
                     self.active.push(binding.id.clone());
+                    return Err(ShortcutRegistrationError::state_may_have_changed(
+                        "simulated backend failure".to_string(),
+                    ));
                 }
-                return Err("simulated backend failure".to_string());
+                return Err(ShortcutRegistrationError::before_activation(
+                    "simulated backend failure".to_string(),
+                ));
             }
             self.active.push(binding.id.clone());
             Ok(())
@@ -1572,6 +1619,33 @@ mod tests {
     }
 
     #[test]
+    fn pre_registration_failure_does_not_attempt_cleanup() {
+        let cleanup_called = std::cell::Cell::new(false);
+
+        let result = register_initial_bindings(
+            vec![("transcribe".to_string(), test_binding("transcribe"))],
+            |_| {
+                Err(ShortcutRegistrationError::before_activation(
+                    "invalid shortcut".to_string(),
+                ))
+            },
+            |_| {
+                cleanup_called.set(true);
+                Err("the invalid shortcut cannot be parsed for cleanup".to_string())
+            },
+        );
+
+        assert_eq!(
+            result,
+            Err("Failed to register shortcut 'transcribe': invalid shortcut".to_string())
+        );
+        assert!(!cleanup_called.get());
+        assert!(initialization_error_allows_retry(
+            result.as_ref().unwrap_err()
+        ));
+    }
+
+    #[test]
     fn optional_registration_failure_keeps_the_primary_shortcut_active() {
         let backend = RefCell::new(ShortcutBackendModel {
             fail_next_registration: Some("second".to_string()),
@@ -1589,6 +1663,50 @@ mod tests {
 
         assert_eq!(result, Ok(()));
         assert_eq!(backend.borrow().active, vec!["transcribe"]);
+    }
+
+    #[test]
+    fn partial_optional_registration_is_cleaned_up() {
+        let backend = RefCell::new(ShortcutBackendModel {
+            fail_next_registration: Some("second".to_string()),
+            activate_before_failure: true,
+            ..ShortcutBackendModel::default()
+        });
+
+        let result = register_initial_bindings(
+            vec![
+                ("transcribe".to_string(), test_binding("transcribe")),
+                ("second".to_string(), test_binding("second")),
+            ],
+            |binding| backend.borrow_mut().register(binding),
+            |binding| backend.borrow_mut().unregister(binding),
+        );
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(backend.borrow().active, vec!["transcribe"]);
+    }
+
+    #[test]
+    fn failed_optional_cleanup_marks_shortcut_state_uncertain() {
+        let backend = RefCell::new(ShortcutBackendModel {
+            fail_next_registration: Some("second".to_string()),
+            activate_before_failure: true,
+            fail_cleanup: true,
+            ..ShortcutBackendModel::default()
+        });
+
+        let result = register_initial_bindings(
+            vec![
+                ("transcribe".to_string(), test_binding("transcribe")),
+                ("second".to_string(), test_binding("second")),
+            ],
+            |binding| backend.borrow_mut().register(binding),
+            |binding| backend.borrow_mut().unregister(binding),
+        );
+
+        let error = result.expect_err("failed optional cleanup must fail initialization");
+        assert!(error.contains(UNCERTAIN_SHORTCUT_STATE));
+        assert!(!initialization_error_allows_retry(&error));
     }
 
     #[test]
