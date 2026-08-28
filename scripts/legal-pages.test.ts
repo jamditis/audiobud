@@ -96,7 +96,8 @@ const footerLinks = [
   { label: "GitHub", href: "https://github.com/jamditis/audiobud" },
 ];
 const socialImage = "https://audiobud.amditis.tech/assets/og-image.png";
-const socialImageAlt = "AudioBud local dictation for Windows app interface";
+const socialImageAlt =
+  "AudioBud local dictation for Windows and macOS app interface";
 const browserFavicon =
   "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23101b13'/%3E%3Ccircle cx='32' cy='34' r='20' fill='%2384d150'/%3E%3Ccircle cx='22' cy='22' r='8' fill='%23f3f7ee'/%3E%3Ccircle cx='42' cy='22' r='8' fill='%23f3f7ee'/%3E%3Ccircle cx='22' cy='22' r='4' fill='%23ff5147'/%3E%3Ccircle cx='42' cy='22' r='4' fill='%23ff5147'/%3E%3Cpath d='M22 39c5 5 15 5 20 0' fill='none' stroke='%23101b13' stroke-width='4' stroke-linecap='round'/%3E%3Cpath d='M17 52h30' stroke='%23ffb23e' stroke-width='5' stroke-linecap='round'/%3E%3C/svg%3E";
 type MetadataTagName = "link" | "meta";
@@ -1117,12 +1118,19 @@ describe("AudioBud public policy pages", () => {
     });
   }
 
-  it("keeps the current Store release and updater status beside the download CTA", () => {
+  it("keeps candidate platform status and the Store status beside the download CTA", () => {
     const home = read("index.html");
     const homeText = readText("index.html");
 
     expect(home).toContain('class="install-note"');
-    expect(homeText).toContain("Current release on Microsoft Store");
+    expect(homeText).toContain("Windows downloads · macOS release candidate");
+    expect(homeText).toContain("Apple Silicon");
+    expect(homeText).toContain("macOS 11 or later");
+    expect(homeText).toContain("public DMG is not available");
+    expect(homeText).toContain("After the Mac release is published");
+    expect(homeText).toContain(
+      "Microsoft Store remains on its current Windows release until the Partner Center update is accepted",
+    );
     expect(homeText).toContain("For U.S. users");
     expect(home).toContain(
       'href="https://apps.microsoft.com/detail/xpff8hfmd98gnd"',
@@ -1131,7 +1139,6 @@ describe("AudioBud public policy pages", () => {
       'href="https://github.com/jamditis/audiobud/releases/latest"',
     );
     expect(home).toContain("<strong>Still on the original Store MSI?</strong>");
-    expect(homeText).toContain("now delivers the current release");
     expect(homeText).toContain("AudioBud's signed update feed");
     expect(homeText).toContain("Direct downloads remain available");
     expect(homeText).not.toContain("replacement completes submission");
@@ -1165,6 +1172,18 @@ describe("AudioBud public policy pages", () => {
     expect(roadmap).not.toContain(
       'href="https://github.com/jamditis/audiobud/milestone/6"',
     );
+  });
+
+  it("marks the Apple Silicon 0.6.0 milestone as a candidate", () => {
+    const roadmap = read("roadmap.html").replace(/\s+/g, " ");
+
+    expect(roadmap).toMatch(
+      /<h3>v0\.6\.0<\/h3> <span class="status-pill status-in-progress">candidate<\/span>/,
+    );
+    expect(roadmap).not.toContain("releases/tag/v0.6.0");
+    expect(roadmap).toContain("blob/main/RELEASE_NOTES.md");
+    expect(roadmap).toContain("Apple Silicon");
+    expect(roadmap).toContain("signed and notarized macOS DMG");
   });
 
   it("links every open milestone and describes each one by its contents", () => {
@@ -1313,28 +1332,41 @@ describe("AudioBud public policy pages", () => {
     expect(readme).not.toContain("https://jamditis.github.io/audiobud");
   });
 
-  it("describes signed Windows releases accurately in README", () => {
+  it("describes the signed Windows release and macOS candidate accurately in README", () => {
     const readme = readRoot("README.md");
+    const readmeText = readme.replace(/\s+/g, " ");
 
-    expect(readme).toContain(
+    expect(readmeText).toContain(
       "AudioBud v0.4.4 is approved and available in the [Microsoft Store](https://apps.microsoft.com/detail/xpff8hfmd98gnd)",
     );
-    expect(readme).toContain(
+    expect(readmeText).toContain(
       "The Store now delivers the current signed NSIS package",
     );
-    expect(readme).toContain(
+    expect(readmeText).toContain(
       "The current Microsoft Store package uses that same NSIS update channel",
     );
-    expect(readme).toContain("If you installed the original Store v0.4.1 MSI");
+    expect(readmeText).toContain(
+      "If you installed the original Store v0.4.1 MSI",
+    );
     expect(readme).not.toContain("replacement completes the Store submission");
     expect(readme).toContain("Beginning with v0.4.0");
     expect(readme).toContain("signed and timestamped through Microsoft");
     expect(readme).toContain(
       "SmartScreen can still show a reputation warning for direct downloads",
     );
-    expect(readme).toContain(
-      "Press the Windows shortcut, `Ctrl+Alt+Space`, to record. In toggle mode, press it again to stop and send the transcript; in hold-to-talk mode, release it to stop.",
+    expect(readmeText).toContain(
+      "release candidate adds support for Apple Silicon Macs running macOS 11 or later",
     );
+    expect(readmeText).toContain("public Mac download is not available");
+    expect(readmeText).toContain(
+      "planned macOS v0.6.0 release uses manual updates",
+    );
+    expect(readmeText).toContain(
+      "Developer ID Application: Joe Amditis (5624SD289G)",
+    );
+    expect(readmeText).toContain("Press your configured shortcut to record");
+    expect(readmeText).toContain("The Windows default is");
+    expect(readme).toContain("`Ctrl+Alt+Space`");
     expect(readme).toContain(
       "- **Recording mode:** press-to-toggle recording or hold-to-talk.",
     );
@@ -1391,7 +1423,8 @@ describe("AudioBud public policy pages", () => {
     const normalizedTerms = terms.toLowerCase();
     const termsDescription =
       "Terms for AudioBud's official website, Microsoft Store listing, release pages, support channels, and other maintainer-operated surfaces.";
-    const termsImageAlt = "AudioBud local dictation for Windows app interface";
+    const termsImageAlt =
+      "AudioBud local dictation for Windows and macOS app interface";
     expect(termsText).toContain(
       "The MIT License's warranty terms govern AudioBud software.",
     );

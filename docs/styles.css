@@ -1490,6 +1490,25 @@ main > .section:first-child:not(.hero) {
   font-style: normal;
 }
 
+.verify-card h4 {
+  margin: 22px 0 10px;
+  color: var(--text);
+  font-size: 15px;
+}
+
+.verify-card pre {
+  margin: 0;
+  padding: 14px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(7, 16, 11, 0.5);
+  color: var(--green);
+  font-family: ui-monospace, "Cascadia Code", "Consolas", monospace;
+  font-size: 12px;
+}
+
 .verify-facts {
   margin: 0 0 14px;
   padding: 16px 18px;

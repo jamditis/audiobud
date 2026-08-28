@@ -6,7 +6,7 @@
     <title>AudioBud - private local dictation for Windows</title>
     <meta
       name="description"
-      content="AudioBud is a private, local-first Windows dictation app with signed downloads and a U.S. Microsoft Store listing. Press a hotkey, speak, and paste speech-to-text into any focused text field."
+      content="AudioBud is a private, local-first dictation app for Windows with an Apple Silicon macOS release candidate. Press a hotkey, speak, and keep speech-to-text on your machine."
     />
     <link rel="canonical" href="https://audiobud.amditis.tech/" />
     <link
@@ -20,7 +20,7 @@
     />
     <meta
       property="og:description"
-      content="Get private, local Windows dictation from signed downloads or the U.S. Microsoft Store. Talk naturally, type instantly, and keep your audio on your machine."
+      content="Get private, local dictation for Windows x64. An Apple Silicon macOS release candidate is in testing."
     />
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://audiobud.amditis.tech/" />
@@ -32,7 +32,7 @@
     <meta property="og:image:height" content="630" />
     <meta
       property="og:image:alt"
-      content="AudioBud local dictation for Windows app interface"
+      content="AudioBud local dictation for Windows and macOS app interface"
     />
     <meta name="twitter:card" content="summary_large_image" />
     <meta
@@ -41,7 +41,7 @@
     />
     <meta
       name="twitter:description"
-      content="Get private, local Windows dictation from signed downloads or the U.S. Microsoft Store. Talk naturally, type instantly, and keep your audio on your machine."
+      content="Get private, local dictation for Windows x64. An Apple Silicon macOS release candidate is in testing."
     />
     <meta
       name="twitter:image"
@@ -49,7 +49,7 @@
     />
     <meta
       name="twitter:image:alt"
-      content="AudioBud local dictation for Windows app interface"
+      content="AudioBud local dictation for Windows and macOS app interface"
     />
     <link rel="stylesheet" href="./styles.css" />
     <script src="./site.js" defer></script>
@@ -79,7 +79,7 @@
         <div class="wrap hero-grid">
           <div class="hero-copy" data-reveal>
             <p class="eyebrow">
-              <span></span>Windows x64 · Microsoft Store approved
+              <span></span>Windows x64 · macOS release candidate
             </p>
             <h1 id="hero-title" tabindex="-1">
               Talk naturally.<br />
@@ -93,13 +93,13 @@
             <div class="actions">
               <a
                 class="button primary"
-                data-download="_x64-setup.exe"
+                data-download-windows="_x64-setup.exe"
                 href="https://github.com/jamditis/audiobud/releases/latest"
               >
                 <svg viewBox="0 0 24 24" aria-hidden="true">
                   <path d="M12 3v12m0 0 5-5m-5 5-5-5M5 20h14" />
                 </svg>
-                Download current release
+                Windows downloads
               </a>
               <a
                 class="button ghost"
@@ -111,7 +111,7 @@
               <span><i class="trust-dot"></i>Open source</span>
               <span><i class="trust-dot"></i>Offline audio</span>
               <span><i class="trust-dot"></i>No account</span>
-              <span><i class="trust-dot"></i>Code-signed</span>
+              <span><i class="trust-dot"></i>Signed Windows release</span>
               <span><i class="trust-dot"></i>U.S. Microsoft Store</span>
             </div>
           </div>
@@ -133,7 +133,7 @@
               />
             </div>
             <div class="float-chip chip-shortcut" aria-hidden="true">
-              <span>Shortcut</span><kbd>Ctrl + Alt + Space</kbd>
+              <span>Shortcut</span><kbd>Configurable</kbd>
             </div>
             <div class="float-chip chip-local" aria-hidden="true">
               <svg viewBox="0 0 24 24">
@@ -313,34 +313,45 @@
               <h2>Fast, broad, or specialized.</h2>
             </div>
             <p>
-              Parakeet V3 is the Windows default. Other local engines cover
-              translation, broader language support, and different hardware.
+              Whisper Turbo is recommended on Apple Silicon Macs. Parakeet V3
+              remains the Windows default, and other local engines cover more
+              languages and specialized jobs.
             </p>
           </div>
           <div class="model-list">
-            <article class="model-row model-recommended" data-reveal>
+            <article class="model-row" data-reveal>
               <div class="model-rank" aria-hidden="true">A</div>
               <div class="model-main">
                 <strong>Parakeet V3</strong>
-                <p>Fast multilingual dictation for 25 European languages.</p>
+                <p>
+                  Fast multilingual Windows dictation. Mac users can run it on
+                  the CPU without NVIDIA hardware.
+                </p>
               </div>
               <div class="model-tags">
-                <span class="tag solid">recommended</span
-                ><span class="tag">DirectML</span>
+                <span class="tag solid">Windows default</span>
+                <span class="tag">DirectML</span>
               </div>
               <span class="size">456 MB</span>
             </article>
-            <article class="model-row" data-reveal data-reveal-delay="1">
+            <article
+              class="model-row model-recommended"
+              data-reveal
+              data-reveal-delay="1"
+            >
               <div class="model-rank" aria-hidden="true">W</div>
               <div class="model-main">
-                <strong>Whisper</strong>
-                <p>Multiple sizes, broad language coverage, and translation.</p>
+                <strong>Whisper Turbo</strong>
+                <p>
+                  Broad language coverage with Metal acceleration on Apple
+                  Silicon. Whisper Small is the lighter option.
+                </p>
               </div>
               <div class="model-tags">
-                <span class="tag">translation</span
-                ><span class="tag">many languages</span>
+                <span class="tag solid">Mac recommended</span>
+                <span class="tag">Metal</span>
               </div>
-              <span class="size">465 MB+</span>
+              <span class="size">1.55 GB</span>
             </article>
             <article class="model-row" data-reveal data-reveal-delay="2">
               <div class="model-rank" aria-hidden="true">+</div>
@@ -367,15 +378,20 @@
             <img src="./favicon.svg" alt="" />
           </div>
           <div class="cta-copy">
-            <p class="eyebrow">Current release on Microsoft Store</p>
-            <h2>Install the current AudioBud release.</h2>
+            <p class="eyebrow">Windows downloads · macOS release candidate</p>
+            <h2>Install the current Windows release.</h2>
             <p>
-              For U.S. users, AudioBud's official Store listing now delivers the
-              current release. New Store installs use the signed NSIS package
-              and check AudioBud's signed update feed for later releases by
-              default.
+              The macOS release candidate targets Apple Silicon Macs running
+              macOS 11 or later. The public DMG is not available until
+              clean-Mac, remote candidate, and exact draft-asset checks pass.
             </p>
             <p class="install-note">
+              After the Mac release is published, updates will be manual: use
+              AudioBud's release link to download and install the next DMG. For
+              U.S. users, the Microsoft Store remains on its current Windows
+              release until the Partner Center update is accepted. New Store
+              installs use the signed NSIS package and AudioBud's signed update
+              feed.
               <strong>Still on the original Store MSI?</strong> That package
               cannot receive in-app updates. Uninstall it in Windows Settings,
               then install from the Store again or run the current NSIS setup
@@ -386,12 +402,12 @@
             </p>
           </div>
           <div class="cta-actions">
-            <span class="store-available">Current release available</span>
+            <span class="store-available">Signed direct downloads</span>
             <a
               class="button primary"
-              data-download="_x64-setup.exe"
+              data-download-windows="_x64-setup.exe"
               href="https://github.com/jamditis/audiobud/releases/latest"
-              >Download current release</a
+              >Windows downloads</a
             >
             <a
               class="text-link"
@@ -420,8 +436,9 @@
               <h2>Using a direct download?</h2>
             </div>
             <p>
-              GitHub installers are signed and timestamped. Confirm that a
-              direct download is genuine before running it.
+              Windows installers are signed and timestamped. The planned Mac DMG
+              is signed and notarized. Confirm that a direct download is genuine
+              before running it.
             </p>
           </div>
 
@@ -474,6 +491,16 @@
                 rather than every byte, so it cannot stand in for the checksum
                 below. Run both checks.
               </p>
+              <h4>Planned macOS release</h4>
+              <p>
+                Before any Mac release is published, Gatekeeper must accept its
+                DMG as
+                <strong
+                  >Developer ID Application: Joe Amditis (5624SD289G)</strong
+                >. Stapler must also validate its notarization ticket:
+              </p>
+              <pre><code>spctl --assess --type open --context context:primary-signature -v "./AudioBud_&lt;version&gt;_macos_aarch64.dmg"
+xcrun stapler validate "./AudioBud_&lt;version&gt;_macos_aarch64.dmg"</code></pre>
             </article>
           </div>
 
@@ -488,14 +515,13 @@
               No hashes and no version live in this markup. Every release would
               need them rewritten, and a stale digest is worse than none: it
               tells someone holding a good installer that it is bad. The list
-              fills in from the release below; SHA256SUMS.txt is the fallback,
-              and its URL resolves to whatever the latest release is.
+              fills in from the release below. The Windows checksum manifest is
+              the current fallback. The Mac manifest will be added here only
+              after the Mac release exists.
             -->
             <ul class="checksum-list" data-checksum-list>
               <li class="checksum-row checksum-row-pending">
-                <span class="checksum-name"
-                  >Checksums load from the latest GitHub release.</span
-                >
+                <span class="checksum-name">Windows checksums</span>
                 <a
                   class="checksum-value"
                   href="https://github.com/jamditis/audiobud/releases/latest/download/SHA256SUMS.txt"
@@ -508,8 +534,11 @@
               own copy before installing.
             </p>
             <figure class="checksum-command">
-              <figcaption>Run this in PowerShell, then compare</figcaption>
-              <pre><code data-checksum-command>Get-FileHash -Algorithm SHA256 .\AudioBud_&lt;version&gt;_x64-setup.exe</code></pre>
+              <figcaption data-checksum-caption>
+                Run the command for your platform, then compare
+              </figcaption>
+              <pre><code data-checksum-command>macOS: shasum -a 256 "./AudioBud_&lt;version&gt;_macos_aarch64.dmg"
+Windows: Get-FileHash -Algorithm SHA256 .\AudioBud_&lt;version&gt;_x64-setup.exe</code></pre>
             </figure>
             <p class="checksum-note">
               A matching hash means the file arrived intact. A mismatch means it
@@ -531,7 +560,7 @@
             <img class="brand-mark" src="./favicon.svg" alt="" />
             <span>AudioBud</span>
           </a>
-          <p>Local dictation for Windows. MIT licensed.</p>
+          <p>Windows release · Apple Silicon macOS candidate · MIT licensed.</p>
         </div>
         <nav class="footer-links" aria-label="Footer">
           <a href="https://apps.microsoft.com/detail/xpff8hfmd98gnd"

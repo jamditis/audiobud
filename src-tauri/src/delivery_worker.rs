@@ -281,7 +281,9 @@ impl DeliveryWorker {
 mod tests {
     use super::{DeliveryWorker, SHUTDOWN_TIMEOUT};
     use crate::delivery_queue::{DeliveryQueue, EnqueueResult};
-    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::atomic::AtomicBool;
+    #[cfg(windows)]
+    use std::sync::atomic::Ordering;
     use std::sync::mpsc;
     use std::sync::{Arc, Mutex};
     use std::thread::ThreadId;

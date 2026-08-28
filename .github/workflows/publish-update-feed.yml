@@ -109,9 +109,11 @@ jobs:
             exit 1
           fi
 
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-          echo "commit=$TAG_SHA" >> "$GITHUB_OUTPUT"
-          echo "json=$RELEASE_JSON" >> "$GITHUB_OUTPUT"
+          {
+            echo "tag=$TAG"
+            echo "commit=$TAG_SHA"
+            echo "json=$RELEASE_JSON"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Download signed updater assets
         id: updater
@@ -142,9 +144,11 @@ jobs:
             exit 1
           fi
 
-          echo "archive=${ARCHIVES[0]}" >> "$GITHUB_OUTPUT"
-          echo "signature=${SIGNATURES[0]}" >> "$GITHUB_OUTPUT"
-          echo "public_key=${PUBLIC_KEYS[0]}" >> "$GITHUB_OUTPUT"
+          {
+            echo "archive=${ARCHIVES[0]}"
+            echo "signature=${SIGNATURES[0]}"
+            echo "public_key=${PUBLIC_KEYS[0]}"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Verify updater provenance
         shell: bash

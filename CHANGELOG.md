@@ -8,7 +8,65 @@ AudioBud is a detached fork of [Handy](https://github.com/cjpais/Handy) by CJ Pa
 restate Handy's own history. AudioBud versions independently of Handy, starting at
 `0.1.0`. Windows releases are code-signed beginning with `0.4.0`.
 
-## Unreleased
+## 0.6.0 - Unreleased
+
+A macOS and reliability release candidate. AudioBud is preparing a signed and
+notarized DMG for Apple Silicon Macs running macOS 11 or later. The candidate
+also reduces startup races and failure leaks in permissions, shortcuts,
+settings, audio, transcription, and transcript delivery. Windows x64 remains
+supported.
+
+### Added
+
+- An Apple Silicon macOS release path with Developer ID signing, Apple
+  notarization, a stapled DMG ticket, checksums, an SBOM, and GitHub build
+  provenance. Publication waits for the clean-Mac and remote candidate gates.
+- Platform-aware downloads and SHA-256 instructions on the AudioBud website.
+- A single macOS permission controller for Microphone and Accessibility state,
+  including retry, focus refresh, and revoked-permission handling.
+- Serialized settings writes and slider drafts so fast changes cannot overwrite
+  each other or leave the interface ahead of the saved value.
+
+### Changed
+
+- The planned macOS artifact requires version 11 or later and is Apple Silicon
+  only. Intel Mac and Linux builds are not validated.
+- macOS updates are manual. Windows NSIS builds keep the signed in-app update
+  channel.
+- Model recommendations are now system-specific. macOS recommends Whisper
+  Turbo with Metal acceleration, while Windows keeps Parakeet V3 with
+  DirectML. Parakeet remains available for CPU inference on macOS.
+- The direct macOS paste option is migrated to supported clipboard delivery.
+- Git dependencies are pinned to exact revisions for repeatable builds.
+- The release workflow tests the full codebase before it exposes signing
+  credentials, then verifies signatures, notarization, architecture, bundled
+  libraries, checksums, the SBOM, and provenance.
+
+### Fixed
+
+- Permission requests no longer race, duplicate, or keep stale granted state
+  after the user revokes access.
+- Shortcut startup no longer blocks forever on a stalled native constructor.
+  Required and optional shortcuts now have separate failure rules, and an
+  uncertain native state cannot trigger an unsafe fallback registration.
+- Pressed modifier keys are released in reverse order after input errors and
+  panics, which prevents stuck Command, Control, or Shift keys.
+- Model loading, audio stream replacement, mute changes, and settings startup
+  now report failures without leaving partial state or duplicate listeners.
+- The macOS DMG is notarized and stapled separately after Tauri notarizes the
+  app bundle. Gatekeeper now accepts both the app and the DMG.
+
+### Removed
+
+- The unused voice-command prototype, duplicate capabilities, an unused direct
+  dependency, and macOS updater code that had no verified update path.
+
+### Performance
+
+- The pre-final local candidate binary was about 4.7% smaller than the v0.5.0
+  baseline, and its measured idle memory use was about 4.4% lower on the test
+  Mac. Final release values will replace these figures after the exact-tree
+  build.
 
 ## 0.5.0 - 2026-08-27
 

@@ -5,15 +5,22 @@ import type {
   AppSettings as Settings,
   AudioDevice,
   ModelUnloadTimeout,
+  OverlayAnchor,
 } from "@/bindings";
 import { commands } from "@/bindings";
 import { toast } from "sonner";
 import i18n from "@/i18n";
 import { settingUpdateError } from "./settingUpdateResult";
+import {
+  createKeyedSerialQueue,
+  createOptimisticWriteCoordinator,
+  createSettingsLifecycle,
+  mergePendingValues,
+} from "./settingsCoordination";
 
 // Auto-save acknowledgment. Settings persist immediately (there is no Save
 // button), so a brief toast confirms each write. A shared toast id plus a short
-// debounce keeps rapid changes (e.g. dragging a slider) from stacking toasts.
+// debounce keeps consecutive changes from stacking toasts.
 let savedToastTimer: ReturnType<typeof setTimeout> | null = null;
 function notifySaved() {
   if (savedToastTimer) clearTimeout(savedToastTimer);
@@ -47,15 +54,14 @@ interface SettingsStore {
     value: Settings[K],
   ) => Promise<void>;
   resetSetting: (key: keyof Settings) => Promise<void>;
-  setOverlayAnchor: (anchor: string) => Promise<void>;
+  setOverlayAnchor: (anchor: OverlayAnchor) => Promise<void>;
   resetOverlayPosition: () => Promise<void>;
-  refreshSettings: () => Promise<void>;
+  refreshSettings: (required?: boolean) => Promise<void>;
   refreshAudioDevices: () => Promise<void>;
   refreshOutputDevices: () => Promise<void>;
   updateBinding: (id: string, binding: string) => Promise<void>;
   resetBinding: (id: string) => Promise<void>;
   getSetting: <K extends keyof Settings>(key: K) => Settings[K] | undefined;
-  isUpdatingKey: (key: string) => boolean;
   playTestSound: (soundType: "start" | "stop") => Promise<void>;
   checkCustomSounds: () => Promise<void>;
   setPostProcessProvider: (providerId: string) => Promise<void>;
@@ -94,6 +100,12 @@ const DEFAULT_AUDIO_DEVICE: AudioDevice = {
   name: "Default",
   is_default: true,
 };
+
+const settingsLifecycle = createSettingsLifecycle((eventName, handler) =>
+  listen(eventName, handler),
+);
+const settingsRefreshQueue = createKeyedSerialQueue();
+const settingWrites = createOptimisticWriteCoordinator<Settings>();
 
 // One backend command now persists any plain `AppSettings` field: it takes the
 // field name and the JSON encoding of the new value, and type-checks the value
@@ -178,6 +190,79 @@ const settingUpdaters: {
     commands.setModelUnloadTimeout(value as ModelUnloadTimeout),
 };
 
+async function persistSettingValue<K extends keyof Settings>(
+  key: K,
+  value: Settings[K],
+) {
+  const updater = settingUpdaters[key];
+  if (!updater) {
+    if (key !== "bindings" && key !== "selected_model") {
+      console.warn(`No handler for setting: ${String(key)}`);
+    }
+    return;
+  }
+
+  // tauri-specta bindings resolve to { status: "error" } on a Rust Err
+  // instead of throwing, so inspect the result explicitly.
+  const errorMessage = settingUpdateError(await updater(value));
+  if (errorMessage) {
+    throw new Error(errorMessage);
+  }
+}
+
+function applySettingsPatch(
+  settings: Settings | null,
+  patch: Partial<Settings>,
+): Settings | null {
+  if (!settings) {
+    return null;
+  }
+  return mergePendingValues(settings, patch);
+}
+
+function pendingSettingsPatch(): Partial<Settings> {
+  return settingWrites.pendingValues();
+}
+
+function reportSettingWriteError(context: string) {
+  return (error: unknown, isLatest: boolean) => {
+    console.error(`Failed to ${context}:`, error);
+    if (isLatest) {
+      notifySaveError();
+    }
+  };
+}
+
+function overlayStatePatch(settings: Settings | null): Partial<Settings> {
+  return {
+    overlay_position: settings?.overlay_position,
+    overlay_custom_position: settings?.overlay_custom_position,
+  };
+}
+
+function overlayAnchorPatch(
+  settings: Settings | null,
+  anchor: OverlayAnchor,
+): Partial<Settings> {
+  const overlayPosition =
+    settings?.overlay_position === "none"
+      ? "none"
+      : anchor.startsWith("top")
+        ? "top"
+        : "bottom";
+  return {
+    overlay_position: overlayPosition,
+    overlay_custom_position: { anchor, dx: 0, dy: 0 },
+  };
+}
+
+function overlayResetPatch(settings: Settings | null): Partial<Settings> {
+  return {
+    overlay_position: settings?.overlay_position === "none" ? "none" : "bottom",
+    overlay_custom_position: null,
+  };
+}
+
 export const useSettingsStore = create<SettingsStore>()(
   subscribeWithSelector((set, get) => ({
     settings: null,
@@ -203,13 +288,16 @@ export const useSettingsStore = create<SettingsStore>()(
 
     // Getters
     getSetting: (key) => get().settings?.[key],
-    isUpdatingKey: (key) => get().isUpdating[key] || false,
 
     // Load settings from store
-    refreshSettings: async () => {
+    refreshSettings: async (required = false) => {
       try {
-        const result = await commands.getAppSettings();
-        if (result.status === "ok") {
+        await settingsRefreshQueue.run("settings", async () => {
+          const result = await commands.getAppSettings();
+          if (result.status === "error") {
+            throw new Error(result.error);
+          }
+
           const settings = result.data;
           const normalizedSettings: Settings = {
             ...settings,
@@ -219,14 +307,20 @@ export const useSettingsStore = create<SettingsStore>()(
             selected_output_device:
               settings.selected_output_device ?? "Default",
           };
-          set({ settings: normalizedSettings, isLoading: false });
-        } else {
-          console.error("Failed to load settings:", result.error);
-          set({ isLoading: false });
-        }
+          set({
+            settings: mergePendingValues(
+              normalizedSettings,
+              pendingSettingsPatch(),
+            ),
+            isLoading: false,
+          });
+        });
       } catch (error) {
-        console.error("Failed to load settings:", error);
         set({ isLoading: false });
+        if (required) {
+          throw error;
+        }
+        console.error("Failed to load settings:", error);
       }
     },
 
@@ -282,12 +376,8 @@ export const useSettingsStore = create<SettingsStore>()(
     },
 
     checkCustomSounds: async () => {
-      try {
-        const sounds = await commands.checkCustomSounds();
-        get().setCustomSounds(sounds);
-      } catch (error) {
-        console.error("Failed to check custom sounds:", error);
-      }
+      const sounds = await commands.checkCustomSounds();
+      get().setCustomSounds(sounds);
     },
 
     // Update a specific setting
@@ -297,61 +387,32 @@ export const useSettingsStore = create<SettingsStore>()(
     ) => {
       const { settings, setUpdating } = get();
       const updateKey = String(key);
-      const originalValue = settings?.[key];
-
-      // Choosing a coarse Top/Bottom/none placement supersedes any fine grid
-      // anchor, and changeOverlayPositionSetting clears overlay_custom_position
-      // on the backend. Mirror that in the optimistic update so the grid and
-      // Reset button clear immediately instead of flashing the stale anchor
-      // until the settings-changed refresh lands.
       const clearsCustomOverlay = key === "overlay_position";
-      const originalCustom = settings?.overlay_custom_position;
+      const confirmedPatch = {
+        [key]: settings?.[key],
+        ...(clearsCustomOverlay
+          ? { overlay_custom_position: settings?.overlay_custom_position }
+          : {}),
+      } as Partial<Settings>;
+      const optimisticPatch = {
+        [key]: value,
+        ...(clearsCustomOverlay ? { overlay_custom_position: null } : {}),
+      } as Partial<Settings>;
 
-      setUpdating(updateKey, true);
-
-      try {
-        set((state) => ({
-          settings: state.settings
-            ? {
-                ...state.settings,
-                [key]: value,
-                ...(clearsCustomOverlay
-                  ? { overlay_custom_position: null }
-                  : {}),
-              }
-            : null,
-        }));
-
-        const updater = settingUpdaters[key];
-        if (updater) {
-          // tauri-specta bindings resolve to { status: "error" } on a Rust Err
-          // instead of throwing (e.g. a declined external-script confirmation),
-          // so inspect the result explicitly to drive the rollback in catch.
-          const errorMessage = settingUpdateError(await updater(value));
-          if (errorMessage) {
-            throw new Error(errorMessage);
-          }
-          notifySaved();
-        } else if (key !== "bindings" && key !== "selected_model") {
-          console.warn(`No handler for setting: ${String(key)}`);
-        }
-      } catch (error) {
-        console.error(`Failed to update setting ${String(key)}:`, error);
-        if (settings) {
-          set({
-            settings: {
-              ...settings,
-              [key]: originalValue,
-              ...(clearsCustomOverlay
-                ? { overlay_custom_position: originalCustom }
-                : {}),
-            },
-          });
-        }
-        notifySaveError();
-      } finally {
-        setUpdating(updateKey, false);
-      }
+      await settingWrites.run({
+        key: updateKey,
+        hasConfirmedValues: settings !== null,
+        confirmedValues: confirmedPatch,
+        optimisticValues: optimisticPatch,
+        persist: () => persistSettingValue(key, value),
+        apply: (patch) =>
+          set((state) => ({
+            settings: applySettingsPatch(state.settings, patch),
+          })),
+        setUpdating,
+        onError: reportSettingWriteError(`update setting ${String(key)}`),
+        onSuccess: notifySaved,
+      });
     },
 
     // Reset a setting to its default value
@@ -372,42 +433,54 @@ export const useSettingsStore = create<SettingsStore>()(
     // "overlay_position" update key is reused so the grid and the show/hide
     // dropdown share one in-flight lock.
     setOverlayAnchor: async (anchor) => {
-      const { setUpdating, refreshSettings } = get();
+      const { settings, setUpdating } = get();
       const updateKey = "overlay_position";
-      setUpdating(updateKey, true);
-      try {
-        const result = await commands.setOverlayAnchor(anchor);
-        if (result.status === "error") {
-          throw new Error(result.error);
-        }
-        await refreshSettings();
-        notifySaved();
-      } catch (error) {
-        console.error("Failed to set overlay anchor:", error);
-        notifySaveError();
-      } finally {
-        setUpdating(updateKey, false);
-      }
+      await settingWrites.run({
+        key: updateKey,
+        hasConfirmedValues: settings !== null,
+        confirmedValues: overlayStatePatch(settings),
+        optimisticValues: overlayAnchorPatch(settings, anchor),
+        persist: async () => {
+          const result = await commands.setOverlayAnchor(anchor);
+          if (result.status === "error") {
+            throw new Error(result.error);
+          }
+        },
+        apply: (patch) =>
+          set((state) => ({
+            settings: applySettingsPatch(state.settings, patch),
+          })),
+        setUpdating,
+        afterSuccess: () => get().refreshSettings(),
+        onError: reportSettingWriteError("set overlay anchor"),
+        onSuccess: notifySaved,
+      });
     },
 
     // Clear any custom overlay placement, returning to the centered default.
     resetOverlayPosition: async () => {
-      const { setUpdating, refreshSettings } = get();
+      const { settings, setUpdating } = get();
       const updateKey = "overlay_position";
-      setUpdating(updateKey, true);
-      try {
-        const result = await commands.resetOverlayPosition();
-        if (result.status === "error") {
-          throw new Error(result.error);
-        }
-        await refreshSettings();
-        notifySaved();
-      } catch (error) {
-        console.error("Failed to reset overlay position:", error);
-        notifySaveError();
-      } finally {
-        setUpdating(updateKey, false);
-      }
+      await settingWrites.run({
+        key: updateKey,
+        hasConfirmedValues: settings !== null,
+        confirmedValues: overlayStatePatch(settings),
+        optimisticValues: overlayResetPatch(settings),
+        persist: async () => {
+          const result = await commands.resetOverlayPosition();
+          if (result.status === "error") {
+            throw new Error(result.error);
+          }
+        },
+        apply: (patch) =>
+          set((state) => ({
+            settings: applySettingsPatch(state.settings, patch),
+          })),
+        setUpdating,
+        afterSuccess: () => get().refreshSettings(),
+        onError: reportSettingWriteError("reset overlay position"),
+        onSuccess: notifySaved,
+      });
     },
 
     // Update a specific binding
@@ -662,46 +735,36 @@ export const useSettingsStore = create<SettingsStore>()(
 
     // Load default settings from Rust
     loadDefaultSettings: async () => {
-      try {
-        const result = await commands.getDefaultSettings();
-        if (result.status === "ok") {
-          set({ defaultSettings: result.data });
-        } else {
-          console.error("Failed to load default settings:", result.error);
-        }
-      } catch (error) {
-        console.error("Failed to load default settings:", error);
+      const result = await commands.getDefaultSettings();
+      if (result.status === "error") {
+        throw new Error(result.error);
       }
+      set({ defaultSettings: result.data });
     },
 
-    // Initialize everything
-    initialize: async () => {
-      const { refreshSettings, checkCustomSounds, loadDefaultSettings } = get();
+    // Initialize everything once for the application process.
+    initialize: () =>
+      settingsLifecycle.initialize(
+        async () => {
+          const { refreshSettings, checkCustomSounds, loadDefaultSettings } =
+            get();
 
-      // Note: Audio devices are NOT refreshed here. The frontend (App.tsx)
-      // is responsible for calling refreshAudioDevices/refreshOutputDevices
-      // after onboarding completes. This avoids triggering permission dialogs
-      // on macOS before the user is ready.
-      await Promise.all([
-        loadDefaultSettings(),
-        refreshSettings(),
-        checkCustomSounds(),
-      ]);
-
-      // Re-fetch settings when the backend changes them (e.g. language
-      // reset during model switch). The backend is the source of truth.
-      listen("model-state-changed", () => {
-        get().refreshSettings();
-      });
-
-      // The backend emits "settings-changed" whenever it mutates a setting outside
-      // the normal command round-trip — e.g. the tray quick-toggles (issue #12) and
-      // the keyboard-implementation/autostart commands. Re-fetch so the settings
-      // window stays in sync. The {setting, value} payload is ignored here; the
-      // backend store is the source of truth, so a full refresh is simplest.
-      listen("settings-changed", () => {
-        get().refreshSettings();
-      });
-    },
+          // Audio devices are loaded only after onboarding. Loading them here
+          // can trigger a macOS permission dialog before the user is ready.
+          const results = await Promise.allSettled([
+            loadDefaultSettings(),
+            refreshSettings(true),
+            checkCustomSounds(),
+          ]);
+          const failure = results.find(
+            (result): result is PromiseRejectedResult =>
+              result.status === "rejected",
+          );
+          if (failure) {
+            throw failure.reason;
+          }
+        },
+        () => get().refreshSettings(),
+      ),
   })),
 );

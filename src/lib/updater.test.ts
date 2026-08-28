@@ -55,14 +55,21 @@ describe("updateChecksActive", () => {
     const hook = readFileSync("src/hooks/useUpdateChannelAvailable.ts", "utf8");
     expect(hook).toMatch(/commands\s*\.isUpdateChannelAvailable\(\)/);
 
-    for (const path of [
+    const toggle = readFileSync(
       "src/components/settings/UpdateChecksToggle.tsx",
+      "utf8",
+    );
+    const footer = readFileSync("src/components/footer/Footer.tsx", "utf8");
+    const checker = readFileSync(
       "src/components/update-checker/UpdateChecker.tsx",
-    ]) {
-      expect(readFileSync(path, "utf8")).toContain(
-        "useUpdateChannelAvailable()",
-      );
-    }
+      "utf8",
+    );
+
+    expect(toggle).toContain("useUpdateChannelAvailable()");
+    expect(footer).toContain("useUpdateChannelAvailable()");
+    expect(footer).toContain("updateChannelAvailable={updateChannelAvailable}");
+    expect(checker).not.toContain("useUpdateChannelAvailable()");
+    expect(checker).toContain("updateChannelAvailable: boolean");
   });
 
   it("gates every backend update action on the installed package type", () => {

@@ -89,17 +89,20 @@ describe("download verification guidance", () => {
     expect(home).not.toMatch(/AudioBud_\d/);
   });
 
-  it("falls back to the release's SHA256SUMS.txt rather than to nothing", () => {
+  it("falls back only to the checksum manifest that exists publicly", () => {
     // Before the API answers -- or if it never does -- the row has to lead
     // somewhere that still lets a user check their file.
-    const fallback =
-      /<li class="checksum-row checksum-row-pending">[\s\S]*?<\/li>/.exec(
-        home,
-      )?.[0];
-    expect(fallback).toBeDefined();
-    expect(compact(fallback!)).toContain(
+    const fallbackRows = [
+      ...home.matchAll(
+        /<li class="checksum-row checksum-row-pending">[\s\S]*?<\/li>/g,
+      ),
+    ].map(([row]) => compact(row));
+    expect(fallbackRows).toHaveLength(1);
+    expect(fallbackRows.join(" ")).toContain(
       'href="https://github.com/jamditis/audiobud/releases/latest/download/SHA256SUMS.txt"',
     );
+    expect(fallbackRows.join(" ")).toContain("Windows checksums");
+    expect(fallbackRows.join(" ")).not.toContain("Mac checksums");
 
     // That row holds a link, not a digest, so it must not inherit the
     // select-all monospace styling that makes a hash look copyable.
@@ -109,19 +112,35 @@ describe("download verification guidance", () => {
     );
   });
 
-  it("ships a verification command users can copy", () => {
-    // <version> rather than a number: the command outlives the release.
+  it("ships verification commands for macOS and Windows", () => {
+    // <version> rather than a number: each command outlives the release.
+    expect(compactHome).toContain(
+      'shasum -a 256 "./AudioBud_&lt;version&gt;_macos_aarch64.dmg"',
+    );
     expect(compactHome).toContain(
       "Get-FileHash -Algorithm SHA256 .\\AudioBud_&lt;version&gt;_x64-setup.exe",
     );
     expect(read("README.md")).toMatch(
       /Get-AuthenticodeSignature \.\\AudioBud_<version>_x64-setup\.exe/,
     );
+    expect(compactHome).toContain(
+      'spctl --assess --type open --context context:primary-signature -v "./AudioBud_&lt;version&gt;_macos_aarch64.dmg"',
+    );
+    expect(compactHome).toContain(
+      'xcrun stapler validate "./AudioBud_&lt;version&gt;_macos_aarch64.dmg"',
+    );
+    expect(compact(read("README.md"))).toContain(
+      "Developer ID Application: Joe Amditis (5624SD289G)",
+    );
 
     // Once the release is known the placeholder is replaced with the real
     // file name, which is the form a user can paste unedited.
-    expect(compact(read("docs/site.js"))).toContain(
+    const script = compact(read("docs/site.js"));
+    expect(script).toContain(
       "commandLine.textContent = `Get-FileHash -Algorithm SHA256 .\\\\${installer.name}`",
+    );
+    expect(script).toContain(
+      'commandLine.textContent = `shasum -a 256 "./${installer.name}"`',
     );
   });
 
@@ -133,6 +152,9 @@ describe("download verification guidance", () => {
     expect(readme).toContain("--repo jamditis/audiobud");
     expect(readme).toContain(
       "--signer-workflow jamditis/audiobud/.github/workflows/release.yml",
+    );
+    expect(readme).toContain(
+      'gh attestation verify "./AudioBud_<version>_macos_aarch64.dmg"',
     );
   });
 
@@ -149,7 +171,7 @@ describe("download verification guidance", () => {
     // it as a row would publish the hash of the hash file next to the two
     // that matter, which reads as a third installer.
     expect(script).toMatch(
-      /const installers = assets\.filter\(\(asset\) => \/\\\.\(exe\|msi\)\$\/i\.test\(asset\.name\)/,
+      /const installers = assets\.filter\(\(asset\) => \/\\\.\(dmg\|exe\|msi\)\$\/i\.test\(asset\.name\)/,
     );
     // Digests are written as text so a hostile response cannot inject markup.
     expect(script).toMatch(/value\.textContent = asset\.digest/);
@@ -160,7 +182,10 @@ describe("download verification guidance", () => {
     // The href in the markup stays on the releases page: it can never 404 and
     // it names no version, so a release does not drag a site edit behind it.
     expect(compactHome).toMatch(
-      /<a class="button primary" data-download="_x64-setup\.exe" href="https:\/\/github\.com\/jamditis\/audiobud\/releases\/latest"/,
+      /<a class="button primary" data-download-windows="_x64-setup\.exe" href="https:\/\/github\.com\/jamditis\/audiobud\/releases\/latest"/,
+    );
+    expect(compactHome).not.toContain(
+      'data-download-macos="_macos_aarch64.dmg"',
     );
 
     // Direct-downloading the .exe hides the MSI and the notes, so the card has
@@ -172,7 +197,11 @@ describe("download verification guidance", () => {
     const script = compact(read("docs/site.js"));
 
     expect(script).toContain("link.href = asset.browser_download_url");
-    expect(script).toContain('asset.name.endsWith("_x64-setup.exe")');
+    expect(script).toContain("const isMacOS");
+    expect(script).toContain("link.dataset.downloadMacos");
+    expect(script).toContain("link.dataset.downloadWindows");
+    expect(script).toContain('const macOSSuffix = "_macos_aarch64.dmg"');
+    expect(script).toContain('const windowsSuffix = "_x64-setup.exe"');
     // One request feeds both the checksums and the button, so the file the
     // button serves is the file the page publishes a digest for.
     expect(script.match(/fetch\(/g)).toHaveLength(1);

@@ -1,14 +1,20 @@
 # AudioBud
 
-AudioBud is a local-first dictation app for Windows. Press a hotkey, speak, and AudioBud types the transcript into the focused text field. Audio stays on your machine unless you explicitly enable optional LLM post-processing.
+AudioBud is a local-first dictation app with a Windows release and an Apple
+Silicon macOS release candidate. Press a hotkey, speak, and AudioBud types the
+transcript into the focused text field. Audio stays on your machine unless you
+explicitly enable optional LLM post-processing.
 
-AudioBud is a detached fork of [Handy](https://github.com/cjpais/Handy) by CJ Pais. It keeps Handy's Tauri, Rust, React, and local transcription base while adding AudioBud defaults, a dark frog/swamp interface, a Windows-first release path, and local model choices tuned for this fork.
+AudioBud is a detached fork of [Handy](https://github.com/cjpais/Handy) by CJ
+Pais. It keeps Handy's Tauri, Rust, React, and local transcription base while
+adding AudioBud defaults, a dark frog/swamp interface, signed Windows and macOS
+release paths, and local model choices tuned for this fork.
 
 - **Website:** <https://audiobud.amditis.tech/>
 - **Privacy:** <https://audiobud.amditis.tech/privacy.html>
 - **Terms:** <https://audiobud.amditis.tech/terms.html>
 - **Support:** <https://github.com/jamditis/audiobud/issues>
-- **Microsoft Store:** [official listing](https://apps.microsoft.com/detail/xpff8hfmd98gnd) (current v0.4.4 release)
+- **Microsoft Store:** [official Windows listing](https://apps.microsoft.com/detail/xpff8hfmd98gnd) (current public Store version: v0.4.4)
 - **Direct downloads:** [latest GitHub release](https://github.com/jamditis/audiobud/releases/latest)
 - **Changelog:** [CHANGELOG.md](CHANGELOG.md)
 
@@ -16,17 +22,36 @@ AudioBud is a detached fork of [Handy](https://github.com/cjpais/Handy) by CJ Pa
 
 ## Current status
 
-AudioBud v0.4.4 is approved and available in the [Microsoft Store](https://apps.microsoft.com/detail/xpff8hfmd98gnd). The Store now delivers the current signed NSIS package, and new Store installs join AudioBud's signed update feed.
+The AudioBud v0.6.0 release candidate adds support for Apple Silicon Macs
+running macOS 11 or later. A pre-final local DMG passed Developer ID,
+notarization, stapling, Gatekeeper, and runtime-dependency checks. The public Mac
+download is not available until clean-Mac, remote candidate, and draft-asset
+tests pass. No Intel Mac build is planned for v0.6.0.
+
+AudioBud v0.4.4 is approved and available in the
+[Microsoft Store](https://apps.microsoft.com/detail/xpff8hfmd98gnd). The Store
+now delivers the current signed NSIS package, and new Store installs join
+AudioBud's signed update feed. The Microsoft Store still serves v0.4.4 until a
+separate v0.6.0 Partner Center update is tested, submitted, and accepted.
 
 Direct GitHub release installers remain available for portable installs, deployment tooling, and users who cannot access the Store listing. Beginning with v0.4.0, Windows release installers are signed and timestamped through Microsoft Artifact Signing. The signature identifies Joseph Amditis as the publisher. SmartScreen can still show a reputation warning for direct downloads while a new release builds reputation.
 
-Windows is the validated target for this milestone. macOS and Linux code is inherited from Handy and may work, but this fork has not validated those builds yet.
+Windows x64 is the validated public target. Apple Silicon macOS is the v0.6.0
+candidate target. Intel Mac and Linux builds are not validated.
 
-Beginning with v0.4.2, installed Windows NSIS builds check AudioBud's signed GitHub release feed for updates by default. You can opt out in Settings > Advanced. The current Microsoft Store package uses that same NSIS update channel. If you installed the original Store v0.4.1 MSI before August 3, 2026, it requires one manual transition onto the current NSIS release; macOS and Linux update behavior remains unvalidated.
+Beginning with v0.4.2, installed Windows NSIS builds check AudioBud's signed
+GitHub release feed for updates by default. You can opt out in Settings >
+Advanced. The current Microsoft Store package uses that same NSIS update
+channel. If you installed the original Store v0.4.1 MSI before August 3, 2026,
+it requires one manual transition onto the current NSIS release. The planned
+macOS v0.6.0 release uses manual updates: use the release link in the app footer,
+download the next DMG, and replace AudioBud in Applications.
 
 ## How it works
 
-1. Press the Windows shortcut, `Ctrl+Alt+Space`, to record. In toggle mode, press it again to stop and send the transcript; in hold-to-talk mode, release it to stop.
+1. Press your configured shortcut to record. The Windows default is
+   `Ctrl+Alt+Space`. In toggle mode, press it again to stop and send the
+   transcript; in hold-to-talk mode, release it to stop.
 2. AudioBud records from your selected microphone and trims silence with Silero VAD.
 3. The selected local model transcribes the audio.
 4. AudioBud inserts the result into the focused app by clipboard paste or direct typing.
@@ -61,32 +86,49 @@ Opt in to let AudioBud learn from your own dictation history, entirely on your m
 
 ## Models
 
-Parakeet V3 is the Windows default in this fork because it was the best small local engine in the milestone A benchmark. See [bench/RESULTS.md](bench/RESULTS.md).
+Whisper Turbo is recommended on Apple Silicon Macs because AudioBud runs it
+through whisper.cpp with Metal acceleration. Whisper Small is the lighter Mac
+choice for systems with less memory or disk space.
+
+Parakeet V3 remains the Windows default because it was the best small local
+engine in the milestone A DirectML benchmark. It can also run on a Mac through
+ONNX Runtime on the CPU. It does not require CUDA or an NVIDIA GPU, but AudioBud
+v0.6.0 does not enable Core ML acceleration for Parakeet. See
+[bench/RESULTS.md](bench/RESULTS.md) for the Windows evidence.
 
 ![AudioBud model settings in dark mode with Parakeet V3 active and other local engines available to download.](screenshots/models.png)
 
-| Engine      | Best fit                                      | Notes                                                         |
-| ----------- | --------------------------------------------- | ------------------------------------------------------------- |
-| Parakeet V3 | Default Windows dictation                     | Fast multilingual ONNX model with DirectML support.           |
-| Whisper     | Broad language coverage                       | Small, medium, turbo, and large variants through whisper.cpp. |
-| Moonshine   | Small English models                          | Very fast English-focused options.                            |
-| SenseVoice  | Chinese, English, Japanese, Korean, Cantonese | Good option for East Asian language coverage.                 |
-| GigaAM      | Russian                                       | Russian speech recognition.                                   |
-| Canary      | Multilingual and translation                  | 180M Flash and 1B v2 options.                                 |
-| Cohere      | Accuracy-first multilingual                   | Larger and slower, but accurate.                              |
+| Engine        | Best fit                                      | Notes                                                   |
+| ------------- | --------------------------------------------- | ------------------------------------------------------- |
+| Whisper Turbo | Recommended Mac dictation                     | Broad language coverage through Metal on Apple Silicon. |
+| Whisper Small | Lighter Mac dictation                         | Smaller download with lower accuracy than Turbo.        |
+| Parakeet V3   | Default Windows dictation                     | DirectML on Windows; CPU inference is available on Mac. |
+| Moonshine     | Small English models                          | Very fast English-focused options.                      |
+| SenseVoice    | Chinese, English, Japanese, Korean, Cantonese | Good option for East Asian language coverage.           |
+| GigaAM        | Russian                                       | Russian speech recognition.                             |
+| Canary        | Multilingual and translation                  | 180M Flash and 1B v2 options.                           |
+| Cohere        | Accuracy-first multilingual                   | Larger and slower, but accurate.                        |
 
 ## Install
 
 For U.S. Windows users, install AudioBud from the [Microsoft Store](https://apps.microsoft.com/detail/xpff8hfmd98gnd). The listing serves v0.4.4, and new Store installs check AudioBud's signed update feed for later releases by default.
 
-Signed installers remain available from the [latest GitHub release](https://github.com/jamditis/audiobud/releases/latest) for portable installs, deployment tooling, and users who cannot access the Store:
+Signed downloads remain available from the
+[latest GitHub release](https://github.com/jamditis/audiobud/releases/latest):
 
 - `AudioBud_<version>_x64-setup.exe` — the setup wizard, which can install normally or in portable mode
 - `AudioBud_<version>_x64_en-US.msi` — the MSI package, for deployment tooling
 
+The planned v0.6.0 release adds
+`AudioBud_<version>_macos_aarch64.dmg`, a signed and notarized Apple Silicon Mac
+disk image. It is not part of the current public release yet.
+
 If you installed AudioBud from the Store before August 3, 2026, open Settings > About and check the version. A v0.4.1 install is the original MSI package and cannot receive the signed in-app updates. Uninstall that copy in Windows Settings, then install from the Store again or run the current NSIS setup executable once. Later releases can then arrive through AudioBud.
 
-On first run, choose a model if one is not already installed and grant microphone permission when Windows asks.
+On Windows, run the setup executable and grant microphone permission on first
+use. After the Mac release is published, open the DMG, drag AudioBud to
+Applications, and open it from there. Grant both Microphone and Accessibility
+permissions when AudioBud asks. Choose a model if one is not already installed.
 
 ## Verify your download
 
@@ -118,12 +160,43 @@ gh attestation verify .\AudioBud_<version>_x64-setup.exe --repo jamditis/audiobu
 
 The attestation identifies the GitHub build workflow and source commit. It does not replace the signature and hash checks above.
 
-## Build from source
-
-Prerequisites: [Rust](https://rustup.rs/), [Bun](https://bun.sh/), and the platform build tools. On Windows, install Visual Studio 2022 with the v143 toolset, the Vulkan SDK, and Ninja. See [BUILD.md](BUILD.md) for platform notes.
+For a tested v0.6.0 Mac candidate or later published Mac release, compare the
+DMG hash with its row in `SHA256SUMS-macos.txt` from the same CI artifact or
+GitHub release:
 
 ```bash
-bun install
+shasum -a 256 "./AudioBud_<version>_macos_aarch64.dmg"
+```
+
+Then ask Gatekeeper to assess the disk image and validate its stapled
+notarization ticket:
+
+```bash
+spctl --assess --type open --context context:primary-signature -v \
+  "./AudioBud_<version>_macos_aarch64.dmg"
+xcrun stapler validate "./AudioBud_<version>_macos_aarch64.dmg"
+```
+
+Gatekeeper must accept it and identify `Developer ID Application: Joe Amditis
+(5624SD289G)`. Stapler must report that validation worked. You can also verify
+that the release workflow produced the DMG:
+
+```bash
+gh attestation verify "./AudioBud_<version>_macos_aarch64.dmg" \
+  --repo jamditis/audiobud \
+  --signer-workflow jamditis/audiobud/.github/workflows/release.yml
+```
+
+## Build from source
+
+Prerequisites: [Rust](https://rustup.rs/), [Bun](https://bun.sh/), and the
+platform build tools. On Windows, install Visual Studio 2022 with the v143
+toolset, the Vulkan SDK, and Ninja. On macOS, install Xcode command-line tools.
+See [BUILD.md](BUILD.md) for platform notes and
+[docs/macos-release.md](docs/macos-release.md) for the signed release process.
+
+```bash
+bun install --frozen-lockfile
 bun run tauri dev
 bun run tauri build
 ```

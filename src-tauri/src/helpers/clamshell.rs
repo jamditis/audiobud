@@ -25,10 +25,10 @@ pub fn is_clamshell() -> Result<bool, String> {
     Ok(stdout.contains("\"AppleClamshellState\" = Yes"))
 }
 
-/// Checks if the Mac is a laptop by detecting battery presence
+/// Reports whether this device is a Mac laptop.
 ///
-/// This uses pmset to check for battery information.
-/// Returns true if a battery is detected (laptop), false otherwise (desktop)
+/// macOS checks for an internal battery. Other platforms return false because
+/// AudioBud's clamshell feature is Mac-only.
 #[cfg(target_os = "macos")]
 #[tauri::command]
 #[specta::specta]
@@ -52,8 +52,10 @@ pub fn is_clamshell() -> Result<bool, String> {
     Ok(false)
 }
 
-/// Stub implementation for non-macOS platforms
-/// Always returns false since laptop detection is macOS-specific
+/// Reports whether this device is a Mac laptop.
+///
+/// macOS checks for an internal battery. Other platforms return false because
+/// AudioBud's clamshell feature is Mac-only.
 #[cfg(not(target_os = "macos"))]
 #[tauri::command]
 #[specta::specta]

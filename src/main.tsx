@@ -13,6 +13,13 @@ import "./i18n";
 import { useModelStore } from "./stores/modelStore";
 useModelStore.getState().initialize();
 
+// Initialize settings once here instead of once per useSettings consumer.
+import { useSettingsStore } from "./stores/settingsStore";
+import { initializeSettingsWithRetry } from "./stores/settingsCoordination";
+void initializeSettingsWithRetry(() =>
+  useSettingsStore.getState().initialize(),
+).catch((error) => console.error("Failed to initialize settings:", error));
+
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
     <App />

@@ -66,6 +66,17 @@ impl Drop for LoadingGuard {
     }
 }
 
+fn spawn_model_load_task<F, T>(loading_guard: LoadingGuard, load: F) -> thread::JoinHandle<T>
+where
+    F: FnOnce() -> T + Send + 'static,
+    T: Send + 'static,
+{
+    thread::spawn(move || {
+        let _loading_guard = loading_guard;
+        load()
+    })
+}
+
 #[derive(Clone)]
 pub struct TranscriptionManager {
     engine: Arc<GenerationGate<LoadedEngine>>,
@@ -461,21 +472,26 @@ impl TranscriptionManager {
 
     /// Kicks off the model loading in a background thread if it's not already loaded
     pub fn initiate_model_load(&self) {
-        let mut is_loading = self.is_loading.lock().unwrap();
-        if *is_loading || self.is_model_loaded() {
+        if self.is_model_loaded() {
             return;
         }
 
-        *is_loading = true;
+        let Some(loading_guard) = self.try_start_loading() else {
+            return;
+        };
+
+        // Another path can finish loading between the first check and taking
+        // the loading guard. Do not start a redundant load in that case.
+        if self.is_model_loaded() {
+            return;
+        }
+
         let self_clone = self.clone();
-        thread::spawn(move || {
+        spawn_model_load_task(loading_guard, move || {
             let settings = get_settings(&self_clone.app_handle);
             if let Err(e) = self_clone.load_model(&settings.selected_model) {
                 error!("Failed to load model: {}", e);
             }
-            let mut is_loading = self_clone.is_loading.lock().unwrap();
-            *is_loading = false;
-            self_clone.loading_condvar.notify_all();
         });
     }
 
@@ -1000,5 +1016,39 @@ impl Drop for TranscriptionManager {
                 debug!("Idle watcher thread joined successfully");
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn loading_guard() -> (LoadingGuard, Arc<Mutex<bool>>) {
+        let is_loading = Arc::new(Mutex::new(true));
+        let guard = LoadingGuard {
+            is_loading: Arc::clone(&is_loading),
+            loading_condvar: Arc::new(Condvar::new()),
+        };
+        (guard, is_loading)
+    }
+
+    #[test]
+    fn model_load_task_clears_loading_after_an_error() {
+        let (guard, is_loading) = loading_guard();
+        let result = spawn_model_load_task(guard, || Err::<(), _>("simulated load error"))
+            .join()
+            .expect("model load task must not panic");
+
+        assert_eq!(result, Err("simulated load error"));
+        assert!(!*is_loading.lock().unwrap());
+    }
+
+    #[test]
+    fn model_load_task_clears_loading_after_a_panic() {
+        let (guard, is_loading) = loading_guard();
+        let result = spawn_model_load_task(guard, || panic!("simulated load panic")).join();
+
+        assert!(result.is_err());
+        assert!(!*is_loading.lock().unwrap());
     }
 }

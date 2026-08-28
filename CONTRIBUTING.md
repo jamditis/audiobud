@@ -4,7 +4,10 @@ Thank you for your interest in contributing to AudioBud! This guide will help yo
 
 ## Priorities
 
-AudioBud is a Windows-first fork focused on local dictation. Bug fixes and stability improvements are the most welcome contributions. New features are tracked as issues — open one (or comment on an existing issue) before starting a large change so we can agree on scope first.
+AudioBud supports Windows x64 and Apple Silicon macOS. Bug fixes and stability
+improvements are the most welcome contributions. New features are tracked as
+issues. Open one, or comment on an existing issue, before starting a large
+change so we can agree on scope first.
 
 ## 📖 Philosophy
 
@@ -15,7 +18,7 @@ AudioBud builds on [Handy](https://github.com/cjpais/Handy)'s goal of being a si
 - **Privacy**: Keep everything local and offline
 - **Accessibility**: Free tooling that belongs in everyone's hands
 
-## 🚀 Getting Started
+## 🚀 Getting started
 
 ### Prerequisites
 
@@ -25,7 +28,7 @@ Before you begin, ensure you have the following installed:
 - [Bun](https://bun.sh/) package manager
 - Platform-specific build tools (see [BUILD.md](BUILD.md))
 
-### Setting Up Your Development Environment
+### Set up your development environment
 
 1. **Fork the repository** on GitHub
 
@@ -45,7 +48,7 @@ Before you begin, ensure you have the following installed:
 4. **Install dependencies**:
 
    ```bash
-   bun install
+   bun install --frozen-lockfile
    ```
 
 5. **Download required models**:
@@ -64,7 +67,7 @@ Before you begin, ensure you have the following installed:
 
 For detailed platform-specific setup instructions, see [BUILD.md](BUILD.md).
 
-### Understanding the Codebase
+### Understand the codebase
 
 AudioBud follows a clean architecture pattern:
 
@@ -74,7 +77,7 @@ AudioBud follows a clean architecture pattern:
 - `managers/` - Core business logic (audio, model, transcription)
 - `audio_toolkit/` - Low-level audio processing (recording, VAD)
 - `commands/` - Tauri command handlers for frontend communication
-- `shortcut.rs` - Global keyboard shortcut handling
+- `shortcut/` - Global keyboard shortcut handling
 - `settings.rs` - Application settings management
 
 **Frontend (React/TypeScript - `src/`):**
@@ -84,17 +87,18 @@ AudioBud follows a clean architecture pattern:
 - `hooks/` - Reusable React hooks
 - `lib/types.ts` - Shared TypeScript types
 
-For more details, see the Architecture section in [README.md](README.md) or [AGENTS.md](AGENTS.md).
+For more details, see the project layout in [README.md](README.md) or
+[AGENTS.md](AGENTS.md).
 
-## 🐛 Reporting Bugs
+## 🐛 Report bugs
 
-### Before Submitting a Bug Report
+### Before you submit a bug report
 
 1. **Search existing issues** at [github.com/jamditis/audiobud/issues](https://github.com/jamditis/audiobud/issues), including closed ones
 2. **Try the latest release** to see if the issue has been fixed
 3. **Enable debug mode** (`Cmd/Ctrl+Shift+D`) to gather diagnostic information
 
-### Submitting a Bug Report
+### Submit a bug report
 
 When creating a bug report, please include:
 
@@ -116,15 +120,15 @@ When creating a bug report, please include:
 
 Use the [Bug Report template](.github/ISSUE_TEMPLATE/bug_report.md) when creating an issue.
 
-## 💡 Suggesting Features
+## 💡 Suggest features
 
 AudioBud has GitHub Discussions disabled, so feature requests are filed as issues with the `enhancement` label. This keeps everything in one tracker.
 
-### Before Suggesting a Feature
+### Before you suggest a feature
 
 1. **Search existing issues** at [github.com/jamditis/audiobud/issues](https://github.com/jamditis/audiobud/issues), including closed ones, to avoid duplicates
 
-### Submitting a Feature Request
+### Submit a feature request
 
 1. Open a [new issue](https://github.com/jamditis/audiobud/issues/new) and add the `enhancement` label
 2. Describe your feature idea including:
@@ -133,9 +137,9 @@ AudioBud has GitHub Discussions disabled, so feature requests are filed as issue
    - Any alternatives you've considered
    - How it fits with AudioBud's goals
 
-## 🔧 Making Code Contributions
+## 🔧 Make code contributions
 
-### Before You Start
+### Before you start
 
 **This is critical:** Before writing any code, please do the following:
 
@@ -149,7 +153,7 @@ AudioBud has GitHub Discussions disabled, so feature requests are filed as issue
 
 3. **Agree on scope for larger changes** - For anything beyond a small fix, open or comment on an issue first so we can agree on the approach before you invest time. This keeps AudioBud focused and avoids feature creep.
 
-### Development Workflow
+### Development workflow
 
 1. **Create a feature branch**:
 
@@ -201,7 +205,7 @@ AudioBud has GitHub Discussions disabled, so feature requests are filed as issue
    git push origin feature/your-feature-name
    ```
 
-7. **Create a Pull Request**:
+7. **Create a pull request**:
    - Go to the [AudioBud repository](https://github.com/jamditis/audiobud)
    - Click "New Pull Request"
    - Select your fork and branch
@@ -212,7 +216,7 @@ AudioBud has GitHub Discussions disabled, so feature requests are filed as issue
      - Screenshots/videos if applicable
      - Breaking changes (if any)
 
-### AI Assistance Disclosure
+### AI assistance disclosure
 
 **AI-assisted PRs are welcome!** Use whatever tools help you contribute, just be upfront about it.
 
@@ -222,7 +226,7 @@ In your PR description, please include:
 - Which tools were used (e.g., "Claude Code", "GitHub Copilot", "ChatGPT")
 - How extensively it was used (e.g., "generated boilerplate", "helped debug", "wrote most of the code")
 
-### Code Style Guidelines
+### Code style guidelines
 
 **Rust:**
 
@@ -247,17 +251,36 @@ In your PR description, please include:
 - Keep functions small and single-purpose
 - Prioritize readability over cleverness
 
-### Testing Your Changes
+### Test your changes
 
-**Manual Testing:**
+Run the automated checks before manual testing:
+
+```bash
+bun run test
+bun run lint
+bun run format:check
+bun run check:translations
+bun run check:rebrand
+bun run build
+cd src-tauri
+cargo fmt --all -- --check
+cargo clippy --all-targets --all-features --locked -- -D warnings
+cargo test --all-targets --locked
+```
+
+**Manual testing:**
 
 - Run the app in development mode: `bun run tauri dev`
 - Test your changes with debug mode enabled
 - Verify on multiple platforms if possible
 - Test with different audio devices
 - Try various transcription scenarios
+- On macOS, revoke and restore Microphone and Accessibility permissions, then
+  confirm that AudioBud detects each state change.
+- On macOS, test shortcut changes and slider pointer, keyboard, and blur commits
+  in the packaged WebKit app.
 
-**Building for Production:**
+**Build for production:**
 
 ```bash
 bun run tauri build
@@ -265,7 +288,7 @@ bun run tauri build
 
 Test the production build to ensure it works as expected.
 
-## 📝 Documentation Contributions
+## 📝 Documentation contributions
 
 Documentation improvements are highly valued! You can contribute by:
 
@@ -275,7 +298,7 @@ Documentation improvements are highly valued! You can contribute by:
 - Improving error messages
 - Updating the project website content
 
-## 🤝 Community Guidelines
+## 🤝 Community guidelines
 
 - **Be respectful and inclusive** - We welcome contributors of all skill levels
 - **Be patient** - This is maintained by a small team, responses may take time
@@ -283,7 +306,7 @@ Documentation improvements are highly valued! You can contribute by:
 - **Be collaborative** - Help others and share knowledge
 - **Search first** - Check existing issues/discussions before creating new ones
 
-## 🎯 Good First Issues
+## 🎯 Good first issues
 
 Look for issues labeled `good first issue` or `help wanted` if you're new to the project. These are typically:
 
@@ -291,7 +314,7 @@ Look for issues labeled `good first issue` or `help wanted` if you're new to the
 - Good for learning the codebase
 - Mentor support available
 
-## 📞 Getting Help
+## 📞 Get help
 
 - **Issues**: Open an issue at [github.com/jamditis/audiobud/issues](https://github.com/jamditis/audiobud/issues) for bugs, questions, or feature requests
 

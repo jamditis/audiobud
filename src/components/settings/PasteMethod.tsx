@@ -6,6 +6,7 @@ import { Input } from "../ui/Input";
 import { useSettings } from "../../hooks/useSettings";
 import { useOsType } from "../../hooks/useOsType";
 import type { PasteMethod } from "@/bindings";
+import { pasteMethodsForOs } from "@/lib/paste-methods";
 
 interface PasteMethodProps {
   descriptionMode?: "inline" | "tooltip";
@@ -18,53 +19,21 @@ export const PasteMethodSetting: React.FC<PasteMethodProps> = React.memo(
     const { getSetting, updateSetting, isUpdating } = useSettings();
     const osType = useOsType();
 
-    const getPasteMethodOptions = (osType: string) => {
-      const mod = osType === "macos" ? "Cmd" : "Ctrl";
-
-      const options = [
-        {
-          value: "ctrl_v",
-          label: t("settings.advanced.pasteMethod.options.clipboard", {
-            modifier: mod,
-          }),
-        },
-        {
-          value: "direct",
-          label: t("settings.advanced.pasteMethod.options.direct"),
-        },
-        {
-          value: "none",
-          label: t("settings.advanced.pasteMethod.options.none"),
-        },
-      ];
-
-      // Add Shift+Insert and Ctrl+Shift+V options for Windows and Linux only
-      if (osType === "windows" || osType === "linux") {
-        options.push(
-          {
-            value: "ctrl_shift_v",
-            label: t(
-              "settings.advanced.pasteMethod.options.clipboardCtrlShiftV",
-            ),
-          },
-          {
-            value: "shift_insert",
-            label: t(
-              "settings.advanced.pasteMethod.options.clipboardShiftInsert",
-            ),
-          },
-        );
-      }
-
-      // External script is only available on Linux
-      if (osType === "linux") {
-        options.push({
-          value: "external_script",
-          label: t("settings.advanced.pasteMethod.options.externalScript"),
-        });
-      }
-
-      return options;
+    const pasteMethodLabels: Record<PasteMethod, string> = {
+      ctrl_v: t("settings.advanced.pasteMethod.options.clipboard", {
+        modifier: osType === "macos" ? "Cmd" : "Ctrl",
+      }),
+      direct: t("settings.advanced.pasteMethod.options.direct"),
+      none: t("settings.advanced.pasteMethod.options.none"),
+      ctrl_shift_v: t(
+        "settings.advanced.pasteMethod.options.clipboardCtrlShiftV",
+      ),
+      shift_insert: t(
+        "settings.advanced.pasteMethod.options.clipboardShiftInsert",
+      ),
+      external_script: t(
+        "settings.advanced.pasteMethod.options.externalScript",
+      ),
     };
 
     const selectedMethod = (getSetting("paste_method") ||
@@ -90,7 +59,10 @@ export const PasteMethodSetting: React.FC<PasteMethodProps> = React.memo(
       }
     };
 
-    const pasteMethodOptions = getPasteMethodOptions(osType);
+    const pasteMethodOptions = pasteMethodsForOs(osType).map((method) => ({
+      value: method,
+      label: pasteMethodLabels[method],
+    }));
 
     return (
       <SettingContainer

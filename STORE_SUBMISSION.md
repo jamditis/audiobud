@@ -8,6 +8,37 @@ the current v0.4.4 package since August 3, 2026.
 
 Store listing: `https://apps.microsoft.com/detail/xpff8hfmd98gnd`.
 
+## v0.6.0 update submission
+
+The Microsoft Store still serves v0.4.4. Submit a new Windows package after the
+v0.6.0 release candidate passes the remote Windows workflow. The macOS DMG does
+not go to Partner Center.
+
+Do not upload or submit before all items below are complete:
+
+1. Commit and push the reviewed v0.6.0 source after explicit approval.
+2. Build the Store candidate through the protected release workflow.
+3. Verify Authenticode, packaged files, silent install, launch, update probe,
+   silent uninstall, checksums, the SBOM, and provenance on clean Windows.
+4. Host the exact `AudioBud_<version>_x64-setup.exe` candidate at an immutable,
+   versioned HTTPS URL. Do not use `/latest`, an expiring Actions URL, or bytes
+   that can change behind the URL.
+5. Download the hosted file and confirm that its SHA-256 equals the tested
+   candidate.
+6. Enter the package URL and release text in Partner Center, then save the draft
+   for final review.
+7. Submit only after the separate publication approval.
+
+Use this Windows Store "What's new" draft:
+
+> AudioBud 0.6.0 improves shortcut startup, settings saves, audio recovery,
+> transcript delivery, and release verification. Windows x64 keeps the signed
+> in-app update channel. This update also includes smaller binaries and clearer
+> error recovery.
+
+The final Partner Center record must capture the submission ID, hosted URL,
+SHA-256, workflow run, commit, validation result, and certification result.
+
 ## Submitted app setup
 
 - Product type: `EXE or MSI app`.

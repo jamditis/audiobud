@@ -748,8 +748,10 @@ async resolveWindowPick(gesture: PickerGesture) : Promise<PickArmed> {
     return await TAURI_INVOKE("resolve_window_pick", { gesture });
 },
 /**
- * Stub implementation for non-macOS platforms
- * Always returns false since laptop detection is macOS-specific
+ * Reports whether this device is a Mac laptop.
+ *
+ * macOS checks for an internal battery. Other platforms return false because
+ * AudioBud's clamshell feature is Mac-only.
  */
 async isLaptop() : Promise<Result<boolean, string>> {
     try {

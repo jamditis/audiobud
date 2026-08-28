@@ -163,6 +163,18 @@ pub struct ModelInfo {
     pub is_custom: bool,            // Whether this is a user-provided custom model
 }
 
+fn recommended_model_for_platform(model_id: &str, platform: &str) -> bool {
+    match platform {
+        "windows" => model_id == "parakeet-tdt-0.6b-v3",
+        "macos" => model_id == "turbo",
+        _ => false,
+    }
+}
+
+fn is_recommended_model(model_id: &str) -> bool {
+    recommended_model_for_platform(model_id, std::env::consts::OS)
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
 pub struct DownloadProgress {
     pub model_id: String,
@@ -349,7 +361,7 @@ impl ModelManager {
                 accuracy_score: 0.80,
                 speed_score: 0.40,
                 supports_translation: false, // Turbo doesn't support translation
-                is_recommended: false,
+                is_recommended: is_recommended_model("turbo"),
                 supported_languages: whisper_languages.clone(),
                 supports_language_selection: true,
                 is_custom: false,
@@ -469,7 +481,7 @@ impl ModelManager {
                 accuracy_score: 0.80,
                 speed_score: 0.85,
                 supports_translation: false,
-                is_recommended: true,
+                is_recommended: is_recommended_model("parakeet-tdt-0.6b-v3"),
                 supported_languages: parakeet_v3_languages,
                 supports_language_selection: false,
                 is_custom: false,
@@ -1820,6 +1832,33 @@ mod tests {
     use super::*;
     use std::io::Write;
     use tempfile::TempDir;
+
+    #[test]
+    fn macos_recommends_whisper_turbo() {
+        assert!(recommended_model_for_platform("turbo", "macos"));
+        assert!(!recommended_model_for_platform(
+            "parakeet-tdt-0.6b-v3",
+            "macos"
+        ));
+    }
+
+    #[test]
+    fn windows_recommends_parakeet_v3() {
+        assert!(recommended_model_for_platform(
+            "parakeet-tdt-0.6b-v3",
+            "windows"
+        ));
+        assert!(!recommended_model_for_platform("turbo", "windows"));
+    }
+
+    #[test]
+    fn unsupported_platform_has_no_recommended_model() {
+        assert!(!recommended_model_for_platform("turbo", "linux"));
+        assert!(!recommended_model_for_platform(
+            "parakeet-tdt-0.6b-v3",
+            "linux"
+        ));
+    }
 
     #[test]
     fn test_discover_custom_whisper_models() {

@@ -1,14 +1,14 @@
-# AudioBud signed Windows release build. The workflow builds the application,
-# signs Tauri's patched package contents while bundling, signs the standalone
-# executable and both finished installers, then verifies and attests the
-# packaged files before uploading any artifact.
+# AudioBud signed Windows and macOS release build. The workflow signs and
+# verifies Windows installers and the Apple Silicon app and DMG, then records
+# checksums, SBOMs, and provenance before it uploads any artifact.
 #
 #   - workflow_dispatch (make_release: false) builds and signs a CI artifact.
 #   - workflow_dispatch (store_candidate: true) builds and signs a CI artifact
 #     with Store-specific offline WebView2 packaging.
-#   - workflow_dispatch (make_release: true, store_candidate: false) or a
-#     pushed v* tag also creates or reuses a draft GitHub release and attaches
-#     the release artifacts.
+#   - A pushed v* tag creates or reuses a draft GitHub release and attaches the
+#     release artifacts.
+#   - workflow_dispatch (make_release: true, store_candidate: false) can retry
+#     those release writes only when the selected ref is the existing v* tag.
 #
 # Normal release builds run only from main or an exact v* release tag. A Store
 # candidate may also run from an immutable, SHA-suffixed v* candidate tag. This
@@ -21,7 +21,7 @@ on:
   workflow_dispatch:
     inputs:
       make_release:
-        description: "Create a draft GitHub release and attach the release artifacts"
+        description: "Retry draft release writes from an existing v* tag"
         type: boolean
         default: false
       store_candidate:
@@ -37,12 +37,6 @@ on:
     tags:
       - "v*"
 
-concurrency:
-  # One group prevents main and tag jobs for the same version from replacing
-  # each other's draft assets.
-  group: release-windows
-  cancel-in-progress: false
-
 jobs:
   build-windows:
     name: Build and sign Windows installers
@@ -56,6 +50,10 @@ jobs:
         )
       )
     environment: artifact-signing
+    concurrency:
+      # Prevent two Windows runs from replacing the same draft assets.
+      group: release-windows
+      cancel-in-progress: false
     runs-on: windows-2025
     timeout-minutes: 90
     permissions:
@@ -128,6 +126,18 @@ jobs:
         run: |
           if ($env:MAKE_RELEASE -eq "true" -and $env:STORE_CANDIDATE -eq "true") {
             throw "Store candidate artifacts cannot be published as a GitHub release"
+          }
+          if ($env:MAKE_RELEASE -eq "true") {
+            if ($env:REF_TYPE -ne "tag") {
+              throw "Manual GitHub release retries require an existing version tag"
+            }
+            $manualTagCommit = git rev-list -n 1 "refs/tags/$env:REF_NAME" 2>$null
+            if ($LASTEXITCODE -ne 0 -or -not $manualTagCommit) {
+              throw "Manual GitHub release retry tag $env:REF_NAME does not exist"
+            }
+            if ($manualTagCommit -cne $env:GITHUB_SHA) {
+              throw "Manual GitHub release retry tag $env:REF_NAME does not match workflow commit $env:GITHUB_SHA"
+            }
           }
           if ($env:STORE_CANDIDATE -eq "true") {
             if ($env:EXPECTED_COMMIT_SHA -notmatch "^[0-9a-f]{40}$") {
@@ -1298,12 +1308,18 @@ jobs:
       # A draft is created only after all signatures pass. Reruns reuse the
       # draft, but they refuse to replace assets on a published release.
       - name: Find or create draft release
-        if: ${{ env.STORE_CANDIDATE != 'true' && ((github.event_name == 'workflow_dispatch' && inputs.make_release) || github.ref_type == 'tag') }}
+        if: ${{ env.STORE_CANDIDATE != 'true' && github.ref_type == 'tag' && (github.event_name != 'workflow_dispatch' || inputs.make_release) }}
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ steps.meta.outputs.tag }}
         run: |
+          $releaseNotesPath = "RELEASE_NOTES.md"
+          if (-not (Test-Path -LiteralPath $releaseNotesPath -PathType Leaf)) {
+            throw "Curated release notes not found at $releaseNotesPath"
+          }
+          $expectedNotes = (Get-Content -LiteralPath $releaseNotesPath -Raw).Replace("`r`n", "`n").TrimEnd()
+
           $tagCommit = git rev-list -n 1 "refs/tags/$env:RELEASE_TAG" 2>$null
           $tagExists = $LASTEXITCODE -eq 0
           if ($tagExists -and $tagCommit -ne $env:GITHUB_SHA) {
@@ -1320,11 +1336,15 @@ jobs:
             if (-not $tagExists -and $release.targetCommitish -ne $env:GITHUB_SHA) {
               throw "Draft $env:RELEASE_TAG must match workflow commit $env:GITHUB_SHA; found $($release.targetCommitish)"
             }
+            gh release edit $env:RELEASE_TAG --notes-file $releaseNotesPath
+            if ($LASTEXITCODE -ne 0) {
+              throw "Failed to update draft $env:RELEASE_TAG with curated release notes"
+            }
             Write-Output "Reusing draft release $env:RELEASE_TAG"
           } else {
             gh release create $env:RELEASE_TAG `
               --draft `
-              --generate-notes `
+              --notes-file $releaseNotesPath `
               --target $env:GITHUB_SHA `
               --title "AudioBud $env:RELEASE_TAG"
             if ($LASTEXITCODE -ne 0) {
@@ -1332,8 +1352,22 @@ jobs:
             }
           }
 
+          $verifiedReleaseJson = gh release view $env:RELEASE_TAG `
+            --json body,isDraft,targetCommitish
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to read back draft release $env:RELEASE_TAG"
+          }
+          $verifiedRelease = $verifiedReleaseJson | ConvertFrom-Json
+          if (-not $verifiedRelease.isDraft) {
+            throw "Release $env:RELEASE_TAG stopped being a draft during preparation"
+          }
+          $actualNotes = ([string]$verifiedRelease.body).Replace("`r`n", "`n").TrimEnd()
+          if ($actualNotes -cne $expectedNotes) {
+            throw "Draft release body does not match RELEASE_NOTES.md"
+          }
+
       - name: Upload release artifacts to GitHub release
-        if: ${{ env.STORE_CANDIDATE != 'true' && ((github.event_name == 'workflow_dispatch' && inputs.make_release) || github.ref_type == 'tag') }}
+        if: ${{ env.STORE_CANDIDATE != 'true' && github.ref_type == 'tag' && (github.event_name != 'workflow_dispatch' || inputs.make_release) }}
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
@@ -1371,3 +1405,371 @@ jobs:
             ${{ steps.checksums.outputs.path }}
           retention-days: 30
           if-no-files-found: error
+
+  build-macos:
+    name: Build, sign, and notarize macOS Apple Silicon
+    if: >-
+      inputs.store_candidate != true &&
+      (
+        github.ref == 'refs/heads/main' ||
+        (
+          startsWith(github.ref, 'refs/tags/v') &&
+          !contains(github.ref_name, '-store-candidate-')
+        )
+      )
+    environment: artifact-signing
+    concurrency:
+      group: release-macos
+      cancel-in-progress: false
+    runs-on: macos-15
+    timeout-minutes: 90
+    permissions:
+      attestations: write
+      contents: read
+      id-token: write
+    outputs:
+      artifact-name: ${{ steps.macos-meta.outputs.artifact-name }}
+      tag: ${{ steps.macos-meta.outputs.tag }}
+      version: ${{ steps.macos-meta.outputs.version }}
+    env:
+      MODEL_ASSET_BASE_URL: https://github.com/jamditis/audiobud/releases/download/model-assets-v1
+      SILERO_VAD_SHA256: a35ebf52fd3ce5f1469b2a36158dba761bc47b973ea3382b3186ca15b1f5af28
+      SILERO_VAD_BYTES: 1807522
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Resolve macOS version and paths
+        id: macos-meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION=$(grep -o '"version": "[^"]*"' src-tauri/tauri.conf.json | cut -d'"' -f4)
+          TAG="v$VERSION"
+          if [[ "${{ github.ref_type }}" == "tag" ]]; then
+            PUSHED="${{ github.ref_name }}"
+            if [[ "$PUSHED" != "$TAG" ]]; then
+              echo "::error::Pushed tag '$PUSHED' does not match app version '$TAG'."
+              exit 1
+            fi
+            TAG="$PUSHED"
+          fi
+
+          RELEASE_DIR="$RUNNER_TEMP/audiobud-macos-release"
+          API_KEY_PATH="$RUNNER_TEMP/AuthKey_${{ vars.APPLE_API_KEY }}.p8"
+          ARTIFACT_NAME="audiobud-macos-aarch64-v${VERSION}-${GITHUB_RUN_ATTEMPT}"
+          DMG_NAME="AudioBud_${VERSION}_macos_aarch64.dmg"
+          SBOM_NAME="AudioBud_${VERSION}_macos_aarch64_sbom.spdx.json"
+
+          {
+            echo "version=$VERSION"
+            echo "tag=$TAG"
+            echo "artifact-name=$ARTIFACT_NAME"
+          } >> "$GITHUB_OUTPUT"
+          {
+            echo "API_KEY_PATH=$API_KEY_PATH"
+            echo "APP_PATH=$GITHUB_WORKSPACE/src-tauri/target/release/bundle/macos/AudioBud.app"
+            echo "SOURCE_DMG=$GITHUB_WORKSPACE/src-tauri/target/release/bundle/dmg/AudioBud_${VERSION}_aarch64.dmg"
+            echo "RELEASE_DIR=$RELEASE_DIR"
+            echo "DMG_NAME=$DMG_NAME"
+            echo "SBOM_NAME=$SBOM_NAME"
+          } >> "$GITHUB_ENV"
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.3.14
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+        with:
+          toolchain: stable
+          targets: aarch64-apple-darwin
+
+      - name: Restore Rust cache
+        uses: swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        with:
+          workspaces: "./src-tauri -> target"
+          key: macos-aarch64
+
+      - name: Install macOS build tools
+        shell: bash
+        run: brew install cmake
+
+      - name: Install frontend dependencies
+        shell: bash
+        run: bun install --frozen-lockfile
+
+      - name: Download Silero VAD model
+        shell: bash
+        run: |
+          set -euo pipefail
+          MODEL_DIRECTORY="src-tauri/resources/models"
+          MODEL_PATH="$MODEL_DIRECTORY/silero_vad_v4.onnx"
+          mkdir -p "$MODEL_DIRECTORY"
+          curl --fail --location --retry 3 --retry-delay 5 \
+            "$MODEL_ASSET_BASE_URL/silero_vad_v4.onnx" \
+            --output "$MODEL_PATH"
+
+          MODEL_BYTES=$(stat -f '%z' "$MODEL_PATH")
+          if [[ "$MODEL_BYTES" != "$SILERO_VAD_BYTES" ]]; then
+            echo "::error::Silero VAD model size mismatch: $MODEL_BYTES"
+            exit 1
+          fi
+          MODEL_HASH=$(shasum -a 256 "$MODEL_PATH" | awk '{print $1}')
+          if [[ "$MODEL_HASH" != "$SILERO_VAD_SHA256" ]]; then
+            echo "::error::Silero VAD model hash mismatch: $MODEL_HASH"
+            exit 1
+          fi
+
+      - name: Run frontend checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          bun run lint
+          bun run format:check
+          bun run test
+          bun run check:translations
+          bun run check:rebrand
+          bun run build
+
+      - name: Run Rust checks
+        shell: bash
+        working-directory: src-tauri
+        run: |
+          set -euo pipefail
+          cargo fmt --all -- --check
+          cargo test --all-targets --locked
+          cargo clippy --all-targets --all-features --locked -- -D warnings
+
+      - name: Build application without bundling
+        shell: bash
+        run: bun run tauri build --no-bundle --ci -- --locked
+
+      - name: Prepare Apple signing credentials
+        shell: bash
+        env:
+          APPLE_API_KEY: ${{ vars.APPLE_API_KEY }}
+          APPLE_API_PRIVATE_KEY: ${{ secrets.APPLE_API_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$APPLE_API_KEY" || -z "$APPLE_API_PRIVATE_KEY" ]]; then
+            echo "::error::Apple notarization credentials are missing."
+            exit 1
+          fi
+          umask 077
+          printf '%s' "$APPLE_API_PRIVATE_KEY" > "$API_KEY_PATH"
+          chmod 600 "$API_KEY_PATH"
+          test -s "$API_KEY_PATH"
+
+      - name: Build signed and notarized macOS bundles
+        shell: bash
+        env:
+          APPLE_API_ISSUER: ${{ vars.APPLE_API_ISSUER }}
+          APPLE_API_KEY: ${{ vars.APPLE_API_KEY }}
+          APPLE_API_KEY_PATH: ${{ env.API_KEY_PATH }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          bun run tauri bundle --bundles app,dmg \
+            --config src-tauri/tauri.macos-signing.conf.json --ci
+
+      - name: Resolve macOS release artifacts
+        id: macos-artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP_BUNDLE_DIRECTORY=$(dirname "$APP_PATH")
+          DMG_BUNDLE_DIRECTORY=$(dirname "$SOURCE_DMG")
+          APP_CANDIDATE_COUNT=$(find "$APP_BUNDLE_DIRECTORY" -maxdepth 1 -type d -name '*.app' -print | wc -l | tr -d '[:space:]')
+          DMG_CANDIDATE_COUNT=$(find "$DMG_BUNDLE_DIRECTORY" -maxdepth 1 -type f -name '*.dmg' -print | wc -l | tr -d '[:space:]')
+          if [[ "$APP_CANDIDATE_COUNT" != "1" ]]; then
+            echo "::error::Expected one app bundle, found $APP_CANDIDATE_COUNT."
+            find "$APP_BUNDLE_DIRECTORY" -maxdepth 1 -type d -name '*.app' -print
+            exit 1
+          fi
+          if [[ "$DMG_CANDIDATE_COUNT" != "1" ]]; then
+            echo "::error::Expected one DMG, found $DMG_CANDIDATE_COUNT."
+            find "$DMG_BUNDLE_DIRECTORY" -maxdepth 1 -type f -name '*.dmg' -print
+            exit 1
+          fi
+          test -d "$APP_PATH"
+          test -s "$SOURCE_DMG"
+          mkdir -p "$RELEASE_DIR"
+          DMG_PATH="$RELEASE_DIR/$DMG_NAME"
+          cp "$SOURCE_DMG" "$DMG_PATH"
+          {
+            echo "dmg=$DMG_PATH"
+            echo "sbom=$RELEASE_DIR/$SBOM_NAME"
+            echo "checksums=$RELEASE_DIR/SHA256SUMS-macos.txt"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Notarize and staple macOS DMG
+        shell: bash
+        env:
+          APPLE_API_ISSUER: ${{ vars.APPLE_API_ISSUER }}
+          APPLE_API_KEY: ${{ vars.APPLE_API_KEY }}
+          DMG_PATH: ${{ steps.macos-artifacts.outputs.dmg }}
+        run: |
+          set -euo pipefail
+          NOTARY_JSON="$RUNNER_TEMP/dmg-notarization.json"
+          xcrun notarytool submit "$DMG_PATH" \
+            --key "$API_KEY_PATH" \
+            --key-id "$APPLE_API_KEY" \
+            --issuer "$APPLE_API_ISSUER" \
+            --wait --output-format json > "$NOTARY_JSON"
+
+          NOTARY_STATUS=$(jq -r '.status // empty' "$NOTARY_JSON")
+          NOTARY_ID=$(jq -r '.id // empty' "$NOTARY_JSON")
+          if [[ "$NOTARY_STATUS" != "Accepted" ]]; then
+            echo "::error::DMG notarization failed with status '$NOTARY_STATUS' and id '$NOTARY_ID'."
+            exit 1
+          fi
+          echo "DMG notarization accepted for id $NOTARY_ID"
+          xcrun stapler staple "$DMG_PATH"
+
+      - name: Remove Apple API private key
+        if: ${{ always() }}
+        shell: bash
+        run: rm -f "$API_KEY_PATH"
+
+      - name: Verify macOS signatures and notarization
+        shell: bash
+        env:
+          DMG_PATH: ${{ steps.macos-artifacts.outputs.dmg }}
+        run: |
+          set -euo pipefail
+          MAIN_BINARY="$APP_PATH/Contents/MacOS/audiobud"
+
+          file "$MAIN_BINARY"
+          LIPO_ARCHS=$(lipo -archs "$MAIN_BINARY")
+          if [[ "$LIPO_ARCHS" != "arm64" ]]; then
+            echo "::error::Expected a thin arm64 binary, found '$LIPO_ARCHS'."
+            exit 1
+          fi
+          codesign --verify --deep --strict --verbose=4 "$APP_PATH"
+          codesign --verify --verbose=2 "$DMG_PATH"
+          codesign --display --verbose=4 "$APP_PATH"
+          codesign --display --entitlements :- "$APP_PATH"
+          spctl --assess --type execute --verbose=4 "$APP_PATH"
+          spctl --assess --type open --context context:primary-signature \
+            --verbose=4 "$DMG_PATH"
+          xcrun stapler validate "$APP_PATH"
+          xcrun stapler validate "$DMG_PATH"
+          hdiutil verify "$DMG_PATH"
+
+          DEPENDENCIES=$(otool -L "$MAIN_BINARY")
+          printf '%s\n' "$DEPENDENCIES"
+          if grep -Eq '/opt/homebrew|/usr/local' <<< "$DEPENDENCIES"; then
+            echo "::error::Packaged binary links to a local package-manager path."
+            exit 1
+          fi
+
+          while IFS= read -r -d '' FILE_PATH; do
+            if file "$FILE_PATH" | grep -q 'Mach-O'; then
+              codesign --verify --strict --verbose=2 "$FILE_PATH"
+            fi
+          done < <(find "$APP_PATH" -type f -print0)
+
+      - name: Generate macOS SBOM
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        with:
+          path: ${{ env.APP_PATH }}
+          format: spdx-json
+          output-file: ${{ steps.macos-artifacts.outputs.sbom }}
+          syft-version: v1.49.0
+          upload-artifact: false
+          upload-release-assets: false
+
+      - name: Write macOS SHA256SUMS
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RELEASE_DIR"
+          shasum -a 256 "$DMG_NAME" > SHA256SUMS-macos.txt
+          shasum -a 256 --check SHA256SUMS-macos.txt
+
+      - name: Attest macOS release provenance
+        uses: actions/attest@f7c74d28b9d84cb8768d0b8ca14a4bac6ef463e6 # v4.2.0
+        with:
+          subject-path: |
+            ${{ steps.macos-artifacts.outputs.dmg }}
+            ${{ steps.macos-artifacts.outputs.sbom }}
+            ${{ steps.macos-artifacts.outputs.checksums }}
+
+      - name: Attest macOS release SBOM
+        uses: actions/attest@f7c74d28b9d84cb8768d0b8ca14a4bac6ef463e6 # v4.2.0
+        with:
+          subject-path: ${{ steps.macos-artifacts.outputs.dmg }}
+          sbom-path: ${{ steps.macos-artifacts.outputs.sbom }}
+
+      - name: Upload macOS release artifacts as CI artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ${{ steps.macos-meta.outputs.artifact-name }}
+          path: ${{ env.RELEASE_DIR }}
+          retention-days: 30
+          if-no-files-found: error
+
+  publish-macos-release:
+    name: Add macOS artifacts to the joint draft release
+    needs: [build-windows, build-macos]
+    if: ${{ inputs.store_candidate != true && github.ref_type == 'tag' && (github.event_name != 'workflow_dispatch' || inputs.make_release) }}
+    concurrency:
+      group: release-macos-publish
+      cancel-in-progress: false
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Download verified macOS artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: ${{ needs.build-macos.outputs.artifact-name }}
+          path: macos-release
+
+      - name: Upload macOS artifacts to joint draft release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.build-macos.outputs.tag }}
+        run: |
+          set -euo pipefail
+          RELEASE_JSON=$(gh release view "$RELEASE_TAG" \
+            --json isDraft,targetCommitish)
+          IS_DRAFT=$(jq -r '.isDraft' <<< "$RELEASE_JSON")
+          TARGET_COMMIT=$(jq -r '.targetCommitish' <<< "$RELEASE_JSON")
+          if [[ "$IS_DRAFT" != "true" ]]; then
+            echo "::error::Release $RELEASE_TAG is already published."
+            exit 1
+          fi
+
+          TAG_COMMIT=$(git rev-list -n 1 "refs/tags/$RELEASE_TAG" 2>/dev/null || true)
+          if [[ -n "$TAG_COMMIT" && "$TAG_COMMIT" != "$GITHUB_SHA" ]]; then
+            echo "::error::Release tag points to $TAG_COMMIT, not $GITHUB_SHA."
+            exit 1
+          fi
+          if [[ -z "$TAG_COMMIT" && "$TARGET_COMMIT" != "$GITHUB_SHA" ]]; then
+            echo "::error::Draft targets $TARGET_COMMIT, not $GITHUB_SHA."
+            exit 1
+          fi
+
+          DMG="macos-release/AudioBud_${{ needs.build-macos.outputs.version }}_macos_aarch64.dmg"
+          SBOM="macos-release/AudioBud_${{ needs.build-macos.outputs.version }}_macos_aarch64_sbom.spdx.json"
+          CHECKSUMS="macos-release/SHA256SUMS-macos.txt"
+          for FILE_PATH in "$DMG" "$SBOM" "$CHECKSUMS"; do
+            test -s "$FILE_PATH"
+          done
+
+          gh release upload "$RELEASE_TAG" \
+            "$DMG" "$SBOM" "$CHECKSUMS" --clobber

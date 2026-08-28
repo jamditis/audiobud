@@ -56,7 +56,12 @@ fn generate_tray_translations() {
     );
 
     // Struct
-    out.push_str("#[derive(Debug, Clone)]\npub struct TrayStrings {\n");
+    // The shared locale schema includes menu items that are rendered on only
+    // one operating system. Keep dead-code checks strict on Windows, where all
+    // current fields are used, without rejecting another target's build.
+    out.push_str(
+        "#[cfg_attr(not(target_os = \"windows\"), allow(dead_code))]\n#[derive(Debug, Clone)]\npub struct TrayStrings {\n",
+    );
     for (rust_field, _) in &fields {
         out.push_str(&format!("    pub {rust_field}: String,\n"));
     }

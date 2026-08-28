@@ -1,13 +1,11 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { check } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { listen } from "@tauri-apps/api/event";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { platform } from "@tauri-apps/plugin-os";
 import { ProgressBar } from "../shared";
 import { useSettings } from "../../hooks/useSettings";
-import { useUpdateChannelAvailable } from "../../hooks/useUpdateChannelAvailable";
 import { commands } from "../../bindings";
 import {
   RELEASES_URL,
@@ -17,9 +15,13 @@ import {
 
 interface UpdateCheckerProps {
   className?: string;
+  updateChannelAvailable: boolean;
 }
 
-const UpdateChecker: React.FC<UpdateCheckerProps> = ({ className = "" }) => {
+const UpdateChecker: React.FC<UpdateCheckerProps> = ({
+  className = "",
+  updateChannelAvailable,
+}) => {
   const { t } = useTranslation();
   // Update checking state
   const [isChecking, setIsChecking] = useState(false);
@@ -33,7 +35,6 @@ const UpdateChecker: React.FC<UpdateCheckerProps> = ({ className = "" }) => {
   const { settings, isLoading } = useSettings();
   const settingsLoaded = !isLoading && settings !== null;
   const currentPlatform = platform();
-  const updateChannelAvailable = useUpdateChannelAvailable();
   const feedReady = updaterFeedReady(currentPlatform) && updateChannelAvailable;
   // Keep checks behind the platform-specific feed gate as well as the user
   // setting. This prevents a partial config change from querying a feed that
@@ -84,6 +85,7 @@ const UpdateChecker: React.FC<UpdateCheckerProps> = ({ className = "" }) => {
 
     try {
       setIsChecking(true);
+      const { check } = await import("@tauri-apps/plugin-updater");
       const update = await check();
 
       if (update) {
@@ -130,6 +132,7 @@ const UpdateChecker: React.FC<UpdateCheckerProps> = ({ className = "" }) => {
       setDownloadProgress(0);
       downloadedBytesRef.current = 0;
       contentLengthRef.current = 0;
+      const { check } = await import("@tauri-apps/plugin-updater");
       const update = await check();
 
       if (!update) {
