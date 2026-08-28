@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { commands, events, type OutputTargetLockEvent } from "@/bindings";
+import type { OutputTargetLockEvent } from "@/bindings";
+import { commands, events } from "../bindings/shared";
 import {
   deriveIndicator,
   type DeriveOptions,

@@ -29,7 +29,7 @@ mod window_picker;
 
 pub use cli::CliArgs;
 use cli::CliParseOutcome;
-#[cfg(any(debug_assertions, test))]
+#[cfg(feature = "generate-bindings")]
 use specta_typescript::{BigIntExportBehavior, Typescript};
 use tauri_specta::{collect_commands, collect_events, Builder};
 
@@ -708,7 +708,7 @@ fn specta_builder() -> Builder<tauri::Wry> {
         ])
 }
 
-#[cfg(any(debug_assertions, test))]
+#[cfg(feature = "generate-bindings")]
 fn export_typescript_bindings(builder: &Builder<tauri::Wry>, output: &std::path::Path) {
     builder
         .export(
@@ -733,6 +733,13 @@ fn export_typescript_bindings(builder: &Builder<tauri::Wry>, output: &std::path:
     std::fs::write(output, normalized).expect("normalized bindings can be written");
 }
 
+/// Generate the checked-in TypeScript contract from the Rust command list.
+/// This is compiled only for the dedicated generator target.
+#[cfg(feature = "generate-bindings")]
+pub fn generate_typescript_bindings(output: &std::path::Path) {
+    export_typescript_bindings(&specta_builder(), output);
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run(cli_args: CliArgs) {
     // Detect portable mode before anything else
@@ -743,9 +750,6 @@ pub fn run(cli_args: CliArgs) {
     let console_filter = build_console_filter();
 
     let specta_builder = specta_builder();
-
-    #[cfg(debug_assertions)] // <- Only export on non-release builds
-    export_typescript_bindings(&specta_builder, std::path::Path::new("../src/bindings.ts"));
 
     let invoke_handler = specta_builder.invoke_handler();
 
@@ -995,34 +999,6 @@ mod updater_gate_tests {
         update_checks_action_enabled_for_channel, UPDATER_FEED_READY,
     };
     use tauri::utils::config::BundleType;
-
-    #[cfg(not(windows))]
-    use super::{export_typescript_bindings, specta_builder};
-
-    // Keeping this generator test out of the Windows test harness avoids
-    // retaining Wry's WebView2 loader in the unit-test executable. The runner
-    // then fails at process startup before any Rust test can run. Linux still
-    // verifies the same deterministic tauri-specta output on every CI run.
-    #[cfg(not(windows))]
-    #[test]
-    fn checked_in_typescript_bindings_match_specta_export() {
-        let generated_path =
-            std::env::temp_dir().join(format!("audiobud-bindings-{}.ts", std::process::id()));
-        export_typescript_bindings(&specta_builder(), &generated_path);
-
-        let generated = std::fs::read_to_string(&generated_path)
-            .expect("temporary TypeScript bindings can be read");
-        std::fs::remove_file(&generated_path).expect("temporary bindings can be removed");
-        let checked_in_path =
-            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../src/bindings.ts");
-        let checked_in =
-            std::fs::read_to_string(checked_in_path).expect("checked-in bindings can be read");
-
-        assert_eq!(
-            generated, checked_in,
-            "src/bindings.ts is stale; run a debug AudioBud build and commit the generated file"
-        );
-    }
 
     /// Regression guard for issue #32. tauri_plugin_updater deserializes the
     /// `plugins.updater` block from tauri.conf.json when it builds, so the app

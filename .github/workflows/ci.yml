@@ -69,6 +69,9 @@ jobs:
       - name: Typecheck
         run: bunx tsc --noEmit
 
+      - name: Check webview bindings
+        run: bun run bindings:check
+
       - name: Unit tests
         run: bun run test
 
@@ -114,6 +117,12 @@ jobs:
       - name: Run Rust tests
         working-directory: src-tauri
         run: cargo test
+
+      - name: Check generated Rust bindings
+        working-directory: src-tauri
+        run: |
+          cargo run --features generate-bindings --bin generate-bindings
+          git diff --exit-code -- ../src/bindings.ts
 
   rust-tests-windows:
     name: Rust tests (Windows, mock transcription, no GPU)

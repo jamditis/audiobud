@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { CancelIcon } from "../components/icons";
 import { DEFAULT_CRITTER_ID, getCritter } from "../components/icons/critters";
 import "./RecordingOverlay.css";
-import { commands, events } from "@/bindings";
+import { commands, events } from "../bindings/overlay";
 import { usePrefersReducedMotion } from "@/hooks/useMicLevel";
 import { useOutputTargetLock } from "@/hooks/useOutputTargetLock";
 import i18n, { syncLanguageFromSettings } from "@/i18n";

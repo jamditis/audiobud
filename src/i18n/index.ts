@@ -3,7 +3,7 @@ import { initReactI18next } from "react-i18next";
 import { locale } from "@tauri-apps/plugin-os";
 import { LANGUAGE_METADATA } from "./languages";
 import englishTranslation from "./locales/en/translation.json";
-import { commands } from "@/bindings";
+import { commands } from "../bindings/shared";
 import {
   getLanguageDirection,
   updateDocumentDirection,
