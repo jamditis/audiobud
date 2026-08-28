@@ -630,6 +630,9 @@ impl TranscriptionManager {
         let language = TextPipelineLanguage::from_transcription_settings(
             &validated_language,
             translation_is_effective,
+            model_info
+                .as_ref()
+                .is_none_or(|info| info.supports_language_selection),
             fixed_model_language,
         );
 

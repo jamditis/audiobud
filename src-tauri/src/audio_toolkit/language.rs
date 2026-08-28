@@ -10,23 +10,25 @@
 pub struct TextPipelineLanguage(Option<String>);
 
 impl TextPipelineLanguage {
-    /// Derives the output language from the two settings that determine it.
-    /// Translation always emits English. Otherwise an explicit dictation
-    /// language is retained, while `auto` remains unknown.
+    /// Derives the output language from the selected settings and model contract.
+    /// Translation always emits English. A selectable model can retain an explicit
+    /// dictation language. An auto-detect-only model uses only a fixed language.
     pub fn from_transcription_settings(
         selected_language: &str,
         translation_is_effective: bool,
+        supports_language_selection: bool,
         fixed_model_language: Option<&str>,
     ) -> Self {
         if translation_is_effective {
             return Self::english();
         }
-        let selected = Self::known(selected_language);
-        if selected.tag().is_some() {
-            selected
-        } else {
-            fixed_model_language.map_or_else(Self::unknown, Self::known)
+        if supports_language_selection {
+            let selected = Self::known(selected_language);
+            if selected.tag().is_some() {
+                return selected;
+            }
         }
+        fixed_model_language.map_or_else(Self::unknown, Self::known)
     }
 
     pub fn known(language_tag: &str) -> Self {
@@ -72,20 +74,25 @@ mod tests {
     #[test]
     fn derives_the_effective_output_language_once() {
         assert_eq!(
-            TextPipelineLanguage::from_transcription_settings("fr-CA", false, None).tag(),
+            TextPipelineLanguage::from_transcription_settings("fr-CA", false, true, None).tag(),
             Some("fr-CA")
         );
         assert_eq!(
-            TextPipelineLanguage::from_transcription_settings("auto", false, None).tag(),
+            TextPipelineLanguage::from_transcription_settings("auto", false, true, None).tag(),
             None
         );
         assert_eq!(
-            TextPipelineLanguage::from_transcription_settings("fr", true, None).tag(),
+            TextPipelineLanguage::from_transcription_settings("fr", true, true, None).tag(),
             Some("en")
         );
         assert_eq!(
-            TextPipelineLanguage::from_transcription_settings("auto", false, Some("ru")).tag(),
+            TextPipelineLanguage::from_transcription_settings("auto", false, false, Some("ru"))
+                .tag(),
             Some("ru")
+        );
+        assert_eq!(
+            TextPipelineLanguage::from_transcription_settings("fr", false, false, None).tag(),
+            None
         );
         assert!(TextPipelineLanguage::known("en-US").is_english());
         assert!(!TextPipelineLanguage::known("pl").is_english());
