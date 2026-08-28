@@ -1,6 +1,6 @@
-#[cfg(windows)]
-use crate::clipboard_snapshot::ClipboardBackend;
-use crate::clipboard_snapshot::{self, ArboardBackend, ClipboardContent, ClipboardHistory};
+use crate::clipboard_snapshot::{
+    self, ArboardBackend, ClipboardBackend, ClipboardContent, ClipboardHistory, ClipboardService,
+};
 use crate::dictation_context::DictationContext;
 use crate::input::{self, EnigoState};
 use crate::output_profile::EffectiveOutput;
@@ -17,7 +17,6 @@ use std::process::Command;
 use std::sync::{Mutex, MutexGuard};
 use std::time::Duration;
 use tauri::{AppHandle, Manager};
-use tauri_plugin_clipboard_manager::ClipboardExt;
 
 /// Serializes every clipboard-touching operation that must not interleave
 /// with a paste's capture/write/restore window: the delivery worker's own
@@ -58,14 +57,6 @@ fn lock_clipboard_txn() -> MutexGuard<'static, ()> {
 
 #[cfg(target_os = "linux")]
 use crate::utils::{is_kde_wayland, is_wayland};
-
-/// What was on the clipboard before the transcript overwrote it.
-enum SavedClipboard {
-    /// Full snapshot (text, HTML, image, file list) via arboard (issue #57).
-    Full(ClipboardContent),
-    /// Text-only fallback when the arboard backend could not be opened.
-    TextOnly(String),
-}
 
 /// Why one delivery stopped early.
 #[derive(Debug, PartialEq, Eq)]
@@ -124,22 +115,12 @@ fn paste_via_clipboard(
     paste_delay_ms: u64,
     hold: &FocusHold,
 ) -> Result<(), DeliveryError> {
-    let clipboard = app_handle.clipboard();
-
     // Save the full clipboard before overwriting it with the transcript.
     // Saving only the text would destroy images, HTML, and file lists the
     // user had copied (issue #57).
-    let mut snapshot_backend = match ArboardBackend::new() {
-        Ok(backend) => Some(backend),
-        Err(e) => {
-            warn!("Falling back to text-only clipboard save/restore: {}", e);
-            None
-        }
-    };
-    let saved_clipboard = match snapshot_backend.as_mut() {
-        Some(backend) => SavedClipboard::Full(clipboard_snapshot::capture(backend)),
-        None => SavedClipboard::TextOnly(clipboard.read_text().unwrap_or_default()),
-    };
+    let clipboard_service = app_handle.state::<ClipboardService>();
+    let mut snapshot_backend = clipboard_service.lock();
+    let saved_clipboard = clipboard_snapshot::capture(&mut *snapshot_backend);
 
     // Write text to clipboard first
     // On Wayland, prefer wl-copy for better compatibility (especially with umlauts)
@@ -148,23 +129,14 @@ fn paste_via_clipboard(
         info!("Using wl-copy for clipboard write on Wayland");
         write_clipboard_via_wl_copy(text)
     } else {
-        clipboard
-            .write_text(text)
-            .map_err(|e| format!("Failed to write to clipboard: {}", e))
+        snapshot_backend.write_text(text, ClipboardHistory::Exclude)
     };
 
     #[cfg(windows)]
-    let write_result = match snapshot_backend.as_mut() {
-        Some(backend) => backend.write_text(text, ClipboardHistory::Exclude),
-        None => clipboard
-            .write_text(text)
-            .map_err(|e| format!("Failed to write to clipboard: {}", e)),
-    };
+    let write_result = snapshot_backend.write_text(text, ClipboardHistory::Exclude);
 
     #[cfg(target_os = "macos")]
-    let write_result = clipboard
-        .write_text(text)
-        .map_err(|e| format!("Failed to write to clipboard: {}", e));
+    let write_result = snapshot_backend.write_text(text, ClipboardHistory::Exclude);
 
     write_result?;
 
@@ -183,19 +155,19 @@ fn paste_via_clipboard(
     // is an inner scope nested entirely within the txn hold, not a sibling
     // of it, so no explicit ordering between the two is needed here.
     struct RestoreClipboardOnExit<'a> {
-        saved: &'a SavedClipboard,
+        saved: &'a ClipboardContent,
         backend: Option<&'a mut ArboardBackend>,
-        app_handle: &'a AppHandle,
     }
     impl Drop for RestoreClipboardOnExit<'_> {
         fn drop(&mut self) {
-            restore_saved_clipboard(self.saved, self.backend.take(), self.app_handle);
+            if let Some(backend) = self.backend.take() {
+                restore_saved_clipboard(self.saved, backend);
+            }
         }
     }
     let _restore_clipboard_on_exit = RestoreClipboardOnExit {
         saved: &saved_clipboard,
-        backend: snapshot_backend.as_mut(),
-        app_handle,
+        backend: Some(&mut snapshot_backend),
     };
 
     std::thread::sleep(Duration::from_millis(paste_delay_ms));
@@ -235,54 +207,44 @@ fn send_paste_key_combo(enigo: &mut Enigo, paste_method: &PasteMethod) -> Result
 
 /// Puts the saved clipboard contents back after the paste keystroke.
 /// Restore failures are logged, not propagated: the paste itself succeeded.
-fn restore_saved_clipboard(
-    saved: &SavedClipboard,
-    backend: Option<&mut ArboardBackend>,
-    app_handle: &AppHandle,
-) {
-    match saved {
-        SavedClipboard::Full(content) => {
-            // On Wayland the transcript was written through wl-copy (same
-            // condition as the write path), so the restore must displace
-            // that write: text-only content goes back through wl-copy, and
-            // everything else clears the wl-copy selection first — the
-            // arboard restore below talks to the X11/XWayland selection and
-            // cannot displace what wl-copy wrote, which would leave the
-            // transcript pasteable.
-            #[cfg(target_os = "linux")]
-            if is_wayland() && is_wl_copy_available() {
-                if content.is_text_only() {
-                    if let Some(text) = content.text.as_deref() {
-                        let _ = write_clipboard_via_wl_copy(text);
-                    }
-                    return;
-                }
-                let _ = clear_clipboard_via_wl_copy();
-            }
-            if let Some(backend) = backend {
-                if let Err(e) =
-                    clipboard_snapshot::restore(backend, content, ClipboardHistory::Exclude)
-                {
-                    warn!("Failed to restore clipboard contents: {}", e);
-                }
-            }
-        }
-        SavedClipboard::TextOnly(text) => {
-            #[cfg(target_os = "linux")]
-            if is_wayland() && is_wl_copy_available() {
+fn restore_saved_clipboard(content: &ClipboardContent, backend: &mut ArboardBackend) {
+    // On Wayland the transcript was written through wl-copy (same condition
+    // as the write path), so the restore must displace that write: text-only
+    // content goes back through wl-copy. Rich content clears wl-copy before
+    // the arboard X11/XWayland restore.
+    #[cfg(target_os = "linux")]
+    if is_wayland() && is_wl_copy_available() {
+        if content.is_text_only() {
+            if let Some(text) = content.text.as_deref() {
                 let _ = write_clipboard_via_wl_copy(text);
-                return;
             }
-            #[cfg(windows)]
-            match ArboardBackend::new()
-                .and_then(|mut backend| backend.write_text(text, ClipboardHistory::Exclude))
-            {
-                Ok(()) => return,
-                Err(e) => warn!("Failed to restore clipboard text without history: {}", e),
-            }
-            let _ = app_handle.clipboard().write_text(text);
+            return;
         }
+        let _ = clear_clipboard_via_wl_copy();
     }
+
+    if let Err(e) = clipboard_snapshot::restore(backend, content, ClipboardHistory::Exclude) {
+        warn!("Failed to restore clipboard contents: {}", e);
+    }
+}
+
+/// Write a durable transcript copy through the process-owned service. Unlike
+/// the temporary write/restore pair used to synthesize a paste, an explicit
+/// copy belongs in Windows clipboard history. Wayland keeps its wl-copy path
+/// for non-ASCII compatibility.
+pub(crate) fn write_transcript_to_clipboard(
+    app_handle: &AppHandle,
+    text: &str,
+) -> Result<(), String> {
+    #[cfg(target_os = "linux")]
+    if is_wayland() && is_wl_copy_available() {
+        return write_clipboard_via_wl_copy(text);
+    }
+
+    app_handle
+        .state::<ClipboardService>()
+        .lock()
+        .write_text(text, ClipboardHistory::Include)
 }
 
 /// Attempts to send a key combination using Linux-native tools.
@@ -1090,9 +1052,7 @@ pub fn paste(text: String, app_handle: AppHandle, context: DictationContext) -> 
         // the single continuous span a concurrent tray copy cannot land
         // inside of (#161 review round 3, finding 1).
         let _txn = txn.unwrap_or_else(lock_clipboard_txn);
-        app_handle
-            .clipboard()
-            .write_text(&text)
+        write_transcript_to_clipboard(&app_handle, &text)
             .map_err(|e| format!("Failed to copy to clipboard: {}", e))
     } else {
         Ok(())

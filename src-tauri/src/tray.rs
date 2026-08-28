@@ -10,7 +10,6 @@ use tauri::image::Image;
 use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::tray::TrayIcon;
 use tauri::{AppHandle, Manager, Theme};
-use tauri_plugin_clipboard_manager::ClipboardExt;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum TrayIconState {
@@ -650,7 +649,7 @@ pub fn copy_last_transcript(app: &AppHandle) {
 /// The actual clipboard write behind `copy_last_transcript`, shared by its
 /// immediate and deferred paths so both report failures the same way.
 fn write_last_transcript_to_clipboard(app: &AppHandle, text: &str) {
-    if let Err(err) = app.clipboard().write_text(text) {
+    if let Err(err) = crate::clipboard::write_transcript_to_clipboard(app, text) {
         error!("Failed to copy last transcript to clipboard: {}", err);
         return;
     }
