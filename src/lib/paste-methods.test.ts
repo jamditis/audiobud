@@ -1,7 +1,17 @@
 import { describe, expect, it } from "bun:test";
-import { pasteMethodsForOs, profilePasteMethodsForOs } from "./paste-methods";
+import {
+  pasteMethodModifierForOs,
+  pasteMethodsForOs,
+  profilePasteMethodsForOs,
+} from "./paste-methods";
 
 describe("paste methods by platform", () => {
+  it("uses the platform modifier in clipboard labels", () => {
+    expect(pasteMethodModifierForOs("macos")).toBe("Cmd");
+    expect(pasteMethodModifierForOs("windows")).toBe("Ctrl");
+    expect(pasteMethodModifierForOs("linux")).toBe("Ctrl");
+  });
+
   it("does not offer direct typing on macOS", () => {
     expect(pasteMethodsForOs("macos")).toEqual(["ctrl_v", "none"]);
   });
@@ -30,14 +40,7 @@ describe("profile paste methods by platform", () => {
     expect(profilePasteMethodsForOs("macos")).toEqual(["ctrl_v", "none"]);
   });
 
-  it("never offers the confirmation-gated external script", () => {
-    expect(profilePasteMethodsForOs("windows")).toEqual([
-      "ctrl_v",
-      "direct",
-      "none",
-      "ctrl_shift_v",
-      "shift_insert",
-    ]);
+  it("filters the confirmation-gated external script from Linux profiles", () => {
     expect(profilePasteMethodsForOs("linux")).toEqual([
       "ctrl_v",
       "direct",

@@ -34,23 +34,40 @@ use crate::tray;
 const UNCERTAIN_SHORTCUT_STATE: &str = "shortcut state may remain active";
 const PRIMARY_SHORTCUT_ID: &str = "transcribe";
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum ShortcutRegistrationStage {
+    /// The binding is inactive and the backend can process more bindings.
+    RejectedBeforeActivation,
+    /// The binding may be active, so cleanup must run before fallback.
+    MayHaveActivated,
+    /// The backend cannot process more bindings, but it owns no uncertain result.
+    BackendUnavailable,
+}
+
 pub(crate) struct ShortcutRegistrationError {
     message: String,
-    cleanup_required: bool,
+    stage: ShortcutRegistrationStage,
 }
 
 impl ShortcutRegistrationError {
     fn before_activation(message: String) -> Self {
         Self {
             message,
-            cleanup_required: false,
+            stage: ShortcutRegistrationStage::RejectedBeforeActivation,
         }
     }
 
     fn state_may_have_changed(message: String) -> Self {
         Self {
             message,
-            cleanup_required: true,
+            stage: ShortcutRegistrationStage::MayHaveActivated,
+        }
+    }
+
+    fn backend_unavailable(message: String) -> Self {
+        Self {
+            message,
+            stage: ShortcutRegistrationStage::BackendUnavailable,
         }
     }
 
@@ -141,8 +158,12 @@ where
             "Failed to register shortcut '{primary_id}': {}",
             error.message
         );
-        if !error.cleanup_required {
-            return Err(registration_error);
+        match error.stage {
+            ShortcutRegistrationStage::RejectedBeforeActivation
+            | ShortcutRegistrationStage::BackendUnavailable => {
+                return Err(registration_error);
+            }
+            ShortcutRegistrationStage::MayHaveActivated => {}
         }
         if let Err(cleanup_error) = unregister(&primary_binding) {
             warn!(
@@ -163,11 +184,19 @@ where
                 "Failed to register optional shortcut '{id}': {}",
                 error.message
             );
-            if error.cleanup_required {
-                if let Err(cleanup_error) = unregister(&binding) {
+            match error.stage {
+                ShortcutRegistrationStage::RejectedBeforeActivation => {}
+                ShortcutRegistrationStage::MayHaveActivated => {
+                    if let Err(cleanup_error) = unregister(&binding) {
+                        warn!(
+                            "Failed to clean up optional shortcut '{id}': {cleanup_error}; the optional shortcut may remain active"
+                        );
+                    }
+                }
+                ShortcutRegistrationStage::BackendUnavailable => {
                     return Err(format!(
-                        "Failed to register optional shortcut '{id}': {}; cleanup failed for '{}': {cleanup_error}; {UNCERTAIN_SHORTCUT_STATE}; restart AudioBud before retrying shortcut initialization",
-                        error.message, binding.id
+                        "Failed to register optional shortcut '{id}': {}",
+                        error.message
                     ));
                 }
             }
@@ -1687,7 +1716,7 @@ mod tests {
     }
 
     #[test]
-    fn failed_optional_cleanup_marks_shortcut_state_uncertain() {
+    fn failed_optional_cleanup_does_not_disable_the_primary_shortcut() {
         let backend = RefCell::new(ShortcutBackendModel {
             fail_next_registration: Some("second".to_string()),
             activate_before_failure: true,
@@ -1704,9 +1733,42 @@ mod tests {
             |binding| backend.borrow_mut().unregister(binding),
         );
 
-        let error = result.expect_err("failed optional cleanup must fail initialization");
-        assert!(error.contains(UNCERTAIN_SHORTCUT_STATE));
-        assert!(!initialization_error_allows_retry(&error));
+        assert_eq!(result, Ok(()));
+        assert_eq!(backend.borrow().active, vec!["transcribe", "second"]);
+    }
+
+    #[test]
+    fn backend_failure_while_registering_an_optional_shortcut_aborts_initialization() {
+        let cleanup_called = std::cell::Cell::new(false);
+
+        let result = register_initial_bindings(
+            vec![
+                ("transcribe".to_string(), test_binding("transcribe")),
+                ("second".to_string(), test_binding("second")),
+            ],
+            |binding| {
+                if binding.id == "second" {
+                    Err(ShortcutRegistrationError::backend_unavailable(
+                        "HandyKeys manager unavailable".to_string(),
+                    ))
+                } else {
+                    Ok(())
+                }
+            },
+            |_| {
+                cleanup_called.set(true);
+                Ok(())
+            },
+        );
+
+        let error = result.expect_err("an unavailable backend must stop initialization");
+        assert_eq!(
+            error,
+            "Failed to register optional shortcut 'second': HandyKeys manager unavailable"
+        );
+        assert!(!cleanup_called.get());
+        assert!(!error.contains(UNCERTAIN_SHORTCUT_STATE));
+        assert!(initialization_error_allows_retry(&error));
     }
 
     #[test]

@@ -105,6 +105,16 @@ App Store Connect values. The release workflow runs all tests before it exposes
 those credentials. Tauri signs and notarizes the app bundle. The workflow must
 then submit, accept, and staple the finished DMG separately.
 
+The macOS release job selects the reviewed toolchain at
+`/Applications/Xcode_26.0.1.app/Contents/Developer`. It stops if that path is
+missing, the selected SDK is not macOS 26, or the SDK does not contain
+`FoundationModels.framework`. It writes that checked SDK to `SDKROOT`, so the
+Rust build uses the same SDK. After bundling, the workflow stops unless the
+final app binary links `FoundationModels.framework`.
+
+Update the Xcode path only after the GitHub runner image and the release
+workflow contract test are reviewed together.
+
 Do not use a local signed artifact as a public release. Use the protected
 workflow so checksums, the SBOM, provenance, architecture checks, Gatekeeper
 checks, and notarization checks all refer to the same bytes.

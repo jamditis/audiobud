@@ -121,12 +121,15 @@ value was
 This hash is local evidence only. The public release must use the checksum from
 the exact remote artifact that passes the draft-release tests.
 
-## v0.6.0 current local candidate evidence
+## v0.6.0 current checkpoint evidence
 
-Recorded on August 27, 2026, after the model, mute, shortcut, workflow, and
-documentation changes. These values describe the current local source tree.
+The package measurements were recorded on August 27, 2026, from the signed
+candidate before pull request review follow-up. Source validation was updated
+on August 28 from an isolated worktree based on pull request commit `db89c23`
+plus the current uncommitted fixes. Do not treat the package measurements as a
+build of the current source checkpoint.
 
-| Item                       | v0.5.0 baseline                 | v0.6.0 local candidate         | Change                                      |
+| Item                       | v0.5.0 baseline                 | v0.6.0 signed candidate        | Change                                      |
 | -------------------------- | ------------------------------- | ------------------------------ | ------------------------------------------- |
 | Main frontend graph        | 638.6 KiB raw; 185.9 KiB gzip   | 647.2 KiB raw; 188.7 KiB gzip  | +8.6 KiB raw; +2.8 KiB gzip                 |
 | Full frontend output       | 1.62 MiB raw; 596.5 KiB gzip    | 1.63 MiB raw; 599.8 KiB gzip   | +0.01 MiB raw; +3.3 KiB gzip                |
@@ -135,14 +138,19 @@ documentation changes. These values describe the current local source tree.
 | DMG                        | 16,948,931 bytes                | 16,044,070 bytes               | -904,861 bytes (-5.34%)                     |
 | Packaged app idle memory   | 105,840 KiB after eight seconds | 92,640 KiB after eight seconds | -13,200 KiB (-12.47%)                       |
 
-The current local candidate passed these checks:
+The current isolated source checkpoint passed these checks:
 
-- 477 frontend tests and 2,136 assertions across 45 files.
-- 490 Rust library tests and the dictionary integration test.
-- Frontend lint, formatting, translation, rebrand, type checking, build, and
-  size checks.
-- Rust formatting and clippy with warnings denied.
-- Workflow lint, release-contract tests, and the independent final review.
+- 481 frontend tests and 2,180 assertions across 45 files.
+- 503 Rust library tests and the dictionary integration test.
+- The focused optional-shortcut cleanup regression test and all 34
+  shortcut-related tests.
+- The macOS release workflow contract and `actionlint`.
+- The full lint, format, translation, rebrand, type, build, and Clippy checks.
+- The size report, with a 647.3 KiB raw and 188.6 KiB gzip main initial
+  payload.
+
+The earlier signed candidate passed these package checks:
+
 - Developer ID signing and hardened run time for the app and DMG.
 - Separate accepted Apple notarization and stapled tickets for the app and DMG.
 - Gatekeeper assessment, `codesign`, `stapler`, and `hdiutil verify` for the
@@ -152,7 +160,7 @@ The current local candidate passed these checks:
 - Audio-input and microphone signing entitlements.
 - An eight-second launch smoke test followed by a controlled `SIGTERM` stop.
 
-The current local DMG is
+The earlier local DMG is
 `src-tauri/target/release/bundle/dmg/AudioBud_0.6.0_aarch64.dmg`. Its SHA-256
 value is
 `43db27f9ab0ddeb54da64f5fc664eecd43d86f22952fd24c828ac856d1629a6f`.
@@ -163,6 +171,13 @@ tag-built draft asset after that asset passes the release tests.
 
 - Time to interactive is not measured because the smoke harness observes only process state.
 - Clean first-launch, permission-state, transcription, paste, display, sleep, and device-change tests are pending on a clean Apple Silicon Mac.
-- The current tree passed its final local build and signed-candidate checks.
-- The protected GitHub release workflow has not built remote candidate artifacts because the changes are not committed or pushed.
+- The current isolated source checkpoint has not been signed, notarized, or
+  packaged. The signed evidence above applies to the August 27 candidate.
+- Pull request 309 is open at `db89c23`. Five remote checks passed. The real
+  Windows engine check failed on a redundant closure that is fixed locally.
+- An independent review of `db89c23` plus the Clippy fix found an optional
+  shortcut regression and two macOS workflow proof gaps. Their fixes pass the
+  full local validation suite. Fresh local and Claude Code reviews found no
+  unresolved P1, P2, or P3 issue in the complete follow-up checkpoint.
+- The protected signed candidate workflow has not run from reviewed `main`.
 - The Windows installers, signed updater path, and Microsoft Store package URL are not ready for submission.

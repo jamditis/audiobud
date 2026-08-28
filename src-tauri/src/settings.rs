@@ -648,28 +648,43 @@ fn migrate_update_checks_v0_4_2(
 
 /// Replace paste methods that macOS cannot deliver reliably.
 ///
-/// Direct typing remains available on Windows and Linux. On macOS, the safe
-/// supported path is the clipboard plus Cmd+V. Profiles are normalized too so
-/// settings copied between installs cannot reactivate direct typing later.
+/// Direct typing and the injected-key methods remain available on Windows and
+/// Linux. On macOS, the safe supported path is the clipboard plus Cmd+V.
+/// Profiles are normalized too so settings copied between installs cannot
+/// reactivate those unsupported injected-key methods later. Other methods are
+/// outside this compatibility migration.
 fn normalize_platform_paste_methods(settings: &mut AppSettings, is_macos: bool) -> bool {
     if !is_macos {
         return false;
     }
 
     let mut changed = false;
-    if settings.paste_method == PasteMethod::Direct {
-        settings.paste_method = PasteMethod::CtrlV;
+    let global_method = normalize_macos_paste_method(settings.paste_method);
+    if settings.paste_method != global_method {
+        settings.paste_method = global_method;
         changed = true;
     }
 
     for profile in &mut settings.output_profiles {
-        if profile.paste_method == Some(PasteMethod::Direct) {
-            profile.paste_method = Some(PasteMethod::CtrlV);
-            changed = true;
+        if let Some(method) = profile.paste_method {
+            let normalized_method = normalize_macos_paste_method(method);
+            if method != normalized_method {
+                profile.paste_method = Some(normalized_method);
+                changed = true;
+            }
         }
     }
 
     changed
+}
+
+fn normalize_macos_paste_method(method: PasteMethod) -> PasteMethod {
+    match method {
+        PasteMethod::Direct | PasteMethod::CtrlShiftV | PasteMethod::ShiftInsert => {
+            PasteMethod::CtrlV
+        }
+        PasteMethod::CtrlV | PasteMethod::None | PasteMethod::ExternalScript => method,
+    }
 }
 
 fn default_selected_language() -> String {
@@ -1405,7 +1420,7 @@ pub fn load_or_create_app_settings(app: &AppHandle) -> AppSettings {
     if normalize_platform_paste_methods(&mut settings, cfg!(target_os = "macos")) {
         store.set("settings", serde_json::to_value(&settings).unwrap());
         mutated = true;
-        debug!("Migrated direct paste settings to Cmd+V on macOS");
+        debug!("Migrated unsupported paste settings to Cmd+V on macOS");
     }
 
     let update_checks_migrated = store
@@ -1514,7 +1529,7 @@ fn read_settings_from_open_store(store: &Store<tauri::Wry>) -> (AppSettings, boo
     if normalize_platform_paste_methods(&mut settings, cfg!(target_os = "macos")) {
         store.set("settings", serde_json::to_value(&settings).unwrap());
         mutated = true;
-        debug!("Migrated direct paste settings to Cmd+V on macOS");
+        debug!("Migrated unsupported paste settings to Cmd+V on macOS");
     }
 
     (settings, mutated)
@@ -1682,6 +1697,26 @@ mod tests {
     }
 
     #[test]
+    fn macos_migrates_windows_only_paste_methods_to_ctrl_v() {
+        let mut settings = get_default_settings();
+        settings.paste_method = PasteMethod::CtrlShiftV;
+        settings.output_profiles = vec![OutputProfile {
+            app_name: "windows-terminal".to_string(),
+            paste_method: Some(PasteMethod::ShiftInsert),
+            auto_submit: None,
+            auto_submit_key: None,
+            clipboard_handling: None,
+        }];
+
+        assert!(normalize_platform_paste_methods(&mut settings, true));
+        assert_eq!(settings.paste_method, PasteMethod::CtrlV);
+        assert_eq!(
+            settings.output_profiles[0].paste_method,
+            Some(PasteMethod::CtrlV)
+        );
+    }
+
+    #[test]
     fn direct_paste_is_unchanged_off_macos() {
         let mut settings = get_default_settings();
         settings.paste_method = PasteMethod::Direct;
@@ -1721,8 +1756,7 @@ mod tests {
             .expect("string applies");
         apply_setting_value(&mut settings, "custom_words", json!(["AudioBud", "Tauri"]))
             .expect("list applies");
-        apply_setting_value(&mut settings, "paste_method", json!("shift_insert"))
-            .expect("enum applies");
+        apply_setting_value(&mut settings, "paste_method", json!("none")).expect("enum applies");
         apply_setting_value(&mut settings, "external_script_path", json!(null))
             .expect("null applies to an Option field");
 
@@ -1730,7 +1764,7 @@ mod tests {
         assert_eq!(settings.paste_delay_ms, 250);
         assert_eq!(settings.selected_language, "de");
         assert_eq!(settings.custom_words, vec!["AudioBud", "Tauri"]);
-        assert_eq!(settings.paste_method, PasteMethod::ShiftInsert);
+        assert_eq!(settings.paste_method, PasteMethod::None);
         assert_eq!(settings.external_script_path, None);
     }
 
@@ -1760,6 +1794,9 @@ mod tests {
         assert_eq!(settings.output_profiles.len(), 1);
         let profile = &settings.output_profiles[0];
         assert_eq!(profile.app_name, "WindowsTerminal");
+        #[cfg(target_os = "macos")]
+        assert_eq!(profile.paste_method, Some(PasteMethod::CtrlV));
+        #[cfg(not(target_os = "macos"))]
         assert_eq!(profile.paste_method, Some(PasteMethod::ShiftInsert));
         assert_eq!(profile.auto_submit, Some(false));
         // Overrides nobody set stay unset, so those settings keep following the
