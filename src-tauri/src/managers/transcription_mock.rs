@@ -9,6 +9,7 @@
 // compile and behave sensibly: the mock transcribe is wrapped in the same
 // run_with_watchdog as the real one.
 
+use crate::audio_toolkit::TextPipelineLanguage;
 use crate::managers::model::ModelManager;
 use crate::managers::watchdog::{run_with_watchdog, WatchdogOutcome};
 use anyhow::Result;
@@ -25,6 +26,12 @@ pub struct ModelStateEvent {
     pub model_id: Option<String>,
     pub model_name: Option<String>,
     pub error: Option<String>,
+}
+
+#[derive(Clone, Debug)]
+pub struct TranscribedText {
+    pub text: String,
+    pub language: TextPipelineLanguage,
 }
 
 /// RAII guard that is a no-op in the mock — mirrors the real `LoadingGuard`.
@@ -58,7 +65,7 @@ impl TranscriptionManager {
         &self,
         audio: Vec<f32>,
         timeout: Duration,
-    ) -> WatchdogOutcome<Result<String>> {
+    ) -> WatchdogOutcome<Result<TranscribedText>> {
         if self.is_wedged() {
             return WatchdogOutcome::Completed(Err(anyhow::anyhow!(
                 "The transcription engine is stuck from an earlier timeout. \
@@ -98,8 +105,11 @@ impl TranscriptionManager {
         None
     }
 
-    pub fn transcribe(&self, _audio: Vec<f32>) -> Result<String> {
-        Ok(String::new())
+    pub fn transcribe(&self, _audio: Vec<f32>) -> Result<TranscribedText> {
+        Ok(TranscribedText {
+            text: String::new(),
+            language: TextPipelineLanguage::unknown(),
+        })
     }
 }
 

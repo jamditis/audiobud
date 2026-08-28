@@ -31,6 +31,8 @@
 //! hour and "one thirty pm" stays "one 30 pm". Thousands separators are not inserted
 //! ("$1200", not "$1,200").
 
+use super::language::TextPipelineLanguage;
+
 /// A classified English number word (or word fragment from a hyphenated compound).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Cat {
@@ -400,7 +402,11 @@ fn is_ordinal_word(word: &str) -> bool {
 /// Rewrites spelled-out English numbers in `text` into digits and symbols. Existing LF and CRLF
 /// line endings are preserved, and number groups never cross them. See the module docs for the
 /// precision rules and known limitations.
-pub fn format_numbers(text: &str) -> String {
+pub fn format_numbers(text: &str, language: &TextPipelineLanguage) -> String {
+    if !language.is_english() {
+        return text.to_string();
+    }
+
     let mut formatted = String::with_capacity(text.len());
 
     for segment in text.split_inclusive('\n') {
@@ -666,7 +672,23 @@ fn parse_decimal_digits(tokens: &[Token], point_idx: usize) -> Option<(String, S
 
 #[cfg(test)]
 mod tests {
-    use super::format_numbers;
+    use super::{format_numbers as format_numbers_for_language, TextPipelineLanguage};
+
+    fn format_numbers(text: &str) -> String {
+        format_numbers_for_language(text, &TextPipelineLanguage::english())
+    }
+
+    #[test]
+    fn opts_out_when_the_language_is_not_known_english() {
+        assert_eq!(
+            format_numbers_for_language("twenty five", &TextPipelineLanguage::known("fr")),
+            "twenty five"
+        );
+        assert_eq!(
+            format_numbers_for_language("twenty five", &TextPipelineLanguage::unknown()),
+            "twenty five"
+        );
+    }
 
     #[test]
     fn cardinals_basic() {

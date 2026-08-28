@@ -1,4 +1,6 @@
-use crate::audio_toolkit::{apply_custom_words, apply_replacements, filter_transcription_output};
+use crate::audio_toolkit::{
+    apply_custom_words, apply_replacements, filter_transcription_output, TextPipelineLanguage,
+};
 use crate::managers::audio::AudioRecordingManager;
 use crate::managers::engine_limits::{
     check_parakeet_input_length, LoadFailureNotification, WEDGED_ENGINE_ERROR,
@@ -38,6 +40,13 @@ pub struct ModelStateEvent {
     pub model_id: Option<String>,
     pub model_name: Option<String>,
     pub error: Option<String>,
+}
+
+/// Text plus the exact language contract used by every downstream formatter.
+#[derive(Clone, Debug)]
+pub struct TranscribedText {
+    pub text: String,
+    pub language: TextPipelineLanguage,
 }
 
 enum LoadedEngine {
@@ -500,7 +509,7 @@ impl TranscriptionManager {
         current_model.clone()
     }
 
-    pub fn transcribe(&self, audio: Vec<f32>) -> Result<String> {
+    pub fn transcribe(&self, audio: Vec<f32>) -> Result<TranscribedText> {
         #[cfg(debug_assertions)]
         if std::env::var("HANDY_FORCE_TRANSCRIPTION_FAILURE").is_ok() {
             return Err(anyhow::anyhow!(
@@ -528,7 +537,10 @@ impl TranscriptionManager {
         if audio.is_empty() {
             debug!("Empty audio vector");
             self.maybe_unload_immediately("empty audio");
-            return Ok(String::new());
+            return Ok(TranscribedText {
+                text: String::new(),
+                language: TextPipelineLanguage::unknown(),
+            });
         }
 
         // Check if model is loaded, if not try to load it
@@ -579,14 +591,15 @@ impl TranscriptionManager {
                 settings.word_replacements.clone()
             };
 
+        let model_info = self.model_manager.get_model_info(&settings.selected_model);
+
         // Validate selected language against the model's supported languages.
         // If the language isn't supported, fall back to "auto" to prevent errors.
         let validated_language = if settings.selected_language == "auto" {
             "auto".to_string()
         } else {
-            let is_supported = self
-                .model_manager
-                .get_model_info(&settings.selected_model)
+            let is_supported = model_info
+                .as_ref()
                 .map(|info| {
                     info.supported_languages.is_empty()
                         || info
@@ -605,6 +618,20 @@ impl TranscriptionManager {
                 "auto".to_string()
             }
         };
+
+        let translation_is_effective = settings.translate_to_english
+            && model_info
+                .as_ref()
+                .is_some_and(|info| info.supports_translation);
+        let fixed_model_language = model_info.as_ref().and_then(|info| {
+            (!info.supports_language_selection && info.supported_languages.len() == 1)
+                .then(|| info.supported_languages[0].as_str())
+        });
+        let language = TextPipelineLanguage::from_transcription_settings(
+            &validated_language,
+            translation_is_effective,
+            fixed_model_language,
+        );
 
         // Perform transcription with the appropriate engine.
         // We use catch_unwind to prevent engine panics from poisoning the mutex,
@@ -664,7 +691,7 @@ impl TranscriptionManager {
 
                             let params = WhisperInferenceParams {
                                 language: whisper_language,
-                                translate: settings.translate_to_english,
+                                translate: translation_is_effective,
                                 initial_prompt: if effective_custom_words.is_empty() {
                                     None
                                 } else {
@@ -726,7 +753,7 @@ impl TranscriptionManager {
                             };
                             let options = TranscribeOptions {
                                 language: lang,
-                                translate: settings.translate_to_english,
+                                translate: translation_is_effective,
                                 ..Default::default()
                             };
                             canary_engine
@@ -815,9 +842,8 @@ impl TranscriptionManager {
 
         // Apply word correction if custom words are configured.
         // Skip for Whisper models since custom words are already passed as initial_prompt.
-        let is_whisper = self
-            .model_manager
-            .get_model_info(&settings.selected_model)
+        let is_whisper = model_info
+            .as_ref()
             .map(|info| matches!(info.engine_type, EngineType::Whisper))
             .unwrap_or(false);
 
@@ -840,15 +866,15 @@ impl TranscriptionManager {
             apply_replacements(&corrected_result, &effective_replacements)
         };
 
-        // Filter out filler words and hallucinations
+        // Filter out filler words and hallucinations.
         let filtered_result = filter_transcription_output(
             &corrected_result,
-            &settings.app_language,
+            &language,
             &settings.custom_filler_words,
         );
 
         let et = std::time::Instant::now();
-        let translation_note = if settings.translate_to_english {
+        let translation_note = if translation_is_effective {
             " (translated)"
         } else {
             ""
@@ -869,7 +895,10 @@ impl TranscriptionManager {
 
         self.maybe_unload_immediately("transcription");
 
-        Ok(final_result)
+        Ok(TranscribedText {
+            text: final_result,
+            language,
+        })
     }
 
     /// Watchdog-guarded transcription (issue #58).
@@ -885,7 +914,7 @@ impl TranscriptionManager {
         &self,
         audio: Vec<f32>,
         timeout: Duration,
-    ) -> WatchdogOutcome<Result<String>> {
+    ) -> WatchdogOutcome<Result<TranscribedText>> {
         if self.is_wedged() {
             return WatchdogOutcome::Completed(Err(anyhow::anyhow!(WEDGED_ENGINE_ERROR)));
         }

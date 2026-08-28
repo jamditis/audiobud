@@ -1,3 +1,4 @@
+use super::language::TextPipelineLanguage;
 use crate::settings::WordReplacement;
 use once_cell::sync::Lazy;
 use regex::{Captures, Regex};
@@ -594,33 +595,28 @@ fn extract_punctuation(word: &str) -> (&str, &str) {
 /// Some words like "um" and "ha" are real words in certain languages
 /// (e.g., Portuguese "um" = "a/an", Spanish "ha" = "has"), so we only
 /// include them as fillers for languages where they are truly fillers.
-fn get_filler_words_for_language(lang: &str) -> &'static [&'static str] {
-    let base_lang = lang.split(&['-', '_'][..]).next().unwrap_or(lang);
-
-    match base_lang {
-        "en" => &[
+fn get_filler_words_for_language(language: &TextPipelineLanguage) -> &'static [&'static str] {
+    match language.base_language() {
+        Some("en") => &[
             "uh", "um", "uhm", "umm", "uhh", "uhhh", "ah", "hmm", "hm", "mmm", "mm", "mh", "eh",
             "ehh", "ha",
         ],
-        "es" => &["ehm", "mmm", "hmm", "hm"],
-        "pt" => &["ahm", "hmm", "mmm", "hm"],
-        "fr" => &["euh", "hmm", "hm", "mmm"],
-        "de" => &["äh", "ähm", "hmm", "hm", "mmm"],
-        "it" => &["ehm", "hmm", "mmm", "hm"],
-        "cs" => &["ehm", "hmm", "mmm", "hm"],
-        "pl" => &["hmm", "mmm", "hm"],
-        "tr" => &["hmm", "mmm", "hm"],
-        "ru" => &["хм", "ммм", "hmm", "mmm"],
-        "uk" => &["хм", "ммм", "hmm", "mmm"],
-        "ar" => &["hmm", "mmm"],
-        "ja" => &["hmm", "mmm"],
-        "ko" => &["hmm", "mmm"],
-        "vi" => &["hmm", "mmm", "hm"],
-        "zh" => &["hmm", "mmm"],
-        // Conservative universal fallback (no "um", "eh", "ha")
-        _ => &[
-            "uh", "uhm", "umm", "uhh", "uhhh", "ah", "hmm", "hm", "mmm", "mm", "mh", "ehh",
-        ],
+        Some("es") => &["ehm", "mmm", "hmm", "hm"],
+        Some("pt") => &["ahm", "hmm", "mmm", "hm"],
+        Some("fr") => &["euh", "hmm", "hm", "mmm"],
+        Some("de") => &["äh", "ähm", "hmm", "hm", "mmm"],
+        Some("it") => &["ehm", "hmm", "mmm", "hm"],
+        Some("cs") => &["ehm", "hmm", "mmm", "hm"],
+        Some("pl") => &["hmm", "mmm", "hm"],
+        Some("tr") => &["hmm", "mmm", "hm"],
+        Some("ru") => &["хм", "ммм", "hmm", "mmm"],
+        Some("uk") => &["хм", "ммм", "hmm", "mmm"],
+        Some("ar") => &["hmm", "mmm"],
+        Some("ja") => &["hmm", "mmm"],
+        Some("ko") => &["hmm", "mmm"],
+        Some("vi") => &["hmm", "mmm", "hm"],
+        Some("zh") => &["hmm", "mmm"],
+        _ => &[],
     }
 }
 
@@ -680,7 +676,7 @@ fn collapse_stutters(text: &str) -> String {
 ///
 /// # Arguments
 /// * `text` - The raw transcription text to filter
-/// * `lang` - The app language code (e.g., "en", "pt-BR") used to select filler words
+/// * `language` - The effective dictation-output language used to select filler words
 /// * `custom_filler_words` - Optional user-provided filler word list. `Some(vec)` overrides
 ///   language defaults; `Some(empty vec)` disables filtering; `None` uses language defaults.
 ///
@@ -688,7 +684,7 @@ fn collapse_stutters(text: &str) -> String {
 /// The filtered text with filler words and stutters removed
 pub fn filter_transcription_output(
     text: &str,
-    lang: &str,
+    language: &TextPipelineLanguage,
     custom_filler_words: &Option<Vec<String>>,
 ) -> String {
     let mut filtered = text.to_string();
@@ -699,7 +695,7 @@ pub fn filter_transcription_output(
             .iter()
             .filter_map(|word| Regex::new(&format!(r"(?i)\b{}\b[,.]?", regex::escape(word))).ok())
             .collect(),
-        None => get_filler_words_for_language(lang)
+        None => get_filler_words_for_language(language)
             .iter()
             .map(|word| Regex::new(&format!(r"(?i)\b{}\b[,.]?", regex::escape(word))).unwrap())
             .collect(),
@@ -816,25 +812,21 @@ fn strip_token_punctuation(token: &str, lowercase: bool) -> String {
 /// leading/trailing punctuation is stripped), which covers decimals, version strings, `GPT-4`,
 /// `claude.md`, `user@example.com`, `well-known`, and path separators.
 ///
-/// `force_english_i` controls the "I" exception. When the output is known to be English (an
-/// explicit English dictation language, or translate-to-English), it is `true` and a standalone
-/// "i" is always capitalized. When the language is unknown (auto-detect; `transcribe-rs` does not
-/// report the detected language) or explicitly non-English, it is `false` and the token keeps the
-/// casing the engine produced: English engines already emit "I" capitalized, so English stays
-/// correct, while a language that uses a lowercase standalone "i" (Polish/Croatian "i" = "and") is
-/// not wrongly capitalized.
+/// `language` controls the "I" exception. Known-English output capitalizes a standalone "i";
+/// unknown (auto-detected) or non-English output keeps the engine's casing. English engines already
+/// emit "I" capitalized, while Polish/Croatian lowercase "i" ("and") remains lowercase.
 ///
 /// This is a pure, deterministic, engine-agnostic transform -- no model, no proper-noun
 /// detection. Worked example:
 /// `Open Claude.md and read GPT-4 notes.` -> `open claude.md and read GPT-4 notes`
-pub fn strip_to_raw_text(text: &str, force_english_i: bool) -> String {
+pub fn strip_to_raw_text(text: &str, language: &TextPipelineLanguage) -> String {
     let mut out: Vec<String> = Vec::new();
 
     for token in text.split_whitespace() {
         if let Some((canonical, was_uppercase)) = english_i_canonical(token) {
             // Force capitalization for known-English output; otherwise only preserve the casing the
             // engine already produced so non-English standalone "i" is left lowercase.
-            if force_english_i || was_uppercase {
+            if language.is_english() || was_uppercase {
                 out.push(canonical);
                 continue;
             }
@@ -1256,15 +1248,18 @@ fn is_learnable_substitution(from: &str, to: &str) -> bool {
 /// `audio_toolkit` without a running app. Capturing the correction and appending
 /// accepted pairs to the store is the caller's job (issue #67 parts 1 and 3).
 ///
-/// Known limitation: the dictionary-word veto in `is_learnable_substitution` is English-only, so
-/// a non-English grammar edit (French `la`->`le`) still passes every guard.
-/// The fix needs the dictation language, which this pure function does not receive; it is
-/// tracked for the parts-1/3 wiring in issue #126.
+/// Correction learning currently has English lexical evidence only. Other and unknown languages
+/// therefore fail closed until a language-specific rule set is explicitly supplied.
 pub fn extract_learned_replacements(
     original: &str,
     corrected: &str,
+    language: &TextPipelineLanguage,
     preceding_replacements: &[WordReplacement],
 ) -> Vec<WordReplacement> {
+    if !language.is_english() {
+        return Vec::new();
+    }
+
     // Normal UI-authored rules are capped at 200 entries and 100 characters per field. Imported
     // settings can bypass that UI, so keep their effect on extraction bounded as well.
     const MAX_PRECEDING_RULES: usize = 512;
@@ -1666,7 +1661,46 @@ mod tests {
     use super::*;
 
     fn extract_learned_replacements(original: &str, corrected: &str) -> Vec<WordReplacement> {
-        super::extract_learned_replacements(original, corrected, &[])
+        super::extract_learned_replacements(
+            original,
+            corrected,
+            &TextPipelineLanguage::english(),
+            &[],
+        )
+    }
+
+    fn extract_learned_replacements_with_preceding(
+        original: &str,
+        corrected: &str,
+        preceding: &[WordReplacement],
+    ) -> Vec<WordReplacement> {
+        super::extract_learned_replacements(
+            original,
+            corrected,
+            &TextPipelineLanguage::english(),
+            preceding,
+        )
+    }
+
+    fn filter_transcription_output(
+        text: &str,
+        language: &str,
+        custom_filler_words: &Option<Vec<String>>,
+    ) -> String {
+        super::filter_transcription_output(
+            text,
+            &TextPipelineLanguage::known(language),
+            custom_filler_words,
+        )
+    }
+
+    fn strip_to_raw_text(text: &str, force_english_i: bool) -> String {
+        let language = if force_english_i {
+            TextPipelineLanguage::english()
+        } else {
+            TextPipelineLanguage::unknown()
+        };
+        super::strip_to_raw_text(text, &language)
     }
 
     fn learned_pairs(v: &[WordReplacement]) -> Vec<(String, String)> {
@@ -2061,33 +2095,35 @@ mod tests {
     #[test]
     fn extractor_rejects_a_rule_that_would_cascade_from_a_preceding_target() {
         let preceding = vec![repl("foo", "bar-baz")];
-        assert!(
-            super::extract_learned_replacements("use bar today", "use qux today", &preceding)
-                .is_empty()
-        );
+        assert!(extract_learned_replacements_with_preceding(
+            "use bar today",
+            "use qux today",
+            &preceding
+        )
+        .is_empty());
 
         let contextual_preceding = vec![repl("foo", "bar")];
-        assert!(super::extract_learned_replacements(
+        assert!(extract_learned_replacements_with_preceding(
             "use bar-baz today",
             "use qux-quux today",
             &contextual_preceding,
         )
         .is_empty());
 
-        assert!(super::extract_learned_replacements(
+        assert!(extract_learned_replacements_with_preceding(
             "use bar-baz today",
             "use qux-baz today",
             &[repl("foo-bar", "x-bar")],
         )
         .is_empty());
-        assert!(super::extract_learned_replacements(
+        assert!(extract_learned_replacements_with_preceding(
             "use y-bar today",
             "use y-qux today",
             &[repl("foo", "bar-x")],
         )
         .is_empty());
 
-        assert!(super::extract_learned_replacements(
+        assert!(extract_learned_replacements_with_preceding(
             "fix sonet today",
             "fix sonnet today",
             &[repl("x-sonet", "x-poem")],
@@ -2096,7 +2132,7 @@ mod tests {
 
         let mut case_sensitive_preemption = repl("SONET", "poem");
         case_sensitive_preemption.case_sensitive = true;
-        assert!(super::extract_learned_replacements(
+        assert!(extract_learned_replacements_with_preceding(
             "fix sonet today",
             "fix sonnet today",
             &[case_sensitive_preemption],
@@ -2105,14 +2141,14 @@ mod tests {
 
         let mut shorter_case_sensitive_preemption = repl("SONET", "poem");
         shorter_case_sensitive_preemption.case_sensitive = true;
-        assert!(super::extract_learned_replacements(
+        assert!(extract_learned_replacements_with_preceding(
             "fix sonet-api today",
             "fix sonnet-api today",
             &[shorter_case_sensitive_preemption],
         )
         .is_empty());
 
-        assert!(super::extract_learned_replacements(
+        assert!(extract_learned_replacements_with_preceding(
             "fix bar-baz today",
             "fix bar-bazz today",
             &[repl("foo-bar", "foo-qux")],
@@ -2121,7 +2157,7 @@ mod tests {
 
         let mut substring_deletion = repl("-", "");
         substring_deletion.whole_word = false;
-        assert!(super::extract_learned_replacements(
+        assert!(extract_learned_replacements_with_preceding(
             "use clawd today",
             "use Claude today",
             &[substring_deletion],
@@ -2129,7 +2165,7 @@ mod tests {
         .is_empty());
 
         let whole_word_deletion = repl("foo", "");
-        assert!(super::extract_learned_replacements(
+        assert!(extract_learned_replacements_with_preceding(
             "use bar- today",
             "use baz- today",
             &[whole_word_deletion],
@@ -2138,21 +2174,21 @@ mod tests {
 
         let mut boundary_changer = repl("_", "-");
         boundary_changer.whole_word = false;
-        assert!(super::extract_learned_replacements(
+        assert!(extract_learned_replacements_with_preceding(
             "use clawd today",
             "use Claude today",
             &[boundary_changer],
         )
         .is_empty());
 
-        assert!(super::extract_learned_replacements(
+        assert!(extract_learned_replacements_with_preceding(
             "use .clawd today",
             "use .Claude today",
             &[repl("foo", "bar.")],
         )
         .is_empty());
 
-        assert!(super::extract_learned_replacements(
+        assert!(extract_learned_replacements_with_preceding(
             "use SSAMPLE today",
             "use Stample today",
             &[repl("foo", "ßample")],
@@ -2161,7 +2197,7 @@ mod tests {
 
         // Runtime case adaptation can emit a form that neither literal target contains. The first
         // pair turns title-cased `Xample` into `Sample`, which would then activate the second pair.
-        assert!(super::extract_learned_replacements(
+        assert!(extract_learned_replacements_with_preceding(
             "xample here and sample",
             "ßample here and stample",
             &[],
@@ -2169,7 +2205,7 @@ mod tests {
         .is_empty());
 
         // Dotless-i uppercases to `I` even though regex simple folding does not equate `ı` and `i`.
-        assert!(super::extract_learned_replacements(
+        assert!(extract_learned_replacements_with_preceding(
             "xample here and iample",
             "ıample here and izample",
             &[],
@@ -2179,7 +2215,7 @@ mod tests {
         // An old user-authored cascade does not block an unrelated learned correction: only pairs
         // whose later rule is new are considered instead of requiring the old list to be pristine.
         let already_cascading = vec![repl("foo", "bar"), repl("bar", "baz")];
-        let unrelated = super::extract_learned_replacements(
+        let unrelated = extract_learned_replacements_with_preceding(
             "ask clawd today",
             "ask Claude today",
             &already_cascading,
@@ -2191,7 +2227,7 @@ mod tests {
 
         // Earlier rules do not revisit a target emitted by a later rule, so this ordering is safe.
         let earlier_zorp_rule = vec![repl("zorp", "qux")];
-        let later_target = super::extract_learned_replacements(
+        let later_target = extract_learned_replacements_with_preceding(
             "use zopr today",
             "use zorp today",
             &earlier_zorp_rule,
@@ -2272,7 +2308,7 @@ mod tests {
         let from = format!("{}b", "a".repeat(239));
         let to = format!("{}c", "a".repeat(239));
 
-        assert!(super::extract_learned_replacements(&from, &to, &preceding).is_empty());
+        assert!(extract_learned_replacements_with_preceding(&from, &to, &preceding).is_empty());
     }
 
     #[test]
@@ -2371,7 +2407,11 @@ mod tests {
     #[test]
     fn extractor_allows_case_distinct_preceding_targets_for_digit_rules() {
         let preceding = vec![repl("foo", "MP")];
-        let out = super::extract_learned_replacements("use mp today", "use MP3 today", &preceding);
+        let out = extract_learned_replacements_with_preceding(
+            "use mp today",
+            "use MP3 today",
+            &preceding,
+        );
         assert_eq!(
             learned_pairs(&out),
             vec![("mp".to_string(), "MP3".to_string())]
@@ -2559,15 +2599,15 @@ mod tests {
     }
 
     #[test]
-    fn test_filter_unknown_language_uses_fallback() {
+    fn test_filter_unknown_language_has_no_implicit_rules() {
         let text = "uh I think uhm this works";
         let result = filter_transcription_output(text, "xx", &None);
-        assert_eq!(result, "I think this works");
+        assert_eq!(result, text);
     }
 
     #[test]
     fn test_filter_fallback_does_not_remove_um() {
-        // Fallback (unknown language) should not remove "um" since it's a real word in some languages
+        // Unknown languages have no implicit filler list.
         let text = "um I think this works";
         let result = filter_transcription_output(text, "xx", &None);
         assert_eq!(result, "um I think this works");
