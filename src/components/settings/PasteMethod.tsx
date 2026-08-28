@@ -6,7 +6,10 @@ import { Input } from "../ui/Input";
 import { useSettings } from "../../hooks/useSettings";
 import { useOsType } from "../../hooks/useOsType";
 import type { PasteMethod } from "@/bindings";
-import { pasteMethodsForOs } from "@/lib/paste-methods";
+import {
+  pasteMethodModifierForOs,
+  pasteMethodsForOs,
+} from "@/lib/paste-methods";
 
 interface PasteMethodProps {
   descriptionMode?: "inline" | "tooltip";
@@ -21,7 +24,7 @@ export const PasteMethodSetting: React.FC<PasteMethodProps> = React.memo(
 
     const pasteMethodLabels: Record<PasteMethod, string> = {
       ctrl_v: t("settings.advanced.pasteMethod.options.clipboard", {
-        modifier: osType === "macos" ? "Cmd" : "Ctrl",
+        modifier: pasteMethodModifierForOs(osType),
       }),
       direct: t("settings.advanced.pasteMethod.options.direct"),
       none: t("settings.advanced.pasteMethod.options.none"),

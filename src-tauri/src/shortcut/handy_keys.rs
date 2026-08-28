@@ -27,11 +27,14 @@
 //! polled from a dedicated recording thread. Events are emitted to the frontend
 //! via Tauri's event system.
 
-use handy_keys::{Hotkey, HotkeyId, HotkeyManager, HotkeyState, KeyboardListener};
+use handy_keys::{
+    Error as HandyKeysError, Hotkey, HotkeyId, HotkeyManager, HotkeyState, KeyboardListener,
+};
 use log::{debug, error, info};
 use serde::Serialize;
 use specta::Type;
 use std::collections::HashMap;
+use std::hash::Hash;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex};
@@ -50,7 +53,7 @@ enum ManagerCommand {
     Register {
         binding_id: String,
         hotkey_string: String,
-        response: Sender<Result<(), String>>,
+        response: Sender<Result<(), super::ShortcutRegistrationError>>,
     },
     Unregister {
         binding_id: String,
@@ -225,14 +228,16 @@ impl HandyKeysState {
         hotkey_to_binding: &mut HashMap<HotkeyId, (String, String)>,
         binding_id: &str,
         hotkey_string: &str,
-    ) -> Result<(), String> {
-        let hotkey: Hotkey = hotkey_string
-            .parse()
-            .map_err(|e| format!("Failed to parse hotkey '{}': {}", hotkey_string, e))?;
+    ) -> Result<(), super::ShortcutRegistrationError> {
+        let hotkey: Hotkey = hotkey_string.parse().map_err(|error| {
+            super::ShortcutRegistrationError::before_activation(format!(
+                "Failed to parse hotkey '{hotkey_string}': {error}"
+            ))
+        })?;
 
         let id = manager
             .register(hotkey)
-            .map_err(|e| format!("Failed to register hotkey: {}", e))?;
+            .map_err(classify_manager_registration_error)?;
 
         binding_to_hotkey.insert(binding_id.to_string(), id);
         hotkey_to_binding.insert(id, (binding_id.to_string(), hotkey_string.to_string()));
@@ -251,31 +256,20 @@ impl HandyKeysState {
         hotkey_to_binding: &mut HashMap<HotkeyId, (String, String)>,
         binding_id: &str,
     ) -> Result<(), String> {
-        if let Some(id) = binding_to_hotkey.remove(binding_id) {
-            manager
-                .unregister(id)
-                .map_err(|e| format!("Failed to unregister hotkey: {}", e))?;
-            hotkey_to_binding.remove(&id);
-            debug!("Unregistered handy-keys shortcut: {}", binding_id);
-        }
+        unregister_tracked_hotkey(binding_to_hotkey, hotkey_to_binding, binding_id, |id| {
+            match manager.unregister(id) {
+                Ok(()) => Ok(()),
+                Err(HandyKeysError::HotkeyNotFound(_)) => Ok(()),
+                Err(error) => Err(format!("Failed to unregister hotkey: {error}")),
+            }
+        })?;
+        debug!("Unregistered handy-keys shortcut: {binding_id}");
         Ok(())
     }
 
     /// Register a shortcut binding
-    pub fn register(&self, binding: &ShortcutBinding) -> Result<(), String> {
-        let (tx, rx) = mpsc::channel();
-        self.command_sender
-            .lock()
-            .map_err(|_| "Failed to lock command_sender")?
-            .send(ManagerCommand::Register {
-                binding_id: binding.id.clone(),
-                hotkey_string: binding.current_binding.clone(),
-                response: tx,
-            })
-            .map_err(|_| "Failed to send register command")?;
-
-        rx.recv()
-            .map_err(|_| "Failed to receive register response")?
+    fn register(&self, binding: &ShortcutBinding) -> Result<(), super::ShortcutRegistrationError> {
+        send_registration_command(&self.command_sender, binding)
     }
 
     /// Unregister a shortcut binding
@@ -394,6 +388,68 @@ impl HandyKeysState {
     }
 }
 
+fn send_registration_command(
+    command_sender: &Mutex<Sender<ManagerCommand>>,
+    binding: &ShortcutBinding,
+) -> Result<(), super::ShortcutRegistrationError> {
+    let (response_sender, response_receiver) = mpsc::channel();
+    command_sender
+        .lock()
+        .map_err(|_| {
+            super::ShortcutRegistrationError::backend_unavailable(
+                "Failed to lock command_sender".to_string(),
+            )
+        })?
+        .send(ManagerCommand::Register {
+            binding_id: binding.id.clone(),
+            hotkey_string: binding.current_binding.clone(),
+            response: response_sender,
+        })
+        .map_err(|_| {
+            super::ShortcutRegistrationError::backend_unavailable(
+                "Failed to send register command".to_string(),
+            )
+        })?;
+
+    match response_receiver.recv() {
+        Ok(Ok(())) => Ok(()),
+        Ok(Err(error)) => Err(error),
+        Err(_) => Err(super::ShortcutRegistrationError::backend_unavailable(
+            "Failed to receive register response".to_string(),
+        )),
+    }
+}
+
+fn classify_manager_registration_error(error: HandyKeysError) -> super::ShortcutRegistrationError {
+    let message = format!("Failed to register hotkey: {error}");
+    match error {
+        HandyKeysError::HotkeyAlreadyRegistered(_) => {
+            super::ShortcutRegistrationError::before_activation(message)
+        }
+        _ => super::ShortcutRegistrationError::backend_unavailable(message),
+    }
+}
+
+fn unregister_tracked_hotkey<Id, Unregister>(
+    binding_to_hotkey: &mut HashMap<String, Id>,
+    hotkey_to_binding: &mut HashMap<Id, (String, String)>,
+    binding_id: &str,
+    unregister: Unregister,
+) -> Result<(), String>
+where
+    Id: Copy + Eq + Hash,
+    Unregister: FnOnce(Id) -> Result<(), String>,
+{
+    let Some(&id) = binding_to_hotkey.get(binding_id) else {
+        return Ok(());
+    };
+
+    unregister(id)?;
+    binding_to_hotkey.remove(binding_id);
+    hotkey_to_binding.remove(&id);
+    Ok(())
+}
+
 fn wait_for_manager_startup(
     startup_rx: Receiver<Result<(), String>>,
     startup_cancelled: &AtomicBool,
@@ -419,15 +475,20 @@ impl Drop for HandyKeysState {
         self.is_recording.store(false, Ordering::SeqCst);
 
         // Send shutdown command
-        if let Ok(sender) = self.command_sender.lock() {
-            let _ = sender.send(ManagerCommand::Shutdown);
-        }
+        let sender = self
+            .command_sender
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let _ = sender.send(ManagerCommand::Shutdown);
+        drop(sender);
 
         // Wait for the manager thread to finish
-        if let Ok(mut handle) = self.thread_handle.lock() {
-            if let Some(h) = handle.take() {
-                let _ = h.join();
-            }
+        let mut handle = self
+            .thread_handle
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if let Some(h) = handle.take() {
+            let _ = h.join();
         }
     }
 }
@@ -474,6 +535,10 @@ pub fn validate_shortcut(raw: &str) -> Result<(), String> {
         .map_err(|e| format!("Invalid shortcut for HandyKeys: {}", e))
 }
 
+fn validate_initial_shortcut(raw: &str) -> Result<(), super::ShortcutRegistrationError> {
+    validate_shortcut(raw).map_err(super::ShortcutRegistrationError::before_activation)
+}
+
 /// Initialize handy-keys shortcuts
 pub fn init_shortcuts(app: &AppHandle) -> Result<(), String> {
     let state = HandyKeysState::new(app.clone())?;
@@ -481,9 +546,8 @@ pub fn init_shortcuts(app: &AppHandle) -> Result<(), String> {
     super::register_initial_bindings(
         bindings,
         |binding| {
-            state
-                .register(binding)
-                .map_err(|error| super::ShortcutRegistrationError::state_may_have_changed(error))
+            validate_initial_shortcut(&binding.current_binding)?;
+            state.register(binding)
         },
         |binding| state.unregister(binding),
     )?;
@@ -508,8 +572,11 @@ pub fn register_cancel_shortcut(app: &AppHandle) {
         tauri::async_runtime::spawn(async move {
             if let Some(cancel_binding) = get_settings(&app_clone).bindings.get("cancel").cloned() {
                 if let Some(state) = app_clone.try_state::<HandyKeysState>() {
-                    if let Err(e) = state.register(&cancel_binding) {
-                        error!("Failed to register cancel shortcut: {}", e);
+                    if let Err(error) = state.register(&cancel_binding) {
+                        error!(
+                            "Failed to register cancel shortcut: {}",
+                            error.into_message()
+                        );
                     }
                 }
             }
@@ -543,7 +610,9 @@ pub fn register_shortcut(app: &AppHandle, binding: ShortcutBinding) -> Result<()
     let state = app
         .try_state::<HandyKeysState>()
         .ok_or("HandyKeysState not initialized")?;
-    state.register(&binding)
+    state
+        .register(&binding)
+        .map_err(super::ShortcutRegistrationError::into_message)
 }
 
 /// Unregister a shortcut
@@ -587,6 +656,168 @@ pub fn stop_handy_keys_recording(app: AppHandle) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn test_binding() -> ShortcutBinding {
+        ShortcutBinding {
+            id: "transcribe".to_string(),
+            name: "Transcribe".to_string(),
+            description: "Test binding".to_string(),
+            default_binding: "option+space".to_string(),
+            current_binding: "option+space".to_string(),
+        }
+    }
+
+    #[test]
+    fn failed_cleanup_keeps_tracking_for_a_retry() {
+        let mut binding_to_hotkey = HashMap::from([("second".to_string(), 7_u32)]);
+        let mut hotkey_to_binding = HashMap::from([(
+            7_u32,
+            ("second".to_string(), "option+shift+space".to_string()),
+        )]);
+
+        let first_result = unregister_tracked_hotkey(
+            &mut binding_to_hotkey,
+            &mut hotkey_to_binding,
+            "second",
+            |_| Err("native cleanup failed".to_string()),
+        );
+
+        assert_eq!(first_result, Err("native cleanup failed".to_string()));
+        assert_eq!(binding_to_hotkey.get("second"), Some(&7_u32));
+        assert!(hotkey_to_binding.contains_key(&7_u32));
+
+        unregister_tracked_hotkey(
+            &mut binding_to_hotkey,
+            &mut hotkey_to_binding,
+            "second",
+            |_| Ok(()),
+        )
+        .expect("a later cleanup can retry the retained native id");
+
+        assert!(!binding_to_hotkey.contains_key("second"));
+        assert!(!hotkey_to_binding.contains_key(&7_u32));
+    }
+
+    #[test]
+    fn closed_manager_command_channel_is_backend_unavailable() {
+        let (command_sender, command_receiver) = mpsc::channel();
+        drop(command_receiver);
+
+        let error = send_registration_command(&Mutex::new(command_sender), &test_binding())
+            .expect_err("a stopped manager must reject the command");
+
+        assert_eq!(
+            error.stage,
+            super::super::ShortcutRegistrationStage::BackendUnavailable
+        );
+    }
+
+    #[test]
+    fn duplicate_manager_registration_is_rejected_before_activation() {
+        let error = classify_manager_registration_error(HandyKeysError::HotkeyAlreadyRegistered(
+            "option+space".to_string(),
+        ));
+
+        assert_eq!(
+            error.stage,
+            super::super::ShortcutRegistrationStage::RejectedBeforeActivation
+        );
+    }
+
+    #[test]
+    fn poisoned_manager_registration_aborts_initialization() {
+        let error = classify_manager_registration_error(HandyKeysError::MutexPoisoned);
+
+        assert_eq!(
+            error.stage,
+            super::super::ShortcutRegistrationStage::BackendUnavailable
+        );
+    }
+
+    #[test]
+    fn lost_registration_response_is_backend_unavailable() {
+        let (command_sender, command_receiver) = mpsc::channel();
+        let manager_thread = thread::spawn(move || {
+            let ManagerCommand::Register { response, .. } = command_receiver
+                .recv()
+                .expect("the manager receives the registration command")
+            else {
+                panic!("expected a registration command");
+            };
+            drop(response);
+        });
+
+        let error = send_registration_command(&Mutex::new(command_sender), &test_binding())
+            .expect_err("a lost response leaves the native result unknown");
+        manager_thread.join().expect("the manager thread exits");
+
+        assert_eq!(
+            error.stage,
+            super::super::ShortcutRegistrationStage::BackendUnavailable
+        );
+    }
+
+    #[test]
+    fn failed_handy_keys_owner_is_joined_before_fallback() {
+        let (command_sender, command_receiver) = mpsc::channel();
+        let teardown_complete = Arc::new(AtomicBool::new(false));
+        let worker_teardown_complete = Arc::clone(&teardown_complete);
+        let manager_thread = thread::spawn(move || loop {
+            match command_receiver
+                .recv()
+                .expect("the state owns the command sender until teardown")
+            {
+                ManagerCommand::Register { response, .. } => drop(response),
+                ManagerCommand::Unregister { response, .. } => {
+                    let _ = response.send(Ok(()));
+                }
+                ManagerCommand::Shutdown => {
+                    worker_teardown_complete.store(true, Ordering::SeqCst);
+                    break;
+                }
+            }
+        });
+
+        let handy_error = {
+            let state = HandyKeysState {
+                command_sender: Mutex::new(command_sender),
+                thread_handle: Mutex::new(Some(manager_thread)),
+                recording_listener: Mutex::new(None),
+                is_recording: AtomicBool::new(false),
+                recording_binding_id: Mutex::new(None),
+                recording_running: Arc::new(AtomicBool::new(false)),
+            };
+            let error = state
+                .register(&test_binding())
+                .expect_err("a lost response makes the backend unavailable");
+            assert_eq!(
+                error.stage,
+                super::super::ShortcutRegistrationStage::BackendUnavailable
+            );
+            error.into_message()
+        };
+
+        let fallback_started = std::cell::Cell::new(false);
+        let result = super::super::with_retry_safe_handy_keys_fallback(handy_error, || {
+            assert!(teardown_complete.load(Ordering::SeqCst));
+            fallback_started.set(true);
+            Ok(())
+        });
+
+        assert_eq!(result, Ok(()));
+        assert!(fallback_started.get());
+    }
+
+    #[test]
+    fn malformed_initial_shortcuts_fail_before_activation() {
+        let error = validate_initial_shortcut("ctrl+definitely_not_a_key")
+            .expect_err("the backend parser must reject an unknown key");
+
+        assert_eq!(
+            error.stage,
+            super::super::ShortcutRegistrationStage::RejectedBeforeActivation
+        );
+    }
 
     #[test]
     fn manager_startup_failure_is_returned_to_the_caller() {

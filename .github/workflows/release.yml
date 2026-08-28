@@ -1432,7 +1432,6 @@ jobs:
       tag: ${{ steps.macos-meta.outputs.tag }}
       version: ${{ steps.macos-meta.outputs.version }}
     env:
-      DEVELOPER_DIR: /Applications/Xcode_26.0.1.app/Contents/Developer
       MODEL_ASSET_BASE_URL: https://github.com/jamditis/audiobud/releases/download/model-assets-v1
       SILERO_VAD_SHA256: a35ebf52fd3ce5f1469b2a36158dba761bc47b973ea3382b3186ca15b1f5af28
       SILERO_VAD_BYTES: 1807522
@@ -1479,6 +1478,36 @@ jobs:
             echo "SBOM_NAME=$SBOM_NAME"
           } >> "$GITHUB_ENV"
 
+      - name: Select reviewed Xcode 26 toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          XCODE_DEVELOPER_DIR="/Applications/Xcode_26.0.1.app/Contents/Developer"
+          if [[ ! -d "$XCODE_DEVELOPER_DIR" ]]; then
+            echo "::error::Reviewed Xcode 26 toolchain is missing at $XCODE_DEVELOPER_DIR."
+            exit 1
+          fi
+
+          export DEVELOPER_DIR="$XCODE_DEVELOPER_DIR"
+          xcodebuild -version
+          SDK_PATH=$(xcrun --sdk macosx --show-sdk-path)
+          SDK_VERSION=$(xcrun --sdk macosx --show-sdk-version)
+          if [[ "$SDK_VERSION" != 26.* ]]; then
+            echo "::error::Expected the reviewed macOS 26 SDK, found $SDK_VERSION at $SDK_PATH."
+            exit 1
+          fi
+
+          FOUNDATION_MODELS_FRAMEWORK="$SDK_PATH/System/Library/Frameworks/FoundationModels.framework"
+          if [[ ! -d "$FOUNDATION_MODELS_FRAMEWORK" ]]; then
+            echo "::error::FoundationModels.framework is missing from the reviewed macOS 26 SDK."
+            exit 1
+          fi
+
+          {
+            echo "DEVELOPER_DIR=$XCODE_DEVELOPER_DIR"
+            echo "SDKROOT=$SDK_PATH"
+          } >> "$GITHUB_ENV"
+
       - name: Set up Bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
@@ -1499,19 +1528,6 @@ jobs:
       - name: Install macOS build tools
         shell: bash
         run: brew install cmake
-
-      - name: Require Apple Intelligence SDK
-        shell: bash
-        run: |
-          set -euo pipefail
-          xcodebuild -version
-          SDK_PATH=$(xcrun --sdk macosx --show-sdk-path)
-          FOUNDATION_MODELS="$SDK_PATH/System/Library/Frameworks/FoundationModels.framework"
-          if [[ ! -d "$FOUNDATION_MODELS" ]]; then
-            echo "::error::The selected Xcode SDK does not include FoundationModels.framework. Select Xcode 26 or newer before releasing."
-            xcodebuild -version
-            exit 1
-          fi
 
       - name: Install frontend dependencies
         shell: bash
@@ -1680,6 +1696,10 @@ jobs:
           printf '%s\n' "$DEPENDENCIES"
           if grep -Eq '/opt/homebrew|/usr/local' <<< "$DEPENDENCIES"; then
             echo "::error::Packaged binary links to a local package-manager path."
+            exit 1
+          fi
+          if ! grep -Fq '/System/Library/Frameworks/FoundationModels.framework/Versions/A/FoundationModels' <<< "$DEPENDENCIES"; then
+            echo "::error::Packaged binary does not link FoundationModels.framework."
             exit 1
           fi
 

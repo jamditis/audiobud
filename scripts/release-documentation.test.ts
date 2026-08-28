@@ -79,6 +79,18 @@ describe("v0.6.0 release documentation", () => {
     expect(macRelease).toContain("Notarize and staple the DMG separately");
     expect(macRelease).toContain("artifact-signing");
     expect(build).toContain("docs/macos-release.md");
+    expect(build).toContain(
+      "/Applications/Xcode_26.0.1.app/Contents/Developer",
+    );
+    expect(build).toContain("SDKROOT");
+    expect(build).toContain("FoundationModels.framework");
+    expect(macRelease).toContain(
+      "/Applications/Xcode_26.0.1.app/Contents/Developer",
+    );
+    expect(macRelease).toContain("macOS 26 SDK");
+    expect(macRelease).toContain("SDKROOT");
+    expect(macRelease).toContain("FoundationModels.framework");
+    expect(macRelease).toContain("final app binary");
     expect(updater).toContain("Windows NSIS builds only");
     expect(updater).toContain("macOS uses manual updates");
     expect(macRelease).not.toContain("3Y74X55F58");
@@ -87,6 +99,10 @@ describe("v0.6.0 release documentation", () => {
     expect(macBaseline).toContain(
       "Issuer and key identifiers are stored outside the repository",
     );
+    expect(macBaseline).toContain(
+      "481 frontend tests and 2,180 assertions across 45 files",
+    );
+    expect(macBaseline).toContain("503 Rust library tests");
   });
 
   it("keeps the Store update plan accurate before Partner Center submission", () => {
@@ -106,13 +122,19 @@ describe("v0.6.0 release documentation", () => {
     expect(
       todoSource.match(/^#{2,3} (current )?release decision$/gim),
     ).toHaveLength(1);
+    expect(todo).toContain("pull request 309 is open");
+    expect(todo).toContain("follow-up fixes are local and uncommitted");
     expect(todo).toContain(
-      "current local macOS candidate passed the full source review",
+      "481 frontend tests with 2,180 assertions across 45 files",
     );
+    expect(todo).toContain("503 Rust library tests");
     expect(todo).toContain("explicit approval to commit and push");
-    expect(todo).toContain("protected remote candidate build");
+    expect(todo).toContain("Do not merge until");
+    expect(todo).toContain("branch protection");
+    expect(todo).toContain("Do not create a tag");
+    expect(todo).toContain("Session handoff for August 28, 2026");
     expect(todo).toContain("clean-Mac tests");
-    expect(todo).toContain("publication has separate approval");
+    expect(todo).toContain("later approval gates");
     expect(todo).not.toContain("finish the independent review");
     expect(todo).not.toContain("complete phase 0");
   });

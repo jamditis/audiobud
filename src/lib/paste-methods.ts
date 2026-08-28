@@ -1,6 +1,11 @@
 import type { PasteMethod } from "@/bindings";
 import type { OSType } from "./utils/keyboard";
 
+/** Keyboard modifier used by the standard clipboard shortcut. */
+export function pasteMethodModifierForOs(osType: OSType): "Cmd" | "Ctrl" {
+  return osType === "macos" ? "Cmd" : "Ctrl";
+}
+
 /** Paste methods that the current platform can safely offer in settings. */
 export function pasteMethodsForOs(osType: OSType): PasteMethod[] {
   const methods: PasteMethod[] = ["ctrl_v"];

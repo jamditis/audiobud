@@ -11,6 +11,13 @@ limited to reviewed `main` and `v*` release refs. The workflow runs frontend,
 Rust, format, lint, workflow, and release-contract tests before it reads Apple
 credentials.
 
+The release job selects
+`/Applications/Xcode_26.0.1.app/Contents/Developer`. It stops if this reviewed
+toolchain is missing, if the selected SDK is not the macOS 26 SDK, or if the SDK
+does not contain `FoundationModels.framework`. It writes the checked SDK path to
+`SDKROOT`, so `build.rs` cannot select a different SDK. The final app binary
+must link `FoundationModels.framework`; a stub build fails verification.
+
 The environment uses these repository values:
 
 - Variable: `APPLE_API_KEY`
@@ -30,15 +37,17 @@ step.
 
 ## Build order
 
-1. Build and test the unsigned application without bundles.
-2. Write the temporary App Store Connect private-key file.
-3. Import the Developer ID certificate through Tauri's signing process.
-4. Build the signed app and DMG with
+1. Select the reviewed Xcode toolchain and verify its SDK.
+2. Build and test the unsigned application without bundles.
+3. Write the temporary App Store Connect private-key file.
+4. Import the Developer ID certificate through Tauri's signing process.
+5. Build the signed app and DMG with
    `src-tauri/tauri.macos-signing.conf.json`.
-5. Resolve the exact app and DMG paths. Reject missing or extra candidates.
-6. Notarize and staple the DMG separately.
-7. Remove the temporary API private-key file, even after failure.
-8. Verify the app and DMG before generating checksums, the SBOM, provenance,
+6. Resolve the exact app and DMG paths. Reject missing or extra candidates.
+7. Notarize and staple the DMG separately.
+8. Remove the temporary API private-key file, even after failure.
+9. Verify the app signature, notarization, architecture, dependencies, and
+   Foundation Models link before generating checksums, the SBOM, provenance,
    and the release artifact.
 
 ## Notarize and staple the DMG separately

@@ -31,13 +31,48 @@ describe("signed macOS release workflow", () => {
     expect(macOS).toContain("attestations: write");
     expect(macOS).toContain("contents: read");
     expect(macOS).toContain("inputs.store_candidate != true");
-    expect(macOS).toContain(
-      "DEVELOPER_DIR: /Applications/Xcode_26.0.1.app/Contents/Developer",
-    );
-
     const windows = jobBlock("build-windows");
     expect(windows).toContain("group: release-windows");
     expect(workflow).not.toMatch(/^concurrency:/m);
+  });
+
+  test("selects the reviewed Xcode 26 SDK before build setup", () => {
+    const macOS = jobBlock("build-macos");
+    const resolvePaths = stepPosition(macOS, "Resolve macOS version and paths");
+    const selectXcode = stepPosition(
+      macOS,
+      "Select reviewed Xcode 26 toolchain",
+    );
+    const setUpBun = stepPosition(macOS, "Set up Bun");
+    const selectXcodeStep = macOS.slice(selectXcode, setUpBun);
+
+    expect(selectXcode).toBeGreaterThan(resolvePaths);
+    expect(selectXcode).toBeLessThan(setUpBun);
+    expect(selectXcodeStep).toContain(
+      'XCODE_DEVELOPER_DIR="/Applications/Xcode_26.0.1.app/Contents/Developer"',
+    );
+    expect(selectXcodeStep).toContain('[[ ! -d "$XCODE_DEVELOPER_DIR" ]]');
+    expect(selectXcodeStep).toContain(
+      'export DEVELOPER_DIR="$XCODE_DEVELOPER_DIR"',
+    );
+    expect(selectXcodeStep).toContain(
+      'echo "DEVELOPER_DIR=$XCODE_DEVELOPER_DIR"',
+    );
+    expect(selectXcodeStep).toContain(
+      "SDK_PATH=$(xcrun --sdk macosx --show-sdk-path)",
+    );
+    expect(selectXcodeStep).toContain(
+      "SDK_VERSION=$(xcrun --sdk macosx --show-sdk-version)",
+    );
+    expect(selectXcodeStep).toContain('[[ "$SDK_VERSION" != 26.* ]]');
+    expect(selectXcodeStep).toContain('echo "SDKROOT=$SDK_PATH"');
+    expect(selectXcodeStep).toContain('} >> "$GITHUB_ENV"');
+    expect(selectXcodeStep).toContain(
+      'FOUNDATION_MODELS_FRAMEWORK="$SDK_PATH/System/Library/Frameworks/FoundationModels.framework"',
+    );
+    expect(selectXcodeStep).toContain(
+      '[[ ! -d "$FOUNDATION_MODELS_FRAMEWORK" ]]',
+    );
   });
 
   test("tests the full frontend and Rust application before signing", () => {
@@ -45,11 +80,11 @@ describe("signed macOS release workflow", () => {
     const orderedSteps = [
       "Check out repository",
       "Resolve macOS version and paths",
+      "Select reviewed Xcode 26 toolchain",
       "Set up Bun",
       "Install Rust stable",
       "Restore Rust cache",
       "Install macOS build tools",
-      "Require Apple Intelligence SDK",
       "Install frontend dependencies",
       "Download Silero VAD model",
       "Run frontend checks",
@@ -64,8 +99,6 @@ describe("signed macOS release workflow", () => {
     }
 
     expect(macOS).toContain("bun install --frozen-lockfile");
-    expect(macOS).toContain("FoundationModels.framework");
-    expect(macOS).toContain("Select Xcode 26 or newer before releasing");
     expect(macOS).toContain("bun run lint");
     expect(macOS).toContain("bun run format:check");
     expect(macOS).toContain("bun run test");
@@ -118,6 +151,8 @@ describe("signed macOS release workflow", () => {
       macOS,
       "Verify macOS signatures and notarization",
     );
+    const generateSbom = stepPosition(macOS, "Generate macOS SBOM");
+    const verifyStep = macOS.slice(verify, generateSbom);
 
     expect(macOS).toContain("bun run tauri bundle --bundles app,dmg");
     expect(macOS).not.toContain("tauri bundle --verbose");
@@ -132,7 +167,13 @@ describe("signed macOS release workflow", () => {
     expect(macOS).toContain("spctl --assess --type open");
     expect(macOS).toContain("xcrun stapler validate");
     expect(macOS).toContain("hdiutil verify");
-    expect(macOS).toContain("otool -L");
+    expect(verifyStep).toContain("otool -L");
+    expect(verifyStep).toContain(
+      "/System/Library/Frameworks/FoundationModels.framework/Versions/A/FoundationModels",
+    );
+    expect(verifyStep).toContain(
+      "Packaged binary does not link FoundationModels.framework",
+    );
     expect(macOS).toContain("/opt/homebrew|/usr/local");
     expect(macOS).toContain("APP_CANDIDATE_COUNT");
     expect(macOS).toContain("DMG_CANDIDATE_COUNT");
@@ -144,6 +185,7 @@ describe("signed macOS release workflow", () => {
     expect(notarizeDMG).toBeGreaterThan(resolve);
     expect(removeKey).toBeGreaterThan(notarizeDMG);
     expect(verify).toBeGreaterThan(removeKey);
+    expect(generateSbom).toBeGreaterThan(verify);
   });
 
   test("names, checksums, inventories, attests, and uploads the macOS artifact", () => {

@@ -53,6 +53,19 @@ pub fn validate_shortcut(raw: &str) -> Result<(), String> {
     }
 }
 
+fn parse_initial_shortcut(raw: &str) -> Result<Shortcut, super::ShortcutRegistrationError> {
+    if let Err(error) = validate_shortcut(raw) {
+        warn!("register_tauri_shortcut validation error for binding '{raw}': {error}");
+        return Err(super::ShortcutRegistrationError::before_activation(error));
+    }
+
+    raw.parse::<Shortcut>().map_err(|error| {
+        let message = format!("Failed to parse shortcut '{raw}': {error}");
+        error!("register_tauri_shortcut parse error: {message}");
+        super::ShortcutRegistrationError::before_activation(message)
+    })
+}
+
 /// Register a shortcut using Tauri's global-shortcut plugin
 pub fn register_shortcut(app: &AppHandle, binding: ShortcutBinding) -> Result<(), String> {
     register_shortcut_attempt(app, binding).map_err(|error| error.into_message())
@@ -62,29 +75,7 @@ fn register_shortcut_attempt(
     app: &AppHandle,
     binding: ShortcutBinding,
 ) -> Result<(), super::ShortcutRegistrationError> {
-    // Validate for Tauri requirements
-    if let Err(e) = validate_shortcut(&binding.current_binding) {
-        warn!(
-            "register_tauri_shortcut validation error for binding '{}': {}",
-            binding.current_binding, e
-        );
-        return Err(super::ShortcutRegistrationError::before_activation(e));
-    }
-
-    // Parse shortcut and return error if it fails
-    let shortcut = match binding.current_binding.parse::<Shortcut>() {
-        Ok(s) => s,
-        Err(e) => {
-            let error_msg = format!(
-                "Failed to parse shortcut '{}': {}",
-                binding.current_binding, e
-            );
-            error!("register_tauri_shortcut parse error: {}", error_msg);
-            return Err(super::ShortcutRegistrationError::before_activation(
-                error_msg,
-            ));
-        }
-    };
+    let shortcut = parse_initial_shortcut(&binding.current_binding)?;
 
     // Prevent duplicate registrations that would silently shadow one another
     if app.global_shortcut().is_registered(shortcut) {
@@ -189,5 +180,21 @@ pub fn unregister_cancel_shortcut(app: &AppHandle) {
                 let _ = unregister_shortcut(&app_clone, cancel_binding);
             }
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn malformed_shortcuts_fail_before_activation() {
+        let error = parse_initial_shortcut("ctrl+definitely_not_a_key")
+            .expect_err("the backend parser must reject an unknown key");
+
+        assert_eq!(
+            error.stage,
+            super::super::ShortcutRegistrationStage::RejectedBeforeActivation
+        );
     }
 }

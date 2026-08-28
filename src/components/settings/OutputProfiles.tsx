@@ -9,7 +9,10 @@ import type {
 } from "@/bindings";
 import { useSettings } from "../../hooks/useSettings";
 import { useOsType } from "../../hooks/useOsType";
-import { profilePasteMethodsForOs } from "@/lib/paste-methods";
+import {
+  pasteMethodModifierForOs,
+  profilePasteMethodsForOs,
+} from "@/lib/paste-methods";
 import { Input } from "../ui/Input";
 import { Button } from "../ui/Button";
 import { Dropdown } from "../ui/Dropdown";
@@ -114,7 +117,7 @@ export const OutputProfiles: React.FC<OutputProfilesProps> = React.memo(
 
     const pasteMethodLabels: Record<PasteMethod, string> = {
       ctrl_v: t("settings.advanced.pasteMethod.options.clipboard", {
-        modifier: "Ctrl",
+        modifier: pasteMethodModifierForOs(osType),
       }),
       ctrl_shift_v: t(
         "settings.advanced.pasteMethod.options.clipboardCtrlShiftV",
