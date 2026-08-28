@@ -362,11 +362,11 @@ function gb(mb: number): string {
 }
 
 /**
- * The checks that apply to each platform. Windows is the validated target and
- * carries the full hard gate (arch, OS version, WebView2, runtime DLLs); macOS
- * and Linux are inherited from upstream Handy and not yet validated here, so they
- * run only the soft, non-blocking checks — an unvalidated platform should warn,
- * never claim a hard pass it has not earned.
+ * The checks that apply to each platform. Windows carries the full hard gate
+ * for architecture, OS version, WebView2, and runtime DLLs. macOS is validated with soft checks
+ * here because its arm64 and OS floor are enforced by the
+ * package, while its permission flow has a separate controller. Linux is not a
+ * validated release target, so it also receives only non-blocking checks.
  */
 function checksFor(
   platform: Platform,

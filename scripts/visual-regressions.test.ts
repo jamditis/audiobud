@@ -14,11 +14,12 @@ describe("visual polish regression contracts", () => {
 
     expect(home).toMatch(/class="nav-cta" href="#install"/);
     expect(home).toMatch(
-      /class="button primary" data-download="_x64-setup\.exe" href="https:\/\/github\.com\/jamditis\/audiobud\/releases\/latest"/,
+      /class="button primary" data-download-windows="_x64-setup\.exe" href="https:\/\/github\.com\/jamditis\/audiobud\/releases\/latest"/,
     );
+    expect(home).toContain("macOS release candidate");
     expect(roadmap).toMatch(/class="nav-cta" href="\.\/index\.html#install"/);
     expect(home).toMatch(
-      /id="install"[\s\S]*class="install-note"[\s\S]*original Store MSI\?[\s\S]*signed update feed[\s\S]*github\.com\/jamditis\/audiobud\/releases\/latest[\s\S]*apps\.microsoft\.com\/detail\/xpff8hfmd98gnd/,
+      /id="install"[\s\S]*Apple Silicon[\s\S]*macOS 11 or later[\s\S]*original Store MSI\?[\s\S]*signed update feed[\s\S]*github\.com\/jamditis\/audiobud\/releases\/latest[\s\S]*apps\.microsoft\.com\/detail\/xpff8hfmd98gnd/,
     );
     expect(css).toMatch(
       /@media \(max-width: 1040px\) \{[\s\S]*?\.cta-actions \{[^}]*flex-wrap: wrap;/,
@@ -56,6 +57,14 @@ describe("visual polish regression contracts", () => {
     const css = compact(read("docs/styles.css"));
 
     expect(css).toMatch(/\.step-number \{[^}]*color: var\(--muted\);/);
+  });
+
+  it("wraps long macOS verification commands inside their card", () => {
+    const css = compact(read("docs/styles.css"));
+
+    expect(css).toMatch(
+      /\.verify-card pre \{[^}]*white-space: pre-wrap;[^}]*overflow-wrap: anywhere;/,
+    );
   });
 
   it("uses the redesigned footer grid on every public page", () => {

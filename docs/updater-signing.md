@@ -1,9 +1,13 @@
 # Updater signing
 
-AudioBud uses a Tauri minisign key to authenticate update payloads. This is
-separate from Windows Authenticode signing: Authenticode establishes the
-publisher identity for Windows, while the updater key binds a payload to the
-update channel configured in the installed app.
+AudioBud uses a Tauri minisign key to authenticate update payloads. This channel
+supports Windows NSIS builds only. It is separate from Windows Authenticode signing:
+Authenticode establishes the Windows publisher identity, while the updater key
+binds a payload to the update channel configured in the installed app.
+
+macOS uses manual updates in v0.6.0. Its footer links to the current release,
+and its DMG uses Developer ID signing and Apple notarization instead of this
+minisign update channel. See [macos-release.md](macos-release.md).
 
 The release workflow reads these repository secrets:
 

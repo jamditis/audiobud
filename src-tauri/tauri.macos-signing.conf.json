@@ -1,0 +1,7 @@
+{
+  "bundle": {
+    "macOS": {
+      "signingIdentity": "Developer ID Application: Joe Amditis (5624SD289G)"
+    }
+  }
+}

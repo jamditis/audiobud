@@ -1,104 +1,96 @@
-import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { type } from "@tauri-apps/plugin-os";
 import {
-  checkMacOSAccessibilityPermission,
-  requestMacOSAccessibilityPermission,
-} from "@/lib/macos-permissions";
+  permissionsNeedingAction,
+  type ManagedPermission,
+  type PermissionSnapshot,
+} from "@/lib/permission-controller";
 
-// Define permission state type
-type PermissionState = "request" | "verify" | "granted";
-
-// Define button configuration type
-interface ButtonConfig {
-  text: string;
-  className: string;
+interface AccessibilityPermissionsProps {
+  permissions: PermissionSnapshot;
+  onRequestAccessibility: () => Promise<void>;
+  onRequestMicrophone: () => Promise<void>;
 }
 
-const AccessibilityPermissions: React.FC = () => {
+const AccessibilityPermissions: React.FC<AccessibilityPermissionsProps> = ({
+  permissions,
+  onRequestAccessibility,
+  onRequestMicrophone,
+}) => {
   const { t } = useTranslation();
-  const [hasAccessibility, setHasAccessibility] = useState<boolean>(false);
-  const [permissionState, setPermissionState] =
-    useState<PermissionState>("request");
+  const recoveryActions = permissionsNeedingAction(permissions);
+  if (permissions.error === "check" && recoveryActions.length === 0) {
+    recoveryActions.push(
+      permissions.platform === "windows" ? "microphone" : "accessibility",
+    );
+  }
 
-  // Accessibility permissions are only required on macOS
-  const isMacOS = type() === "macos";
-
-  // Check permissions without requesting
-  const checkPermissions = async (): Promise<boolean> => {
-    const hasPermissions: boolean = await checkMacOSAccessibilityPermission();
-    setHasAccessibility(hasPermissions);
-    setPermissionState(hasPermissions ? "granted" : "verify");
-    return hasPermissions;
-  };
-
-  // Handle the unified button action based on current state
-  const handleButtonClick = async (): Promise<void> => {
-    if (permissionState === "request") {
-      try {
-        await requestMacOSAccessibilityPermission();
-        // After system prompt, transition to verification state
-        setPermissionState("verify");
-      } catch (error) {
-        console.error("Error requesting permissions:", error);
-        setPermissionState("verify");
-      }
-    } else if (permissionState === "verify") {
-      // State is "verify" - check if permission was granted
-      await checkPermissions();
-    }
-  };
-
-  // On app boot - check permissions (only on macOS)
-  useEffect(() => {
-    if (!isMacOS) return;
-
-    const initialSetup = async (): Promise<void> => {
-      const hasPermissions: boolean = await checkMacOSAccessibilityPermission();
-      setHasAccessibility(hasPermissions);
-      setPermissionState(hasPermissions ? "granted" : "request");
-    };
-
-    initialSetup();
-  }, [isMacOS]);
-
-  // Skip rendering on non-macOS platforms or if permission is already granted
-  if (!isMacOS || hasAccessibility) {
+  if (permissions.platform === "other" || recoveryActions.length === 0) {
     return null;
   }
 
-  // Configure button text and style based on state
-  const buttonConfig: Record<PermissionState, ButtonConfig | null> = {
-    request: {
-      text: t("accessibility.openSettings"),
-      className:
-        "px-2 py-1 text-sm font-semibold bg-mid-gray/10 border  border-mid-gray/80 hover:bg-logo-primary/10 rounded cursor-pointer hover:border-logo-primary",
-    },
-    verify: {
-      text: t("accessibility.openSettings"),
-      className:
-        "bg-gray-100 hover:bg-gray-200 text-gray-800 font-medium py-1 px-3 rounded-md text-sm flex items-center justify-center cursor-pointer",
-    },
-    granted: null,
+  const requestPermission = async (
+    permission: ManagedPermission,
+  ): Promise<void> => {
+    try {
+      if (permission === "microphone") {
+        await onRequestMicrophone();
+      } else {
+        await onRequestAccessibility();
+      }
+    } catch (error) {
+      console.error(`Failed to request ${permission} permission:`, error);
+    }
   };
 
-  const config = buttonConfig[permissionState] as ButtonConfig;
-
   return (
-    <div className="p-4 w-full rounded-lg border border-mid-gray">
-      <div className="flex justify-between items-center gap-2">
-        <div className="">
-          <p className="text-sm font-medium">
-            {t("accessibility.permissionsDescription")}
-          </p>
-        </div>
-        <button
-          onClick={handleButtonClick}
-          className={`min-h-10 ${config.className}`}
-        >
-          {config.text}
-        </button>
-      </div>
+    <div className="p-4 w-full rounded-lg border border-mid-gray flex flex-col gap-3">
+      {permissions.error !== null && (
+        <p className="text-sm text-red-400" role="alert">
+          {t(
+            permissions.error === "check"
+              ? "onboarding.permissions.errors.checkFailed"
+              : "onboarding.permissions.errors.requestFailed",
+          )}
+        </p>
+      )}
+      {recoveryActions.map((permission) => {
+        const isMicrophone = permission === "microphone";
+        const isWaiting = permissions[permission] === "waiting";
+        return (
+          <div
+            key={permission}
+            className="flex justify-between items-center gap-2"
+          >
+            <div>
+              <p className="text-sm font-medium">
+                {t(
+                  isMicrophone
+                    ? "onboarding.permissions.microphone.title"
+                    : "onboarding.permissions.accessibility.title",
+                )}
+              </p>
+              <p className="text-sm text-text/60">
+                {t(
+                  isMicrophone
+                    ? "onboarding.permissions.microphone.description"
+                    : "accessibility.permissionsDescription",
+                )}
+              </p>
+            </div>
+            <button
+              onClick={() => requestPermission(permission)}
+              disabled={isWaiting}
+              className="min-h-10 px-2 py-1 text-sm font-semibold bg-mid-gray/10 border border-mid-gray/80 hover:bg-logo-primary/10 rounded cursor-pointer hover:border-logo-primary disabled:cursor-wait disabled:opacity-60"
+            >
+              {isWaiting
+                ? t("onboarding.permissions.waiting")
+                : isMicrophone && permissions.platform === "macos"
+                  ? t("onboarding.permissions.grant")
+                  : t("accessibility.openSettings")}
+            </button>
+          </div>
+        );
+      })}
     </div>
   );
 };

@@ -1,5 +1,6 @@
-import React from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { SettingContainer } from "./SettingContainer";
+import { createSliderInteraction } from "./sliderDraft";
 
 interface SliderProps {
   value: number;
@@ -30,8 +31,46 @@ export const Slider: React.FC<SliderProps> = ({
   showValue = true,
   formatValue = (v) => v.toFixed(2),
 }) => {
+  const onChangeRef = useRef(onChange);
+  const [draftValue, setDraftValue] = useState(value);
+  const [interaction] = useState(() =>
+    createSliderInteraction(value, setDraftValue, (nextValue) =>
+      onChangeRef.current(nextValue),
+    ),
+  );
+
+  useEffect(() => {
+    onChangeRef.current = onChange;
+  }, [onChange]);
+
+  useEffect(() => {
+    interaction.sync(value);
+  }, [interaction, value]);
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    onChange(parseFloat(e.target.value));
+    const nextValue = parseFloat(e.target.value);
+    interaction.update(nextValue);
+  };
+
+  const handleCommit = () => {
+    interaction.finish();
+  };
+
+  const handlePointerDown = (e: React.PointerEvent<HTMLInputElement>) => {
+    interaction.begin();
+    e.currentTarget.setPointerCapture(e.pointerId);
+  };
+
+  const handlePointerCancel = () => {
+    interaction.cancel();
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    interaction.keyDown(e.key);
+  };
+
+  const handleKeyUp = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    interaction.keyUp(e.key);
   };
 
   return (
@@ -50,21 +89,27 @@ export const Slider: React.FC<SliderProps> = ({
             min={min}
             max={max}
             step={step}
-            value={value}
+            value={draftValue}
             onChange={handleChange}
+            onPointerDown={handlePointerDown}
+            onPointerUp={handleCommit}
+            onPointerCancel={handlePointerCancel}
+            onKeyDown={handleKeyDown}
+            onKeyUp={handleKeyUp}
+            onBlur={handleCommit}
             disabled={disabled}
             className="flex-grow h-2 rounded-lg appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-logo-primary disabled:opacity-50 disabled:cursor-not-allowed"
             style={{
               background: `linear-gradient(to right, var(--color-background-ui) ${
-                ((value - min) / (max - min)) * 100
+                ((draftValue - min) / (max - min)) * 100
               }%, rgba(128, 128, 128, 0.2) ${
-                ((value - min) / (max - min)) * 100
+                ((draftValue - min) / (max - min)) * 100
               }%)`,
             }}
           />
           {showValue && (
             <span className="text-sm font-medium text-text/90 w-12 text-end">
-              {formatValue(value)}
+              {formatValue(draftValue)}
             </span>
           )}
         </div>

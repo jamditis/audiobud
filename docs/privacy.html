@@ -32,7 +32,7 @@
     <meta property="og:image:height" content="630" />
     <meta
       property="og:image:alt"
-      content="AudioBud local dictation for Windows app interface"
+      content="AudioBud local dictation for Windows and macOS app interface"
     />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="AudioBud privacy policy" />
@@ -46,7 +46,7 @@
     />
     <meta
       name="twitter:image:alt"
-      content="AudioBud local dictation for Windows app interface"
+      content="AudioBud local dictation for Windows and macOS app interface"
     />
     <link rel="stylesheet" href="./styles.css" />
   </head>
@@ -228,8 +228,9 @@
                 activity is limited to actions such as downloading a model,
                 opening a project or release link, contacting a provider you
                 configured, or checking AudioBud's signed update feed. Automatic
-                update checks are enabled by default for current NSIS installs
-                and can be disabled in advanced settings.
+                update checks are enabled by default for Windows NSIS installs
+                and can be disabled in advanced settings. macOS uses manual
+                release downloads and does not check the in-app update feed.
               </p>
               <p>
                 Clipboard paste modes (Ctrl+V, Ctrl+Shift+V, and Shift+Insert)
@@ -274,15 +275,16 @@
               <h2>Downloads and external links</h2>
               <p>
                 Microsoft Store handles discovery and initial delivery for the
-                Store listing. GitHub handles AudioBud model downloads, direct
-                app releases, automatic update checks for installed NSIS
-                packages, and project links. The current Store v0.4.4 package is
-                an NSIS install and uses that same signed GitHub update feed.
-                The first Store v0.4.1 MSI requires one manual transition to
-                join it. Microsoft and GitHub can receive normal network
-                metadata such as your IP address, request time, and browser or
-                app headers when you use their services. You can disable GitHub
-                update checks in advanced settings.
+                Windows Store listing. GitHub handles AudioBud model downloads,
+                direct Windows and macOS releases, automatic update checks for
+                installed Windows NSIS packages, and project links. The current
+                Store v0.4.4 package is an NSIS install and uses that same
+                signed GitHub update feed. The first Store v0.4.1 MSI requires
+                one manual transition to join it. macOS uses manual GitHub
+                release downloads. Microsoft and GitHub can receive normal
+                network metadata such as your IP address, request time, and
+                browser or app headers when you use their services. You can
+                disable Windows GitHub update checks in advanced settings.
               </p>
             </section>
 

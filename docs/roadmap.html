@@ -6,7 +6,7 @@
     <title>AudioBud roadmap</title>
     <meta
       name="description"
-      content="Milestones and status for AudioBud, the local-first Windows dictation app: what has shipped and what is planned next."
+      content="Milestones and status for AudioBud, the local-first Windows and macOS dictation app: what has shipped and what is planned next."
     />
     <link rel="canonical" href="https://audiobud.amditis.tech/roadmap.html" />
     <link
@@ -17,7 +17,7 @@
     <meta property="og:title" content="AudioBud roadmap" />
     <meta
       property="og:description"
-      content="What has shipped and what is planned next for AudioBud, the local-first Windows dictation app."
+      content="What has shipped and what is planned next for AudioBud, the local-first Windows and macOS dictation app."
     />
     <meta property="og:type" content="website" />
     <meta
@@ -32,13 +32,13 @@
     <meta property="og:image:height" content="630" />
     <meta
       property="og:image:alt"
-      content="AudioBud local dictation for Windows app interface"
+      content="AudioBud local dictation for Windows and macOS app interface"
     />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="AudioBud roadmap" />
     <meta
       name="twitter:description"
-      content="What has shipped and what is planned next for AudioBud, the local-first Windows dictation app."
+      content="What has shipped and what is planned next for AudioBud, the local-first Windows and macOS dictation app."
     />
     <meta
       name="twitter:image"
@@ -46,7 +46,7 @@
     />
     <meta
       name="twitter:image:alt"
-      content="AudioBud local dictation for Windows app interface"
+      content="AudioBud local dictation for Windows and macOS app interface"
     />
     <link rel="stylesheet" href="./styles.css" />
     <script src="./site.js" defer></script>
@@ -87,7 +87,7 @@
           <div class="roadmap-grid">
             <article class="roadmap-card" data-reveal>
               <div class="roadmap-card-head">
-                <h3>v0.6.0 &mdash; transcription quality</h3>
+                <h3>Next &mdash; transcription quality</h3>
                 <span class="status-pill status-planned">planned</span>
               </div>
               <p>
@@ -134,13 +134,14 @@
             </article>
             <article class="roadmap-card" data-reveal data-reveal-delay="1">
               <div class="roadmap-card-head">
-                <h3>v1.0.0 &mdash; platform decision</h3>
+                <h3>v1.0.0 &mdash; remaining platforms</h3>
                 <span class="status-pill status-planned">planned</span>
               </div>
               <p>
-                Finish the rebrand down to the plumbing, then make an explicit
-                call on macOS and Linux: validate them, or hand them back to
-                upstream. Right now nothing tests either one.
+                Finish the rebrand down to the plumbing, then decide whether to
+                validate Intel Mac and Linux builds or leave them as unsupported
+                source-build paths. Apple Silicon macOS is the active v0.6.0
+                release candidate.
               </p>
               <a
                 class="roadmap-link"
@@ -155,13 +156,31 @@
       <section class="section alt">
         <div class="wrap">
           <div class="section-head" data-reveal>
-            <h2>What has shipped.</h2>
+            <h2>Release status.</h2>
             <p>
               Recent releases and distribution updates. The changelog has every
               patch-level detail.
             </p>
           </div>
           <div class="roadmap-grid">
+            <article class="roadmap-card">
+              <div class="roadmap-card-head">
+                <h3>v0.6.0</h3>
+                <span class="status-pill status-in-progress">candidate</span>
+              </div>
+              <p>
+                The Apple Silicon candidate prepares a signed and notarized
+                macOS DMG, a protected Apple release workflow, and permission,
+                shortcut, settings, input, audio, and model-loading recovery
+                fixes shared with Windows. Publication waits for the clean-Mac,
+                remote candidate, and exact draft-asset gates.
+              </p>
+              <a
+                class="roadmap-link"
+                href="https://github.com/jamditis/audiobud/blob/main/RELEASE_NOTES.md"
+                >Read draft notes &rarr;</a
+              >
+            </article>
             <article class="roadmap-card">
               <div class="roadmap-card-head">
                 <h3>v0.5.0</h3>
@@ -393,7 +412,7 @@
             <img class="brand-mark" src="./favicon.svg" alt="" />
             <span>AudioBud</span>
           </a>
-          <p>Local dictation for Windows. MIT licensed.</p>
+          <p>Windows release · Apple Silicon macOS candidate · MIT licensed.</p>
         </div>
         <nav class="footer-links" aria-label="Footer">
           <a href="https://apps.microsoft.com/detail/xpff8hfmd98gnd"

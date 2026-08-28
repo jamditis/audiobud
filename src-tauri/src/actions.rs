@@ -705,20 +705,24 @@ impl ShortcutAction for TranscribeAction {
 
         let mut recording_error: Option<String> = None;
         if is_always_on {
-            // Always-on mode: Play audio feedback immediately, then apply mute after sound finishes
-            debug!("Always-on mode: Playing audio feedback immediately");
-            let rm_clone = Arc::clone(&rm);
-            let app_clone = app.clone();
-            // The blocking helper exits immediately if audio feedback is disabled,
-            // so we can always reuse this thread to ensure mute happens right after playback.
-            std::thread::spawn(move || {
-                play_feedback_sound_blocking(&app_clone, SoundType::Start);
-                rm_clone.apply_mute();
-            });
-
-            if let Err(e) = rm.try_start_recording(&binding_id) {
-                debug!("Recording failed: {}", e);
-                recording_error = Some(e);
+            // Always-on mode already has an open stream. Start the recording
+            // before scheduling feedback so failed starts cannot mute output.
+            debug!("Always-on mode: Starting recording before audio feedback");
+            match rm.try_start_recording(&binding_id) {
+                Ok(mute_generation) => {
+                    let rm_clone = Arc::clone(&rm);
+                    let app_clone = app.clone();
+                    // The generation check rejects this work if a quick key
+                    // release stops the recording before feedback finishes.
+                    std::thread::spawn(move || {
+                        play_feedback_sound_blocking(&app_clone, SoundType::Start);
+                        rm_clone.apply_mute_for_recording(mute_generation);
+                    });
+                }
+                Err(e) => {
+                    debug!("Recording failed: {}", e);
+                    recording_error = Some(e);
+                }
             }
         } else {
             // On-demand mode: Start recording first, then play audio feedback, then apply mute
@@ -726,7 +730,7 @@ impl ShortcutAction for TranscribeAction {
             debug!("On-demand mode: Starting recording first, then audio feedback");
             let recording_start_time = Instant::now();
             match rm.try_start_recording(&binding_id) {
-                Ok(()) => {
+                Ok(mute_generation) => {
                     debug!("Recording started in {:?}", recording_start_time.elapsed());
                     // Small delay to ensure microphone stream is active
                     let app_clone = app.clone();
@@ -737,7 +741,7 @@ impl ShortcutAction for TranscribeAction {
                         // Helper handles disabled audio feedback by returning early, so we reuse it
                         // to keep mute sequencing consistent in every mode.
                         play_feedback_sound_blocking(&app_clone, SoundType::Start);
-                        rm_clone.apply_mute();
+                        rm_clone.apply_mute_for_recording(mute_generation);
                     });
                 }
                 Err(e) => {
@@ -813,7 +817,7 @@ impl ShortcutAction for TranscribeAction {
         show_transcribing_overlay(app, effective_raw);
 
         // Unmute before playing audio feedback so the stop sound is audible
-        rm.remove_mute();
+        rm.finish_mute_for_recording(binding_id);
 
         // Play audio feedback for recording stop
         play_feedback_sound(app, SoundType::Stop);

@@ -31,29 +31,141 @@ use crate::tray;
 
 // Note: Commands are accessed via shortcut::handy_keys:: in lib.rs
 
+const UNCERTAIN_SHORTCUT_STATE: &str = "shortcut state may remain active";
+const PRIMARY_SHORTCUT_ID: &str = "transcribe";
+
+pub(crate) fn initialization_error_allows_retry(error: &str) -> bool {
+    !error.contains(UNCERTAIN_SHORTCUT_STATE)
+}
+
+fn with_retry_safe_handy_keys_fallback<T, F>(handy_error: String, fallback: F) -> Result<T, String>
+where
+    F: FnOnce() -> Result<T, String>,
+{
+    if !initialization_error_allows_retry(&handy_error) {
+        return Err(handy_error);
+    }
+    fallback()
+}
+
+/// Commits a fallback that is already live.
+///
+/// If persistence fails, remove the live fallback so runtime routing continues
+/// to agree with the backend named in settings. A failed cleanup makes the
+/// backend state uncertain and requires a restart.
+fn commit_initialized_fallback<Persist, Cleanup>(
+    persist: Persist,
+    cleanup: Cleanup,
+) -> Result<(), String>
+where
+    Persist: FnOnce() -> Result<(), String>,
+    Cleanup: FnOnce() -> Result<(), String>,
+{
+    let Err(persist_error) = persist() else {
+        return Ok(());
+    };
+
+    match cleanup() {
+        Ok(()) => Err(format!(
+            "Failed to persist the Tauri shortcut fallback: {persist_error}. The live Tauri fallback was removed; retry shortcut initialization."
+        )),
+        Err(cleanup_error) => Err(format!(
+            "Failed to persist the Tauri shortcut fallback: {persist_error}. Failed to remove the live Tauri fallback: {cleanup_error}; {UNCERTAIN_SHORTCUT_STATE}; restart AudioBud before retrying shortcut initialization"
+        )),
+    }
+}
+
+pub(super) fn configured_initial_bindings(app: &AppHandle) -> Vec<(String, ShortcutBinding)> {
+    let default_bindings = settings::get_default_settings().bindings;
+    let user_settings = settings::load_or_create_app_settings(app);
+
+    default_bindings
+        .into_iter()
+        .filter(|(id, _)| id != "cancel")
+        .filter(|(id, _)| {
+            id != "transcribe_with_post_process" || user_settings.post_process_enabled
+        })
+        .map(|(id, default_binding)| {
+            let binding = user_settings
+                .bindings
+                .get(&id)
+                .cloned()
+                .unwrap_or(default_binding);
+            (id, binding)
+        })
+        .collect()
+}
+
+pub(super) fn register_initial_bindings<Register, Unregister>(
+    mut bindings: Vec<(String, ShortcutBinding)>,
+    mut register: Register,
+    mut unregister: Unregister,
+) -> Result<(), String>
+where
+    Register: FnMut(&ShortcutBinding) -> Result<(), String>,
+    Unregister: FnMut(&ShortcutBinding) -> Result<(), String>,
+{
+    let primary_index = bindings
+        .iter()
+        .position(|(id, _)| id == PRIMARY_SHORTCUT_ID)
+        .ok_or_else(|| format!("Required shortcut '{PRIMARY_SHORTCUT_ID}' is not configured"))?;
+    let (primary_id, primary_binding) = bindings.remove(primary_index);
+
+    if let Err(error) = register(&primary_binding) {
+        let registration_error = format!("Failed to register shortcut '{primary_id}': {error}");
+        if let Err(cleanup_error) = unregister(&primary_binding) {
+            warn!(
+                "Failed to clean up shortcut '{}': {}",
+                primary_binding.id, cleanup_error
+            );
+            return Err(format!(
+                "{registration_error}; cleanup failed for '{}': {cleanup_error}; {UNCERTAIN_SHORTCUT_STATE}; restart AudioBud before retrying shortcut initialization",
+                primary_binding.id
+            ));
+        }
+        return Err(registration_error);
+    }
+
+    for (id, binding) in bindings {
+        if let Err(error) = register(&binding) {
+            warn!("Failed to register optional shortcut '{id}': {error}");
+        }
+    }
+
+    Ok(())
+}
+
 /// Initialize shortcuts using the configured implementation
-pub fn init_shortcuts(app: &AppHandle) {
+pub fn init_shortcuts(app: &AppHandle) -> Result<(), String> {
     let user_settings = settings::load_or_create_app_settings(app);
 
     // Check which implementation to use
     match user_settings.keyboard_implementation {
-        KeyboardImplementation::Tauri => {
-            tauri_impl::init_shortcuts(app);
-        }
+        KeyboardImplementation::Tauri => tauri_impl::init_shortcuts(app),
         KeyboardImplementation::HandyKeys => {
-            if let Err(e) = handy_keys::init_shortcuts(app) {
-                error!("Failed to initialize handy-keys shortcuts: {}", e);
-                // Fall back to Tauri implementation and persist this fallback
-                warn!("Falling back to Tauri global shortcut implementation and saving fallback to settings");
+            match handy_keys::init_shortcuts(app) {
+                Ok(()) => Ok(()),
+                Err(handy_error) => {
+                    error!("Failed to initialize handy-keys shortcuts: {handy_error}");
+                    let error_context = handy_error.clone();
+                    with_retry_safe_handy_keys_fallback(handy_error, || {
+                        warn!("Falling back to Tauri global shortcut implementation");
 
-                // Update settings to persist the fallback so we don't retry HandyKeys on next launch
-                let mut settings = settings::get_settings(app);
-                settings.keyboard_implementation = KeyboardImplementation::Tauri;
-                if let Err(e) = settings::write_settings(app, settings) {
-                    warn!("Failed to persist the handy-keys fallback: {e}");
+                        tauri_impl::init_shortcuts(app).map_err(|tauri_error| {
+                            format!(
+                                "HandyKeys initialization failed: {error_context}. Tauri fallback failed: {tauri_error}"
+                            )
+                        })?;
+
+                        // Persist only after the fallback has working shortcuts.
+                        let mut current_settings = settings::get_settings(app);
+                        current_settings.keyboard_implementation = KeyboardImplementation::Tauri;
+                        commit_initialized_fallback(
+                            || settings::write_settings(app, current_settings),
+                            || unregister_all_shortcuts(app, KeyboardImplementation::Tauri),
+                        )
+                    })
                 }
-
-                tauri_impl::init_shortcuts(app);
             }
         }
     }
@@ -316,7 +428,11 @@ pub fn change_keyboard_implementation_setting(
     settings::write_settings(&app, settings)?;
 
     // Unregister all shortcuts from the current implementation
-    unregister_all_shortcuts(&app, current_impl);
+    unregister_all_shortcuts(&app, current_impl).map_err(|cleanup_error| {
+        format!(
+            "Failed to remove the current shortcut backend: {cleanup_error}; {UNCERTAIN_SHORTCUT_STATE}; restart AudioBud before retrying the backend switch"
+        )
+    })?;
 
     // Initialize new implementation if needed (HandyKeys needs state)
     if new_impl == KeyboardImplementation::HandyKeys && initialize_handy_keys_with_rollback(&app)? {
@@ -390,12 +506,18 @@ fn parse_keyboard_implementation(s: &str) -> KeyboardImplementation {
 }
 
 /// Unregister all shortcuts for the current implementation
-fn unregister_all_shortcuts(app: &AppHandle, implementation: KeyboardImplementation) {
-    let bindings = settings::get_bindings(app);
+fn unregister_all_shortcuts(
+    app: &AppHandle,
+    implementation: KeyboardImplementation,
+) -> Result<(), String> {
+    let current_settings = settings::get_settings(app);
+    let mut failures = Vec::new();
 
-    for (id, binding) in bindings {
+    for (id, binding) in current_settings.bindings {
         // Skip cancel shortcut as it's dynamically registered
-        if id == "cancel" {
+        if id == "cancel"
+            || (id == "transcribe_with_post_process" && !current_settings.post_process_enabled)
+        {
             continue;
         }
 
@@ -409,7 +531,14 @@ fn unregister_all_shortcuts(app: &AppHandle, implementation: KeyboardImplementat
                 "Failed to unregister shortcut '{}' during switch: {}",
                 id, e
             );
+            failures.push(format!("{id}: {e}"));
         }
+    }
+
+    if failures.is_empty() {
+        Ok(())
+    } else {
+        Err(failures.join("; "))
     }
 }
 
@@ -497,21 +626,27 @@ fn initialize_handy_keys_with_rollback(app: &AppHandle) -> Result<bool, String> 
         return Ok(false); // Already initialized, caller should continue
     }
 
-    if let Err(e) = handy_keys::init_shortcuts(app) {
-        error!("Failed to initialize HandyKeys: {}", e);
-        // Rollback to Tauri
-        let mut settings = settings::get_settings(app);
-        settings.keyboard_implementation = KeyboardImplementation::Tauri;
-        // The init failure below is what the caller needs to see; log a
-        // failed revert rather than replacing that error with this one.
-        if let Err(revert_err) = settings::write_settings(app, settings) {
-            warn!("Failed to persist the Tauri rollback: {revert_err}");
-        }
-        tauri_impl::init_shortcuts(app);
-        return Err(format!(
-            "Failed to initialize HandyKeys: {}. Reverted to Tauri.",
-            e
-        ));
+    if let Err(handy_error) = handy_keys::init_shortcuts(app) {
+        error!("Failed to initialize HandyKeys: {handy_error}");
+        let error_context = handy_error.clone();
+        return with_retry_safe_handy_keys_fallback(handy_error, || {
+            // Rollback to Tauri
+            let mut settings = settings::get_settings(app);
+            settings.keyboard_implementation = KeyboardImplementation::Tauri;
+            settings::write_settings(app, settings).map_err(|revert_error| {
+                format!(
+                    "Failed to initialize HandyKeys: {error_context}. Tauri rollback was not started because its setting could not be saved: {revert_error}"
+                )
+            })?;
+            if let Err(fallback_error) = tauri_impl::init_shortcuts(app) {
+                return Err(format!(
+                    "Failed to initialize HandyKeys: {error_context}. Tauri rollback also failed: {fallback_error}"
+                ));
+            }
+            Err(format!(
+                "Failed to initialize HandyKeys: {error_context}. Reverted to Tauri."
+            ))
+        });
     }
 
     // init_shortcuts already registered shortcuts
@@ -1221,6 +1356,37 @@ pub async fn get_available_accelerators() -> crate::managers::transcription::Ava
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::cell::RefCell;
+
+    #[derive(Default)]
+    struct ShortcutBackendModel {
+        active: Vec<String>,
+        fail_next_registration: Option<String>,
+        activate_before_failure: bool,
+        fail_cleanup: bool,
+    }
+
+    impl ShortcutBackendModel {
+        fn register(&mut self, binding: &ShortcutBinding) -> Result<(), String> {
+            if self.fail_next_registration.as_deref() == Some(binding.id.as_str()) {
+                self.fail_next_registration = None;
+                if self.activate_before_failure {
+                    self.active.push(binding.id.clone());
+                }
+                return Err("simulated backend failure".to_string());
+            }
+            self.active.push(binding.id.clone());
+            Ok(())
+        }
+
+        fn unregister(&mut self, binding: &ShortcutBinding) -> Result<(), String> {
+            if self.fail_cleanup {
+                return Err("simulated cleanup failure".to_string());
+            }
+            self.active.retain(|id| id != &binding.id);
+            Ok(())
+        }
+    }
 
     #[test]
     fn external_script_path_requires_confirmation_when_armed() {
@@ -1368,6 +1534,182 @@ mod tests {
                 effects_for_setting(key).is_empty(),
                 "unexpected effect for '{key}'"
             );
+        }
+    }
+
+    #[test]
+    fn successful_rollback_leaves_a_later_initialization_retry_safe() {
+        let bindings = vec![
+            ("transcribe".to_string(), test_binding("transcribe")),
+            ("second".to_string(), test_binding("second")),
+        ];
+        let backend = RefCell::new(ShortcutBackendModel {
+            fail_next_registration: Some("transcribe".to_string()),
+            activate_before_failure: true,
+            ..ShortcutBackendModel::default()
+        });
+
+        let first_result = register_initial_bindings(
+            bindings.clone(),
+            |binding| backend.borrow_mut().register(binding),
+            |binding| backend.borrow_mut().unregister(binding),
+        );
+
+        assert_eq!(
+            first_result,
+            Err("Failed to register shortcut 'transcribe': simulated backend failure".to_string())
+        );
+        assert!(backend.borrow().active.is_empty());
+
+        let second_result = register_initial_bindings(
+            bindings,
+            |binding| backend.borrow_mut().register(binding),
+            |binding| backend.borrow_mut().unregister(binding),
+        );
+
+        assert_eq!(second_result, Ok(()));
+        assert_eq!(backend.borrow().active, vec!["transcribe", "second"]);
+    }
+
+    #[test]
+    fn optional_registration_failure_keeps_the_primary_shortcut_active() {
+        let backend = RefCell::new(ShortcutBackendModel {
+            fail_next_registration: Some("second".to_string()),
+            ..ShortcutBackendModel::default()
+        });
+
+        let result = register_initial_bindings(
+            vec![
+                ("transcribe".to_string(), test_binding("transcribe")),
+                ("second".to_string(), test_binding("second")),
+            ],
+            |binding| backend.borrow_mut().register(binding),
+            |binding| backend.borrow_mut().unregister(binding),
+        );
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(backend.borrow().active, vec!["transcribe"]);
+    }
+
+    #[test]
+    fn rollback_failure_reports_that_shortcut_state_may_remain_active() {
+        let backend = RefCell::new(ShortcutBackendModel {
+            fail_next_registration: Some("transcribe".to_string()),
+            activate_before_failure: true,
+            fail_cleanup: true,
+            ..ShortcutBackendModel::default()
+        });
+
+        let result = register_initial_bindings(
+            vec![
+                ("transcribe".to_string(), test_binding("transcribe")),
+                ("second".to_string(), test_binding("second")),
+            ],
+            |binding| backend.borrow_mut().register(binding),
+            |binding| backend.borrow_mut().unregister(binding),
+        );
+
+        assert_eq!(
+            result,
+            Err(
+                "Failed to register shortcut 'transcribe': simulated backend failure; cleanup failed for 'transcribe': simulated cleanup failure; shortcut state may remain active; restart AudioBud before retrying shortcut initialization"
+                    .to_string()
+            )
+        );
+        assert_eq!(backend.borrow().active, vec!["transcribe"]);
+        assert!(!initialization_error_allows_retry(
+            result.as_ref().unwrap_err()
+        ));
+    }
+
+    #[test]
+    fn uncertain_shortcut_state_does_not_start_a_fallback_backend() {
+        let fallback_started = std::cell::Cell::new(false);
+        let cleanup_error =
+            "shortcut state may remain active; restart AudioBud before retrying".to_string();
+
+        let result = with_retry_safe_handy_keys_fallback(cleanup_error.clone(), || {
+            fallback_started.set(true);
+            Ok(())
+        });
+
+        assert_eq!(result, Err(cleanup_error));
+        assert!(!fallback_started.get());
+    }
+
+    #[test]
+    fn retry_safe_handy_keys_error_can_start_the_tauri_fallback() {
+        let fallback_started = std::cell::Cell::new(false);
+
+        let result = with_retry_safe_handy_keys_fallback(
+            "HandyKeys manager startup timed out".to_string(),
+            || {
+                fallback_started.set(true);
+                Ok(())
+            },
+        );
+
+        assert_eq!(result, Ok(()));
+        assert!(fallback_started.get());
+    }
+
+    #[test]
+    fn failed_fallback_persistence_removes_the_live_fallback() {
+        let cleanup_called = std::cell::Cell::new(false);
+
+        let result = commit_initialized_fallback(
+            || Err("simulated settings write failure".to_string()),
+            || {
+                cleanup_called.set(true);
+                Ok(())
+            },
+        );
+
+        assert!(cleanup_called.get());
+        assert_eq!(
+            result,
+            Err(
+                "Failed to persist the Tauri shortcut fallback: simulated settings write failure. The live Tauri fallback was removed; retry shortcut initialization."
+                    .to_string()
+            )
+        );
+    }
+
+    #[test]
+    fn failed_fallback_cleanup_marks_shortcut_state_uncertain() {
+        let result = commit_initialized_fallback(
+            || Err("simulated settings write failure".to_string()),
+            || Err("simulated cleanup failure".to_string()),
+        );
+
+        let error = result.expect_err("failed persistence and cleanup must fail");
+        assert!(error.contains(UNCERTAIN_SHORTCUT_STATE));
+        assert!(!initialization_error_allows_retry(&error));
+    }
+
+    #[test]
+    fn persisted_fallback_keeps_the_live_backend() {
+        let cleanup_called = std::cell::Cell::new(false);
+
+        let result = commit_initialized_fallback(
+            || Ok(()),
+            || {
+                cleanup_called.set(true);
+                Ok(())
+            },
+        );
+
+        assert_eq!(result, Ok(()));
+        assert!(!cleanup_called.get());
+    }
+
+    fn test_binding(id: &str) -> ShortcutBinding {
+        ShortcutBinding {
+            id: id.to_string(),
+            name: id.to_string(),
+            description: String::new(),
+            default_binding: "ctrl+a".to_string(),
+            current_binding: "ctrl+a".to_string(),
         }
     }
 

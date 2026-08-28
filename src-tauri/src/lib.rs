@@ -6,12 +6,6 @@ pub mod audio_toolkit;
 pub mod cli;
 mod clipboard;
 mod clipboard_snapshot;
-// Voice-command grammar (#7). Not yet wired into the dictation pipeline: the
-// mode boundary that decides when a phrase is a command versus dictation is a
-// separate, still-open design step, so the parser is intentionally unused until
-// that lands.
-#[allow(dead_code)]
-mod command;
 mod commands;
 mod delivery_queue;
 mod delivery_worker;
@@ -57,6 +51,7 @@ use tauri::tray::TrayIconBuilder;
 use tauri::{AppHandle, Emitter, Listener, Manager};
 use tauri_plugin_autostart::{MacosLauncher, ManagerExt};
 use tauri_plugin_log::{Builder as LogBuilder, RotationStrategy, Target, TargetKind};
+#[cfg(target_os = "windows")]
 use tauri_plugin_updater::UpdaterExt;
 
 use crate::settings::get_settings;
@@ -68,6 +63,7 @@ pub static FILE_LOG_LEVEL: AtomicU8 = AtomicU8::new(log::LevelFilter::Debug as u
 // The updater plugin deserializes `plugins.updater` from tauri.conf.json at app
 // startup. Keep this in lockstep with that block and the frontend gate in
 // src/lib/updater.ts; the test below enforces the backend/config half.
+#[cfg(any(target_os = "windows", test))]
 const UPDATER_FEED_READY: bool = true;
 
 fn nsis_update_channel_available(
@@ -97,6 +93,7 @@ pub(crate) fn update_checks_action_enabled(setting_enabled: bool) -> bool {
     update_checks_action_enabled_for_channel(setting_enabled, update_channel_available())
 }
 
+#[cfg(any(target_os = "windows", test))]
 fn ensure_cli_update_supported(
     is_portable: bool,
     is_windows: bool,
@@ -120,6 +117,7 @@ fn ensure_cli_update_supported(
     Ok(())
 }
 
+#[cfg(target_os = "windows")]
 async fn install_available_update(
     app: AppHandle,
     verification_endpoint: Option<String>,
@@ -170,6 +168,14 @@ async fn install_available_update(
         .await
         .map_err(|error| format!("Failed to download or install signed update: {error}"))?;
     Ok(true)
+}
+
+#[cfg(not(target_os = "windows"))]
+async fn install_available_update(
+    _app: AppHandle,
+    _verification_endpoint: Option<String>,
+) -> Result<bool, String> {
+    Err("Automatic updates are currently supported only on Windows".to_string())
 }
 
 /// Drain the delivery worker (#161) before exiting the process, so no exit
@@ -356,7 +362,7 @@ fn initialize_core_logic(app_handle: &AppHandle) {
     // This matches the pattern used for Enigo initialization.
 
     #[cfg(unix)]
-    let signals = Signals::new(&[SIGUSR1, SIGUSR2]).unwrap();
+    let signals = Signals::new([SIGUSR1, SIGUSR2]).unwrap();
     // Set up signal handlers for toggling transcription
     #[cfg(unix)]
     signal_handle::setup_signal_handler(app_handle.clone(), signals);
@@ -805,8 +811,11 @@ pub fn run(cli_args: CliArgs) {
     // Registering it without a `plugins.updater` block in tauri.conf.json panics
     // at startup (issue #32); UPDATER_FEED_READY keeps this in step with the
     // frontend gate and the config (see the const and test).
-    if UPDATER_FEED_READY {
-        builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
+    #[cfg(target_os = "windows")]
+    {
+        if UPDATER_FEED_READY {
+            builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
+        }
     }
 
     builder
@@ -939,7 +948,7 @@ pub fn run(cli_args: CliArgs) {
 
                 #[cfg(target_os = "macos")]
                 {
-                    let settings = get_settings(&window.app_handle());
+                    let settings = get_settings(window.app_handle());
                     let tray_visible =
                         settings.show_tray_icon && !window.app_handle().state::<CliArgs>().no_tray;
                     if tray_visible {

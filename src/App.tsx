@@ -4,10 +4,6 @@ import { useTranslation } from "react-i18next";
 import { listen } from "@tauri-apps/api/event";
 import { platform } from "@tauri-apps/plugin-os";
 import {
-  checkMacOSAccessibilityPermission,
-  checkMacOSMicrophonePermission,
-} from "@/lib/macos-permissions";
-import {
   ModelStateEvent,
   RecordingErrorEvent,
   TranscriptionErrorEvent,
@@ -20,6 +16,7 @@ import Onboarding, { AccessibilityOnboarding } from "./components/onboarding";
 import { Sidebar, SidebarSection, SECTIONS_CONFIG } from "./components/Sidebar";
 import SwampBackground from "./components/SwampBackground";
 import { useSettings } from "./hooks/useSettings";
+import { usePermissionController } from "./hooks/usePermissionController";
 import { useSettingsStore } from "./stores/settingsStore";
 import { commands, events } from "@/bindings";
 import { getLanguageDirection, initializeRTL } from "@/lib/utils/rtl";
@@ -31,6 +28,7 @@ import {
   formatDeliveredWindowName,
   truncateName,
 } from "@/lib/output-target-indicator";
+import { claimPermissionCompletion } from "@/lib/permission-controller";
 
 type OnboardingStep = "accessibility" | "model" | "done";
 const PRODUCT_NAME = "AudioBud";
@@ -65,11 +63,40 @@ function App() {
     (state) => state.refreshOutputDevices,
   );
   const refreshSettings = useSettingsStore((state) => state.refreshSettings);
+  const permissions = usePermissionController();
   const hasCompletedPostOnboardingInit = useRef(false);
+  const permissionCompletionGuard = useRef({ completed: false });
 
   useEffect(() => {
     checkOnboardingStatus();
   }, []);
+
+  useEffect(() => {
+    if (onboardingStep !== "accessibility") return;
+    if (
+      !claimPermissionCompletion(
+        permissionCompletionGuard.current,
+        permissions.allGranted,
+      )
+    ) {
+      return;
+    }
+
+    let cancelled = false;
+    let didComplete = false;
+    const completionTimer = setTimeout(() => {
+      if (!cancelled) {
+        didComplete = true;
+        setOnboardingStep(isReturningUser ? "done" : "model");
+      }
+    }, 300);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(completionTimer);
+      if (!didComplete) permissionCompletionGuard.current.completed = false;
+    };
+  }, [isReturningUser, onboardingStep, permissions.allGranted]);
 
   // Initialize RTL direction when language changes
   useEffect(() => {
@@ -346,66 +373,42 @@ function App() {
 
   const checkOnboardingStatus = async () => {
     try {
-      // Check if they have any models available
-      const result = await commands.hasAnyModelsAvailable();
-      const hasModels = result.status === "ok" && result.data;
-      const currentPlatform = platform();
+      const [modelResult, permissionResult] = await Promise.allSettled([
+        commands.hasAnyModelsAvailable(),
+        permissions.check(),
+      ]);
+      const hasModels =
+        modelResult.status === "fulfilled" &&
+        modelResult.value.status === "ok" &&
+        modelResult.value.data;
+      setIsReturningUser(hasModels);
+
+      if (permissionResult.status === "rejected") {
+        console.error(
+          "Failed to check system permissions:",
+          permissionResult.reason,
+        );
+        await revealMainWindowForPermissions();
+        setOnboardingStep("accessibility");
+        return;
+      }
 
       if (hasModels) {
-        // Returning user - check if they need to grant permissions first
-        setIsReturningUser(true);
-
-        if (currentPlatform === "macos") {
-          try {
-            const [hasAccessibility, hasMicrophone] = await Promise.all([
-              checkMacOSAccessibilityPermission(),
-              checkMacOSMicrophonePermission(),
-            ]);
-            if (!hasAccessibility || !hasMicrophone) {
-              await revealMainWindowForPermissions();
-              setOnboardingStep("accessibility");
-              return;
-            }
-          } catch (e) {
-            console.warn("Failed to check macOS permissions:", e);
-            // If we can't check, proceed to main app and let them fix it there
-          }
-        }
-
-        if (currentPlatform === "windows") {
-          try {
-            const microphoneStatus =
-              await commands.getWindowsMicrophonePermissionStatus();
-            if (
-              microphoneStatus.supported &&
-              microphoneStatus.overall_access === "denied"
-            ) {
-              await revealMainWindowForPermissions();
-              setOnboardingStep("accessibility");
-              return;
-            }
-          } catch (e) {
-            console.warn("Failed to check Windows microphone permissions:", e);
-            // If we can't check, proceed to main app and let them fix it there
-          }
+        if (!permissionResult.value.allGranted) {
+          await revealMainWindowForPermissions();
+          setOnboardingStep("accessibility");
+          return;
         }
 
         setOnboardingStep("done");
       } else {
         // New user - start full onboarding
-        setIsReturningUser(false);
         setOnboardingStep("accessibility");
       }
     } catch (error) {
       console.error("Failed to check onboarding status:", error);
       setOnboardingStep("accessibility");
     }
-  };
-
-  const handleAccessibilityComplete = () => {
-    // Returning users already have models, skip to main app
-    // New users need to select a model
-    setOnboardingStep(isReturningUser ? "done" : "model");
   };
 
   const handleModelSelected = () => {
@@ -419,7 +422,13 @@ function App() {
   }
 
   if (onboardingStep === "accessibility") {
-    return <AccessibilityOnboarding onComplete={handleAccessibilityComplete} />;
+    return (
+      <AccessibilityOnboarding
+        permissions={permissions}
+        onRequestAccessibility={permissions.requestAccessibility}
+        onRequestMicrophone={permissions.requestMicrophone}
+      />
+    );
   }
 
   if (onboardingStep === "model") {
@@ -475,7 +484,11 @@ function App() {
               key={currentSection}
               className="app-content flex flex-col items-center gap-4"
             >
-              <AccessibilityPermissions />
+              <AccessibilityPermissions
+                permissions={permissions}
+                onRequestAccessibility={permissions.requestAccessibility}
+                onRequestMicrophone={permissions.requestMicrophone}
+              />
               {renderSettingsContent(currentSection, setCurrentSection)}
             </div>
           </div>

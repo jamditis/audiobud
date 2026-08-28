@@ -29,12 +29,11 @@ function reduceMotionQuery(): MediaQueryList | null {
  * Subscribe to a media query across both listener APIs, returning the
  * unsubscribe.
  *
- * `tauri.conf.json` still sets `minimumSystemVersion: "10.15"`, and Catalina's
- * WKWebView predates `MediaQueryList.addEventListener` (Safari 14) while still
- * implementing `matchMedia`. So the object exists, passes the null check, and
- * throws when subscribed to. This hook mounts inside both LiveFrog and
- * RecordingOverlay, so that throw would take the window's UI with it — a blank
- * app because of an animation preference.
+ * Keep the legacy listener fallback even though v0.6.0 requires macOS 11.
+ * A restored or embedded WebView can still expose `matchMedia` without the
+ * modern listener methods. This hook mounts inside both LiveFrog and
+ * RecordingOverlay, so an unguarded subscription error would blank the window
+ * because of an animation preference.
  *
  * Exported for the test: the fallback branch cannot run in a modern engine, so
  * the only way to prove it works is to call it with a query object shaped like

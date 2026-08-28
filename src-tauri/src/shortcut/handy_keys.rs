@@ -36,11 +36,14 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
+use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager};
 
 use crate::settings::{self, get_settings, ShortcutBinding};
 
 use super::handler::handle_shortcut_event;
+
+const MANAGER_STARTUP_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// Commands that can be sent to the hotkey manager thread
 enum ManagerCommand {
@@ -89,12 +92,25 @@ impl HandyKeysState {
     /// Create a new HandyKeysState
     pub fn new(app: AppHandle) -> Result<Self, String> {
         let (cmd_tx, cmd_rx) = mpsc::channel::<ManagerCommand>();
+        let (startup_tx, startup_rx) = mpsc::channel::<Result<(), String>>();
+        let startup_cancelled = Arc::new(AtomicBool::new(false));
 
         // Start the manager thread
         let app_clone = app.clone();
+        let thread_cancelled = Arc::clone(&startup_cancelled);
         let thread_handle = thread::spawn(move || {
-            Self::manager_thread(cmd_rx, app_clone);
+            Self::manager_thread(cmd_rx, app_clone, startup_tx, thread_cancelled);
         });
+
+        if let Err(error) =
+            wait_for_manager_startup(startup_rx, &startup_cancelled, MANAGER_STARTUP_TIMEOUT)
+        {
+            // The manager checks cancellation before it publishes startup and
+            // exits without entering its command loop. Dropping the handle
+            // keeps this error path bounded while native startup unwinds.
+            drop(thread_handle);
+            return Err(error);
+        }
 
         Ok(Self {
             command_sender: Mutex::new(cmd_tx),
@@ -107,17 +123,36 @@ impl HandyKeysState {
     }
 
     /// The main manager thread - owns the HotkeyManager and processes commands
-    fn manager_thread(cmd_rx: Receiver<ManagerCommand>, app: AppHandle) {
+    fn manager_thread(
+        cmd_rx: Receiver<ManagerCommand>,
+        app: AppHandle,
+        startup_tx: Sender<Result<(), String>>,
+        startup_cancelled: Arc<AtomicBool>,
+    ) {
         info!("handy-keys manager thread started");
+
+        if startup_cancelled.load(Ordering::SeqCst) {
+            return;
+        }
 
         // Create the HotkeyManager in this thread
         let manager = match HotkeyManager::new_with_blocking() {
             Ok(m) => m,
             Err(e) => {
-                error!("Failed to create HotkeyManager: {}", e);
+                let message = format!("Failed to create HotkeyManager: {e}");
+                error!("{message}");
+                let _ = startup_tx.send(Err(message));
                 return;
             }
         };
+
+        if startup_cancelled.load(Ordering::SeqCst) {
+            return;
+        }
+
+        if startup_tx.send(Ok(())).is_err() {
+            return;
+        }
 
         // Maps binding IDs to HotkeyIds and hotkey strings
         let mut binding_to_hotkey: HashMap<String, HotkeyId> = HashMap::new();
@@ -359,6 +394,24 @@ impl HandyKeysState {
     }
 }
 
+fn wait_for_manager_startup(
+    startup_rx: Receiver<Result<(), String>>,
+    startup_cancelled: &AtomicBool,
+    timeout: Duration,
+) -> Result<(), String> {
+    match startup_rx.recv_timeout(timeout) {
+        Ok(result) => result,
+        Err(mpsc::RecvTimeoutError::Timeout) => {
+            startup_cancelled.store(true, Ordering::SeqCst);
+            Err("HandyKeys manager startup timed out".to_string())
+        }
+        Err(mpsc::RecvTimeoutError::Disconnected) => {
+            startup_cancelled.store(true, Ordering::SeqCst);
+            Err("HandyKeys manager stopped during startup".to_string())
+        }
+    }
+}
+
 impl Drop for HandyKeysState {
     fn drop(&mut self) {
         // Signal recording to stop
@@ -424,33 +477,12 @@ pub fn validate_shortcut(raw: &str) -> Result<(), String> {
 /// Initialize handy-keys shortcuts
 pub fn init_shortcuts(app: &AppHandle) -> Result<(), String> {
     let state = HandyKeysState::new(app.clone())?;
-
-    let default_bindings = settings::get_default_settings().bindings;
-    let user_settings = settings::load_or_create_app_settings(app);
-
-    // Register all bindings except cancel (which is dynamic)
-    for (id, default_binding) in default_bindings {
-        if id == "cancel" {
-            continue;
-        }
-        // Skip post-processing shortcut when the feature is disabled
-        if id == "transcribe_with_post_process" && !user_settings.post_process_enabled {
-            continue;
-        }
-
-        let binding = user_settings
-            .bindings
-            .get(&id)
-            .cloned()
-            .unwrap_or(default_binding);
-
-        if let Err(e) = state.register(&binding) {
-            error!(
-                "Failed to register handy-keys shortcut {} during init: {}",
-                id, e
-            );
-        }
-    }
+    let bindings = super::configured_initial_bindings(app);
+    super::register_initial_bindings(
+        bindings,
+        |binding| state.register(binding),
+        |binding| state.unregister(binding),
+    )?;
 
     app.manage(state);
     info!("handy-keys shortcuts initialized");
@@ -546,4 +578,55 @@ pub fn stop_handy_keys_recording(app: AppHandle) -> Result<(), String> {
         .try_state::<HandyKeysState>()
         .ok_or("HandyKeysState not initialized")?;
     state.stop_recording()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn manager_startup_failure_is_returned_to_the_caller() {
+        let (startup_tx, startup_rx) = mpsc::channel();
+        let cancelled = AtomicBool::new(false);
+        startup_tx
+            .send(Err("simulated manager startup failure".to_string()))
+            .unwrap();
+
+        assert_eq!(
+            wait_for_manager_startup(startup_rx, &cancelled, Duration::from_secs(1)),
+            Err("simulated manager startup failure".to_string())
+        );
+    }
+
+    #[test]
+    fn closed_startup_channel_is_an_error() {
+        let (startup_tx, startup_rx) = mpsc::channel::<Result<(), String>>();
+        let cancelled = AtomicBool::new(false);
+        drop(startup_tx);
+
+        assert_eq!(
+            wait_for_manager_startup(startup_rx, &cancelled, Duration::from_secs(1)),
+            Err("HandyKeys manager stopped during startup".to_string())
+        );
+    }
+
+    #[test]
+    fn stalled_startup_times_out_and_cancels_the_manager_thread() {
+        let (_startup_tx, startup_rx) = mpsc::channel::<Result<(), String>>();
+        let cancelled = Arc::new(AtomicBool::new(false));
+        let thread_cancelled = Arc::clone(&cancelled);
+        let manager_thread = thread::spawn(move || {
+            while !thread_cancelled.load(Ordering::SeqCst) {
+                thread::sleep(Duration::from_millis(1));
+            }
+        });
+
+        assert_eq!(
+            wait_for_manager_startup(startup_rx, &cancelled, Duration::from_millis(10),),
+            Err("HandyKeys manager startup timed out".to_string())
+        );
+
+        manager_thread.join().unwrap();
+        assert!(cancelled.load(Ordering::SeqCst));
+    }
 }

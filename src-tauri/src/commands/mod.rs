@@ -7,6 +7,7 @@ pub mod window_picker;
 
 use crate::settings::{get_settings, write_settings, AppSettings, LogLevel};
 use crate::utils::cancel_current_operation;
+use std::sync::Mutex;
 use tauri::{AppHandle, Manager};
 use tauri_plugin_opener::OpenerExt;
 
@@ -189,24 +190,147 @@ pub fn initialize_enigo(app: AppHandle) -> Result<(), String> {
 /// Marker state to track if shortcuts have been initialized.
 pub struct ShortcutsInitialized;
 
+#[derive(Default)]
+enum ShortcutInitializationStatus {
+    #[default]
+    Idle,
+    Initialized,
+    CleanupFailed(String),
+}
+
+static SHORTCUT_INITIALIZATION: Mutex<ShortcutInitializationStatus> =
+    Mutex::new(ShortcutInitializationStatus::Idle);
+
+fn initialize_shortcuts_once<IsInitialized, Initialize, MarkInitialized>(
+    state: &Mutex<ShortcutInitializationStatus>,
+    is_initialized: IsInitialized,
+    initialize: Initialize,
+    mark_initialized: MarkInitialized,
+) -> Result<(), String>
+where
+    IsInitialized: FnOnce() -> bool,
+    Initialize: FnOnce() -> Result<(), String>,
+    MarkInitialized: FnOnce(),
+{
+    let mut status = state
+        .lock()
+        .map_err(|_| "Shortcut initialization lock is poisoned".to_string())?;
+    match &*status {
+        ShortcutInitializationStatus::Initialized => return Ok(()),
+        ShortcutInitializationStatus::CleanupFailed(error) => return Err(error.clone()),
+        ShortcutInitializationStatus::Idle => {}
+    }
+
+    if is_initialized() {
+        *status = ShortcutInitializationStatus::Initialized;
+        return Ok(());
+    }
+
+    match initialize() {
+        Ok(()) => {
+            mark_initialized();
+            *status = ShortcutInitializationStatus::Initialized;
+            Ok(())
+        }
+        Err(error) => {
+            if !crate::shortcut::initialization_error_allows_retry(&error) {
+                *status = ShortcutInitializationStatus::CleanupFailed(error.clone());
+            }
+            Err(error)
+        }
+    }
+}
+
 /// Initialize keyboard shortcuts.
 /// On macOS, this should be called after accessibility permissions are granted.
 /// This is idempotent - calling it multiple times is safe.
 #[specta::specta]
 #[tauri::command]
 pub fn initialize_shortcuts(app: AppHandle) -> Result<(), String> {
-    // Check if already initialized
-    if app.try_state::<ShortcutsInitialized>().is_some() {
-        log::debug!("Shortcuts already initialized");
-        return Ok(());
-    }
-
-    // Initialize shortcuts
-    crate::shortcut::init_shortcuts(&app);
-
-    // Mark as initialized
-    app.manage(ShortcutsInitialized);
+    initialize_shortcuts_once(
+        &SHORTCUT_INITIALIZATION,
+        || app.try_state::<ShortcutsInitialized>().is_some(),
+        || crate::shortcut::init_shortcuts(&app),
+        || {
+            app.manage(ShortcutsInitialized);
+        },
+    )?;
 
     log::info!("Shortcuts initialized successfully");
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+    use std::sync::{Arc, Barrier, Mutex};
+    use std::thread;
+    use std::time::Duration;
+
+    #[test]
+    fn concurrent_shortcut_initialization_registers_once() {
+        let state = Arc::new(Mutex::new(ShortcutInitializationStatus::Idle));
+        let initialized = Arc::new(AtomicBool::new(false));
+        let initialization_calls = Arc::new(AtomicUsize::new(0));
+        let start = Arc::new(Barrier::new(3));
+        let mut threads = Vec::new();
+
+        for _ in 0..2 {
+            let state = Arc::clone(&state);
+            let initialized = Arc::clone(&initialized);
+            let initialization_calls = Arc::clone(&initialization_calls);
+            let start = Arc::clone(&start);
+            threads.push(thread::spawn(move || {
+                start.wait();
+                initialize_shortcuts_once(
+                    &state,
+                    || initialized.load(Ordering::SeqCst),
+                    || {
+                        initialization_calls.fetch_add(1, Ordering::SeqCst);
+                        thread::sleep(Duration::from_millis(20));
+                        Ok(())
+                    },
+                    || initialized.store(true, Ordering::SeqCst),
+                )
+            }));
+        }
+
+        start.wait();
+        for thread in threads {
+            assert_eq!(thread.join().unwrap(), Ok(()));
+        }
+        assert!(initialized.load(Ordering::SeqCst));
+        assert_eq!(initialization_calls.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn cleanup_failure_blocks_a_same_process_retry() {
+        let state = Mutex::new(ShortcutInitializationStatus::Idle);
+        let initialization_calls = AtomicUsize::new(0);
+        let cleanup_error = "shortcut state may remain active".to_string();
+
+        let first = initialize_shortcuts_once(
+            &state,
+            || false,
+            || {
+                initialization_calls.fetch_add(1, Ordering::SeqCst);
+                Err(cleanup_error.clone())
+            },
+            || {},
+        );
+        let second = initialize_shortcuts_once(
+            &state,
+            || false,
+            || {
+                initialization_calls.fetch_add(1, Ordering::SeqCst);
+                Ok(())
+            },
+            || {},
+        );
+
+        assert_eq!(first, Err(cleanup_error.clone()));
+        assert_eq!(second, Err(cleanup_error));
+        assert_eq!(initialization_calls.load(Ordering::SeqCst), 1);
+    }
 }

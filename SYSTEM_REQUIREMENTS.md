@@ -1,14 +1,9 @@
 # System requirements
 
-AudioBud runs local speech-to-text engines with platform-specific acceleration,
-so the machine needs a few things in place before it works well. The first-run
-preflight check (`src/lib/preflight.ts`, issue #51) reads these same numbers and
-tells you at launch if something is missing, so this page and the in-app check
-never disagree.
-
-Windows x64 is the validated target for the current milestone. macOS and Linux
-are inherited from upstream Handy and not yet validated in this fork, so their
-rows are best-effort.
+AudioBud runs local speech-to-text engines with platform-specific acceleration.
+The validated public target is Windows 10 or 11 on x64. The v0.6.0 release
+candidate targets macOS 11 or later on Apple Silicon. The first-run preflight
+check uses the same memory and disk limits listed here.
 
 ## Windows (validated)
 
@@ -32,18 +27,35 @@ The standard Windows setup can install WebView2 when it is missing. The larger
 runtime for PCs that cannot download it during setup. The Microsoft Store
 candidate carries Microsoft's offline WebView2 installer.
 
-## macOS and Linux (inherited, not yet validated)
+## macOS on Apple Silicon (v0.6.0 release candidate)
 
-| Requirement  | Minimum    | Recommended                               |
-| ------------ | ---------- | ----------------------------------------- |
-| Memory (RAM) | 4 GB       | 8 GB                                      |
-| Free disk    | 4 GB       | 8 GB+                                     |
-| Acceleration | none (CPU) | Metal (macOS), Vulkan or OpenBLAS (Linux) |
+| Requirement  | Minimum                                  | Recommended   | Hard or soft                                           |
+| ------------ | ---------------------------------------- | ------------- | ------------------------------------------------------ |
+| Architecture | Apple Silicon (arm64)                    | Apple Silicon | Hard — no Intel Mac artifact is published              |
+| OS           | macOS 11 or later                        | Current macOS | Hard — the signed app declares macOS 11 as its minimum |
+| Permissions  | Microphone and Accessibility permissions | Granted       | Hard — recording and transcript delivery need them     |
+| Memory (RAM) | 4 GB                                     | 8 GB          | Soft — larger models need more memory                  |
+| Free disk    | 4 GB                                     | 8 GB+         | Soft — covers the app and at least one model           |
+| Acceleration | none (CPU)                               | Metal         | Soft — CPU-only transcription works but is slower      |
 
-On these platforms the preflight check runs only the soft checks and warns
-rather than claiming a hard pass the fork has not verified. Apple Intelligence
-post-processing has its own separate check (`check_apple_intelligence_available`:
-Apple Silicon plus a recent macOS).
+The planned release is a signed and notarized Developer ID DMG. The tested
+local candidate contains an arm64 app and does not depend on Homebrew libraries
+at runtime. Publication waits for the remaining release gates.
+
+Whisper Turbo is the recommended Mac model because AudioBud runs Whisper
+through Metal on Apple Silicon. Whisper Small uses less disk space and memory.
+Parakeet also works through CPU inference and does not require CUDA or an
+NVIDIA GPU, but v0.6.0 does not enable Core ML for ONNX models.
+
+Apple Intelligence is optional. AudioBud checks Apple's platform and feature
+availability before it offers that post-processing path. Local transcription
+does not require Apple Intelligence or macOS 26.
+
+## Other platforms
+
+Intel Mac and Linux builds are not validated. No Intel Mac artifact is
+published. Contributors can still build inherited Linux and Intel paths from
+source, but those paths are outside the v0.6.0 release support boundary.
 
 ## Why these numbers
 

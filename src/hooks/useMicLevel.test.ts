@@ -1,11 +1,9 @@
 import { describe, expect, it } from "bun:test";
 import { onMediaQueryChange } from "./useMicLevel";
 
-// The reduce-motion subscription has to work on both MediaQueryList APIs, because
-// tauri.conf.json still ships a 10.15 minimum and Catalina's WKWebView implements
-// matchMedia without addEventListener. That branch cannot execute in a modern
-// engine, so the only way to prove it is to hand the function a query object
-// shaped like the old one.
+// Keep the reduce-motion subscription compatible with both MediaQueryList APIs.
+// The legacy branch cannot execute in a modern test engine, so prove it with a
+// query object shaped like the old API.
 
 type Handler = (event: MediaQueryListEvent) => void;
 

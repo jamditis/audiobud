@@ -41,6 +41,7 @@ pub struct ClipboardContent {
 /// Whether a clipboard write may enter the operating system's history.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ClipboardHistory {
+    #[cfg_attr(not(test), allow(dead_code))]
     Include,
     Exclude,
 }

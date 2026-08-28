@@ -646,6 +646,32 @@ fn migrate_update_checks_v0_4_2(
     Some(true)
 }
 
+/// Replace paste methods that macOS cannot deliver reliably.
+///
+/// Direct typing remains available on Windows and Linux. On macOS, the safe
+/// supported path is the clipboard plus Cmd+V. Profiles are normalized too so
+/// settings copied between installs cannot reactivate direct typing later.
+fn normalize_platform_paste_methods(settings: &mut AppSettings, is_macos: bool) -> bool {
+    if !is_macos {
+        return false;
+    }
+
+    let mut changed = false;
+    if settings.paste_method == PasteMethod::Direct {
+        settings.paste_method = PasteMethod::CtrlV;
+        changed = true;
+    }
+
+    for profile in &mut settings.output_profiles {
+        if profile.paste_method == Some(PasteMethod::Direct) {
+            profile.paste_method = Some(PasteMethod::CtrlV);
+            changed = true;
+        }
+    }
+
+    changed
+}
+
 fn default_selected_language() -> String {
     "auto".to_string()
 }
@@ -1294,6 +1320,10 @@ fn normalize_after_change(settings: &mut AppSettings, key: &str, previous: &AppS
         // Top/Bottom default.
         settings.overlay_custom_position = None;
     }
+
+    // The renderer filters unsupported choices, but the backend remains the
+    // authority for stale webviews and direct command calls.
+    normalize_platform_paste_methods(settings, cfg!(target_os = "macos"));
 }
 
 pub fn load_or_create_app_settings(app: &AppHandle) -> AppSettings {
@@ -1372,6 +1402,12 @@ pub fn load_or_create_app_settings(app: &AppHandle) -> AppSettings {
         mutated = true;
     }
 
+    if normalize_platform_paste_methods(&mut settings, cfg!(target_os = "macos")) {
+        store.set("settings", serde_json::to_value(&settings).unwrap());
+        mutated = true;
+        debug!("Migrated direct paste settings to Cmd+V on macOS");
+    }
+
     let update_checks_migrated = store
         .get(UPDATE_CHECKS_V0_4_2_MIGRATION_KEY)
         .and_then(|value| value.as_bool())
@@ -1439,32 +1475,49 @@ pub fn get_settings(app: &AppHandle) -> AppSettings {
         // when the store later recovers.
         return get_default_settings();
     };
-    let settings = read_settings_from_open_store(&store);
-    // Same race as `load_or_create_app_settings`: only fill an empty slot so
-    // a concurrent write that already published wins instead of being
-    // overwritten by this read's stale snapshot.
-    SETTINGS_CACHE.fill_if_empty(&settings);
+    let (settings, mutated) = read_settings_from_open_store(&store);
+    if mutated {
+        SETTINGS_CACHE.write_through(
+            || store.set("settings", serde_json::to_value(&settings).unwrap()),
+            &settings,
+        );
+    } else {
+        // Same race as `load_or_create_app_settings`: only fill an empty slot
+        // so a concurrent write that already published wins instead of being
+        // overwritten by this read's stale snapshot.
+        SETTINGS_CACHE.fill_if_empty(&settings);
+    }
     settings
 }
 
-fn read_settings_from_open_store(store: &Store<tauri::Wry>) -> AppSettings {
+fn read_settings_from_open_store(store: &Store<tauri::Wry>) -> (AppSettings, bool) {
+    let mut mutated = false;
     let mut settings = if let Some(settings_value) = store.get("settings") {
         serde_json::from_value::<AppSettings>(settings_value).unwrap_or_else(|_| {
             let default_settings = get_default_settings();
             store.set("settings", serde_json::to_value(&default_settings).unwrap());
+            mutated = true;
             default_settings
         })
     } else {
         let default_settings = get_default_settings();
         store.set("settings", serde_json::to_value(&default_settings).unwrap());
+        mutated = true;
         default_settings
     };
 
     if ensure_post_process_defaults(&mut settings) {
         store.set("settings", serde_json::to_value(&settings).unwrap());
+        mutated = true;
     }
 
-    settings
+    if normalize_platform_paste_methods(&mut settings, cfg!(target_os = "macos")) {
+        store.set("settings", serde_json::to_value(&settings).unwrap());
+        mutated = true;
+        debug!("Migrated direct paste settings to Cmd+V on macOS");
+    }
+
+    (settings, mutated)
 }
 
 /// Persist `settings`, returning `Err` when the store could not be written.
@@ -1605,6 +1658,56 @@ mod tests {
             serde_json::to_value(settings.log_level).unwrap(),
             json!("warn"),
             "a migrated level is rewritten in the current string encoding"
+        );
+    }
+
+    #[test]
+    fn macos_migrates_direct_paste_to_the_safe_clipboard_method() {
+        let mut settings = get_default_settings();
+        settings.paste_method = PasteMethod::Direct;
+        settings.output_profiles = vec![OutputProfile {
+            app_name: "legacy".to_string(),
+            paste_method: Some(PasteMethod::Direct),
+            auto_submit: None,
+            auto_submit_key: None,
+            clipboard_handling: None,
+        }];
+
+        assert!(normalize_platform_paste_methods(&mut settings, true));
+        assert_eq!(settings.paste_method, PasteMethod::CtrlV);
+        assert_eq!(
+            settings.output_profiles[0].paste_method,
+            Some(PasteMethod::CtrlV)
+        );
+    }
+
+    #[test]
+    fn direct_paste_is_unchanged_off_macos() {
+        let mut settings = get_default_settings();
+        settings.paste_method = PasteMethod::Direct;
+
+        assert!(!normalize_platform_paste_methods(&mut settings, false));
+        assert_eq!(settings.paste_method, PasteMethod::Direct);
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn macos_rejects_new_direct_paste_writes() {
+        let mut settings = get_default_settings();
+
+        apply_setting_value(&mut settings, "paste_method", json!("direct"))
+            .expect("the legacy value is normalized");
+        assert_eq!(settings.paste_method, PasteMethod::CtrlV);
+
+        apply_setting_value(
+            &mut settings,
+            "output_profiles",
+            json!([{ "app_name": "legacy", "paste_method": "direct" }]),
+        )
+        .expect("the legacy profile value is normalized");
+        assert_eq!(
+            settings.output_profiles[0].paste_method,
+            Some(PasteMethod::CtrlV)
         );
     }
 

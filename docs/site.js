@@ -32,14 +32,24 @@ window.addEventListener("scroll", updateHeader, { passive: true });
    and the download buttons, so neither can describe an older build than the
    other. No digest and no version live in the markup -- either would be wrong
    from the next release onward -- so a failed or blocked request leaves the
-   page pointing at SHA256SUMS.txt and the releases page instead. */
+   page pointing at the Windows and Mac checksum manifests and the releases
+   page instead. */
 const checksumList = document.querySelector("[data-checksum-list]");
-const downloadLinks = document.querySelectorAll("[data-download]");
+const downloadLinks = document.querySelectorAll("[data-download-windows]");
+const platform =
+  navigator.userAgentData?.platform ??
+  navigator.platform ??
+  navigator.userAgent ??
+  "";
+const isMacOS = /mac/i.test(platform);
+const macOSSuffix = "_macos_aarch64.dmg";
+const windowsSuffix = "_x64-setup.exe";
 
 if (checksumList || downloadLinks.length > 0) {
   const releaseLabel = document.querySelector("[data-checksum-release]");
   const statusLine = document.querySelector("[data-checksum-status]");
   const commandLine = document.querySelector("[data-checksum-command]");
+  const commandCaption = document.querySelector("[data-checksum-caption]");
 
   /* Only ever hand the button a real asset URL on this repository. A hostile
      or mistaken response cannot turn the button into a javascript: URL or
@@ -61,7 +71,9 @@ if (checksumList || downloadLinks.length > 0) {
      button never points at a file this page cannot also give a checksum for. */
   const linkDownloads = (assets) => {
     for (const link of downloadLinks) {
-      const suffix = link.dataset.download;
+      const suffix = isMacOS
+        ? link.dataset.downloadMacos
+        : link.dataset.downloadWindows;
       if (!suffix) continue;
 
       const asset = assets.find((item) => item.name.endsWith(suffix));
@@ -103,11 +115,11 @@ if (checksumList || downloadLinks.length > 0) {
         asset?.digest?.startsWith("sha256:"),
       );
 
-      /* SHA256SUMS.txt is itself a release asset and carries its own digest.
-         Listing it beside the installers would publish the hash of the hash
-         file, so the rows and the buttons cover installers only. */
+      /* Each checksum manifest is itself a release asset and carries its own
+         digest. Listing it beside the installers would publish the hash of the
+         hash file, so the rows and the buttons cover installers only. */
       const installers = assets.filter((asset) =>
-        /\.(exe|msi)$/i.test(asset.name),
+        /\.(dmg|exe|msi)$/i.test(asset.name),
       );
 
       if (installers.length === 0) return;
@@ -119,11 +131,21 @@ if (checksumList || downloadLinks.length > 0) {
         releaseLabel.textContent = `Release ${release.tag_name}`;
       }
 
+      const selectedSuffix = isMacOS ? macOSSuffix : windowsSuffix;
       const installer = installers.find((asset) =>
-        asset.name.endsWith("_x64-setup.exe"),
+        asset.name.endsWith(selectedSuffix),
       );
       if (commandLine && installer) {
-        commandLine.textContent = `Get-FileHash -Algorithm SHA256 .\\${installer.name}`;
+        if (isMacOS) {
+          commandLine.textContent = `shasum -a 256 "./${installer.name}"`;
+        } else {
+          commandLine.textContent = `Get-FileHash -Algorithm SHA256 .\\${installer.name}`;
+        }
+      }
+      if (commandCaption) {
+        commandCaption.textContent = isMacOS
+          ? "Run this in Terminal, then compare"
+          : "Run this in PowerShell, then compare";
       }
 
       if (statusLine) {
@@ -132,7 +154,7 @@ if (checksumList || downloadLinks.length > 0) {
       }
     })
     .catch(() => {
-      /* The markup's SHA256SUMS.txt link resolves to the latest release on
-         its own, so it needs nothing from this request to stay correct. */
+      /* The markup's checksum links resolve to the latest release on their own,
+         so they need nothing from this request to stay correct. */
     });
 }

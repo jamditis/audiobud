@@ -371,6 +371,32 @@ describe("Windows release signing workflow", () => {
     expect(workflow).toContain("-${{ github.run_attempt }}");
   });
 
+  test("allows GitHub release writes only from an existing version tag", () => {
+    const releaseCondition =
+      "env.STORE_CANDIDATE != 'true' && github.ref_type == 'tag' && (github.event_name != 'workflow_dispatch' || inputs.make_release)";
+    const draftStep = stepBlock("Find or create draft release");
+    const uploadStep = stepBlock("Upload release artifacts to GitHub release");
+
+    expect(draftStep).toContain("if: ${{ " + releaseCondition + " }}");
+    expect(uploadStep).toContain("if: ${{ " + releaseCondition + " }}");
+    expect(workflow).toContain(
+      "Manual GitHub release retries require an existing version tag",
+    );
+    expect(workflow).toContain(
+      '$manualTagCommit = git rev-list -n 1 "refs/tags/$env:REF_NAME"',
+    );
+    expect(workflow).toContain("$manualTagCommit -cne $env:GITHUB_SHA");
+    expect(
+      workflow.split("if: ${{ " + releaseCondition + " }}").length - 1,
+    ).toBe(2);
+    expect(workflow).toContain(
+      "if: ${{ inputs.store_candidate != true && github.ref_type == 'tag' && (github.event_name != 'workflow_dispatch' || inputs.make_release) }}",
+    );
+    expect(workflow).not.toContain(
+      "(github.event_name == 'workflow_dispatch' && inputs.make_release) ||",
+    );
+  });
+
   test("verifies every downloaded package input before use", () => {
     expect(workflow).toContain(
       "SILERO_VAD_SHA256: a35ebf52fd3ce5f1469b2a36158dba761bc47b973ea3382b3186ca15b1f5af28",
@@ -552,6 +578,18 @@ describe("Windows release signing workflow", () => {
     expect(workflow).toContain(
       "name: audiobud-windows-x86_64${{ steps.package-flavor.outputs.artifact_suffix }}-v${{ steps.meta.outputs.version }}-${{ github.run_attempt }}",
     );
+  });
+
+  test("uses and verifies the tagged curated notes for the draft body", () => {
+    const draftStep = stepBlock("Find or create draft release");
+
+    expect(draftStep).toContain('$releaseNotesPath = "RELEASE_NOTES.md"');
+    expect(draftStep).toContain("--notes-file $releaseNotesPath");
+    expect(draftStep).toContain("--json body,isDraft,targetCommitish");
+    expect(draftStep).toContain(
+      "Draft release body does not match RELEASE_NOTES.md",
+    );
+    expect(draftStep).not.toContain("--generate-notes");
   });
 
   test("documents the Microsoft Store package checkpoint", () => {
