@@ -8,7 +8,7 @@ use crate::audio_toolkit::{
 };
 use crate::delivery_queue::{DeliveryQueue, EnqueueResult, TranscriptDelivery};
 use crate::delivery_worker::DeliveryWorker;
-use crate::dictation_context::{ActiveDictations, DictationContext};
+use crate::dictation_context::{ActiveDictations, DeliverySequenceGate, DictationContext};
 use crate::managers::audio::AudioRecordingManager;
 use crate::managers::engine_limits::{MODEL_AUTO_LOAD_FAILED_ERROR, WEDGED_ENGINE_ERROR};
 use crate::managers::history::HistoryManager;
@@ -126,6 +126,15 @@ fn schedule_transcript_delivery(app: AppHandle, delivery: TranscriptDelivery) {
     let app_for_delivery = app.clone();
     let job = move || {
         let _handoff = DeliveryHandoff(app_for_delivery.clone());
+        let sequence = delivery.context.sequence();
+        if app_for_delivery
+            .try_state::<DeliverySequenceGate>()
+            .is_some_and(|gate| !gate.claim(sequence))
+        {
+            warn!("Suppressed duplicate transcript delivery for dictation sequence {sequence}");
+            return;
+        }
+        debug!("Delivering transcript for dictation sequence {sequence}");
         let paste_time = Instant::now();
         let app_for_paste = app_for_delivery.clone();
         // Caught here, not just by delivery_worker's own catch_unwind around

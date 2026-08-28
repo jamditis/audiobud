@@ -509,6 +509,9 @@ fn initialize_core_logic(app_handle: &AppHandle) {
     // Counts dictations as they start, so a one-shot pick can be handed to the
     // dictation it was made for rather than to whichever paste lands first.
     app_handle.manage(dictation_context::DictationSequence::default());
+    // A completed dictation may cross the clipboard/focus/input boundary only
+    // once, even if an upstream race submits the same delivery twice (#310).
+    app_handle.manage(dictation_context::DeliverySequenceGate::default());
     let delivery_queue: delivery_queue::DeliveryQueue = delivery_queue::DeliveryQueue::default();
     app_handle.manage(delivery_queue);
     // The thread the queue's transcripts are actually pasted on. A paste blocks
