@@ -480,7 +480,11 @@ pub fn init_shortcuts(app: &AppHandle) -> Result<(), String> {
     let bindings = super::configured_initial_bindings(app);
     super::register_initial_bindings(
         bindings,
-        |binding| state.register(binding),
+        |binding| {
+            state
+                .register(binding)
+                .map_err(|error| super::ShortcutRegistrationError::state_may_have_changed(error))
+        },
         |binding| state.unregister(binding),
     )?;
 

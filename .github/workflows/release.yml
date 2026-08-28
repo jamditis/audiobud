@@ -1432,6 +1432,7 @@ jobs:
       tag: ${{ steps.macos-meta.outputs.tag }}
       version: ${{ steps.macos-meta.outputs.version }}
     env:
+      DEVELOPER_DIR: /Applications/Xcode_26.0.1.app/Contents/Developer
       MODEL_ASSET_BASE_URL: https://github.com/jamditis/audiobud/releases/download/model-assets-v1
       SILERO_VAD_SHA256: a35ebf52fd3ce5f1469b2a36158dba761bc47b973ea3382b3186ca15b1f5af28
       SILERO_VAD_BYTES: 1807522
@@ -1498,6 +1499,19 @@ jobs:
       - name: Install macOS build tools
         shell: bash
         run: brew install cmake
+
+      - name: Require Apple Intelligence SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild -version
+          SDK_PATH=$(xcrun --sdk macosx --show-sdk-path)
+          FOUNDATION_MODELS="$SDK_PATH/System/Library/Frameworks/FoundationModels.framework"
+          if [[ ! -d "$FOUNDATION_MODELS" ]]; then
+            echo "::error::The selected Xcode SDK does not include FoundationModels.framework. Select Xcode 26 or newer before releasing."
+            xcodebuild -version
+            exit 1
+          fi
 
       - name: Install frontend dependencies
         shell: bash
