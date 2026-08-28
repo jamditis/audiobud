@@ -1,11 +1,25 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use clap::Parser;
+use handy_app_lib::cli::CliParseOutcome;
 use handy_app_lib::CliArgs;
 
 fn main() {
-    let cli_args = CliArgs::parse();
+    let cli_args = match CliArgs::parse_env() {
+        Ok(CliParseOutcome::Run(arguments)) => arguments,
+        Ok(CliParseOutcome::Help) => {
+            print!("{}", CliArgs::help());
+            return;
+        }
+        Ok(CliParseOutcome::Version) => {
+            println!("{}", CliArgs::version());
+            return;
+        }
+        Err(error) => {
+            eprintln!("{error}");
+            std::process::exit(2);
+        }
+    };
 
     #[cfg(target_os = "linux")]
     {

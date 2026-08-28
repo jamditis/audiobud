@@ -28,6 +28,7 @@ mod utils;
 mod window_picker;
 
 pub use cli::CliArgs;
+use cli::CliParseOutcome;
 #[cfg(any(debug_assertions, test))]
 use specta_typescript::{BigIntExportBehavior, Typescript};
 use tauri_specta::{collect_commands, collect_events, Builder};
@@ -211,20 +212,6 @@ fn spawn_update_install(
             }
         }
     });
-}
-
-fn cli_option(args: &[String], option: &str) -> Option<String> {
-    args.iter().enumerate().find_map(|(index, argument)| {
-        if argument == option {
-            return args.get(index + 1).cloned();
-        }
-
-        argument
-            .strip_prefix(option)
-            .and_then(|suffix| suffix.strip_prefix('='))
-            .filter(|value| !value.is_empty())
-            .map(str::to_string)
-    })
 }
 
 fn level_filter_from_u8(value: u8) -> log::LevelFilter {
@@ -820,19 +807,24 @@ pub fn run(cli_args: CliArgs) {
 
     builder
         .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
-            if args.iter().any(|a| a == "--install-update") {
-                spawn_update_install(
-                    app.clone(),
-                    false,
-                    cli_option(&args, "--install-update-endpoint"),
-                );
-            } else if args.iter().any(|a| a == "--toggle-transcription") {
+            let cli_args = match CliArgs::parse_from(args) {
+                Ok(CliParseOutcome::Run(arguments)) => arguments,
+                Ok(CliParseOutcome::Help | CliParseOutcome::Version) => return,
+                Err(error) => {
+                    log::error!("Rejected second-instance arguments: {error}");
+                    return;
+                }
+            };
+
+            if cli_args.install_update {
+                spawn_update_install(app.clone(), false, cli_args.install_update_endpoint);
+            } else if cli_args.toggle_transcription {
                 signal_handle::send_transcription_input(app, "transcribe", "CLI");
-            } else if args.iter().any(|a| a == "--toggle-post-process") {
+            } else if cli_args.toggle_post_process {
                 signal_handle::send_transcription_input(app, "transcribe_with_post_process", "CLI");
-            } else if args.iter().any(|a| a == "--toggle-raw") {
+            } else if cli_args.toggle_raw {
                 signal_handle::send_transcription_input(app, "transcribe_raw", "CLI");
-            } else if args.iter().any(|a| a == "--cancel") {
+            } else if cli_args.cancel {
                 crate::utils::cancel_current_operation(app);
             } else {
                 show_main_window(app);
@@ -996,7 +988,7 @@ pub fn run(cli_args: CliArgs) {
 #[cfg(test)]
 mod updater_gate_tests {
     use super::{
-        cli_option, ensure_cli_update_supported, nsis_update_channel_available,
+        ensure_cli_update_supported, nsis_update_channel_available,
         update_checks_action_enabled_for_channel, UPDATER_FEED_READY,
     };
     use tauri::utils::config::BundleType;
@@ -1125,18 +1117,5 @@ mod updater_gate_tests {
         assert!(!update_checks_action_enabled_for_channel(false, true));
         assert!(!update_checks_action_enabled_for_channel(true, false));
         assert!(!update_checks_action_enabled_for_channel(false, false));
-    }
-
-    #[test]
-    fn single_instance_cli_options_accept_both_clap_value_forms() {
-        let endpoint =
-            "https://github.com/jamditis/audiobud/releases/download/v0.4.2/latest-candidate.json";
-        let option = "--install-update-endpoint";
-        let separated = ["AudioBud.exe", option, endpoint].map(str::to_string);
-        let joined = ["AudioBud.exe".to_string(), format!("{option}={endpoint}")];
-
-        assert_eq!(cli_option(&separated, option).as_deref(), Some(endpoint));
-        assert_eq!(cli_option(&joined, option).as_deref(), Some(endpoint));
-        assert_eq!(cli_option(&separated, "--missing"), None);
     }
 }
