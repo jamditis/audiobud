@@ -556,9 +556,6 @@ fn initialize_core_logic(app_handle: &AppHandle) {
         // Disable autostart if user has opted out
         let _ = autostart_manager.disable();
     }
-
-    // Create the recording overlay window (hidden by default)
-    utils::create_recording_overlay(app_handle);
 }
 
 /// A hidden launch has no settings React surface to perform the post-onboarding
@@ -622,6 +619,7 @@ fn specta_builder() -> Builder<tauri::Wry> {
             trigger_update_check,
             show_main_window_command,
             main_window::main_window_ready,
+            overlay::recording_overlay_ready,
             commands::cancel_operation,
             commands::is_portable,
             commands::is_update_channel_available,
@@ -835,6 +833,7 @@ pub fn run(cli_args: CliArgs) {
             specta_builder.mount_events(app);
 
             main_window::initialize(app.handle());
+            overlay::initialize(app.handle());
 
             let clipboard_service =
                 clipboard_snapshot::ClipboardService::new().map_err(std::io::Error::other)?;

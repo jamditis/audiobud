@@ -236,6 +236,11 @@ const RecordingOverlay: React.FC = () => {
         return;
       }
       cleanup = unlistenAll;
+
+      // Rust queues the first overlay state until this handshake confirms
+      // that every listener above is active. Without it, the first dictation
+      // can create the webview and emit `show-overlay` before React mounts.
+      await commands.recordingOverlayReady();
     };
 
     setupEventListeners();
@@ -243,6 +248,7 @@ const RecordingOverlay: React.FC = () => {
     return () => {
       cancelled = true;
       cleanup?.();
+      cleanup = undefined;
     };
   }, []);
 

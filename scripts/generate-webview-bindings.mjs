@@ -175,6 +175,7 @@ import { listen, type EventCallback } from "@tauri-apps/api/event";
 import type { TranscriptDeliveredEvent } from "../bindings";
 
 export const commands = {
+  ${extractCommand("recordingOverlayReady")}
   ${extractCommand("cancelOperation")}
 };
 

@@ -6,6 +6,9 @@ import { listen, type EventCallback } from "@tauri-apps/api/event";
 import type { TranscriptDeliveredEvent } from "../bindings";
 
 export const commands = {
+  async recordingOverlayReady(): Promise<void> {
+    await TAURI_INVOKE("recording_overlay_ready");
+  },
   async cancelOperation(): Promise<void> {
     await TAURI_INVOKE("cancel_operation");
   },

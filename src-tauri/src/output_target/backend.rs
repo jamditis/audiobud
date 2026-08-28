@@ -531,12 +531,14 @@ pub fn announce_delivered(app: &AppHandle, identity: WindowIdentity, source: Del
         "Transcript delivered to window {:#x} (app: {:?})",
         identity.handle.0, app_name
     );
-    let _ = TranscriptDeliveredEvent {
-        app: app_name,
-        title,
-        source,
-    }
-    .emit(app);
+    crate::overlay::emit_delivery_confirmation(
+        app,
+        TranscriptDeliveredEvent {
+            app: app_name,
+            title,
+            source,
+        },
+    );
 }
 
 /// Tell the user the lock is gone, once, and put the tray and indicator

@@ -256,6 +256,12 @@ async showMainWindowCommand() : Promise<Result<null, string>> {
 async mainWindowReady() : Promise<boolean> {
     return await TAURI_INVOKE("main_window_ready");
 },
+/**
+ * The overlay calls this only after all first-state event listeners exist.
+ */
+async recordingOverlayReady() : Promise<void> {
+    await TAURI_INVOKE("recording_overlay_ready");
+},
 async cancelOperation() : Promise<void> {
     await TAURI_INVOKE("cancel_operation");
 },
