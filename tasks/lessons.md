@@ -29,3 +29,9 @@
 - A regression test must reject `tauri bundle --verbose` in the release workflow.
 - If a signing password appears in a log, stop the build, rotate the password and matching GitHub secret, remove temporary keychains or files, and verify the new credential before another signing run.
 - Do not assume that a temporary keychain password and an export password have the same risk. Rotate each reusable value that appeared; temporary keychain values expire when the keychain is removed.
+
+## Verify live coordination scope
+
+- Count the live pull requests before sending a coordination message. The August 28 Office queue is exactly seven pull requests: 311 through 317.
+- Address a cross-host peer by the broker-discovered peer ID. A stale named inbox is not proof of delivery.
+- A poll-only remote message is delivered only after the recipient checks its peer messages. Keep a durable GitHub comment when coordination affects merge safety.
