@@ -291,6 +291,7 @@ describe("Windows release signing workflow", () => {
     const steps = [
       "Resolve SBOM path",
       "Generate release SBOM",
+      "Complete Windows SBOM file checksums",
       "Validate release SBOM file checksums",
       "Write SHA256SUMS",
       "Attest release provenance",
@@ -306,6 +307,17 @@ describe("Windows release signing workflow", () => {
     const sbomStep = stepBlock("Generate release SBOM");
     expect(sbomStep).toMatch(/^\s+SYFT_FILE_METADATA_SELECTION: all\s*$/m);
 
+    const completionStep = stepBlock("Complete Windows SBOM file checksums");
+    expect(completionStep).toContain(
+      "SBOM_PATH: ${{ steps.sbom-path.outputs.path }}",
+    );
+    expect(completionStep).toContain(
+      "PAYLOAD_PATH: ${{ steps.packaged-payload.outputs.path }}",
+    );
+    expect(completionStep).toContain("--complete-windows-placeholders");
+    expect(completionStep).toContain('"$env:SBOM_PATH"');
+    expect(completionStep).toContain('"$env:PAYLOAD_PATH"');
+
     const validationStep = stepBlock("Validate release SBOM file checksums");
     expect(validationStep).toContain(
       "SBOM_PATH: ${{ steps.sbom-path.outputs.path }}",
@@ -320,6 +332,9 @@ describe("Windows release signing workflow", () => {
     expect(validationStep).toContain('"$env:SBOM_PATH"');
 
     expect(stepPosition("Generate release SBOM")).toBeLessThan(
+      stepPosition("Complete Windows SBOM file checksums"),
+    );
+    expect(stepPosition("Complete Windows SBOM file checksums")).toBeLessThan(
       stepPosition("Validate release SBOM file checksums"),
     );
     expect(stepPosition("Validate release SBOM file checksums")).toBeLessThan(

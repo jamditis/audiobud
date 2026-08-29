@@ -113,6 +113,13 @@ symlinks. Every regular-file checksum must be real, supported, and equal to the
 staged bytes, and each regular-file record must include SHA-256. Any inventory
 or checksum mismatch stops the job before attestation.
 
+The Windows release job uses the same final validation contract. Syft 1.49.0
+cannot collect directory-source file digests on Windows, so that job first
+completes only Syft's exact zero-SHA-1 regular-file placeholder form from the
+staged bytes. A changed document records the completion tool and a derived SPDX
+namespace. A document with native valid digests stays byte-for-byte unchanged.
+The macOS job does not use this Windows-only compatibility step.
+
 ## Local credential handling
 
 Local signing can confirm the procedure before a remote run. Keep certificates,

@@ -1245,6 +1245,21 @@ jobs:
           upload-artifact: false
           upload-release-assets: false
 
+      # Syft 1.49.0 catalogs Windows directory entries but cannot resolve those
+      # same paths for digest collection. Complete only its exact zero-SHA-1
+      # regular-file placeholder form, then run the normal fail-closed gate.
+      # https://github.com/anchore/syft/pull/5197
+      - name: Complete Windows SBOM file checksums
+        shell: pwsh
+        env:
+          PAYLOAD_PATH: ${{ steps.packaged-payload.outputs.path }}
+          SBOM_PATH: ${{ steps.sbom-path.outputs.path }}
+        run: |
+          bun run scripts/validate-sbom-file-checksums.ts `
+            --complete-windows-placeholders `
+            "$env:SBOM_PATH" `
+            "$env:PAYLOAD_PATH"
+
       - name: Validate release SBOM file checksums
         shell: pwsh
         env:
