@@ -85,7 +85,7 @@ describe("latest stable app release selection", () => {
     expect(result).toEqual({ exitCode: 0, stderr: "", stdout: "v0.5.0\n" });
   });
 
-  test("selects the newest eligible release from standard input", () => {
+  test("selects the highest eligible release from standard input", () => {
     const result = runSelectorFromStdin([
       [
         {
@@ -112,6 +112,75 @@ describe("latest stable app release selection", () => {
     ]);
 
     expect(result).toEqual({ exitCode: 0, stderr: "", stdout: "v0.5.0\n" });
+  });
+
+  test("does not select a lower version that was published later", () => {
+    const result = runSelector([
+      [
+        {
+          tag_name: "v0.6.0",
+          draft: false,
+          prerelease: false,
+          published_at: "2026-08-28T08:00:00Z",
+        },
+        {
+          tag_name: "v0.5.1",
+          draft: false,
+          prerelease: false,
+          published_at: "2026-08-29T08:00:00Z",
+        },
+      ],
+    ]);
+
+    expect(result).toEqual({ exitCode: 0, stderr: "", stdout: "v0.6.0\n" });
+  });
+
+  test("prefers a canonical tag regardless of release order", () => {
+    const canonical = {
+      tag_name: "v1.2.3",
+      draft: false,
+      prerelease: false,
+      published_at: "2026-08-28T08:00:00Z",
+    };
+    const leadingZero = {
+      tag_name: "v01.2.3",
+      draft: false,
+      prerelease: false,
+      published_at: "2026-08-29T08:00:00Z",
+    };
+
+    for (const releases of [
+      [canonical, leadingZero],
+      [leadingZero, canonical],
+    ]) {
+      expect(runSelector([releases])).toEqual({
+        exitCode: 0,
+        stderr: "",
+        stdout: "v1.2.3\n",
+      });
+    }
+  });
+
+  test("compares version components above the safe number limit", () => {
+    const higher = {
+      tag_name: "v9007199254740993.0.0",
+      draft: false,
+      prerelease: false,
+      published_at: "2026-08-28T08:00:00Z",
+    };
+    const lower = {
+      tag_name: "v9007199254740992.999999999999999999.999999999999999999",
+      draft: false,
+      prerelease: false,
+      published_at: "2026-08-29T08:00:00Z",
+    };
+
+    for (const releases of [
+      [higher, lower],
+      [lower, higher],
+    ]) {
+      expect(runSelector([releases]).stdout).toBe("v9007199254740993.0.0\n");
+    }
   });
 
   test("fails closed when no stable app release exists", () => {

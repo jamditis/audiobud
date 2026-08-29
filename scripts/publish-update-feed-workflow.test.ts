@@ -308,7 +308,9 @@ describe("published update feed workflow", () => {
     expect(workflow).toContain("release:\n    types: [published]");
     expect(workflow).toContain("workflow_dispatch:");
     expect(workflow).toContain("tag:");
-    expect(workflow).toContain("^v[0-9]+\\.[0-9]+\\.[0-9]+$");
+    expect(workflow).toContain(
+      "^v(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$",
+    );
     expect(workflow).toContain('echo "publish=false"');
     expect(workflow).toContain("if: needs.gate.outputs.publish == 'true'");
     expect(workflow).toContain(
@@ -356,6 +358,7 @@ describe("published update feed workflow", () => {
     ).not.toBe(0);
     expect(runGate({ INPUT_MANIFEST_SHA256: digest }).exitCode).not.toBe(0);
     expect(runGate({ INPUT_TAG: "v0.6" }).exitCode).not.toBe(0);
+    expect(runGate({ INPUT_TAG: "v01.2.3" }).exitCode).not.toBe(0);
   });
 
   test("verifies exact updater assets before it builds the manifest", () => {

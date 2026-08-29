@@ -1,7 +1,23 @@
 import { readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
-const stableAppTag = /^v\d+\.\d+\.\d+$/;
+const stableAppTag = /^v(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$/;
+
+function versionFromTag(tag) {
+  return tag.slice(1).split(".").map(BigInt);
+}
+
+function isHigherVersion(candidate, current) {
+  for (let index = 0; index < candidate.length; index += 1) {
+    if (candidate[index] > current[index]) {
+      return true;
+    }
+    if (candidate[index] < current[index]) {
+      return false;
+    }
+  }
+  return false;
+}
 
 export function selectLatestStableAppRelease(releasePages) {
   if (!Array.isArray(releasePages)) {
@@ -26,13 +42,13 @@ export function selectLatestStableAppRelease(releasePages) {
       continue;
     }
 
-    const publishedAt = Date.parse(release.published_at);
-    if (!Number.isFinite(publishedAt)) {
+    if (!Number.isFinite(Date.parse(release.published_at))) {
       continue;
     }
 
-    if (latest === null || publishedAt > latest.publishedAt) {
-      latest = { publishedAt, tag: release.tag_name };
+    const version = versionFromTag(release.tag_name);
+    if (latest === null || isHigherVersion(version, latest.version)) {
+      latest = { tag: release.tag_name, version };
     }
   }
 
