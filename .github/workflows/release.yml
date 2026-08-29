@@ -1515,21 +1515,17 @@ jobs:
             throw "Draft release returned the wrong tag: $($release.tag_name)"
           }
 
-          $priorReleaseJson = gh api `
-            "repos/$env:GITHUB_REPOSITORY/releases/latest"
+          $releasePagesJson = gh api --paginate --slurp `
+            "repos/$env:GITHUB_REPOSITORY/releases?per_page=100"
           if ($LASTEXITCODE -ne 0) {
-            throw 'Latest prior stable release was not found'
+            throw 'Published releases could not be listed'
           }
-          $priorRelease = $priorReleaseJson | ConvertFrom-Json
-          $priorTag = [string]$priorRelease.tag_name
-          if (
-            $priorRelease.draft -or
-            $priorRelease.prerelease -or
-            $null -eq $priorRelease.published_at -or
-            $priorTag -notmatch '^v\d+\.\d+\.\d+$'
-          ) {
-            throw "Latest prior release is not a published stable app release: $priorTag"
+          $priorTag = $releasePagesJson |
+            node scripts/select-latest-stable-app-release.mjs
+          if ($LASTEXITCODE -ne 0 -or -not $priorTag) {
+            throw 'Latest prior stable app release was not found'
           }
+          $priorTag = $priorTag.Trim()
           $priorVersion = $priorTag.Substring(1)
           if ([version]$priorVersion -ge [version]$version) {
             throw "Prior release $priorTag is not older than $env:RELEASE_TAG"

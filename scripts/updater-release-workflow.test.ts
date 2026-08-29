@@ -157,7 +157,12 @@ describe("signed updater release artifacts", () => {
     expect(verification).not.toContain("dangerousInsecureTransportProtocol");
 
     const metadata = stepBlock("Resolve private updater draft");
-    expect(metadata).toContain("releases/latest");
+    expect(metadata).toContain("releases?per_page=100");
+    expect(metadata).toContain("--paginate --slurp");
+    expect(metadata).toContain("scripts/select-latest-stable-app-release.mjs");
+    expect(metadata).not.toContain("-match '^v");
+    expect(metadata).not.toContain("-notmatch '^v");
+    expect(metadata).not.toContain("releases/latest");
     expect(metadata).toContain("prior_tag=$priorTag");
     expect(metadata).toContain("prior_version=$priorVersion");
     const priorInstaller = stepBlock("Download latest prior stable installer");

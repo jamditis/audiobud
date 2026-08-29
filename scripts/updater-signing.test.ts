@@ -47,6 +47,8 @@ describe("updater signing key operations", () => {
     expect(runbook).toMatch(/disposable\s+GitHub-hosted runner/);
     expect(runbook).toContain("Re-run all jobs");
     expect(runbook).toContain("durable backup asset");
+    expect(runbook).toContain("latest stable app release");
+    expect(runbook).toContain("no `latest.json`");
     expect(runbook).toContain("manifest_sha256");
     expect(runbook).toContain("expected_live_sha256");
     expect(runbook).toContain("confirm_rollback");

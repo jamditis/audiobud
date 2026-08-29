@@ -76,6 +76,133 @@ function runGate(overrides: Record<string, string>) {
   return { exitCode: result.exitCode, output };
 }
 
+function runBackupWithoutLiveManifest() {
+  const directory = mkdtempSync(join(tmpdir(), "audiobud-feed-empty-backup-"));
+  const downloadPath = join(directory, "download-attempted.txt");
+  const outputPath = join(directory, "output.txt");
+  const scriptPath = join(directory, "backup.sh");
+  const summaryPath = join(directory, "summary.md");
+  writeFileSync(
+    scriptPath,
+    `GITHUB_OUTPUT=${JSON.stringify(outputPath)}
+GITHUB_REPOSITORY=jamditis/audiobud
+GITHUB_STEP_SUMMARY=${JSON.stringify(summaryPath)}
+RUNNER_TEMP=${JSON.stringify(directory)}
+FEED_TAG=update-feed
+DOWNLOAD_PATH=${JSON.stringify(downloadPath)}
+gh() {
+  if [[ "$1" == "api" ]]; then
+    printf '%s\\n' '{"draft":false,"prerelease":false,"published_at":"2026-08-29T00:00:00Z","assets":[]}'
+    return 0
+  fi
+  if [[ "$1 $2" == "release download" ]]; then
+    touch "$DOWNLOAD_PATH"
+    return 1
+  fi
+  return 1
+}
+${stepScript("Backup live update feed")}
+`,
+  );
+  const result = Bun.spawnSync({
+    cmd: ["bash", scriptPath],
+    stderr: "pipe",
+    stdout: "pipe",
+  });
+  const state = {
+    downloadAttempted: existsSync(downloadPath),
+    exitCode: result.exitCode,
+    output: existsSync(outputPath) ? readFileSync(outputPath, "utf8") : "",
+  };
+  rmSync(directory, { force: true, recursive: true });
+  return state;
+}
+
+function runFailedFirstPublication(options: {
+  deleteFailures: number;
+  malformedFinalResponse?: boolean;
+}) {
+  const promotion = stepScript("Promote and verify update feed");
+  const helperStart = promotion.indexOf("latest_json_asset_count() {");
+  const absenceStart = promotion.indexOf("restore_previous_absence() {");
+  const functionsEnd = promotion.indexOf(
+    "trap restore_previous_feed ERR",
+    absenceStart,
+  );
+  expect(helperStart).toBeGreaterThan(-1);
+  expect(absenceStart).toBeGreaterThan(helperStart);
+  expect(functionsEnd).toBeGreaterThan(absenceStart);
+  const restoreFunctions = promotion.slice(helperStart, functionsEnd);
+
+  const directory = mkdtempSync(join(tmpdir(), "audiobud-feed-empty-restore-"));
+  const afterPath = join(directory, "after.txt");
+  const deleteCountPath = join(directory, "delete-count.txt");
+  const liveStatePath = join(directory, "live-state.txt");
+  const scriptPath = join(directory, "restore.sh");
+  writeFileSync(
+    scriptPath,
+    `set -eEuo pipefail
+BACKUP_MANIFEST=''
+BACKUP_SHA256=''
+FEED_TAG=update-feed
+GITHUB_REPOSITORY=jamditis/audiobud
+HAD_LIVE=false
+RUNNER_TEMP=${JSON.stringify(directory)}
+AFTER_PATH=${JSON.stringify(afterPath)}
+DELETE_COUNT_PATH=${JSON.stringify(deleteCountPath)}
+LIVE_STATE_PATH=${JSON.stringify(liveStatePath)}
+DELETE_COUNT=0
+DELETE_FAILURES_REMAINING=${options.deleteFailures}
+INSPECTION_COUNT=0
+LIVE_PRESENT=true
+MALFORMED_FINAL_RESPONSE=${options.malformedFinalResponse ? "true" : "false"}
+trap 'printf "%s" "$DELETE_COUNT" > "$DELETE_COUNT_PATH"; printf "%s" "$LIVE_PRESENT" > "$LIVE_STATE_PATH"' EXIT
+sleep() { :; }
+gh() {
+  if [[ "$1" == "api" && "\${2:-} \${3:-}" == "--method DELETE" ]]; then
+    DELETE_COUNT=$((DELETE_COUNT + 1))
+    if [[ "$DELETE_FAILURES_REMAINING" -gt 0 ]]; then
+      DELETE_FAILURES_REMAINING=$((DELETE_FAILURES_REMAINING - 1))
+      return 1
+    fi
+    LIVE_PRESENT=false
+    return 0
+  fi
+  if [[ "$1" == "api" ]]; then
+    INSPECTION_COUNT=$((INSPECTION_COUNT + 1))
+    if [[ "$MALFORMED_FINAL_RESPONSE" == "true" && "$INSPECTION_COUNT" -eq 4 ]]; then
+      printf '%s\\n' '{'
+    elif [[ "$LIVE_PRESENT" == "true" ]]; then
+      printf '%s\\n' '{"assets":[{"id":123,"name":"latest.json"}]}'
+    else
+      printf '%s\\n' '{"assets":[]}'
+    fi
+    return 0
+  fi
+  return 1
+}
+${restoreFunctions}
+trap restore_previous_feed ERR
+false
+printf 'resumed' > "$AFTER_PATH"
+`,
+  );
+  const result = Bun.spawnSync({
+    cmd: ["bash", scriptPath],
+    stderr: "pipe",
+    stdout: "pipe",
+  });
+  const state = {
+    afterExists: existsSync(afterPath),
+    deleteCount: readFileSync(deleteCountPath, "utf8"),
+    exitCode: result.exitCode,
+    liveState: readFileSync(liveStatePath, "utf8"),
+    output: result.stdout.toString() + result.stderr.toString(),
+  };
+  rmSync(directory, { force: true, recursive: true });
+  return state;
+}
+
 function runRollbackPromotion(options: {
   failTargetReadback: boolean;
   restoreUploadFailures: number;
@@ -187,12 +314,14 @@ describe("published update feed workflow", () => {
     expect(workflow).toContain(
       ".draft or .prerelease or (.published_at == null)",
     );
-    expect(
-      workflow.match(/gh api "repos\/\$GITHUB_REPOSITORY\/releases\/latest"/g),
-    ).toHaveLength(2);
-    expect(workflow).toContain(
-      'LATEST_TAG=$(jq -r ".tag_name" "$LATEST_JSON")',
+    expect(workflow).not.toContain(
+      'gh api "repos/$GITHUB_REPOSITORY/releases/latest"',
     );
+    expect(workflow.match(/releases\?per_page=100/g)).toHaveLength(2);
+    expect(workflow).toContain("--paginate --slurp");
+    expect(
+      workflow.match(/node scripts\/select-latest-stable-app-release\.mjs/g),
+    ).toHaveLength(2);
     expect(workflow).toContain('if [[ "$LATEST_TAG" != "$TAG" ]]');
     expect(workflow).toContain("operation:");
     expect(workflow).toContain("options:");
@@ -343,6 +472,39 @@ describe("published update feed workflow", () => {
     );
   });
 
+  test("checks out the release selector before final promotion", () => {
+    const finalizeStart = workflow.indexOf("\n  finalize:\n");
+    const finalizeEnd = workflow.indexOf("\n  rollback:\n", finalizeStart);
+    expect(finalizeStart).toBeGreaterThan(-1);
+    expect(finalizeEnd).toBeGreaterThan(finalizeStart);
+    const finalize = workflow.slice(finalizeStart, finalizeEnd);
+    const checkout = finalize.indexOf("actions/checkout@");
+    const setupBun = finalize.indexOf("oven-sh/setup-bun@");
+    const backup = finalize.indexOf("- name: Backup live update feed");
+    expect(checkout).toBeGreaterThan(-1);
+    expect(setupBun).toBeGreaterThan(checkout);
+    expect(backup).toBeGreaterThan(setupBun);
+  });
+
+  test("keeps workflow source separate from the target release on retry", () => {
+    const prepareStart = workflow.indexOf("\n  prepare:\n");
+    const finalizeStart = workflow.indexOf("\n  finalize:\n");
+    const rollbackStart = workflow.indexOf("\n  rollback:\n", finalizeStart);
+    expect(prepareStart).toBeGreaterThan(-1);
+    expect(finalizeStart).toBeGreaterThan(prepareStart);
+    expect(rollbackStart).toBeGreaterThan(finalizeStart);
+    const prepare = workflow.slice(prepareStart, finalizeStart);
+    const finalize = workflow.slice(finalizeStart, rollbackStart);
+    expect(prepare).toContain(
+      "source-commit: ${{ steps.source.outputs.commit }}",
+    );
+    expect(prepare).toContain('echo "commit=$SOURCE_COMMIT"');
+    expect(finalize).toContain(
+      "ref: ${{ needs.prepare.outputs.source-commit }}",
+    );
+    expect(finalize).not.toContain("ref: ${{ needs.prepare.outputs.commit }}");
+  });
+
   test("restores exact prior feed bytes if promotion fails", () => {
     const promotion = stepBlock("Promote and verify update feed");
     expect(promotion).toContain("restore_previous_feed");
@@ -410,6 +572,7 @@ BACKUP_MANIFEST=${JSON.stringify(backupPath)}
 BACKUP_SHA256=${JSON.stringify(backupSha256)}
 FEED_TAG=update-feed
 GITHUB_REPOSITORY=jamditis/audiobud
+HAD_LIVE=true
 RUNNER_TEMP=${JSON.stringify(directory)}
 LIVE_MANIFEST=${JSON.stringify(livePath)}
 AFTER_PATH=${JSON.stringify(afterPath)}
@@ -463,6 +626,55 @@ printf 'resumed' > "$AFTER_PATH"
     expect(backup).toContain('cmp --silent "$BACKUP_MANIFEST" "$SAVED_BACKUP"');
     expect(backup).toContain("$GITHUB_STEP_SUMMARY");
     expect(backup).toContain('sub("\\\\.[0-9]+Z$"; "Z")');
+  });
+
+  test("publishes safely when the live feed is absent", () => {
+    const backup = stepBlock("Backup live update feed");
+    expect(backup).toContain("LIVE_MATCH_COUNT");
+    expect(backup).toContain('echo "had_live=false"');
+    expect(backup.indexOf("LIVE_MATCH_COUNT")).toBeLessThan(
+      backup.indexOf('gh release download "$FEED_TAG"'),
+    );
+
+    const promotion = stepBlock("Promote and verify update feed");
+    expect(promotion).toContain("HAD_LIVE");
+    expect(promotion).toContain("restore_previous_absence");
+    expect(promotion).toContain(
+      'gh api --method DELETE "repos/$GITHUB_REPOSITORY/releases/assets/$FEED_ASSET_ID"',
+    );
+    expect(promotion).toContain(
+      "The live update feed appeared after the empty-state check",
+    );
+
+    expect(runBackupWithoutLiveManifest()).toEqual({
+      downloadAttempted: false,
+      exitCode: 0,
+      output: "had_live=false\n",
+    });
+  });
+
+  test("a failed first publication restores the absent feed state", () => {
+    const result = runFailedFirstPublication({ deleteFailures: 2 });
+    expect(result.exitCode).not.toBe(0);
+    expect(result.deleteCount).toBe("3");
+    expect(result.liveState).toBe("false");
+    expect(result.output).toContain("The prior empty update feed was restored");
+    expect(result.afterExists).toBe(false);
+  });
+
+  test("fails closed when empty-feed restoration cannot parse the final state", () => {
+    const result = runFailedFirstPublication({
+      deleteFailures: 2,
+      malformedFinalResponse: true,
+    });
+    expect(result.exitCode).not.toBe(0);
+    expect(result.output).toContain(
+      "Could not verify the restored empty feed state",
+    );
+    expect(result.output).not.toContain(
+      "The prior empty update feed was restored",
+    );
+    expect(result.afterExists).toBe(false);
   });
 
   test("supports an exact hash-checked rollback from a durable backup", () => {

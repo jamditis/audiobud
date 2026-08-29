@@ -124,12 +124,25 @@ jobs:
     outputs:
       tag: ${{ steps.release.outputs.tag }}
       commit: ${{ steps.release.outputs.commit }}
+      source-commit: ${{ steps.source.outputs.commit }}
       artifact-name: ${{ steps.manifest.outputs.artifact_name }}
     steps:
       - name: Check out repository
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
+
+      - name: Record workflow source
+        id: source
+        shell: bash
+        run: |
+          set -euo pipefail
+          SOURCE_COMMIT=$(git rev-parse HEAD)
+          if [[ ! "$SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::Workflow source did not resolve to a commit"
+            exit 1
+          fi
+          echo "commit=$SOURCE_COMMIT" >> "$GITHUB_OUTPUT"
 
       - name: Set up Bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
@@ -156,11 +169,14 @@ jobs:
             exit 1
           fi
 
-          LATEST_JSON="$RUNNER_TEMP/latest-release.json"
-          gh api "repos/$GITHUB_REPOSITORY/releases/latest" > "$LATEST_JSON"
-          LATEST_TAG=$(jq -r ".tag_name" "$LATEST_JSON")
+          APP_RELEASES_JSON="$RUNNER_TEMP/app-releases.json"
+          gh api --paginate --slurp \
+            "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+            > "$APP_RELEASES_JSON"
+          LATEST_TAG=$(node scripts/select-latest-stable-app-release.mjs \
+            "$APP_RELEASES_JSON")
           if [[ "$LATEST_TAG" != "$TAG" ]]; then
-            echo "::error::Update feeds can only be published for GitHub's latest release ($LATEST_TAG)"
+            echo "::error::Update feeds can only be published for the latest stable app release ($LATEST_TAG)"
             exit 1
           fi
 
@@ -406,6 +422,17 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       TAG: ${{ needs.prepare.outputs.tag }}
     steps:
+      - name: Check out workflow source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ needs.prepare.outputs.source-commit }}
+          persist-credentials: false
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.3.14
+
       - name: Download prepared update manifest
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
@@ -422,6 +449,23 @@ jobs:
           if jq -e '.draft or .prerelease or (.published_at == null)' "$FEED_RELEASE_JSON" > /dev/null; then
             echo "::error::The dedicated update feed release must be published and stable"
             exit 1
+          fi
+
+          LIVE_MATCH_COUNT=$(jq \
+            '[.assets[] | select(.name == "latest.json")] | length' \
+            "$FEED_RELEASE_JSON")
+          if [[ "$LIVE_MATCH_COUNT" -gt 1 ]]; then
+            echo "::error::The update feed release has more than one latest.json asset"
+            exit 1
+          fi
+          if [[ "$LIVE_MATCH_COUNT" -eq 0 ]]; then
+            echo "had_live=false" >> "$GITHUB_OUTPUT"
+            {
+              echo "### No live update feed backup"
+              echo
+              echo "The update feed had no latest.json asset before publication."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
           fi
 
           BACKUP_DIRECTORY="$RUNNER_TEMP/update-feed-backup"
@@ -506,6 +550,7 @@ jobs:
           fi
 
           {
+            echo "had_live=true"
             echo "path=$BACKUP_MANIFEST"
             echo "sha256=$BACKUP_SHA256"
             echo "asset=$BACKUP_ASSET_NAME"
@@ -523,6 +568,7 @@ jobs:
         env:
           BACKUP_MANIFEST: ${{ steps.backup.outputs.path }}
           BACKUP_SHA256: ${{ steps.backup.outputs.sha256 }}
+          HAD_LIVE: ${{ steps.backup.outputs.had_live }}
         run: |
           set -eEuo pipefail
           PREPARED_MANIFEST="$GITHUB_WORKSPACE/prepared-update-manifest/latest.json"
@@ -531,31 +577,130 @@ jobs:
             exit 1
           fi
 
-          LATEST_JSON="$RUNNER_TEMP/latest-release-final.json"
-          gh api "repos/$GITHUB_REPOSITORY/releases/latest" > "$LATEST_JSON"
-          LATEST_TAG=$(jq -r ".tag_name" "$LATEST_JSON")
+          APP_RELEASES_JSON="$RUNNER_TEMP/app-releases-final.json"
+          gh api --paginate --slurp \
+            "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+            > "$APP_RELEASES_JSON"
+          LATEST_TAG=$(node scripts/select-latest-stable-app-release.mjs \
+            "$APP_RELEASES_JSON")
           if [[ "$LATEST_TAG" != "$TAG" ]]; then
-            echo "::error::Update feed promotion requires GitHub's latest release ($LATEST_TAG)"
+            echo "::error::Update feed promotion requires the latest stable app release ($LATEST_TAG)"
             exit 1
           fi
 
-          PRE_PROMOTION_DIRECTORY="$RUNNER_TEMP/update-feed-pre-promotion"
-          mkdir -p "$PRE_PROMOTION_DIRECTORY"
-          gh release download "$FEED_TAG" \
-            --repo "$GITHUB_REPOSITORY" \
-            --dir "$PRE_PROMOTION_DIRECTORY" \
-            --pattern "latest.json"
-          PRE_PROMOTION_MANIFEST="$PRE_PROMOTION_DIRECTORY/latest.json"
-          PRE_PROMOTION_SHA256=$(sha256sum "$PRE_PROMOTION_MANIFEST" | cut -d' ' -f1)
-          if [[ "$PRE_PROMOTION_SHA256" != "$BACKUP_SHA256" ]]; then
-            echo "::error::The live update feed changed after its durable backup"
+          PRE_PROMOTION_RELEASE="$RUNNER_TEMP/update-feed-pre-promotion.json"
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$FEED_TAG" \
+            > "$PRE_PROMOTION_RELEASE"
+          PRE_PROMOTION_MATCH_COUNT=$(jq \
+            '[.assets[] | select(.name == "latest.json")] | length' \
+            "$PRE_PROMOTION_RELEASE")
+          if [[ "$PRE_PROMOTION_MATCH_COUNT" -gt 1 ]]; then
+            echo "::error::The update feed release has more than one latest.json asset"
             exit 1
           fi
+          if [[ "$HAD_LIVE" == "true" ]]; then
+            if [[ "$PRE_PROMOTION_MATCH_COUNT" -ne 1 ]]; then
+              echo "::error::The live update feed disappeared after its durable backup"
+              exit 1
+            fi
+            PRE_PROMOTION_DIRECTORY="$RUNNER_TEMP/update-feed-pre-promotion"
+            mkdir -p "$PRE_PROMOTION_DIRECTORY"
+            gh release download "$FEED_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --dir "$PRE_PROMOTION_DIRECTORY" \
+              --pattern "latest.json"
+            PRE_PROMOTION_MANIFEST="$PRE_PROMOTION_DIRECTORY/latest.json"
+            PRE_PROMOTION_SHA256=$(sha256sum "$PRE_PROMOTION_MANIFEST" | cut -d' ' -f1)
+            if [[ "$PRE_PROMOTION_SHA256" != "$BACKUP_SHA256" ]]; then
+              echo "::error::The live update feed changed after its durable backup"
+              exit 1
+            fi
+          elif [[ "$HAD_LIVE" == "false" ]]; then
+            if [[ "$PRE_PROMOTION_MATCH_COUNT" -ne 0 ]]; then
+              echo "::error::The live update feed appeared after the empty-state check"
+              exit 1
+            fi
+          else
+            echo "::error::The update feed backup state is invalid"
+            exit 1
+          fi
+
+          latest_json_asset_count() {
+            release_json="$1"
+            jq -er '
+              if (type != "object") or ((.assets | type) != "array") then
+                error("release assets must be an array")
+              else
+                [.assets[] | select(
+                  (type == "object") and (.name == "latest.json")
+                )] | length
+              end
+            ' "$release_json"
+          }
+
+          restore_previous_absence() {
+            failure_status="$1"
+            for restore_attempt in 1 2 3; do
+              ABSENCE_RELEASE_JSON="$RUNNER_TEMP/update-feed-absence-$restore_attempt.json"
+              if ! gh api "repos/$GITHUB_REPOSITORY/releases/tags/$FEED_TAG" \
+                > "$ABSENCE_RELEASE_JSON"; then
+                echo "::warning::Could not inspect the feed during absence restore attempt $restore_attempt"
+              else
+                if ! ABSENCE_MATCH_COUNT=$(latest_json_asset_count \
+                  "$ABSENCE_RELEASE_JSON"); then
+                  echo "::error::Could not parse the feed during absence restore attempt $restore_attempt"
+                  exit 1
+                fi
+                if [[ "$ABSENCE_MATCH_COUNT" -eq 0 ]]; then
+                  break
+                fi
+                if [[ "$ABSENCE_MATCH_COUNT" -gt 1 ]]; then
+                  echo "::error::More than one latest.json asset exists during absence restore"
+                  exit 1
+                fi
+                if ! FEED_ASSET_ID=$(jq -er '
+                  .assets[] |
+                  select(.name == "latest.json") |
+                  .id |
+                  select((type == "number") and (. > 0) and (floor == .))
+                ' "$ABSENCE_RELEASE_JSON"); then
+                  echo "::error::The update feed asset has an invalid id"
+                  exit 1
+                fi
+                if ! gh api --method DELETE "repos/$GITHUB_REPOSITORY/releases/assets/$FEED_ASSET_ID"; then
+                  echo "::warning::Absence restore delete attempt $restore_attempt failed"
+                fi
+              fi
+              if [[ "$restore_attempt" -lt 3 ]]; then
+                sleep $((restore_attempt * 2))
+              fi
+            done
+            FINAL_ABSENCE_JSON="$RUNNER_TEMP/update-feed-absence-final.json"
+            if ! gh api "repos/$GITHUB_REPOSITORY/releases/tags/$FEED_TAG" \
+              > "$FINAL_ABSENCE_JSON"; then
+              echo "::error::Could not verify the restored empty feed state"
+              exit 1
+            fi
+            if ! FINAL_ABSENCE_COUNT=$(latest_json_asset_count \
+              "$FINAL_ABSENCE_JSON"); then
+              echo "::error::Could not verify the restored empty feed state"
+              exit 1
+            fi
+            if [[ "$FINAL_ABSENCE_COUNT" -ne 0 ]]; then
+              echo "::error::Could not restore the prior empty update feed"
+              exit 1
+            fi
+            echo "::notice::The prior empty update feed was restored"
+            exit "$failure_status"
+          }
 
           restore_previous_feed() {
             failure_status=$?
             trap - ERR
             set +e
+            if [[ "$HAD_LIVE" == "false" ]]; then
+              restore_previous_absence "$failure_status"
+            fi
             echo "::warning::Update feed promotion failed; restoring the prior latest.json"
             restore_uploaded=false
             for restore_attempt in 1 2 3; do

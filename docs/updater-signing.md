@@ -89,16 +89,19 @@ After a stable app release is published, `publish-update-feed.yml` downloads
 and verifies the public updater assets and attached evidence again. It requires
 evidence from the exact successful release workflow run and attempt for the same
 tag, commit, archive hash, and prior stable source installation. It uses the
-strict production generator to prepare
-`latest.json` inside the workflow run. Before promotion, it saves the current
-`update-feed/latest.json`. It uploads the new manifest, downloads it again, and
-compares the exact bytes. If upload or read-back verification fails, it restores
-and verifies the saved manifest. Before each feed mutation, it also stores and
-reads back a durable backup asset named from the outgoing version and full
-SHA-256. It never overwrites that asset. The fixed feed tag keeps model mirrors
-and other repository releases from changing the URL installed clients query.
-Releases whose tags are not exact `vMAJOR.MINOR.PATCH` versions skip this
-workflow without changing the live feed.
+strict production generator to prepare `latest.json` inside the workflow run.
+It confirms that the target is the latest stable app release, so model and other
+auxiliary releases do not displace it. Before promotion, it saves the current
+`update-feed/latest.json` when one exists. If the release has no `latest.json`,
+the workflow records that empty state instead. It uploads the new manifest,
+downloads it again, and compares the exact bytes. If upload or read-back
+verification fails, it restores and verifies the saved manifest or removes the
+new asset and verifies the prior empty state. Before each feed replacement, it
+also stores and reads back a durable backup asset named from the outgoing
+version and full SHA-256. It never overwrites that asset. The fixed feed tag
+keeps model mirrors and other repository releases from changing the URL
+installed clients query. Releases whose tags are not exact
+`vMAJOR.MINOR.PATCH` versions skip this workflow without changing the live feed.
 
 To restore an older feed, run `publish-update-feed.yml` manually with
 `operation` set to `rollback`. Supply the saved release `tag`, its
