@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 
 const workflow = readFileSync(".github/workflows/release.yml", "utf8");
+const ciWorkflow = readFileSync(".github/workflows/ci.yml", "utf8");
 const config = JSON.parse(readFileSync("src-tauri/tauri.conf.json", "utf8"));
 const storeConfig = JSON.parse(
   readFileSync("src-tauri/tauri.microsoftstore.conf.json", "utf8"),
@@ -14,7 +15,19 @@ function stepBlock(name: string): string {
   return workflow.slice(position, next === -1 ? undefined : next);
 }
 
+function stepPosition(name: string): number {
+  const position = workflow.indexOf(`- name: ${name}`);
+  expect(position, `Missing workflow step: ${name}`).toBeGreaterThan(-1);
+  return position;
+}
+
 describe("signed updater release artifacts", () => {
+  test("serializes every release mutation for one source ref", () => {
+    expect(workflow).toMatch(
+      /\nconcurrency:\n  group: release-\$\{\{ github\.ref \}\}\n  cancel-in-progress: false\n\njobs:/,
+    );
+  });
+
   test("creates and signs updater artifacts after unrelated bundle hooks", () => {
     expect(config.bundle.createUpdaterArtifacts).toBe(false);
     expect(storeConfig.bundle.createUpdaterArtifacts).toBe(false);
@@ -98,5 +111,225 @@ describe("signed updater release artifacts", () => {
     }
     expect(workflow).not.toContain("- name: Generate latest.json");
     expect(workflow).not.toContain("- name: Publish latest.json");
+  });
+
+  test("applies the exact private draft updater before publication", () => {
+    expect(workflow).toContain("verify-updater-candidate:");
+    expect(workflow).toMatch(
+      /verify-updater-candidate:[\s\S]*?needs: build-windows[\s\S]*?runs-on: windows-2025/,
+    );
+    const jobStart = workflow.indexOf("  verify-updater-candidate:");
+    const jobEnd = workflow.indexOf("\n  build-macos:", jobStart);
+    const verificationJob = workflow.slice(jobStart, jobEnd);
+    expect(verificationJob).toContain(
+      "if: ${{ inputs.store_candidate != true && github.ref_type == 'tag' && (github.event_name != 'workflow_dispatch' || inputs.make_release) }}",
+    );
+    expect(verificationJob).toContain("environment: artifact-signing");
+    expect(verificationJob).toContain("contents: write");
+    expect(verificationJob).toContain(
+      "artifact-name: ${{ steps.updater-meta.outputs.evidence_artifact }}",
+    );
+    expect(stepPosition("Resolve private updater draft")).toBeLessThan(
+      stepPosition("Download private updater draft files"),
+    );
+    expect(stepPosition("Download private updater draft files")).toBeLessThan(
+      stepPosition("Verify private updater provenance"),
+    );
+    expect(stepPosition("Verify private updater provenance")).toBeLessThan(
+      stepPosition("Verify private updater signature"),
+    );
+    expect(stepPosition("Verify private updater signature")).toBeLessThan(
+      stepPosition("Apply private updater and preserve user data"),
+    );
+    expect(
+      stepPosition("Apply private updater and preserve user data"),
+    ).toBeLessThan(
+      stepPosition("Upload private updater verification evidence"),
+    );
+
+    const verification = stepBlock(
+      "Apply private updater and preserve user data",
+    );
+    expect(verification).toContain("scripts/verify-updater-candidate.ps1");
+    expect(verification).toContain("steps.updater-meta.outputs.prior_tag");
+    expect(verification).toContain("steps.updater-meta.outputs.prior_version");
+    expect(verification).not.toContain("$LASTEXITCODE");
+    expect(verification).not.toContain("dangerousInsecureTransportProtocol");
+
+    const metadata = stepBlock("Resolve private updater draft");
+    expect(metadata).toContain("releases?per_page=100");
+    expect(metadata).toContain("--paginate --slurp");
+    expect(metadata).toContain("scripts/select-latest-stable-app-release.mjs");
+    expect(metadata).not.toContain("-match '^v");
+    expect(metadata).not.toContain("-notmatch '^v");
+    expect(metadata).not.toContain("releases/latest");
+    expect(metadata).toContain("prior_tag=$priorTag");
+    expect(metadata).toContain("prior_version=$priorVersion");
+    const priorInstaller = stepBlock("Download latest prior stable installer");
+    expect(priorInstaller).toContain("steps.updater-meta.outputs.prior_tag");
+    expect(priorInstaller).toContain(
+      "steps.updater-meta.outputs.prior_version",
+    );
+  });
+
+  test("retains private proof that settings and models survive", () => {
+    const verifierPath = "scripts/verify-updater-candidate.ps1";
+    const serverPath = "scripts/serve-updater-candidate.mjs";
+    expect(existsSync(verifierPath)).toBe(true);
+    expect(existsSync(serverPath)).toBe(true);
+
+    const verifier = existsSync(verifierPath)
+      ? readFileSync(verifierPath, "utf8")
+      : "";
+    expect(verifier).toContain("settings_store.json");
+    expect(verifier).toContain("audio_feedback");
+    expect(verifier).toContain("models");
+    expect(verifier).toContain("Get-FileHash");
+    expect(verifier).toContain("https://localhost");
+    expect(verifier).toContain("Import-Certificate");
+    expect(verifier).toContain("Cert:\\CurrentUser\\Root");
+    expect(verifier).toContain("finally");
+    expect(verifier).toContain("--install-update-endpoint");
+    expect(verifier).toContain("model_sha256_before");
+    expect(verifier).toContain("model_sha256_after");
+    expect(verifier).toContain("moonshine-tiny-streaming-en.tar.gz");
+    expect(verifier).toContain(
+      "465addcfca9e86117415677dfdc98b21edc53537210333a3ecdb58509a80abaf",
+    );
+    expect(verifier).toContain("Get-DirectoryInventorySha256");
+    expect(verifier).not.toContain("release-preservation-sentinel.bin");
+    expect(verifier).toContain("Wait-ForUpdaterQuiescence");
+    expect(verifier).not.toContain("Wait-ForUpdaterRelaunch");
+    expect(verifier).toContain('"AudioBud_${TargetVersion}_x64-setup"');
+    expect(verifier).toContain("settings_value_before");
+    expect(verifier).toContain("settings_value_after");
+    expect(verifier).toContain("workflow_run_attempt");
+    expect(verifier).not.toContain("[string]$PriorTag = 'v0.5.0'");
+    expect(verifier).not.toContain("[string]$PriorVersion = '0.5.0'");
+    expect(verifier).toContain("TimeStamperCertificate");
+    expect(verifier).toContain("uninstall.exe");
+    expect(verifier).toContain("Get-AudioBudUninstallRegistryPaths");
+    expect(verifier).toContain("Get-OptionalRegistryStringValue");
+    const registryScanStart = verifier.indexOf(
+      "function Get-AudioBudUninstallRegistryPaths",
+    );
+    const updaterDirectoryFunctionsStart = verifier.indexOf(
+      "function Get-AudioBudUpdaterDirectories",
+    );
+    expect(registryScanStart).toBeGreaterThan(-1);
+    expect(updaterDirectoryFunctionsStart).toBeGreaterThan(registryScanStart);
+    const registryScan = verifier.slice(
+      registryScanStart,
+      updaterDirectoryFunctionsStart,
+    );
+    expect(
+      registryScan.match(/Get-OptionalRegistryStringValue/g) ?? [],
+    ).toHaveLength(3);
+    for (const registryValueName of [
+      "DisplayName",
+      "InstallLocation",
+      "UninstallString",
+    ]) {
+      expect(registryScan).toContain(`-Name '${registryValueName}'`);
+    }
+    expect(verifier).not.toContain("[string]$values.DisplayName");
+    expect(verifier).not.toContain("[string]$values.InstallLocation");
+    expect(verifier).not.toContain("[string]$values.UninstallString");
+    expect(verifier).toContain("installedRegistryPaths");
+    expect(verifier).toContain("targetRegistryPaths");
+    expect(verifier).toContain("remainingRegistryPaths");
+    expect(verifier).toContain(
+      "Updated installation created no AudioBud uninstall registration",
+    );
+    expect(verifier).toContain(
+      "Updated uninstall left AudioBud registration keys",
+    );
+    expect(verifier.indexOf("targetRegistryPaths")).toBeLessThan(
+      verifier.indexOf("uninstall.exe"),
+    );
+    expect(verifier.indexOf("remainingRegistryPaths")).toBeGreaterThan(
+      verifier.indexOf("uninstall.exe"),
+    );
+    expect(verifier).toContain("Updated uninstall left the install directory");
+    expect(verifier).toContain("Get-NewAudioBudUpdaterDirectories");
+    expect(verifier).toContain("updaterDirectoriesBefore");
+    expect(verifier).toContain("updaterExtractionDirectories");
+    expect(verifier).toContain("Updater extraction directory cleanup failed");
+    const updaterCleanupStart = verifier.indexOf(
+      "foreach ($updaterDirectory in @($updaterExtractionDirectories))",
+    );
+    const certificateCleanupStart = verifier.indexOf(
+      "foreach ($trustedCertificate in @($rootCertificate))",
+    );
+    expect(updaterCleanupStart).toBeGreaterThan(-1);
+    expect(certificateCleanupStart).toBeGreaterThan(updaterCleanupStart);
+    const updaterCleanup = verifier.slice(
+      updaterCleanupStart,
+      certificateCleanupStart,
+    );
+    expect(updaterCleanup).toContain(
+      "$updaterDirectoryParent -ine $tempRootFullPath",
+    );
+    expect(updaterCleanup).toContain("$updaterDirectoryName.StartsWith(");
+    expect(updaterCleanup).toContain('"AudioBud-${TargetVersion}-updater-"');
+    expect(updaterCleanup).toContain(
+      "Refusing to remove unexpected updater directory",
+    );
+    expect(updaterCleanup).toContain("[System.StringComparison]::Ordinal");
+    expect(updaterCleanup).toContain(
+      "Remove-Item -LiteralPath $updaterDirectory -Recurse",
+    );
+    const parentGuard = updaterCleanup.indexOf(
+      "$updaterDirectoryParent -ine $tempRootFullPath",
+    );
+    const prefixGuard = updaterCleanup.indexOf(
+      "$updaterDirectoryName.StartsWith(",
+    );
+    const refusal = updaterCleanup.indexOf(
+      "Refusing to remove unexpected updater directory",
+    );
+    const recursiveDelete = updaterCleanup.indexOf(
+      "Remove-Item -LiteralPath $updaterDirectory -Recurse",
+    );
+    expect(parentGuard).toBeGreaterThan(-1);
+    expect(prefixGuard).toBeGreaterThan(-1);
+    expect(refusal).toBeGreaterThan(parentGuard);
+    expect(refusal).toBeGreaterThan(prefixGuard);
+    expect(recursiveDelete).toBeGreaterThan(refusal);
+    expect(verifier).not.toMatch(
+      /Remove-Item[\s\S]{0,400}?-Path[\s\S]{0,400}?AudioBud-[^\r\n]{0,200}-updater-\*/,
+    );
+    expect(verifier).toContain("cleanupErrors");
+    expect(verifier).toContain("Trusted root certificate cleanup failed");
+    expect(verifier).toContain("Candidate server cleanup failed");
+    expect(verifier).toContain("updater-prepublication-evidence.json");
+    expect(workflow).toContain(
+      "audiobud-updater-prepublication-$env:RELEASE_TAG-$env:GITHUB_RUN_ATTEMPT",
+    );
+    expect(workflow).toContain(
+      "- name: Download private updater verification evidence",
+    );
+    expect(workflow).toContain("- name: Attest updater verification evidence");
+    expect(workflow).toContain("updater-prepublication-evidence.json");
+    const attestEvidence = stepPosition("Attest updater verification evidence");
+    const uploadDraft = stepPosition(
+      "Upload macOS artifacts to joint draft release",
+    );
+    expect(attestEvidence).toBeLessThan(uploadDraft);
+    const draftUpload = stepBlock(
+      "Upload macOS artifacts to joint draft release",
+    );
+    expect(draftUpload).toContain('"$EVIDENCE" --clobber');
+    expect(draftUpload).toContain(
+      '--pattern "updater-prepublication-evidence.json"',
+    );
+    expect(draftUpload).toContain("cmp --silent");
+    expect(draftUpload.indexOf("gh release upload")).toBeLessThan(
+      draftUpload.indexOf("cmp --silent"),
+    );
+    expect(ciWorkflow).toContain("Parse updater candidate verifier");
+    expect(ciWorkflow).toContain(
+      "[System.Management.Automation.Language.Parser]::ParseFile",
+    );
   });
 });

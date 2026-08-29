@@ -101,9 +101,10 @@ The macOS release artifact contains:
 - `AudioBud_<version>_macos_aarch64_sbom.spdx.json`
 - `SHA256SUMS-macos.txt`
 
-GitHub also records provenance and SBOM attestations. Publication waits for the
-Windows and macOS build jobs. A build artifact or draft release is not approval
-to publish the tag or release.
+GitHub also records provenance and SBOM attestations. The joint draft waits for
+the Windows and macOS build jobs and the private Windows updater test. A build
+artifact, updater-test artifact, or draft release is not approval to publish
+the tag or release.
 
 Syft must collect metadata for every staged app entry. Before attestation, the
 workflow runs `scripts/validate-sbom-file-checksums.ts` against the app root. It

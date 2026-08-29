@@ -33,9 +33,26 @@ describe("updater signing key operations", () => {
     expect(runbook).toContain("Authenticode");
   });
 
-  test("documents candidate validation before live feed publication", () => {
-    expect(runbook).toContain("latest-candidate.json");
-    expect(runbook).toContain("Only after that job succeeds");
+  test("documents private candidate validation before live feed publication", () => {
+    expect(runbook).toContain("before the draft becomes public");
+    expect(runbook).toContain("latest prior stable release");
+    expect(runbook).toMatch(/trusts the active\s+signing key/);
+    expect(runbook).toContain("localhost HTTPS");
+    expect(runbook).toContain("installs v0.5.0");
+    expect(runbook).toMatch(/private Actions\s+artifact/);
+    expect(runbook).toContain("attached to the joint draft");
+    expect(runbook).toMatch(/same\s+tag, commit, archive hash/);
+    expect(runbook).toMatch(/restores\s+and verifies the saved manifest/);
+    expect(runbook).toMatch(/stops and checks the\s+server process/);
+    expect(runbook).toMatch(/disposable\s+GitHub-hosted runner/);
+    expect(runbook).toContain("Re-run all jobs");
+    expect(runbook).toContain("durable backup asset");
+    expect(runbook).toContain("latest stable app release");
+    expect(runbook).toContain("no `latest.json`");
+    expect(runbook).toContain("manifest_sha256");
+    expect(runbook).toContain("expected_live_sha256");
+    expect(runbook).toContain("confirm_rollback");
+    expect(runbook).not.toContain("latest-candidate.json");
     expect(runbook).toContain("`update-feed`");
     expect(runbook).toContain("gh release create update-feed");
     expect(runbook).toContain("--latest=false");

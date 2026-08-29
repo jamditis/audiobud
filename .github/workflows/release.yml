@@ -37,6 +37,10 @@ on:
     tags:
       - "v*"
 
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   build-windows:
     name: Build and sign Windows installers
@@ -1436,6 +1440,282 @@ jobs:
           retention-days: 30
           if-no-files-found: error
 
+  verify-updater-candidate:
+    name: Verify private Windows updater candidate
+    needs: build-windows
+    if: ${{ inputs.store_candidate != true && github.ref_type == 'tag' && (github.event_name != 'workflow_dispatch' || inputs.make_release) }}
+    environment: artifact-signing
+    runs-on: windows-2025
+    timeout-minutes: 35
+    outputs:
+      artifact-name: ${{ steps.updater-meta.outputs.evidence_artifact }}
+    permissions:
+      attestations: read
+      # GitHub limits draft release visibility to identities with push access.
+      # This job only reads and verifies the protected draft.
+      contents: write
+    steps:
+      - name: Check out repository for updater verification
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Bun for updater verification
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.3.14
+
+      - name: Install Rust for updater verification
+        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+        with:
+          toolchain: stable
+
+      - name: Resolve private updater draft
+        id: updater-meta
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          $config = Get-Content -LiteralPath 'src-tauri/tauri.conf.json' -Raw |
+            ConvertFrom-Json
+          $version = [string]$config.version
+          if ($version -notmatch '^\d+\.\d+\.\d+$') {
+            throw "Application version is not stable semver: $version"
+          }
+          if ($env:RELEASE_TAG -cne "v$version") {
+            throw "Release tag $env:RELEASE_TAG does not match application version $version"
+          }
+
+          $tagCommit = git rev-list -n 1 "refs/tags/$env:RELEASE_TAG" 2>$null
+          if ($LASTEXITCODE -ne 0 -or -not $tagCommit) {
+            throw "Release tag $env:RELEASE_TAG was not checked out"
+          }
+          if ($tagCommit -cne $env:GITHUB_SHA) {
+            throw "Release tag $env:RELEASE_TAG points to $tagCommit, not $env:GITHUB_SHA"
+          }
+
+          $releaseJson = gh api `
+            "repos/$env:GITHUB_REPOSITORY/releases/tags/$env:RELEASE_TAG"
+          if ($LASTEXITCODE -ne 0) {
+            throw "Draft release $env:RELEASE_TAG was not found"
+          }
+          $release = $releaseJson | ConvertFrom-Json
+          if (-not $release.draft) {
+            throw "Release $env:RELEASE_TAG is not a draft"
+          }
+          if ($release.prerelease) {
+            throw "Release $env:RELEASE_TAG is marked as a prerelease"
+          }
+          if ($null -ne $release.published_at) {
+            throw "Release $env:RELEASE_TAG already has a publication time"
+          }
+          if ([string]$release.tag_name -cne $env:RELEASE_TAG) {
+            throw "Draft release returned the wrong tag: $($release.tag_name)"
+          }
+
+          $releasePagesJson = gh api --paginate --slurp `
+            "repos/$env:GITHUB_REPOSITORY/releases?per_page=100"
+          if ($LASTEXITCODE -ne 0) {
+            throw 'Published releases could not be listed'
+          }
+          $priorTag = $releasePagesJson |
+            node scripts/select-latest-stable-app-release.mjs
+          if ($LASTEXITCODE -ne 0 -or -not $priorTag) {
+            throw 'Latest prior stable app release was not found'
+          }
+          $priorTag = $priorTag.Trim()
+          $priorVersion = $priorTag.Substring(1)
+          if ([version]$priorVersion -ge [version]$version) {
+            throw "Prior release $priorTag is not older than $env:RELEASE_TAG"
+          }
+
+          "version=$version" |
+            Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "tag=$env:RELEASE_TAG" |
+            Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "prior_tag=$priorTag" |
+            Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "prior_version=$priorVersion" |
+            Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "evidence_artifact=audiobud-updater-prepublication-$env:RELEASE_TAG-$env:GITHUB_RUN_ATTEMPT" |
+            Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      - name: Download private updater draft files
+        id: updater-files
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.updater-meta.outputs.tag }}
+          RELEASE_VERSION: ${{ steps.updater-meta.outputs.version }}
+        run: |
+          $assetDirectory = Join-Path $env:RUNNER_TEMP `
+            "audiobud-private-updater-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
+          if (Test-Path -LiteralPath $assetDirectory) {
+            throw "Private updater directory already exists: $assetDirectory"
+          }
+          New-Item -ItemType Directory -Path $assetDirectory | Out-Null
+
+          $archiveName = "AudioBud_$($env:RELEASE_VERSION)_x64-setup.nsis.zip"
+          $signatureName = "$archiveName.sig"
+          $publicKeyName = 'updater-signing-public-key.pub'
+          foreach ($assetName in @($archiveName, $signatureName, $publicKeyName)) {
+            gh release download $env:RELEASE_TAG `
+              --dir $assetDirectory `
+              --pattern $assetName
+            if ($LASTEXITCODE -ne 0) {
+              throw "Failed to download private draft asset $assetName"
+            }
+          }
+
+          $files = @(Get-ChildItem -LiteralPath $assetDirectory -File)
+          if ($files.Count -ne 3) {
+            throw "Expected three private updater files, found $($files.Count)"
+          }
+          $archive = Join-Path $assetDirectory $archiveName
+          $signature = Join-Path $assetDirectory $signatureName
+          $publicKey = Join-Path $assetDirectory $publicKeyName
+          foreach ($path in @($archive, $signature, $publicKey)) {
+            if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+              throw "Private updater asset was not downloaded: $path"
+            }
+            if ((Get-Item -LiteralPath $path).Length -le 0) {
+              throw "Private updater asset is empty: $path"
+            }
+          }
+
+          "archive=$archive" |
+            Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "signature=$signature" |
+            Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "public_key=$publicKey" |
+            Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      - name: Verify private updater provenance
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.updater-meta.outputs.tag }}
+          UPDATER_ARCHIVE: ${{ steps.updater-files.outputs.archive }}
+          UPDATER_SIGNATURE: ${{ steps.updater-files.outputs.signature }}
+          UPDATER_PUBLIC_KEY: ${{ steps.updater-files.outputs.public_key }}
+        run: |
+          foreach ($path in @(
+            $env:UPDATER_ARCHIVE,
+            $env:UPDATER_SIGNATURE,
+            $env:UPDATER_PUBLIC_KEY
+          )) {
+            gh attestation verify $path `
+              --repo $env:GITHUB_REPOSITORY `
+              --signer-workflow "$env:GITHUB_REPOSITORY/.github/workflows/release.yml" `
+              --source-ref "refs/tags/$env:RELEASE_TAG" `
+              --source-digest $env:GITHUB_SHA `
+              --deny-self-hosted-runners
+            if ($LASTEXITCODE -ne 0) {
+              throw "Release provenance verification failed: $path"
+            }
+          }
+
+      - name: Verify private updater signature
+        shell: pwsh
+        env:
+          TAURI_SIGNING_PUBLIC_KEY: ${{ vars.TAURI_SIGNING_PUBLIC_KEY }}
+          UPDATER_ARCHIVE: ${{ steps.updater-files.outputs.archive }}
+          UPDATER_SIGNATURE: ${{ steps.updater-files.outputs.signature }}
+          UPDATER_PUBLIC_KEY: ${{ steps.updater-files.outputs.public_key }}
+        run: |
+          $signatureValue = (Get-Content -LiteralPath $env:UPDATER_SIGNATURE -Raw).Trim()
+          if ($signatureValue -notmatch '^[A-Za-z0-9+/]+={0,2}$') {
+            throw 'Updater signature must be one base64 line'
+          }
+          $publicKeyValue = [Convert]::ToBase64String(
+            [System.IO.File]::ReadAllBytes($env:UPDATER_PUBLIC_KEY))
+          if ($publicKeyValue -cne $env:TAURI_SIGNING_PUBLIC_KEY.Trim()) {
+            throw 'Draft updater public key does not match the repository release key'
+          }
+          bun scripts/validate-updater-key-transition.ts
+          if ($LASTEXITCODE -ne 0) {
+            throw 'Updater signing key transition validation failed'
+          }
+
+          $decodedSignature = Join-Path $env:RUNNER_TEMP `
+            "audiobud-private-updater-$env:GITHUB_RUN_ID.sig"
+          [System.IO.File]::WriteAllBytes(
+            $decodedSignature,
+            [Convert]::FromBase64String($signatureValue))
+          cargo run --locked --release `
+            --manifest-path scripts/verify-updater-signature/Cargo.toml -- `
+            $env:UPDATER_PUBLIC_KEY $decodedSignature $env:UPDATER_ARCHIVE
+          if ($LASTEXITCODE -ne 0) {
+            throw 'Private updater signature verification failed'
+          }
+
+      - name: Download latest prior stable installer
+        id: prior-installer
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PRIOR_TAG: ${{ steps.updater-meta.outputs.prior_tag }}
+          PRIOR_VERSION: ${{ steps.updater-meta.outputs.prior_version }}
+        run: |
+          $installerName = "AudioBud_$($env:PRIOR_VERSION)_x64-setup.exe"
+          $priorDirectory = Join-Path $env:RUNNER_TEMP `
+            "audiobud-prior-installer-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
+          if (Test-Path -LiteralPath $priorDirectory) {
+            throw "Prior installer directory already exists: $priorDirectory"
+          }
+          New-Item -ItemType Directory -Path $priorDirectory | Out-Null
+          gh release download $env:PRIOR_TAG `
+            --dir $priorDirectory `
+            --pattern $installerName
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to download required prior installer $installerName"
+          }
+          $installer = Join-Path $priorDirectory $installerName
+          if (-not (Test-Path -LiteralPath $installer -PathType Leaf)) {
+            throw "Required prior installer was not downloaded: $installer"
+          }
+          if ((Get-Item -LiteralPath $installer).Length -le 0) {
+            throw "Required prior installer is empty: $installer"
+          }
+          "path=$installer" |
+            Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      - name: Apply private updater and preserve user data
+        shell: pwsh
+        env:
+          TARGET_TAG: ${{ steps.updater-meta.outputs.tag }}
+          TARGET_VERSION: ${{ steps.updater-meta.outputs.version }}
+          PRIOR_TAG: ${{ steps.updater-meta.outputs.prior_tag }}
+          PRIOR_VERSION: ${{ steps.updater-meta.outputs.prior_version }}
+          UPDATER_ARCHIVE: ${{ steps.updater-files.outputs.archive }}
+          UPDATER_SIGNATURE: ${{ steps.updater-files.outputs.signature }}
+          PRIOR_INSTALLER: ${{ steps.prior-installer.outputs.path }}
+        run: |
+          $evidenceDirectory = Join-Path $env:RUNNER_TEMP `
+            "audiobud-updater-evidence-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
+          & scripts/verify-updater-candidate.ps1 `
+            -TargetCommit $env:GITHUB_SHA `
+            -TargetTag $env:TARGET_TAG `
+            -TargetVersion $env:TARGET_VERSION `
+            -ArchivePath $env:UPDATER_ARCHIVE `
+            -SignaturePath $env:UPDATER_SIGNATURE `
+            -PriorInstallerPath $env:PRIOR_INSTALLER `
+            -EvidenceDirectory $evidenceDirectory `
+            -PriorTag $env:PRIOR_TAG `
+            -PriorVersion $env:PRIOR_VERSION
+          "UPDATER_EVIDENCE_DIRECTORY=$evidenceDirectory" |
+            Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Upload private updater verification evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ${{ steps.updater-meta.outputs.evidence_artifact }}
+          path: ${{ env.UPDATER_EVIDENCE_DIRECTORY }}
+          retention-days: 30
+          if-no-files-found: error
+
   build-macos:
     name: Build, sign, and notarize macOS Apple Silicon
     if: >-
@@ -1792,14 +2072,16 @@ jobs:
 
   publish-macos-release:
     name: Add macOS artifacts to the joint draft release
-    needs: [build-windows, build-macos]
+    needs: [build-windows, verify-updater-candidate, build-macos]
     if: ${{ inputs.store_candidate != true && github.ref_type == 'tag' && (github.event_name != 'workflow_dispatch' || inputs.make_release) }}
     concurrency:
       group: release-macos-publish
       cancel-in-progress: false
     runs-on: ubuntu-24.04
     permissions:
+      attestations: write
       contents: write
+      id-token: write
     steps:
       - name: Check out repository
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -1812,6 +2094,17 @@ jobs:
         with:
           name: ${{ needs.build-macos.outputs.artifact-name }}
           path: macos-release
+
+      - name: Download private updater verification evidence
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: ${{ needs.verify-updater-candidate.outputs.artifact-name }}
+          path: updater-evidence
+
+      - name: Attest updater verification evidence
+        uses: actions/attest@f7c74d28b9d84cb8768d0b8ca14a4bac6ef463e6 # v4.2.0
+        with:
+          subject-path: updater-evidence/updater-prepublication-evidence.json
 
       - name: Upload macOS artifacts to joint draft release
         shell: bash
@@ -1842,9 +2135,19 @@ jobs:
           DMG="macos-release/AudioBud_${{ needs.build-macos.outputs.version }}_macos_aarch64.dmg"
           SBOM="macos-release/AudioBud_${{ needs.build-macos.outputs.version }}_macos_aarch64_sbom.spdx.json"
           CHECKSUMS="macos-release/SHA256SUMS-macos.txt"
-          for FILE_PATH in "$DMG" "$SBOM" "$CHECKSUMS"; do
+          EVIDENCE="updater-evidence/updater-prepublication-evidence.json"
+          for FILE_PATH in "$DMG" "$SBOM" "$CHECKSUMS" "$EVIDENCE"; do
             test -s "$FILE_PATH"
           done
 
           gh release upload "$RELEASE_TAG" \
-            "$DMG" "$SBOM" "$CHECKSUMS" --clobber
+            "$DMG" "$SBOM" "$CHECKSUMS" "$EVIDENCE" --clobber
+
+          READBACK_DIRECTORY="$RUNNER_TEMP/updater-evidence-readback"
+          mkdir -p "$READBACK_DIRECTORY"
+          gh release download "$RELEASE_TAG" \
+            --dir "$READBACK_DIRECTORY" \
+            --pattern "updater-prepublication-evidence.json"
+          cmp --silent \
+            "$EVIDENCE" \
+            "$READBACK_DIRECTORY/updater-prepublication-evidence.json"

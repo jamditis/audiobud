@@ -59,14 +59,60 @@ gh release create update-feed --repo jamditis/audiobud --target main \
   --latest=false
 ```
 
-Publishing a stable app release stages `latest-candidate.json` on that exact
-release. A clean Windows runner uses the candidate endpoint to update a real
-prior installation. Only after that job succeeds does the workflow copy the
-candidate to `latest.json` on the dedicated `update-feed` release; it then
-removes the candidate asset whether validation passed or failed. The fixed feed
-tag keeps model mirrors and other repository releases from changing the URL
-installed clients query. Releases whose tags are not exact `vMAJOR.MINOR.PATCH`
-versions skip this workflow without changing the live feed.
+The tag release workflow tests the updater before the draft becomes public. It
+downloads the exact private draft archive with the workflow token, verifies the
+tag, commit, provenance, and minisign signature, and then serves only that
+archive and an in-memory manifest through localhost HTTPS on a disposable
+GitHub-hosted runner. The workflow resolves GitHub's latest prior stable release
+while the target release is still a draft. That release trusts the active
+signing key under the planned-rotation procedure below. For v0.6.0, the runner
+installs v0.5.0. The runner verifies the prior installer's Authenticode
+identity, installs it, creates a non-default setting, and installs the pinned
+Moonshine model asset. It applies the private candidate and confirms that the
+setting and exact model-file inventory survive. It also verifies the installed
+version, Authenticode identity, updater-process quiescence, candidate uninstall
+registration, and normal uninstall cleanup. The workflow stops and checks the
+server process, clears the temporary credential, and removes and checks the
+temporary certificate entries and files, readiness file, model archive, and the
+exact updater extraction directory from this run. The preserved app data stays
+on the disposable runner until GitHub destroys it. The workflow first stores
+the evidence as a private Actions artifact. After all release jobs pass, the
+evidence is attested and attached to the joint draft. It does not add a
+candidate manifest to the draft or change the live feed.
+
+If any later release job fails after `verify-updater-candidate` succeeds, use
+GitHub's `Re-run all jobs` action. Do not use `Re-run failed jobs`. A partial
+rerun keeps evidence from the earlier failed attempt, so feed publication will
+reject it.
+
+After a stable app release is published, `publish-update-feed.yml` downloads
+and verifies the public updater assets and attached evidence again. It requires
+evidence from the exact successful release workflow run and attempt for the same
+tag, commit, archive hash, and prior stable source installation. It uses the
+strict production generator to prepare `latest.json` inside the workflow run.
+It confirms that the target is the latest stable app release, so model and other
+auxiliary releases do not displace it. Before promotion, it saves the current
+`update-feed/latest.json` when one exists. If the release has no `latest.json`,
+the workflow records that empty state instead. It uploads the new manifest,
+downloads it again, and compares the exact bytes. If upload or read-back
+verification fails, it restores and verifies the saved manifest or removes the
+new asset and verifies the prior empty state. Before each feed replacement, it
+also stores and reads back a durable backup asset named from the outgoing
+version and full SHA-256. It never overwrites that asset. The fixed feed tag
+keeps model mirrors and other repository releases from changing the URL
+installed clients query. Releases whose tags are not exact
+`vMAJOR.MINOR.PATCH` versions skip this workflow without changing the live feed.
+
+To restore an older feed, run `publish-update-feed.yml` manually with
+`operation` set to `rollback`. Supply the saved release `tag`, its
+`manifest_sha256`, the current live feed's `expected_live_sha256`, and set
+`confirm_rollback` to true. The workflow derives the durable backup asset name,
+checks both hashes, verifies the saved manifest and its signed updater archive,
+stores the outgoing live feed as another durable backup, and then publishes the
+exact saved bytes. It stops if the live feed changed after approval. The legacy
+v0.5.0 rollback key comes from its pinned commit because that release predates
+required key-asset attestations. Later rollback keys must come from attested
+release assets.
 
 ## Planned rotation
 
