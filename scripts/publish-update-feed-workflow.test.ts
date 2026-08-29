@@ -292,7 +292,13 @@ describe("published update feed workflow", () => {
     expect(workflow).toContain("updater-prepublication-evidence.json");
     expect(workflow).toContain(".target_commit == $commit");
     expect(workflow).toContain(".target_tag == $tag");
-    expect(workflow).toContain('.prior_tag == "v0.5.0"');
+    expect(workflow).toContain('.prior_tag == ("v" + .prior_version)');
+    expect(workflow).toContain(
+      '.prior_installer == ("AudioBud_" + .prior_version + "_x64-setup.exe")',
+    );
+    expect(workflow).toContain(
+      '(.prior_version | split(".") | map(tonumber)) < ($version | split(".") | map(tonumber))',
+    );
     expect(workflow).toContain(".workflow_run_attempt == $run_attempt");
     expect(workflow).toContain(".updater_archive_sha256 == $archive_sha256");
     expect(workflow).toContain(".settings_value_before == true");
@@ -484,6 +490,16 @@ printf 'resumed' > "$AFTER_PATH"
     expect(rollback).toContain("gh attestation verify");
     expect(rollback).toContain('sub("\\\\.[0-9]+Z$"; "Z")');
     expect(rollback).toContain("scripts/verify-updater-signature/Cargo.toml");
+    expect(rollback).toContain("5a25482ba3e82410a7fb19ee0f48cd3f87564a7d");
+    expect(rollback).toContain(
+      "contents/src-tauri/tauri.conf.json?ref=$LEGACY_COMMIT",
+    );
+    expect(rollback).not.toContain(
+      "'.plugins.updater.pubkey' src-tauri/tauri.conf.json",
+    );
+    expect(rollback).not.toContain(
+      "The rollback release has no verified updater public key",
+    );
     expect(rollback).toContain("Save current feed before rollback");
     expect(rollback).toContain(
       'PUBLISH_MANIFEST="$RUNNER_TEMP/update-feed-rollback-publish/latest.json"',

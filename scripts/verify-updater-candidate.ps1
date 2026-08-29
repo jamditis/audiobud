@@ -23,8 +23,13 @@ param(
   [Parameter(Mandatory = $true)]
   [string]$EvidenceDirectory,
 
-  [string]$PriorTag = 'v0.5.0',
-  [string]$PriorVersion = '0.5.0'
+  [Parameter(Mandatory = $true)]
+  [ValidatePattern('^v\d+\.\d+\.\d+$')]
+  [string]$PriorTag,
+
+  [Parameter(Mandatory = $true)]
+  [ValidatePattern('^\d+\.\d+\.\d+$')]
+  [string]$PriorVersion
 )
 
 Set-StrictMode -Version Latest
@@ -360,18 +365,18 @@ try {
 
   $priorSignature = Assert-AudioBudSignature `
     -Path $PriorInstallerPath `
-    -Label 'v0.5.0 installer'
+    -Label "$PriorTag installer"
   $installProcess = Start-Process `
     -FilePath $PriorInstallerPath `
     -ArgumentList @('/S', "/D=$installDirectory") `
     -Wait `
     -PassThru
   if ($installProcess.ExitCode -ne 0) {
-    throw "v0.5.0 installation failed with exit code $($installProcess.ExitCode)"
+    throw "$PriorTag installation failed with exit code $($installProcess.ExitCode)"
   }
 
   $executable = Join-Path $installDirectory 'AudioBud.exe'
-  Assert-File -Path $executable -Label 'Installed v0.5.0 executable'
+  Assert-File -Path $executable -Label "Installed $PriorTag executable"
   $installedPriorVersion = (Get-Item -LiteralPath $executable).VersionInfo.ProductVersion
   if ($installedPriorVersion -notmatch "^$([regex]::Escape($PriorVersion))(\.0)?$") {
     throw "Expected installed version $PriorVersion, found $installedPriorVersion"
@@ -389,10 +394,10 @@ try {
 
   $settingsStore = Get-Content -LiteralPath $settingsPath -Raw | ConvertFrom-Json
   if ($settingsStore.PSObject.Properties.Name -notcontains 'settings') {
-    throw 'v0.5.0 settings store has no settings object'
+    throw "$PriorTag settings store has no settings object"
   }
   if ($settingsStore.settings.PSObject.Properties.Name -notcontains 'audio_feedback') {
-    throw 'v0.5.0 settings store has no audio_feedback value'
+    throw "$PriorTag settings store has no audio_feedback value"
   }
   $settingsStore.settings.audio_feedback = $true
   $settingsStore | ConvertTo-Json -Depth 100 -Compress |
@@ -424,7 +429,7 @@ try {
     Get-AudioBudUninstallRegistryPaths -InstallDirectory $installDirectory
   )
   if ($installedRegistryPaths.Count -eq 0) {
-    throw 'v0.5.0 installation created no AudioBud uninstall registration'
+    throw "$PriorTag installation created no AudioBud uninstall registration"
   }
 
   $priorRestart = Start-Process `
@@ -433,15 +438,15 @@ try {
     -PassThru
   Start-Sleep -Seconds 10
   if ($priorRestart.HasExited) {
-    throw "v0.5.0 did not restart with prepared state: $($priorRestart.ExitCode)"
+    throw "$PriorTag did not restart with prepared state: $($priorRestart.ExitCode)"
   }
   Stop-AudioBudProcesses
   $settingsValueBefore = Read-AudioFeedbackSetting -SettingsPath $settingsPath
   if (-not $settingsValueBefore) {
-    throw 'v0.5.0 did not preserve the non-default audio_feedback setting'
+    throw "$PriorTag did not preserve the non-default audio_feedback setting"
   }
   if ((Get-DirectoryInventorySha256 -Path $modelDirectory) -cne $modelSha256Before) {
-    throw "v0.5.0 changed the pinned $modelName model before the update"
+    throw "$PriorTag changed the pinned $modelName model before the update"
   }
 
   $updaterDirectoriesBefore = @(

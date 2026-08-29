@@ -63,8 +63,11 @@ The tag release workflow tests the updater before the draft becomes public. It
 downloads the exact private draft archive with the workflow token, verifies the
 tag, commit, provenance, and minisign signature, and then serves only that
 archive and an in-memory manifest through localhost HTTPS on a disposable
-GitHub-hosted runner. The runner verifies the v0.5.0 installer's Authenticode
-identity, installs v0.5.0, creates a non-default setting, and installs the pinned
+GitHub-hosted runner. The workflow resolves GitHub's latest prior stable release
+while the target release is still a draft. That release trusts the active
+signing key under the planned-rotation procedure below. For v0.6.0, the runner
+installs v0.5.0. The runner verifies the prior installer's Authenticode
+identity, installs it, creates a non-default setting, and installs the pinned
 Moonshine model asset. It applies the private candidate and confirms that the
 setting and exact model-file inventory survive. It also verifies the installed
 version, Authenticode identity, updater-process quiescence, candidate uninstall
@@ -85,8 +88,8 @@ reject it.
 After a stable app release is published, `publish-update-feed.yml` downloads
 and verifies the public updater assets and attached evidence again. It requires
 evidence from the exact successful release workflow run and attempt for the same
-tag, commit, archive hash, and v0.5.0 source installation. It uses the strict
-production generator to prepare
+tag, commit, archive hash, and prior stable source installation. It uses the
+strict production generator to prepare
 `latest.json` inside the workflow run. Before promotion, it saves the current
 `update-feed/latest.json`. It uploads the new manifest, downloads it again, and
 compares the exact bytes. If upload or read-back verification fails, it restores
@@ -103,7 +106,10 @@ To restore an older feed, run `publish-update-feed.yml` manually with
 `confirm_rollback` to true. The workflow derives the durable backup asset name,
 checks both hashes, verifies the saved manifest and its signed updater archive,
 stores the outgoing live feed as another durable backup, and then publishes the
-exact saved bytes. It stops if the live feed changed after approval.
+exact saved bytes. It stops if the live feed changed after approval. The legacy
+v0.5.0 rollback key comes from its pinned commit because that release predates
+required key-asset attestations. Later rollback keys must come from attested
+release assets.
 
 ## Planned rotation
 

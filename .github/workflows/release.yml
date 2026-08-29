@@ -1515,9 +1515,33 @@ jobs:
             throw "Draft release returned the wrong tag: $($release.tag_name)"
           }
 
+          $priorReleaseJson = gh api `
+            "repos/$env:GITHUB_REPOSITORY/releases/latest"
+          if ($LASTEXITCODE -ne 0) {
+            throw 'Latest prior stable release was not found'
+          }
+          $priorRelease = $priorReleaseJson | ConvertFrom-Json
+          $priorTag = [string]$priorRelease.tag_name
+          if (
+            $priorRelease.draft -or
+            $priorRelease.prerelease -or
+            $null -eq $priorRelease.published_at -or
+            $priorTag -notmatch '^v\d+\.\d+\.\d+$'
+          ) {
+            throw "Latest prior release is not a published stable app release: $priorTag"
+          }
+          $priorVersion = $priorTag.Substring(1)
+          if ([version]$priorVersion -ge [version]$version) {
+            throw "Prior release $priorTag is not older than $env:RELEASE_TAG"
+          }
+
           "version=$version" |
             Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           "tag=$env:RELEASE_TAG" |
+            Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "prior_tag=$priorTag" |
+            Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "prior_version=$priorVersion" |
             Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           "evidence_artifact=audiobud-updater-prepublication-$env:RELEASE_TAG-$env:GITHUB_RUN_ATTEMPT" |
             Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
@@ -1631,22 +1655,22 @@ jobs:
             throw 'Private updater signature verification failed'
           }
 
-      - name: Download required v0.5.0 installer
+      - name: Download latest prior stable installer
         id: prior-installer
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
+          PRIOR_TAG: ${{ steps.updater-meta.outputs.prior_tag }}
+          PRIOR_VERSION: ${{ steps.updater-meta.outputs.prior_version }}
         run: |
-          $priorTag = 'v0.5.0'
-          $priorVersion = '0.5.0'
-          $installerName = "AudioBud_${priorVersion}_x64-setup.exe"
+          $installerName = "AudioBud_$($env:PRIOR_VERSION)_x64-setup.exe"
           $priorDirectory = Join-Path $env:RUNNER_TEMP `
             "audiobud-prior-installer-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
           if (Test-Path -LiteralPath $priorDirectory) {
             throw "Prior installer directory already exists: $priorDirectory"
           }
           New-Item -ItemType Directory -Path $priorDirectory | Out-Null
-          gh release download $priorTag `
+          gh release download $env:PRIOR_TAG `
             --dir $priorDirectory `
             --pattern $installerName
           if ($LASTEXITCODE -ne 0) {
@@ -1667,6 +1691,8 @@ jobs:
         env:
           TARGET_TAG: ${{ steps.updater-meta.outputs.tag }}
           TARGET_VERSION: ${{ steps.updater-meta.outputs.version }}
+          PRIOR_TAG: ${{ steps.updater-meta.outputs.prior_tag }}
+          PRIOR_VERSION: ${{ steps.updater-meta.outputs.prior_version }}
           UPDATER_ARCHIVE: ${{ steps.updater-files.outputs.archive }}
           UPDATER_SIGNATURE: ${{ steps.updater-files.outputs.signature }}
           PRIOR_INSTALLER: ${{ steps.prior-installer.outputs.path }}
@@ -1681,8 +1707,8 @@ jobs:
             -SignaturePath $env:UPDATER_SIGNATURE `
             -PriorInstallerPath $env:PRIOR_INSTALLER `
             -EvidenceDirectory $evidenceDirectory `
-            -PriorTag 'v0.5.0' `
-            -PriorVersion '0.5.0'
+            -PriorTag $env:PRIOR_TAG `
+            -PriorVersion $env:PRIOR_VERSION
           "UPDATER_EVIDENCE_DIRECTORY=$evidenceDirectory" |
             Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 

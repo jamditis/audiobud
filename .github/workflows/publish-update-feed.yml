@@ -330,8 +330,11 @@ jobs:
              (.target_version == $version) and
              (.workflow_run_url == $run_url) and
              (.workflow_run_attempt == $run_attempt) and
-             (.prior_tag == "v0.5.0") and
-             (.prior_version == "0.5.0") and
+             (.prior_version | test("^[0-9]+\\.[0-9]+\\.[0-9]+$")) and
+             (.prior_tag == ("v" + .prior_version)) and
+             (.prior_installer == ("AudioBud_" + .prior_version + "_x64-setup.exe")) and
+             ((.prior_version | split(".") | map(tonumber)) < ($version | split(".") | map(tonumber))) and
+             (.prior_installer_sha256 | test("^[0-9a-f]{64}$")) and
              (.updater_archive == $archive) and
              (.updater_archive_sha256 == $archive_sha256) and
              (.settings_value_before == true) and
@@ -711,16 +714,23 @@ jobs:
           fi
 
           PUBLIC_KEY="$SOURCE_DIRECTORY/updater-signing-public-key.pub"
-          if ! gh release download "$TAG" \
-            --repo "$GITHUB_REPOSITORY" \
-            --dir "$SOURCE_DIRECTORY" \
-            --pattern "updater-signing-public-key.pub"; then
-            if [[ "$TAG" != "v0.5.0" ]]; then
-              echo "::error::The rollback release has no verified updater public key"
+          if [[ "$TAG" == "v0.5.0" ]]; then
+            LEGACY_COMMIT="5a25482ba3e82410a7fb19ee0f48cd3f87564a7d"
+            if [[ "$RELEASE_COMMIT" != "$LEGACY_COMMIT" ]]; then
+              echo "::error::Legacy v0.5.0 no longer resolves to its pinned commit"
               exit 1
             fi
-            jq -r '.plugins.updater.pubkey' src-tauri/tauri.conf.json | \
+            LEGACY_CONFIG="$SOURCE_DIRECTORY/v0.5.0-tauri.conf.json"
+            gh api \
+              "repos/$GITHUB_REPOSITORY/contents/src-tauri/tauri.conf.json?ref=$LEGACY_COMMIT" \
+              --jq '.content' | tr -d '\n' | base64 --decode > "$LEGACY_CONFIG"
+            jq -er '.plugins.updater.pubkey' "$LEGACY_CONFIG" | \
               base64 --decode > "$PUBLIC_KEY"
+          else
+            gh release download "$TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --dir "$SOURCE_DIRECTORY" \
+              --pattern "updater-signing-public-key.pub"
           fi
           if [[ ! -s "$PUBLIC_KEY" ]]; then
             echo "::error::The rollback updater public key is empty"

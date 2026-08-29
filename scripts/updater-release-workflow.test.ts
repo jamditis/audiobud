@@ -151,9 +151,20 @@ describe("signed updater release artifacts", () => {
       "Apply private updater and preserve user data",
     );
     expect(verification).toContain("scripts/verify-updater-candidate.ps1");
-    expect(verification).toContain("v0.5.0");
+    expect(verification).toContain("steps.updater-meta.outputs.prior_tag");
+    expect(verification).toContain("steps.updater-meta.outputs.prior_version");
     expect(verification).not.toContain("$LASTEXITCODE");
     expect(verification).not.toContain("dangerousInsecureTransportProtocol");
+
+    const metadata = stepBlock("Resolve private updater draft");
+    expect(metadata).toContain("releases/latest");
+    expect(metadata).toContain("prior_tag=$priorTag");
+    expect(metadata).toContain("prior_version=$priorVersion");
+    const priorInstaller = stepBlock("Download latest prior stable installer");
+    expect(priorInstaller).toContain("steps.updater-meta.outputs.prior_tag");
+    expect(priorInstaller).toContain(
+      "steps.updater-meta.outputs.prior_version",
+    );
   });
 
   test("retains private proof that settings and models survive", () => {
@@ -188,6 +199,8 @@ describe("signed updater release artifacts", () => {
     expect(verifier).toContain("settings_value_before");
     expect(verifier).toContain("settings_value_after");
     expect(verifier).toContain("workflow_run_attempt");
+    expect(verifier).not.toContain("[string]$PriorTag = 'v0.5.0'");
+    expect(verifier).not.toContain("[string]$PriorVersion = '0.5.0'");
     expect(verifier).toContain("TimeStamperCertificate");
     expect(verifier).toContain("uninstall.exe");
     expect(verifier).toContain("Get-AudioBudUninstallRegistryPaths");

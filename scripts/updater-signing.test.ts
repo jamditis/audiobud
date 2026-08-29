@@ -35,6 +35,8 @@ describe("updater signing key operations", () => {
 
   test("documents private candidate validation before live feed publication", () => {
     expect(runbook).toContain("before the draft becomes public");
+    expect(runbook).toContain("latest prior stable release");
+    expect(runbook).toMatch(/trusts the active\s+signing key/);
     expect(runbook).toContain("localhost HTTPS");
     expect(runbook).toContain("installs v0.5.0");
     expect(runbook).toMatch(/private Actions\s+artifact/);
