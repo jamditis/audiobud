@@ -110,6 +110,7 @@ FEED_TAG=update-feed
 GITHUB_REPOSITORY=jamditis/audiobud
 ROLLBACK_MANIFEST=${JSON.stringify(rollbackPath)}
 RUNNER_TEMP=${JSON.stringify(directory)}
+TAG=v0.5.0
 LIVE_MANIFEST=${JSON.stringify(livePath)}
 ASSET_DIRECTORY=${JSON.stringify(assetDirectory)}
 HISTORY_TOUCHED_PATH=${JSON.stringify(historyTouchedPath)}
