@@ -214,4 +214,33 @@ describe("signed macOS release workflow", () => {
     expect(publish).toContain("isDraft");
     expect(publish).toContain("targetCommitish");
   });
+
+  test("rejects macOS SBOM file records with placeholder checksums", () => {
+    const macOS = jobBlock("build-macos");
+    const generate = stepPosition(macOS, "Generate macOS SBOM");
+    const validate = stepPosition(macOS, "Validate macOS SBOM file checksums");
+    const writeChecksums = stepPosition(macOS, "Write macOS SHA256SUMS");
+    const attestProvenance = stepPosition(
+      macOS,
+      "Attest macOS release provenance",
+    );
+    const attestSbom = stepPosition(macOS, "Attest macOS release SBOM");
+    const validationStep = macOS.slice(validate, writeChecksums);
+
+    expect(macOS.slice(generate, validate)).toMatch(
+      /^\s+SYFT_FILE_METADATA_SELECTION: all\s*$/m,
+    );
+    expect(validationStep).toContain(
+      "bun run scripts/validate-sbom-file-checksums.ts",
+    );
+    expect(validationStep).toContain(
+      "SBOM_PATH: ${{ steps.macos-artifacts.outputs.sbom }}",
+    );
+    expect(validationStep).toContain('"$SBOM_PATH"');
+    expect(validationStep).toContain('"$APP_PATH"');
+    expect(generate).toBeLessThan(validate);
+    expect(validate).toBeLessThan(writeChecksums);
+    expect(writeChecksums).toBeLessThan(attestProvenance);
+    expect(attestProvenance).toBeLessThan(attestSbom);
+  });
 });

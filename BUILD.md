@@ -119,6 +119,15 @@ Do not use a local signed artifact as a public release. Use the protected
 workflow so checksums, the SBOM, provenance, architecture checks, Gatekeeper
 checks, and notarization checks all refer to the same bytes.
 
+The macOS and Windows SBOM jobs select every staged package entry for metadata
+and digest collection. `scripts/validate-sbom-file-checksums.ts` walks the
+staged payload and requires one unique SPDX record for every filesystem entry,
+including the payload root. Directory records can carry Syft's required
+placeholder value, as can symlink records, which Syft does not follow. Every
+regular-file record must include SHA-256, and every listed checksum must be
+real, supported, and equal to the staged bytes. The job stops before checksums
+or attestations are created on any inventory or checksum error.
+
 The credential names, command order, failure rules, and local verification
 commands are in [docs/macos-release.md](docs/macos-release.md).
 

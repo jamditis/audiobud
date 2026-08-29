@@ -241,15 +241,23 @@ Acceptance criteria:
 - [x] Add install, permission, update, signature, checksum, and support instructions for macOS.
 - [x] Search the final tree and public site for stale versions, Windows-only claims, AudioBash or Handy names, old download URLs, and unsupported macOS claims.
 - [x] Check every edited link and render the README, changelog, patch notes, and public pages before publication.
-- [ ] Run all frontend and Rust checks from a clean checkout.
+- [x] Run all frontend and Rust checks from a clean checkout.
 - [x] Confirm every public surface labels macOS v0.6.0 as a candidate and does not link to an absent tag, DMG, or Mac checksum manifest.
 - [x] Ask for explicit approval to commit and push the reviewed candidate to
       `release/v0.6.0-candidate`.
 - [x] Commit and push only to `release/v0.6.0-candidate` after that approval.
       The candidate-safe `docs/` copy may publish through GitHub Pages, but it
       must not call v0.6.0 shipped.
-- [ ] Dispatch the signed release workflow from the exact `main` commit with `make_release: false`.
-- [ ] Download the CI artifacts and repeat signature, notarization, checksum, SBOM, provenance, and clean-Mac smoke checks.
+- [x] Dispatch the signed release workflow from exact `main` commit `e417154`
+      with `make_release: false` and `store_candidate: false`.
+- [x] Download both CI artifacts from run `33195432598` and repeat their
+      checksum, SBOM, provenance, signature, notarization, Gatekeeper,
+      architecture, dependency, and controlled-launch checks where the local
+      platform permits.
+- [ ] Produce a replacement candidate whose macOS and Windows SPDX file records
+      all contain real checksums.
+- [ ] Complete first-launch, permission, transcription, paste, display, sleep,
+      and device-change tests on a clean Apple Silicon Mac.
 - [ ] Test the candidate Windows installers and the v0.5.0 to v0.6.0 updater path.
 - [ ] Confirm the prepared `update-feed/latest.json` points to the tested Windows updater artifact.
 - [ ] Review every changed line and complete the release checklist.
@@ -310,43 +318,74 @@ Acceptance criteria:
 - [x] Full validation of the complete follow-up checkpoint passes.
 - [x] Fresh local and Claude Code reviews have no unresolved P1, P2, or P3
       finding.
+- [x] The final read-only review of the complete SBOM fix has no unresolved P1,
+      P2, or P3 finding.
 - [ ] A fresh GitHub connector review has no unresolved finding.
+- [x] Pull request 309 merged into `main` as commits `a6fdd06`, `688b8aa`, and
+      `e417154`.
+- [x] CI, the real Windows engine job, the size report, Pages, and the protected
+      unsigned-release candidate workflow passed on `e417154`.
 
 ### Current release decision
 
-Status: pull request 309 is open from `release/v0.6.0-candidate` at `db89c23`.
-The three original connector threads are resolved. Five remote checks passed,
-and the real Windows engine check failed on one redundant closure. The follow-up
-fixes are local and uncommitted: the Clippy correction, optional-shortcut
-cleanup behavior, an early Xcode and SDK guard, a final Foundation Models link
-check, and accurate release evidence. The exact checkpoint currently passes
-481 frontend tests with 2,180 assertions across 45 files, 503 Rust library tests
-plus the dictionary integration test, the shortcut regression tests, the macOS
-workflow contract, and workflow lint.
+Status: local and remote `main` point to `e417154`. Pull request 309 is merged,
+and its branch is deleted. The protected candidate workflow completed without
+creating a tag or release. The exact downloaded macOS DMG has SHA-256
+`ac1ecc5661473f4fe7533cd971df5c91b654e1a1848a543dcfcdf7534f49f566`.
+Its checksum, provenance, Developer ID signature, notarization tickets,
+Gatekeeper checks, arm64 architecture, macOS 11.0 minimum, Foundation Models
+link, run-time dependencies, entitlements, and eight-second controlled launch
+pass on an Apple Silicon Mac running macOS 26.6.2. The Windows installer hashes,
+provenance, and SBOM attestations also verify against exact commit `e417154`.
 
-Next gate: present the exact diff and ask for explicit approval to commit and
-push it only to `release/v0.6.0-candidate`. Do not merge until all required and
-optional checks pass, a fresh connector review has no unresolved finding, and
-branch protection reports the required independent approval. Do not create a
-tag, publish a release, dispatch the signed candidate workflow, change the
-updater feed, or use Partner Center before the later approval gates.
+The candidate is rejected. Its attested macOS SBOM gives the main executable an
+all-zero SHA-1 placeholder, and all 67 Windows SBOM file records use that same
+placeholder. A test-first local fix makes Syft collect metadata for every staged
+entry, requires one unique SPDX record for each filesystem entry, permits
+placeholder values only for actual directories and symlinks, and requires every
+regular-file record to include SHA-256. Every listed checksum must be real,
+supported, and equal to the staged bytes. Any inventory or checksum error stops
+both platform jobs before attestation.
+
+The complete local fix passes 499 frontend and release-contract tests with
+2,240 assertions across 46 files, 503 Rust library tests plus the dictionary
+integration test, the production frontend build, ESLint, all 19 translation
+checks, rebrand validation, Prettier, Rust formatting, Clippy with warnings
+denied, workflow lint, and whitespace validation. Two read-only Claude Code
+reviews found checksum-shape, command-exit, workflow-contract, documentation,
+and diagnostic-size gaps. Those gaps are corrected and their focused tests
+pass. The final read-only review of the corrected full diff found no unresolved
+P1, P2, or P3 issue.
+
+Next gate: request approval to commit the fix to a dedicated release-fix pull
+request. After an approved merge, rerun the protected candidate workflow and
+repeat the artifact checks. Pull requests 311 through 317 stay outside v0.6.0
+and must not merge into `main` before publication. Do not create or push the
+v0.6.0 tag, publish a release, change the updater feed, or use Partner Center
+before their later gates and approvals.
 
 ### Session handoff for August 28, 2026
 
 Safe state:
 
-- Local `main` remains at `54519ca` with the alternate August 27 connector fixes
-  still dirty. Preserve that tree until the remote implementation is accepted.
-- Remote pull request 309 is at `db89c23`. It has five passing checks and one
-  failed Windows engine check caused by the redundant closure.
-- A detached worktree based on `db89c23` contains the uncommitted reviewed
-  follow-up. The full local validation suite passes.
-- Fresh local and Claude Code reviews found no unresolved P1, P2, or P3
-  finding.
-- The three original connector threads are resolved. A fresh connector review
-  of the follow-up checkpoint has not started.
-- No commit, push, merge, workflow dispatch, tag, release, updater-feed change,
-  or Partner Center action is authorized at this checkpoint.
+- Local `main` and `origin/main` point to `e417154`. The worktree contains the
+  uncommitted test-first SBOM fix and its release evidence updates.
+- The older local connector implementation is recoverable from the named
+  `pre-reconcile local connector fixes 2026-08-28` stash. It is not part of the
+  candidate.
+- The old detached pull request worktree was clean and has been removed.
+- Candidate run `33195432598` passed and its artifacts expire on September 27, 2026. It did not create a draft or public release.
+- The macOS artifact is downloaded under
+  `/private/tmp/audiobud-v060-candidate.taVo6P/macos`. The Windows artifact is
+  in the adjacent `windows` directory.
+- The package signatures, hashes, notarization evidence, and provenance pass,
+  but both candidate SBOMs fail the new file-checksum validator.
+- The complete local verification suite and final corrected-diff review pass on
+  the uncommitted fix. Commit, push, and pull request approval is the next gate.
+- Pull requests 311 through 317 each have a release-freeze coordination comment
+  for the Office agent. Do not modify or merge those pull requests here.
+- No v0.6.0 tag, release, updater-feed change, or Partner Center submission has
+  been made.
 
 Separate follow-up, outside this release checkpoint:
 
@@ -356,14 +395,15 @@ Separate follow-up, outside this release checkpoint:
 
 Resume in this order:
 
-1. Present the final diff and request explicit approval to commit and push only
-   to `release/v0.6.0-candidate`.
-2. After approval, push, request a fresh connector review, and verify every
-   required and optional check on the new head.
-3. Confirm branch protection and independent approval. Ask before merge.
-4. After an approved merge, verify remote `main` and ask before dispatching the
-   protected candidate workflow with `make_release: false` and
-   `store_candidate: false`.
-5. Continue with exact-byte clean-Mac tests and Windows tests. Keep
-   publication, updater-feed changes, and Partner Center work behind later
-   approval gates.
+1. Ask for approval before committing or pushing the fix to a dedicated pull
+   request. Keep pull requests 311 through 317 unmerged.
+2. After the fix passes review, CI, and an approved merge, rerun the protected
+   candidate workflow with release and Store publication disabled.
+3. Verify both replacement artifacts, then run Windows install, delivery,
+   target-lock, uninstall, and v0.5.0 updater tests.
+4. Finish the clean-Mac first-launch, permission, transcription, paste, display,
+   sleep, and device-change tests.
+5. Confirm that the prepared Windows update manifest selects only the tested
+   candidate updater. Do not publish it.
+6. Review every changed line and complete the release checklist before the
+   release-state commit and tag approval gates.

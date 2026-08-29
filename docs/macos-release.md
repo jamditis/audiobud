@@ -105,6 +105,14 @@ GitHub also records provenance and SBOM attestations. Publication waits for the
 Windows and macOS build jobs. A build artifact or draft release is not approval
 to publish the tag or release.
 
+Syft must collect metadata for every staged app entry. Before attestation, the
+workflow runs `scripts/validate-sbom-file-checksums.ts` against the app root. It
+requires one unique SPDX record for every filesystem entry. Syft's placeholder
+is permitted for actual directories and symlinks. Syft does not follow those
+symlinks. Every regular-file checksum must be real, supported, and equal to the
+staged bytes, and each regular-file record must include SHA-256. Any inventory
+or checksum mismatch stops the job before attestation.
+
 ## Local credential handling
 
 Local signing can confirm the procedure before a remote run. Keep certificates,

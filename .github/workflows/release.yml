@@ -1232,6 +1232,11 @@ jobs:
 
       - name: Generate release SBOM
         uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        env:
+          # The SPDX formatter writes zero SHA-1 placeholders for file records
+          # outside Syft's default owned-by-package selection. Hash every file
+          # in the staged package payload before the SBOM is attested.
+          SYFT_FILE_METADATA_SELECTION: all
         with:
           path: ${{ steps.packaged-payload.outputs.path }}
           format: spdx-json
@@ -1239,6 +1244,16 @@ jobs:
           syft-version: v1.49.0
           upload-artifact: false
           upload-release-assets: false
+
+      - name: Validate release SBOM file checksums
+        shell: pwsh
+        env:
+          PAYLOAD_PATH: ${{ steps.packaged-payload.outputs.path }}
+          SBOM_PATH: ${{ steps.sbom-path.outputs.path }}
+        run: |
+          bun run scripts/validate-sbom-file-checksums.ts `
+            "$env:SBOM_PATH" `
+            "$env:PAYLOAD_PATH"
 
       # Publish installer digests as a release asset so the website can link to one
       # stable URL instead of carrying hashes in its markup, which go stale the
@@ -1711,6 +1726,8 @@ jobs:
 
       - name: Generate macOS SBOM
         uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        env:
+          SYFT_FILE_METADATA_SELECTION: all
         with:
           path: ${{ env.APP_PATH }}
           format: spdx-json
@@ -1718,6 +1735,15 @@ jobs:
           syft-version: v1.49.0
           upload-artifact: false
           upload-release-assets: false
+
+      - name: Validate macOS SBOM file checksums
+        shell: bash
+        env:
+          SBOM_PATH: ${{ steps.macos-artifacts.outputs.sbom }}
+        run: |
+          bun run scripts/validate-sbom-file-checksums.ts \
+            "$SBOM_PATH" \
+            "$APP_PATH"
 
       - name: Write macOS SHA256SUMS
         shell: bash

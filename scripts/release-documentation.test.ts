@@ -84,12 +84,16 @@ describe("v0.6.0 release documentation", () => {
     );
     expect(build).toContain("SDKROOT");
     expect(build).toContain("FoundationModels.framework");
+    expect(build).toContain("validate-sbom-file-checksums.ts");
+    expect(build).toContain("placeholder value");
     expect(macRelease).toContain(
       "/Applications/Xcode_26.0.1.app/Contents/Developer",
     );
     expect(macRelease).toContain("macOS 26 SDK");
     expect(macRelease).toContain("SDKROOT");
     expect(macRelease).toContain("FoundationModels.framework");
+    expect(macRelease).toContain("validate-sbom-file-checksums.ts");
+    expect(macRelease).toContain("placeholder");
     expect(macRelease).toContain("final app binary");
     expect(updater).toContain("Windows NSIS builds only");
     expect(updater).toContain("macOS uses manual updates");
@@ -122,19 +126,22 @@ describe("v0.6.0 release documentation", () => {
     expect(
       todoSource.match(/^#{2,3} (current )?release decision$/gim),
     ).toHaveLength(1);
-    expect(todo).toContain("pull request 309 is open");
-    expect(todo).toContain("follow-up fixes are local and uncommitted");
+    expect(todo).toContain("local and remote `main` point to `e417154`");
+    expect(todo).toContain("Candidate run `33195432598` passed");
     expect(todo).toContain(
-      "481 frontend tests with 2,180 assertions across 45 files",
+      "ac1ecc5661473f4fe7533cd971df5c91b654e1a1848a543dcfcdf7534f49f566",
     );
-    expect(todo).toContain("503 Rust library tests");
-    expect(todo).toContain("explicit approval to commit and push");
-    expect(todo).toContain("Do not merge until");
-    expect(todo).toContain("branch protection");
-    expect(todo).toContain("Do not create a tag");
+    expect(todo).toContain("The candidate is rejected");
+    expect(todo).toContain("all 67 Windows SBOM file records");
+    expect(todo).toContain("dedicated release-fix pull request");
+    expect(todo).toContain("Pull requests 311 through 317 stay outside v0.6.0");
+    expect(todo).toContain("clean Apple Silicon Mac");
+    expect(todo).toContain("Do not create or push the v0.6.0 tag");
     expect(todo).toContain("Session handoff for August 28, 2026");
-    expect(todo).toContain("clean-Mac tests");
-    expect(todo).toContain("later approval gates");
+    expect(todo).toContain("before their later gates and approvals");
+    expect(todo).toContain("Partner Center");
+    expect(todo).not.toContain("pull request 309 is open");
+    expect(todo).not.toContain("follow-up fixes are local and uncommitted");
     expect(todo).not.toContain("finish the independent review");
     expect(todo).not.toContain("complete phase 0");
   });
