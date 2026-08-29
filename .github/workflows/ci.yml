@@ -125,6 +125,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Parse updater candidate verifier
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $parseErrors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path 'scripts/verify-updater-candidate.ps1'),
+            [ref]$tokens,
+            [ref]$parseErrors
+          ) | Out-Null
+          if ($parseErrors.Count -gt 0) {
+            $parseErrors | Format-List | Out-String | Write-Error
+            throw 'Updater candidate verifier has PowerShell parse errors'
+          }
+
       # Compile a tiny installer with the same NSIS ExecWait shape as the real
       # portable installer. This catches quoting/serialization regressions
       # without rebuilding the hour-long signed release. The archive and SHA-1

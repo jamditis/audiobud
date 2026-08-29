@@ -99,6 +99,8 @@ describe("v0.6.0 release documentation", () => {
     expect(macRelease).toContain("placeholder");
     expect(macRelease).toMatch(/derived SPDX\s+namespace/);
     expect(macRelease).toContain("final app binary");
+    expect(macRelease).toContain("private Windows updater test");
+    expect(macRelease).toContain("updater-test artifact");
     expect(updater).toContain("Windows NSIS builds only");
     expect(updater).toContain("macOS uses manual updates");
     expect(macRelease).not.toContain("3Y74X55F58");
