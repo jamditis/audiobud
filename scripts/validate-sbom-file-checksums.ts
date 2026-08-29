@@ -5,6 +5,9 @@ import {
   readFileSync,
   readSync,
   readdirSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
 
@@ -18,6 +21,9 @@ type ParsedChecksum = {
   checksum: string;
   nodeAlgorithm: string;
 };
+
+const checksumCompleterCreator = "Tool: audiobud-sbom-checksum-completer-1";
+const checksumCompleterNamespaceParameter = "audiobud-sbom-checksum-completer";
 
 const digestAlgorithms: Record<
   string,
@@ -100,8 +106,10 @@ export function collectPayloadInventory(
         visit(entryPath, relativePath);
       } else if (entry.isSymbolicLink()) {
         inventory.set(relativePath, { kind: "symlink", path: entryPath });
-      } else {
+      } else if (entry.isFile()) {
         inventory.set(relativePath, { kind: "file", path: entryPath });
+      } else {
+        throw new Error(`Unsupported payload entry type: ${relativePath}`);
       }
     }
   }
@@ -142,6 +150,130 @@ function calculateChecksums(
       hasher.digest("hex"),
     ]),
   );
+}
+
+function isExactSyftZeroSha1Placeholder(value: unknown): boolean {
+  if (!Array.isArray(value) || value.length !== 1) return false;
+  const checksum = value[0];
+  return (
+    isRecord(checksum) &&
+    checksum.algorithm === "SHA1" &&
+    checksum.checksumValue === "0".repeat(40)
+  );
+}
+
+function getCompletionMetadata(document: Record<string, unknown>): {
+  completedNamespace: string;
+  creators: string[];
+} {
+  const creationInfo = document.creationInfo;
+  const namespace = document.documentNamespace;
+  if (
+    !isRecord(creationInfo) ||
+    !Array.isArray(creationInfo.creators) ||
+    creationInfo.creators.length === 0 ||
+    !creationInfo.creators.every((creator) => typeof creator === "string") ||
+    typeof namespace !== "string"
+  ) {
+    throw new Error(
+      "Cannot complete checksums without valid SPDX creation metadata.",
+    );
+  }
+
+  let namespaceUrl: URL;
+  try {
+    namespaceUrl = new URL(namespace);
+  } catch {
+    throw new Error(
+      "Cannot complete checksums without valid SPDX creation metadata.",
+    );
+  }
+  if (namespaceUrl.hash !== "") {
+    throw new Error(
+      "Cannot complete checksums without valid SPDX creation metadata.",
+    );
+  }
+  namespaceUrl.searchParams.set(checksumCompleterNamespaceParameter, "1");
+
+  return {
+    completedNamespace: namespaceUrl.toString(),
+    creators: creationInfo.creators as string[],
+  };
+}
+
+export function completeWindowsSyftPlaceholderChecksums(
+  document: unknown,
+  payloadInventory: ReadonlyMap<string, PayloadEntry>,
+): {
+  completedFileCount: number;
+  directoryCount: number;
+  fileCount: number;
+  symlinkCount: number;
+} {
+  if (!isRecord(document) || !Array.isArray(document.files)) {
+    throw new Error("SBOM contains no file records.");
+  }
+
+  const completionTargets = document.files.filter((file) => {
+    if (!isRecord(file) || typeof file.fileName !== "string") return false;
+    const payloadEntry = payloadInventory.get(normalizeFileName(file.fileName));
+    return (
+      payloadEntry?.kind === "file" &&
+      isExactSyftZeroSha1Placeholder(file.checksums)
+    );
+  }) as Array<Record<string, unknown>>;
+
+  const completionMetadata =
+    completionTargets.length > 0 ? getCompletionMetadata(document) : undefined;
+  for (const file of completionTargets) {
+    const payloadEntry = payloadInventory.get(
+      normalizeFileName(file.fileName as string),
+    );
+    if (payloadEntry?.kind !== "file") {
+      throw new Error("SBOM completion target is not a regular file.");
+    }
+
+    const calculatedChecksums = calculateChecksums(payloadEntry.path, [
+      { algorithm: "SHA1", checksum: "", nodeAlgorithm: "sha1" },
+      { algorithm: "SHA256", checksum: "", nodeAlgorithm: "sha256" },
+    ]);
+    file.checksums = [
+      {
+        algorithm: "SHA1",
+        checksumValue: calculatedChecksums.get("SHA1"),
+      },
+      {
+        algorithm: "SHA256",
+        checksumValue: calculatedChecksums.get("SHA256"),
+      },
+    ];
+  }
+
+  if (completionMetadata !== undefined) {
+    if (!completionMetadata.creators.includes(checksumCompleterCreator)) {
+      completionMetadata.creators.push(checksumCompleterCreator);
+    }
+    document.documentNamespace = completionMetadata.completedNamespace;
+  }
+
+  return {
+    completedFileCount: completionTargets.length,
+    ...validateSbomFileChecksums(document, payloadInventory),
+  };
+}
+
+export function writeJsonAtomically(
+  filePath: string,
+  document: unknown,
+  replaceFile: (source: string, destination: string) => void = renameSync,
+): void {
+  const temporaryPath = `${filePath}.tmp-${process.pid}`;
+  try {
+    writeFileSync(temporaryPath, `${JSON.stringify(document)}\n`);
+    replaceFile(temporaryPath, filePath);
+  } finally {
+    rmSync(temporaryPath, { force: true });
+  }
 }
 
 export function validateSbomFileChecksums(
@@ -265,20 +397,38 @@ export function validateSbomFileChecksums(
 }
 
 function main(): void {
-  const sbomPath = process.argv[2];
-  const payloadRoot = process.argv[3];
+  const completeWindowsPlaceholders =
+    process.argv[2] === "--complete-windows-placeholders";
+  const argumentOffset = completeWindowsPlaceholders ? 1 : 0;
+  const sbomPath = process.argv[2 + argumentOffset];
+  const payloadRoot = process.argv[3 + argumentOffset];
   if (!sbomPath || !payloadRoot) {
     throw new Error(
-      "Usage: bun run validate-sbom-file-checksums.ts <sbom> <payload-root>",
+      completeWindowsPlaceholders
+        ? "Usage: bun run validate-sbom-file-checksums.ts --complete-windows-placeholders <sbom> <payload-root>"
+        : "Usage: bun run validate-sbom-file-checksums.ts <sbom> <payload-root>",
     );
   }
 
   const document: unknown = JSON.parse(readFileSync(sbomPath, "utf8"));
   const payloadInventory = collectPayloadInventory(payloadRoot);
-  const { directoryCount, fileCount, symlinkCount } = validateSbomFileChecksums(
-    document,
-    payloadInventory,
-  );
+  const validationResult = completeWindowsPlaceholders
+    ? completeWindowsSyftPlaceholderChecksums(document, payloadInventory)
+    : validateSbomFileChecksums(document, payloadInventory);
+  if (
+    completeWindowsPlaceholders &&
+    "completedFileCount" in validationResult &&
+    validationResult.completedFileCount > 0
+  ) {
+    writeJsonAtomically(sbomPath, document);
+  }
+  const { directoryCount, fileCount, symlinkCount } = validationResult;
+  if (completeWindowsPlaceholders && "completedFileCount" in validationResult) {
+    const suffix = validationResult.completedFileCount === 1 ? "" : "s";
+    console.log(
+      `Completed ${validationResult.completedFileCount} Syft Windows file checksum placeholder${suffix}.`,
+    );
+  }
   console.log(
     `Verified ${fileCount} file checksums and ${directoryCount} directory plus ${symlinkCount} symlink records.`,
   );

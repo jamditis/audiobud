@@ -320,7 +320,13 @@ Acceptance criteria:
       finding.
 - [x] The final read-only review of the complete SBOM fix has no unresolved P1,
       P2, or P3 finding.
-- [ ] A fresh GitHub connector review has no unresolved finding.
+- [x] The GitHub connector review of pull request 319 completed with no
+      finding.
+- [x] Pull request 319 merged into `main` as `1dcea94` after all required checks
+      passed.
+- [x] The independent re-review of the Windows Syft compatibility fix found no
+      actionable P1, P2, or P3 issue after its filesystem, SPDX metadata,
+      no-op, inventory, and atomic-write findings were corrected.
 - [x] Pull request 309 merged into `main` as commits `a6fdd06`, `688b8aa`, and
       `e417154`.
 - [x] CI, the real Windows engine job, the size report, Pages, and the protected
@@ -328,60 +334,66 @@ Acceptance criteria:
 
 ### Current release decision
 
-Status: local and remote `main` point to `e417154`. Pull request 309 is merged,
-and its branch is deleted. The protected candidate workflow completed without
-creating a tag or release. The exact downloaded macOS DMG has SHA-256
-`ac1ecc5661473f4fe7533cd971df5c91b654e1a1848a543dcfcdf7534f49f566`.
-Its checksum, provenance, Developer ID signature, notarization tickets,
-Gatekeeper checks, arm64 architecture, macOS 11.0 minimum, Foundation Models
-link, run-time dependencies, entitlements, and eight-second controlled launch
-pass on an Apple Silicon Mac running macOS 26.6.2. The Windows installer hashes,
-provenance, and SBOM attestations also verify against exact commit `e417154`.
+Status: local and remote `main` point to `1dcea94`. Pull request 319 merged after
+all required checks and the GitHub connector review passed. Candidate run
+`33226723040` failed closed at the Windows SBOM checksum gate without creating
+a tag, release, Windows artifact, Windows attestation, or checksum manifest.
 
-The candidate is rejected. Its attested macOS SBOM gives the main executable an
-all-zero SHA-1 placeholder, and all 67 Windows SBOM file records use that same
-placeholder. A test-first local fix makes Syft collect metadata for every staged
-entry, requires one unique SPDX record for each filesystem entry, permits
-placeholder values only for actual directories and symlinks, and requires every
-regular-file record to include SHA-256. Every listed checksum must be real,
-supported, and equal to the staged bytes. Any inventory or checksum error stops
-both platform jobs before attestation.
+The macOS job passed signing, app and DMG notarization, stapling, Gatekeeper,
+SBOM generation, the new checksum gate, provenance, SBOM attestation, and
+artifact upload. The Windows job passed its builds, signing, Authenticode,
+portable-install, packaged-signature, and SBOM-generation checks. Its 339
+Windows regular-file records then failed checksum validation.
 
-The complete local fix passes 499 frontend and release-contract tests with
-2,240 assertions across 46 files, 503 Rust library tests plus the dictionary
-integration test, the production frontend build, ESLint, all 19 translation
-checks, rebrand validation, Prettier, Rust formatting, Clippy with warnings
-denied, workflow lint, and whitespace validation. Two read-only Claude Code
-reviews found checksum-shape, command-exit, workflow-contract, documentation,
-and diagnostic-size gaps. Those gaps are corrected and their focused tests
-pass. The final read-only review of the corrected full diff found no unresolved
-P1, P2, or P3 issue.
+The environment setting reached Syft 1.49.0. The failure is the upstream Syft
+Windows directory-resolver bug: Syft catalogs the staged paths but cannot
+resolve them again for digest collection. The test-first workaround adds a
+`Complete Windows SBOM file checksums` step. It replaces only an actual regular
+file's exact single zero-SHA-1 placeholder with SHA-1 and SHA-256 calculated
+from the staged bytes. Mixed, missing, malformed, unsupported, and real but
+stale checksums still fail. The completed document is written atomically only
+after the existing exact-inventory and byte validation passes. A changed
+document records the completion tool and a derived SPDX namespace. A document
+with valid native digests stays byte-for-byte unchanged. Special filesystem
+entries fail before hashing. macOS does not use this compatibility step.
 
-Next gate: request approval to commit the fix to a dedicated release-fix pull
-request. After an approved merge, rerun the protected candidate workflow and
-repeat the artifact checks. Pull requests 311 through 317 stay outside v0.6.0
-and must not merge into `main` before publication. Do not create or push the
-v0.6.0 tag, publish a release, change the updater feed, or use Partner Center
-before their later gates and approvals.
+The corrected workaround passes 510 frontend and release-contract tests with
+2,310 assertions across 46 files, 503 Rust library tests plus the dictionary
+integration test, the production frontend build, TypeScript, ESLint, all 19
+translation checks, rebrand validation, Prettier, Rust formatting, Clippy with
+warnings denied, workflow lint, and whitespace validation. The final
+independent re-review found no actionable P1, P2, or P3 issue.
+
+Next gate: commit and push the workaround through a dedicated bug-fix pull
+request. After it merges, run a new protected candidate and repeat exact
+artifact checks. Pull requests 311 through 317 stay outside v0.6.0 and must not
+merge into `main` before publication. Do not create or push the v0.6.0 tag,
+publish a release, change the updater feed, or use Partner Center until a
+replacement candidate passes.
+The user's end-to-end release approval authorizes those actions after their
+technical gates pass. It does not authorize publishing a failed or unverified
+artifact.
 
 ### Session handoff for August 28, 2026
 
 Safe state:
 
-- Local `main` and `origin/main` point to `e417154`. The worktree contains the
-  uncommitted test-first SBOM fix and its release evidence updates.
+- Local `main` and `origin/main` point to `1dcea94`. The worktree is on
+  `fix/windows-syft-file-digests` with the uncommitted test-first Windows Syft
+  compatibility fix and release evidence updates.
 - The older local connector implementation is recoverable from the named
   `pre-reconcile local connector fixes 2026-08-28` stash. It is not part of the
   candidate.
 - The old detached pull request worktree was clean and has been removed.
-- Candidate run `33195432598` passed and its artifacts expire on September 27, 2026. It did not create a draft or public release.
-- The macOS artifact is downloaded under
-  `/private/tmp/audiobud-v060-candidate.taVo6P/macos`. The Windows artifact is
-  in the adjacent `windows` directory.
-- The package signatures, hashes, notarization evidence, and provenance pass,
-  but both candidate SBOMs fail the new file-checksum validator.
-- The complete local verification suite and final corrected-diff review pass on
-  the uncommitted fix. Commit, push, and pull request approval is the next gate.
+- Candidate run `33226723040` failed closed on the Windows SBOM gate. Its macOS
+  job passed and uploaded artifact id `9707382447`; no Windows artifact exists.
+- The rejected earlier candidate artifacts remain under
+  `/private/tmp/audiobud-v060-candidate.taVo6P`. Do not use those bytes as
+  replacement-candidate evidence.
+- The replacement run's macOS artifact passed the checksum validator. No
+  replacement Windows artifact exists because its job failed closed.
+- The full local suite and final independent re-review pass. Commit, push, and
+  the dedicated bug-fix pull request are the next gates.
 - Pull requests 311 through 317 each have a release-freeze coordination comment
   for the Office agent. Do not modify or merge those pull requests here.
 - No v0.6.0 tag, release, updater-feed change, or Partner Center submission has
@@ -395,15 +407,17 @@ Separate follow-up, outside this release checkpoint:
 
 Resume in this order:
 
-1. Ask for approval before committing or pushing the fix to a dedicated pull
-   request. Keep pull requests 311 through 317 unmerged.
-2. After the fix passes review, CI, and an approved merge, rerun the protected
+1. Complete full validation and independent review of the Windows Syft
+   workaround. Keep pull requests 311 through 317 unmerged.
+2. Commit, push, and open the dedicated bug-fix pull request under the user's
+   end-to-end release approval.
+3. After the fix passes review, CI, and merge, rerun the protected
    candidate workflow with release and Store publication disabled.
-3. Verify both replacement artifacts, then run Windows install, delivery,
+4. Verify both replacement artifacts, then run Windows install, delivery,
    target-lock, uninstall, and v0.5.0 updater tests.
-4. Finish the clean-Mac first-launch, permission, transcription, paste, display,
+5. Finish the clean-Mac first-launch, permission, transcription, paste, display,
    sleep, and device-change tests.
-5. Confirm that the prepared Windows update manifest selects only the tested
+6. Confirm that the prepared Windows update manifest selects only the tested
    candidate updater. Do not publish it.
-6. Review every changed line and complete the release checklist before the
+7. Review every changed line and complete the release checklist before the
    release-state commit and tag approval gates.

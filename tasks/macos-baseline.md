@@ -201,15 +201,48 @@ record must include SHA-256, and every listed checksum must be real, supported,
 and equal to the staged bytes. A new protected candidate must prove the fix on
 GitHub's macOS and Windows runners.
 
+## Replacement candidate run 33226723040
+
+Pull request 319 merged the first checksum gate into `main` at
+`1dcea94049497e24ba67ca8ba2e67f5fd3e141e1`. Protected candidate run
+`33226723040` used that exact commit with release and Store publication
+disabled.
+
+The macOS job passed in 21 minutes and 17 seconds. Signing, app and DMG
+notarization, stapling, Gatekeeper, SBOM generation, the new SBOM checksum gate,
+provenance, SBOM attestation, and artifact upload all passed. The uploaded
+artifact is `audiobud-macos-aarch64-v0.6.0-1`, artifact id `9707382447`, with
+17,687,762 uploaded bytes and a September 28, 2026 expiration date.
+
+The Windows job passed compilation, installer bundling, updater signing,
+Authenticode checks, portable installation, packaged-file signature checks,
+and SBOM generation. It then failed closed at `Validate release SBOM file
+checksums`. Syft received `SYFT_FILE_METADATA_SELECTION=all`, cataloged the
+staged inventory, but left 339 regular-file records with invalid placeholder
+checksums. The upstream Syft Windows directory resolver cannot resolve the
+paths it reports for digest collection. Windows checksums, attestations,
+release writes, and artifact upload were skipped. No Windows artifact escaped
+the failed gate.
+
+The test-first compatibility fix completes only an actual regular file whose
+SPDX record contains exactly one all-zero SHA-1 checksum. It calculates SHA-1
+and SHA-256 from the staged bytes, writes the document atomically only after the
+existing exact-inventory and byte checks pass, and leaves every other invalid or
+stale form to fail. It rejects special filesystem entries, records the
+completion tool and a derived SPDX namespace when it changes a document, and
+leaves an already-valid document byte-for-byte unchanged. macOS remains on
+Syft's native digest path.
+
 ## v0.6.0 remaining limits
 
 - Time to interactive is not measured because the smoke harness observes only process state.
 - Clean first-launch, permission-state, transcription, paste, display, sleep, and device-change tests are pending on a clean Apple Silicon Mac.
 - The protected candidate is not the final public artifact. The tag workflow
   will create new bytes that need the same checks.
-- The protected candidate is rejected because its macOS main-executable record
-  and all 67 Windows SPDX file records contain all-zero checksum placeholders.
-  It must not be tagged or published.
-- Pull request 309 is merged. All remote jobs completed successfully on
-  `e417154`, but the post-download SBOM content gate rejected their artifacts.
+- The earlier candidate at `e417154` is rejected because its macOS
+  main-executable record and all 67 Windows SPDX file records contain all-zero
+  checksum placeholders. It must not be tagged or published.
+- Replacement run `33226723040` proved the macOS checksum gate and failed
+  safely on the upstream Windows digest defect. A new protected run must prove
+  the narrow Windows compatibility step before artifact testing continues.
 - The Windows installers, signed updater path, and Microsoft Store package URL are not ready for submission.
