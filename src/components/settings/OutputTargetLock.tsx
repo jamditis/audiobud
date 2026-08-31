@@ -21,6 +21,7 @@ export const OutputTargetLock: React.FC<OutputTargetLockProps> = React.memo(
   ({ descriptionMode = "tooltip", grouped = false }) => {
     const { t } = useTranslation();
     const { indicator, unlock } = useOutputTargetLock();
+    const experimentalLabel = t("settings.advanced.groups.experimental");
 
     const target =
       indicator.targetName ||
@@ -34,7 +35,7 @@ export const OutputTargetLock: React.FC<OutputTargetLockProps> = React.memo(
 
     return (
       <SettingContainer
-        title={t("settings.advanced.outputTargetLock.title")}
+        title={`${t("settings.advanced.outputTargetLock.title")} (${experimentalLabel})`}
         description={t("settings.advanced.outputTargetLock.description")}
         descriptionMode={descriptionMode}
         grouped={grouped}

@@ -26,7 +26,21 @@ pub mod backend;
 use serde::{Deserialize, Serialize};
 use specta::Type;
 use std::fmt;
-use std::sync::Mutex;
+use std::sync::{Mutex, MutexGuard};
+
+/// Serializes experimental target creation with disable-time cleanup.
+///
+/// The settings cache changes before its runtime effects run. Without one
+/// shared lock, an action can read "enabled", cleanup can finish, and then the
+/// older action can create a lock or pick after cleanup. Holding this guard
+/// across each targeting mutation makes cleanup the last writer after a disable.
+static EXPERIMENTAL_TARGETING_GATE: Mutex<()> = Mutex::new(());
+
+pub(crate) fn experimental_targeting_guard() -> MutexGuard<'static, ()> {
+    EXPERIMENTAL_TARGETING_GATE
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
 
 /// A captured native window handle. On Windows this holds an `HWND` as the
 /// `isize` that `GetForegroundWindow` returns. Other platforms have no
@@ -570,6 +584,31 @@ impl LockedLabel {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn experimental_targeting_actions_finish_before_disable_cleanup_enters() {
+        use std::sync::mpsc;
+        use std::time::Duration;
+
+        let action_guard = experimental_targeting_guard();
+        let (attempted_tx, attempted_rx) = mpsc::channel();
+        let (entered_tx, entered_rx) = mpsc::channel();
+        let cleanup = std::thread::spawn(move || {
+            attempted_tx.send(()).unwrap();
+            let _cleanup_guard = experimental_targeting_guard();
+            entered_tx.send(()).unwrap();
+        });
+
+        attempted_rx.recv_timeout(Duration::from_secs(1)).unwrap();
+        assert!(
+            entered_rx.try_recv().is_err(),
+            "disable cleanup entered while a targeting action held the gate"
+        );
+
+        drop(action_guard);
+        entered_rx.recv_timeout(Duration::from_secs(1)).unwrap();
+        cleanup.join().unwrap();
+    }
 
     /// A captured window: handle `h`, owned by process `pid` / thread `tid`.
     fn win(h: isize, pid: u32, tid: u32) -> WindowIdentity {

@@ -37,6 +37,8 @@ const WindowPicker: React.FC = () => {
   // open so they can pick again, rather than closing as if it had worked.
   const [refused, setRefused] = useState(false);
   const direction = getLanguageDirection(i18n.language);
+  const experimentalLabel = t("settings.advanced.groups.experimental");
+  const pickerTitle = `${t("windowPicker.title")} (${experimentalLabel})`;
   // One pick per opening: a click that lands while a gesture is in flight must
   // not send a second one.
   const sending = useRef(false);
@@ -57,7 +59,7 @@ const WindowPicker: React.FC = () => {
       // title -- what a screen reader and the window list announce -- is set
       // here, in the language the rest of the app is using.
       await getCurrentWindow()
-        .setTitle(t("windowPicker.title"))
+        .setTitle(pickerTitle)
         .catch(() => {});
       await load();
     };
@@ -65,9 +67,8 @@ const WindowPicker: React.FC = () => {
     return () => {
       cancelled = true;
     };
-    // Runs once: the picker lives for a single pick, and `t` and `load` are
-    // stable for its whole life.
-  }, [load, t]);
+    // The picker lives for one pick. Reload only if its localized title changes.
+  }, [load, pickerTitle]);
 
   const send = useCallback(
     async (gesture: PickerGesture) => {
@@ -153,7 +154,7 @@ const WindowPicker: React.FC = () => {
   return (
     <div className="window-picker" dir={direction}>
       <header className="picker-header">
-        <h1 className="picker-title">{t("windowPicker.title")}</h1>
+        <h1 className="picker-title">{pickerTitle}</h1>
         <p className="picker-hint">
           {refused ? t("windowPicker.refused") : t("windowPicker.hint")}
         </p>
@@ -168,7 +169,7 @@ const WindowPicker: React.FC = () => {
           className="picker-list"
           role="listbox"
           tabIndex={0}
-          aria-label={t("windowPicker.title")}
+          aria-label={pickerTitle}
           aria-activedescendant={
             state.highlighted >= 0 ? rowId(state.highlighted) : undefined
           }

@@ -1029,6 +1029,72 @@ jobs:
             }
           }
 
+          function Normalize-AudioBudInstallDirectory {
+            param([string] $Path)
+            return $Path.Trim().Trim('"').TrimEnd('\')
+          }
+
+          function Assert-AudioBudUninstallRegistration {
+            param(
+              [Parameter(Mandatory = $true)][string] $InstallDirectory,
+              [Parameter(Mandatory = $true)][string] $ExpectedVersion
+            )
+
+            $normalizedInstallDirectory = Normalize-AudioBudInstallDirectory `
+              -Path $InstallDirectory
+            $registrations = @(
+              foreach ($root in @(
+                'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall',
+                'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall',
+                'HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall'
+              )) {
+                if (-not (Test-Path -LiteralPath $root -PathType Container)) {
+                  continue
+                }
+                foreach ($key in Get-ChildItem -LiteralPath $root -ErrorAction Stop) {
+                  $displayName = [string](
+                    Get-ItemPropertyValue -LiteralPath $key.PSPath `
+                      -Name 'DisplayName' -ErrorAction SilentlyContinue
+                  )
+                  $displayVersion = [string](
+                    Get-ItemPropertyValue -LiteralPath $key.PSPath `
+                      -Name 'DisplayVersion' -ErrorAction SilentlyContinue
+                  )
+                  $installLocation = [string](
+                    Get-ItemPropertyValue -LiteralPath $key.PSPath `
+                      -Name 'InstallLocation' -ErrorAction SilentlyContinue
+                  )
+                  $uninstallString = [string](
+                    Get-ItemPropertyValue -LiteralPath $key.PSPath `
+                      -Name 'UninstallString' -ErrorAction SilentlyContinue
+                  )
+                  if (
+                    $displayName -ceq 'AudioBud' -and
+                    (Normalize-AudioBudInstallDirectory -Path $installLocation) -ieq `
+                      $normalizedInstallDirectory
+                  ) {
+                    [pscustomobject]@{
+                      Path = $key.PSPath
+                      DisplayVersion = $displayVersion
+                      UninstallString = $uninstallString
+                    }
+                  }
+                }
+              }
+            )
+
+            if ($registrations.Count -ne 1) {
+              throw "Expected one AudioBud uninstall registration for $InstallDirectory, found $($registrations.Count)"
+            }
+            $registration = $registrations[0]
+            if ($registration.DisplayVersion -cne $ExpectedVersion) {
+              throw "NSIS registered DisplayVersion $($registration.DisplayVersion) instead of $ExpectedVersion"
+            }
+            if ($registration.UninstallString -notlike "*$normalizedInstallDirectory*uninstall.exe*") {
+              throw "NSIS registered an unexpected uninstall command: $($registration.UninstallString)"
+            }
+          }
+
           $verificationRoot = Join-Path $env:RUNNER_TEMP `
             "audiobud-signature-verification-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
           if (Test-Path -LiteralPath $verificationRoot) {
@@ -1092,6 +1158,9 @@ jobs:
           if ($nsisProcess.ExitCode -ne 0) {
             throw "NSIS installation failed with exit code $($nsisProcess.ExitCode)"
           }
+          Assert-AudioBudUninstallRegistration `
+            -InstallDirectory $nsisDirectory `
+            -ExpectedVersion $env:APP_VERSION
 
           $msiApplications = @(
             Get-ChildItem -LiteralPath $msiDirectory -Filter "audiobud.exe" -File -Recurse

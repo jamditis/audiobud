@@ -213,13 +213,23 @@ describe("signed updater release artifacts", () => {
     const registryScanStart = verifier.indexOf(
       "function Get-AudioBudUninstallRegistryPaths",
     );
+    const registrationAssertionStart = verifier.indexOf(
+      "function Assert-AudioBudUninstallRegistration",
+    );
     const updaterDirectoryFunctionsStart = verifier.indexOf(
       "function Get-AudioBudUpdaterDirectories",
     );
     expect(registryScanStart).toBeGreaterThan(-1);
-    expect(updaterDirectoryFunctionsStart).toBeGreaterThan(registryScanStart);
+    expect(registrationAssertionStart).toBeGreaterThan(registryScanStart);
+    expect(updaterDirectoryFunctionsStart).toBeGreaterThan(
+      registrationAssertionStart,
+    );
     const registryScan = verifier.slice(
       registryScanStart,
+      registrationAssertionStart,
+    );
+    const registrationAssertion = verifier.slice(
+      registrationAssertionStart,
       updaterDirectoryFunctionsStart,
     );
     expect(
@@ -232,6 +242,14 @@ describe("signed updater release artifacts", () => {
     ]) {
       expect(registryScan).toContain(`-Name '${registryValueName}'`);
     }
+    expect(registryScan).toContain("$displayName -ceq 'AudioBud' -or");
+    expect(registrationAssertion).toContain(
+      "$displayName -ceq 'AudioBud' -and",
+    );
+    expect(registrationAssertion).toContain(
+      "Normalize-AudioBudInstallDirectory -Path $installLocation",
+    );
+    expect(verifier).toContain(".Trim('\"')");
     expect(verifier).not.toContain("[string]$values.DisplayName");
     expect(verifier).not.toContain("[string]$values.InstallLocation");
     expect(verifier).not.toContain("[string]$values.UninstallString");
@@ -241,14 +259,39 @@ describe("signed updater release artifacts", () => {
     expect(verifier).toContain(
       "Updated installation created no AudioBud uninstall registration",
     );
+    expect(verifier).toContain("function Assert-AudioBudUninstallRegistration");
+    expect(verifier).toContain("-Name 'DisplayVersion'");
+    const priorRegistrationCheck = verifier.slice(
+      verifier.indexOf("$installedRegistryPaths"),
+      verifier.indexOf("$priorRestart"),
+    );
+    expect(priorRegistrationCheck).toContain(
+      "Assert-AudioBudUninstallRegistration",
+    );
+    expect(priorRegistrationCheck).toContain("-ExpectedVersion $PriorVersion");
+    expect(priorRegistrationCheck).not.toContain("$TargetVersion");
+    const targetRegistrationCheck = verifier.slice(
+      verifier.indexOf("$targetRegistryPaths"),
+      verifier.indexOf("$uninstaller = Join-Path"),
+    );
+    expect(targetRegistrationCheck).toContain(
+      "Assert-AudioBudUninstallRegistration",
+    );
+    expect(targetRegistrationCheck).toContain(
+      "-ExpectedVersion $TargetVersion",
+    );
+    expect(targetRegistrationCheck).not.toContain("$PriorVersion");
     expect(verifier).toContain(
       "Updated uninstall left AudioBud registration keys",
     );
-    expect(verifier.indexOf("targetRegistryPaths")).toBeLessThan(
-      verifier.indexOf("uninstall.exe"),
+    const targetRegistryPosition = verifier.indexOf("targetRegistryPaths");
+    const updatedUninstallerPosition = verifier.indexOf(
+      "$uninstaller = Join-Path $installDirectory 'uninstall.exe'",
+      targetRegistryPosition,
     );
+    expect(targetRegistryPosition).toBeLessThan(updatedUninstallerPosition);
     expect(verifier.indexOf("remainingRegistryPaths")).toBeGreaterThan(
-      verifier.indexOf("uninstall.exe"),
+      updatedUninstallerPosition,
     );
     expect(verifier).toContain("Updated uninstall left the install directory");
     expect(verifier).toContain("Get-NewAudioBudUpdaterDirectories");
@@ -331,5 +374,16 @@ describe("signed updater release artifacts", () => {
     expect(ciWorkflow).toContain(
       "[System.Management.Automation.Language.Parser]::ParseFile",
     );
+  });
+
+  test("checks the packaged NSIS uninstall version before release", () => {
+    const packaging = stepBlock("Verify packaged application signatures");
+
+    expect(packaging).toContain("Assert-AudioBudUninstallRegistration");
+    expect(packaging).toContain("-Name 'DisplayVersion'");
+    expect(packaging).toContain("-ExpectedVersion $env:APP_VERSION");
+    expect(packaging).toContain("-InstallDirectory $nsisDirectory");
+    expect(packaging).toContain("param([string] $Path)");
+    expect(packaging).toContain(".Trim('\"')");
   });
 });
