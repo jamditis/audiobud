@@ -379,6 +379,11 @@ describe("signed updater release artifacts", () => {
   test("checks the packaged NSIS uninstall version before release", () => {
     const packaging = stepBlock("Verify packaged application signatures");
 
+    expect(packaging).toContain("function Get-OptionalRegistryStringValue");
+    expect(packaging).toContain(
+      "Get-ItemProperty -LiteralPath $key.PSPath -ErrorAction Stop",
+    );
+    expect(packaging).not.toContain("Get-ItemPropertyValue");
     expect(packaging).toContain("Assert-AudioBudUninstallRegistration");
     expect(packaging).toContain("-Name 'DisplayVersion'");
     expect(packaging).toContain("-ExpectedVersion $env:APP_VERSION");
