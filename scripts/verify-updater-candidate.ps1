@@ -163,6 +163,9 @@ function Read-AudioFeedbackSetting {
 
 function Get-OptionalRegistryStringValue {
   param([psobject]$Values, [string]$Name)
+  if ($null -eq $Values) {
+    return ''
+  }
   $property = $Values.PSObject.Properties[$Name]
   if ($null -eq $property) {
     return ''

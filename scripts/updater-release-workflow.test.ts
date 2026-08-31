@@ -210,6 +210,14 @@ describe("signed updater release artifacts", () => {
     expect(verifier).toContain("uninstall.exe");
     expect(verifier).toContain("Get-AudioBudUninstallRegistryPaths");
     expect(verifier).toContain("Get-OptionalRegistryStringValue");
+    const optionalValueReader = verifier.slice(
+      verifier.indexOf("function Get-OptionalRegistryStringValue"),
+      verifier.indexOf("function Normalize-AudioBudInstallDirectory"),
+    );
+    expect(optionalValueReader).toContain("if ($null -eq $Values)");
+    expect(optionalValueReader.indexOf("if ($null -eq $Values)")).toBeLessThan(
+      optionalValueReader.indexOf("$Values.PSObject.Properties[$Name]"),
+    );
     const registryScanStart = verifier.indexOf(
       "function Get-AudioBudUninstallRegistryPaths",
     );
@@ -380,6 +388,14 @@ describe("signed updater release artifacts", () => {
     const packaging = stepBlock("Verify packaged application signatures");
 
     expect(packaging).toContain("function Get-OptionalRegistryStringValue");
+    const optionalValueReader = packaging.slice(
+      packaging.indexOf("function Get-OptionalRegistryStringValue"),
+      packaging.indexOf("function Assert-AudioBudUninstallRegistration"),
+    );
+    expect(optionalValueReader).toContain("if ($null -eq $Values)");
+    expect(optionalValueReader.indexOf("if ($null -eq $Values)")).toBeLessThan(
+      optionalValueReader.indexOf("$Values.PSObject.Properties[$Name]"),
+    );
     expect(packaging).toContain(
       "Get-ItemProperty -LiteralPath $key.PSPath -ErrorAction Stop",
     );
