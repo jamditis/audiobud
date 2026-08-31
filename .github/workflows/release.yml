@@ -1034,6 +1034,16 @@ jobs:
             return $Path.Trim().Trim('"').TrimEnd('\')
           }
 
+          function Get-OptionalRegistryStringValue {
+            param([psobject] $Values, [string] $Name)
+
+            $property = $Values.PSObject.Properties[$Name]
+            if ($null -eq $property) {
+              return ''
+            }
+            return [string] $property.Value
+          }
+
           function Assert-AudioBudUninstallRegistration {
             param(
               [Parameter(Mandatory = $true)][string] $InstallDirectory,
@@ -1052,22 +1062,15 @@ jobs:
                   continue
                 }
                 foreach ($key in Get-ChildItem -LiteralPath $root -ErrorAction Stop) {
-                  $displayName = [string](
-                    Get-ItemPropertyValue -LiteralPath $key.PSPath `
-                      -Name 'DisplayName' -ErrorAction SilentlyContinue
-                  )
-                  $displayVersion = [string](
-                    Get-ItemPropertyValue -LiteralPath $key.PSPath `
-                      -Name 'DisplayVersion' -ErrorAction SilentlyContinue
-                  )
-                  $installLocation = [string](
-                    Get-ItemPropertyValue -LiteralPath $key.PSPath `
-                      -Name 'InstallLocation' -ErrorAction SilentlyContinue
-                  )
-                  $uninstallString = [string](
-                    Get-ItemPropertyValue -LiteralPath $key.PSPath `
-                      -Name 'UninstallString' -ErrorAction SilentlyContinue
-                  )
+                  $values = Get-ItemProperty -LiteralPath $key.PSPath -ErrorAction Stop
+                  $displayName = Get-OptionalRegistryStringValue `
+                    -Values $values -Name 'DisplayName'
+                  $displayVersion = Get-OptionalRegistryStringValue `
+                    -Values $values -Name 'DisplayVersion'
+                  $installLocation = Get-OptionalRegistryStringValue `
+                    -Values $values -Name 'InstallLocation'
+                  $uninstallString = Get-OptionalRegistryStringValue `
+                    -Values $values -Name 'UninstallString'
                   if (
                     $displayName -ceq 'AudioBud' -and
                     (Normalize-AudioBudInstallDirectory -Path $installLocation) -ieq `
