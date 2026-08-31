@@ -22,7 +22,7 @@ use log::{debug, info, warn};
 use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 
 use crate::output_target::backend as target_backend;
-use crate::output_target::{WindowHandle, WindowIdentity};
+use crate::output_target::{experimental_targeting_guard, WindowHandle, WindowIdentity};
 
 use super::{
     arm_pick, decide_paste, is_stale_selection, offer_rows, offered_candidates, resolve_gesture,
@@ -54,6 +54,13 @@ const PICKER_HEIGHT: f64 = 360.0;
 /// is already open just focuses it, since a second press means "I am picking",
 /// not "start over".
 pub fn open_picker(app: &AppHandle) {
+    let _targeting_guard = experimental_targeting_guard();
+    if !crate::settings::get_settings(app).experimental_enabled {
+        warn!("Output targeting is experimental and is not enabled");
+        abandon_pick(app);
+        close_picker(app);
+        return;
+    }
     if let Some(existing) = app.get_webview_window(PICKER_WINDOW) {
         let _ = existing.show();
         let _ = existing.set_focus();
@@ -117,6 +124,12 @@ pub fn close_picker(app: &AppHandle) {
 /// result as the session's offer so a gesture is only ever resolved against the
 /// rows the user actually saw.
 pub fn offered_rows(app: &AppHandle) -> Vec<PickerWindow> {
+    let _targeting_guard = experimental_targeting_guard();
+    if !crate::settings::get_settings(app).experimental_enabled {
+        abandon_pick(app);
+        close_picker(app);
+        return Vec::new();
+    }
     // Offering a list is the user starting a pick. Whatever an earlier pick
     // armed is superseded now rather than left waiting behind this one, so a
     // route they have moved on from can never fire later -- least of all into
@@ -152,6 +165,12 @@ pub fn offered_rows(app: &AppHandle) -> Vec<PickerWindow> {
 /// (#254), and the picker closes either way. Nothing here creates a lasting
 /// lock: the armed pick routes one transcript and is then forgotten.
 pub fn resolve_pick(app: &AppHandle, gesture: PickerGesture) -> PickArmed {
+    let _targeting_guard = experimental_targeting_guard();
+    if !crate::settings::get_settings(app).experimental_enabled {
+        abandon_pick(app);
+        close_picker(app);
+        return PickArmed::Cancelled;
+    }
     let offered: Vec<OfferedWindow> = app
         .try_state::<PickerSession>()
         .map(|session| session.offered())

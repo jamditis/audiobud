@@ -193,7 +193,7 @@ function Get-AudioBudUninstallRegistryPaths {
           -Name 'UninstallString'
         if (
           $displayName -ceq 'AudioBud' -or
-          $installLocation.TrimEnd('\') -ceq $InstallDirectory.TrimEnd('\') -or
+          $installLocation.TrimEnd('\') -ieq $InstallDirectory.TrimEnd('\') -or
           $uninstallString -like "*$InstallDirectory*"
         ) {
           $key.PSPath
@@ -201,6 +201,68 @@ function Get-AudioBudUninstallRegistryPaths {
       }
     }
   )
+}
+
+function Assert-AudioBudUninstallRegistration {
+  param(
+    [string]$InstallDirectory,
+    [string]$ExpectedVersion,
+    [string]$Label
+  )
+  $registryPaths = @(
+    foreach ($registryPath in @(
+      Get-AudioBudUninstallRegistryPaths -InstallDirectory $InstallDirectory
+    )) {
+      $candidateValues = Get-ItemProperty -LiteralPath $registryPath -ErrorAction Stop
+      $displayName = Get-OptionalRegistryStringValue `
+        -Values $candidateValues `
+        -Name 'DisplayName'
+      $installLocation = Get-OptionalRegistryStringValue `
+        -Values $candidateValues `
+        -Name 'InstallLocation'
+      if (
+        $displayName -ceq 'AudioBud' -and
+        $installLocation.TrimEnd('\') -ieq $InstallDirectory.TrimEnd('\')
+      ) {
+        $registryPath
+      }
+    }
+  )
+  if ($registryPaths.Count -eq 0) {
+    throw "$Label created no AudioBud uninstall registration"
+  }
+  if ($registryPaths.Count -ne 1) {
+    throw "$Label created multiple uninstall registrations for ${InstallDirectory}: $($registryPaths -join ', ')"
+  }
+
+  $values = Get-ItemProperty -LiteralPath $registryPaths[0] -ErrorAction Stop
+  $displayName = Get-OptionalRegistryStringValue `
+    -Values $values `
+    -Name 'DisplayName'
+  $displayVersion = Get-OptionalRegistryStringValue `
+    -Values $values `
+    -Name 'DisplayVersion'
+  $installLocation = Get-OptionalRegistryStringValue `
+    -Values $values `
+    -Name 'InstallLocation'
+  $uninstallString = Get-OptionalRegistryStringValue `
+    -Values $values `
+    -Name 'UninstallString'
+
+  if ($displayName -cne 'AudioBud') {
+    throw "$Label registered an unexpected display name: $displayName"
+  }
+  if ($displayVersion -cne $ExpectedVersion) {
+    throw "$Label registered DisplayVersion $displayVersion instead of $ExpectedVersion"
+  }
+  if ($installLocation.TrimEnd('\') -ine $InstallDirectory.TrimEnd('\')) {
+    throw "$Label registered an unexpected install location: $installLocation"
+  }
+  if ($uninstallString -notlike "*$InstallDirectory*uninstall.exe*") {
+    throw "$Label registered an unexpected uninstall command: $uninstallString"
+  }
+
+  return $registryPaths[0]
 }
 
 function Get-AudioBudUpdaterDirectories {
@@ -431,6 +493,10 @@ try {
   if ($installedRegistryPaths.Count -eq 0) {
     throw "$PriorTag installation created no AudioBud uninstall registration"
   }
+  Assert-AudioBudUninstallRegistration `
+    -InstallDirectory $installDirectory `
+    -ExpectedVersion $PriorVersion `
+    -Label "$PriorTag installation" | Out-Null
 
   $priorRestart = Start-Process `
     -FilePath $executable `
@@ -534,6 +600,10 @@ try {
   if ($targetRegistryPaths.Count -eq 0) {
     throw 'Updated installation created no AudioBud uninstall registration'
   }
+  Assert-AudioBudUninstallRegistration `
+    -InstallDirectory $installDirectory `
+    -ExpectedVersion $TargetVersion `
+    -Label 'Updated installation' | Out-Null
 
   $uninstaller = Join-Path $installDirectory 'uninstall.exe'
   Assert-File -Path $uninstaller -Label 'Updated NSIS uninstaller'

@@ -131,6 +131,8 @@ fn version_label() -> String {
 
 pub fn update_tray_menu(app: &AppHandle, state: &TrayIconState, locale: Option<&str>) {
     let settings = settings::get_settings(app);
+    #[cfg(target_os = "windows")]
+    let experimental_targeting_enabled = settings.experimental_enabled;
 
     let locale = locale.unwrap_or(&settings.app_language);
     let strings = get_tray_translations(Some(locale.to_string()));
@@ -391,7 +393,9 @@ pub fn update_tray_menu(app: &AppHandle, state: &TrayIconState, locale: Option<&
             let mut items: Vec<&dyn tauri::menu::IsMenuItem<tauri::Wry>> =
                 vec![&version_i, &separators[0], &cancel_i, &separators[1]];
             #[cfg(target_os = "windows")]
-            items.push(&toggle_target_lock_i);
+            if experimental_targeting_enabled {
+                items.push(&toggle_target_lock_i);
+            }
             items.extend([
                 &copy_last_transcript_i as &dyn tauri::menu::IsMenuItem<tauri::Wry>,
                 &separators[2],
@@ -424,9 +428,13 @@ pub fn update_tray_menu(app: &AppHandle, state: &TrayIconState, locale: Option<&
                 &toggle_overlay_i,
             ];
             #[cfg(target_os = "windows")]
-            items.push(&toggle_target_lock_i);
+            if experimental_targeting_enabled {
+                items.push(&toggle_target_lock_i);
+            }
             #[cfg(target_os = "windows")]
-            items.push(&pick_output_window_i);
+            if experimental_targeting_enabled {
+                items.push(&pick_output_window_i);
+            }
             items.extend([
                 &separators[4] as &dyn tauri::menu::IsMenuItem<tauri::Wry>,
                 &settings_i,

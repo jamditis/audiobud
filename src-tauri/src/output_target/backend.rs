@@ -26,8 +26,8 @@ use tauri::{AppHandle, Emitter, Manager};
 use tauri_specta::Event;
 
 use super::{
-    CaptureError, CaptureSource, LockToggle, LockedLabel, OutputTargetLockEvent, PinnedTarget,
-    TargetLoss, WindowIdentity, WindowLabel,
+    experimental_targeting_guard, CaptureError, CaptureSource, LockToggle, LockedLabel,
+    OutputTargetLockEvent, PinnedTarget, TargetLoss, WindowIdentity, WindowLabel,
 };
 
 /// Emitted when a pinned paste was suppressed because the locked window is gone
@@ -166,8 +166,14 @@ pub fn toggle_target_lock(app: &AppHandle, source: CaptureSource) {
         warn!("Target lock state is not initialized");
         return;
     };
-
-    let (toggle, generation) = pinned.toggle(|| capture_foreground_window(source));
+    let (toggle, generation) = {
+        let _targeting_guard = experimental_targeting_guard();
+        if !crate::settings::get_settings(app).experimental_enabled && !pinned.is_locked() {
+            warn!("Output targeting is experimental and is not enabled");
+            return;
+        }
+        pinned.toggle(|| capture_foreground_window(source))
+    };
     match toggle {
         LockToggle::Locked(window) => {
             info!(

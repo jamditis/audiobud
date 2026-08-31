@@ -36,11 +36,11 @@ export const AdvancedSettings: React.FC = () => {
   const { t } = useTranslation();
   const { getSetting } = useSettings();
   const experimentalEnabled = getSetting("experimental_enabled") || false;
-  // The target lock has a Windows backend only for now (issue #119), same as
-  // the toggle_target_lock shortcut row in GeneralSettings -- everywhere else
-  // it is always Unsupported, so the row would offer a control that can never
-  // do anything (#266 review).
+  // The target lock has a Windows backend only for now (issue #119). Everywhere
+  // else it is always Unsupported, so the controls would never do anything
+  // (#266 review).
   const isWindows = type() === "windows";
+  const experimentalTargetingEnabled = isWindows && experimentalEnabled;
 
   return (
     <div className="max-w-3xl w-full mx-auto space-y-6">
@@ -59,9 +59,6 @@ export const AdvancedSettings: React.FC = () => {
         <TypingToolSetting descriptionMode="tooltip" grouped={true} />
         <ClipboardHandlingSetting descriptionMode="tooltip" grouped={true} />
         <AutoSubmit descriptionMode="tooltip" grouped={true} />
-        {isWindows && (
-          <OutputTargetLock descriptionMode="tooltip" grouped={true} />
-        )}
         {/* Per-app output settings (#123) need the window backend to know which
             app a transcript is going to, and that is Windows-only for now
             (#119), so the list is hidden where it could never take effect. */}
@@ -92,6 +89,13 @@ export const AdvancedSettings: React.FC = () => {
 
       {experimentalEnabled && (
         <SettingsGroup title={t("settings.advanced.groups.experimental")}>
+          {experimentalTargetingEnabled && (
+            <>
+              <OutputTargetLock descriptionMode="tooltip" grouped={true} />
+              <ShortcutInput shortcutId="toggle_target_lock" grouped={true} />
+              <ShortcutInput shortcutId="pick_output_window" grouped={true} />
+            </>
+          )}
           <PostProcessingToggle descriptionMode="tooltip" grouped={true} />
           <KeyboardImplementationSelector
             descriptionMode="tooltip"
