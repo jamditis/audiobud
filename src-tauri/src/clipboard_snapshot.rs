@@ -7,6 +7,7 @@
 
 use std::borrow::Cow;
 use std::path::PathBuf;
+use std::sync::{Mutex, MutexGuard};
 
 /// An RGBA8 image captured from the clipboard.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -167,12 +168,24 @@ pub fn restore(
     backend.clear()
 }
 
-/// [`ClipboardBackend`] backed by the OS clipboard via arboard.
-///
-/// The instance is short-lived (created per paste). That is safe on X11
-/// because tauri-plugin-clipboard-manager holds a process-lifetime arboard
-/// instance, which keeps arboard's shared clipboard server thread (and the
-/// restored content) alive after this instance drops.
+/// The process-owned clipboard service. Its arboard handle lives as long as
+/// the Tauri application, which keeps X11 selections available after the
+/// operation that wrote them returns.
+pub struct ClipboardService(Mutex<ArboardBackend>);
+
+impl ClipboardService {
+    pub fn new() -> Result<Self, String> {
+        ArboardBackend::new().map(|backend| Self(Mutex::new(backend)))
+    }
+
+    pub fn lock(&self) -> MutexGuard<'_, ArboardBackend> {
+        self.0
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+}
+
+/// ClipboardBackend backed by the OS clipboard via arboard.
 pub struct ArboardBackend(arboard::Clipboard);
 
 impl ArboardBackend {
