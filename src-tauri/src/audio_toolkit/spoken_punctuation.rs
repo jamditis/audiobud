@@ -30,6 +30,8 @@
 //! - "quote" opens and "unquote" closes. A speaker who says "quote" for both gets two
 //!   opening quotes, because guessing from context is how you get it wrong silently.
 
+use super::language::TextPipelineLanguage;
+
 /// Which neighbour a symbol closes up against.
 #[derive(Clone, Copy, PartialEq)]
 enum Attach {
@@ -112,7 +114,11 @@ fn match_command(words: &[&str], i: usize) -> Option<(&'static str, Attach, usiz
 /// rebuilds the string from its words. Nothing upstream of the raw path is relying on that --
 /// `strip_to_raw_text` has already flattened the text by the time this runs -- but it does mean
 /// this is not a transform to reach for on text whose existing layout matters.
-pub fn apply_spoken_punctuation(text: &str) -> String {
+pub fn apply_spoken_punctuation(text: &str, language: &TextPipelineLanguage) -> String {
+    if !language.is_english() {
+        return text.to_string();
+    }
+
     let words: Vec<&str> = text.split_whitespace().collect();
     let mut out = String::with_capacity(text.len());
     // Whether the next thing written needs a space in front of it. Starts false so the
@@ -148,6 +154,22 @@ pub fn apply_spoken_punctuation(text: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn apply_spoken_punctuation(text: &str) -> String {
+        super::apply_spoken_punctuation(text, &TextPipelineLanguage::english())
+    }
+
+    #[test]
+    fn opts_out_when_the_language_is_not_known_english() {
+        assert_eq!(
+            super::apply_spoken_punctuation("question mark", &TextPipelineLanguage::known("fr")),
+            "question mark"
+        );
+        assert_eq!(
+            super::apply_spoken_punctuation("question mark", &TextPipelineLanguage::unknown()),
+            "question mark"
+        );
+    }
 
     #[test]
     fn closes_a_question_up_to_the_word_before_it() {

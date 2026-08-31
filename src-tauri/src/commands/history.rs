@@ -94,7 +94,7 @@ pub async fn retry_history_entry_transcription(
     // through the command's normal Result path.
     let tm = Arc::clone(&transcription_manager);
     let watchdog_timeout = transcription_watchdog_timeout(samples.len(), WHISPER_SAMPLE_RATE);
-    let transcription = match tauri::async_runtime::spawn_blocking(move || {
+    let transcribed = match tauri::async_runtime::spawn_blocking(move || {
         tm.transcribe_with_watchdog(samples, watchdog_timeout)
     })
     .await
@@ -115,9 +115,12 @@ pub async fn retry_history_entry_transcription(
         }
     };
 
-    if transcription.is_empty() {
+    if transcribed.text.is_empty() {
         return Err("Recording contains no speech".to_string());
     }
+
+    let transcription = transcribed.text;
+    let language = transcribed.language;
 
     // Reproduce the entry's original output mode. `raw_requested` records whether the dictation was
     // emitted raw, so passing it (rather than the live `raw_output` setting) keeps a retried entry in
@@ -127,6 +130,7 @@ pub async fn retry_history_entry_transcription(
     let processed = process_transcription_output(
         &app,
         &transcription,
+        &language,
         entry.post_process_requested,
         entry.raw_requested,
     )

@@ -4,7 +4,7 @@ use crate::audio_feedback::{play_feedback_sound, play_feedback_sound_blocking, S
 use crate::audio_toolkit::constants::WHISPER_SAMPLE_RATE;
 use crate::audio_toolkit::{
     apply_spoken_punctuation, format_numbers, is_microphone_access_denied,
-    is_no_input_device_error, strip_to_raw_text,
+    is_no_input_device_error, strip_to_raw_text, TextPipelineLanguage,
 };
 use crate::delivery_queue::{DeliveryQueue, EnqueueResult, TranscriptDelivery};
 use crate::delivery_worker::DeliveryWorker;
@@ -524,12 +524,12 @@ async fn post_process_transcription(settings: &AppSettings, transcription: &str)
 }
 
 async fn maybe_convert_chinese_variant(
-    settings: &AppSettings,
+    language: &TextPipelineLanguage,
     transcription: &str,
 ) -> Option<String> {
     // Check if language is set to Simplified or Traditional Chinese
-    let is_simplified = settings.selected_language == "zh-Hans";
-    let is_traditional = settings.selected_language == "zh-Hant";
+    let is_simplified = language.tag() == Some("zh-Hans");
+    let is_traditional = language.tag() == Some("zh-Hant");
 
     if !is_simplified && !is_traditional {
         debug!("selected_language is not Simplified or Traditional Chinese; skipping translation");
@@ -538,7 +538,7 @@ async fn maybe_convert_chinese_variant(
 
     debug!(
         "Starting Chinese translation using OpenCC for language: {}",
-        settings.selected_language
+        language.tag().unwrap_or("unknown")
     );
 
     // Use OpenCC to convert based on selected language
@@ -573,27 +573,10 @@ pub(crate) struct ProcessedTranscription {
     pub post_process_prompt: Option<String>,
 }
 
-/// Decides whether raw-text formatting should force English casing for the standalone pronoun "I".
-/// This is `true` only when the output is known to be English: translate-to-English makes the engine
-/// emit English regardless of source language, and an explicitly selected English dictation language
-/// is likewise definitely English. For auto-detect (`transcribe-rs` does not report the detected
-/// language) or an explicit non-English language it is `false`, and `strip_to_raw_text` then keeps
-/// the engine's own casing of an "i"/"I" token -- correct for English (engines capitalize "I") yet
-/// not wrongly capitalizing languages that use a lowercase standalone "i".
-fn force_english_i_casing(translate_to_english: bool, selected_language: &str) -> bool {
-    if translate_to_english {
-        return true;
-    }
-    let base = selected_language
-        .split(&['-', '_'][..])
-        .next()
-        .unwrap_or(selected_language);
-    base == "en"
-}
-
 pub(crate) async fn process_transcription_output(
     app: &AppHandle,
     transcription: &str,
+    language: &TextPipelineLanguage,
     post_process: bool,
     effective_raw: bool,
 ) -> ProcessedTranscription {
@@ -601,8 +584,7 @@ pub(crate) async fn process_transcription_output(
     let mut final_text = transcription.to_string();
     let mut post_processed_text: Option<String> = None;
     let mut post_process_prompt: Option<String> = None;
-
-    if let Some(converted_text) = maybe_convert_chinese_variant(&settings, transcription).await {
+    if let Some(converted_text) = maybe_convert_chinese_variant(language, transcription).await {
         final_text = converted_text;
     }
 
@@ -611,18 +593,16 @@ pub(crate) async fn process_transcription_output(
         // is skipped. Apply the deterministic raw transform as the final stage. The raw text is the
         // entry's primary output (see the save sites), so it is left in `final_text` rather than
         // being recorded as a separate `post_processed_text` variant.
-        let force_english_i =
-            force_english_i_casing(settings.translate_to_english, &settings.selected_language);
-        final_text = strip_to_raw_text(&final_text, force_english_i);
+        final_text = strip_to_raw_text(&final_text, language);
         // Raw mode has no model to tidy the text, so spoken punctuation and numbers are the
         // only way to dictate anything with a "?" or a "$25" in it. Both stay behind their own
         // setting: format_raw_output turns raw formatting on at all, and format_numbers keeps
         // meaning the same thing here as it does on the normal path.
         if settings.format_raw_output {
             if settings.format_numbers {
-                final_text = format_numbers(&final_text);
+                final_text = format_numbers(&final_text, language);
             }
-            final_text = apply_spoken_punctuation(&final_text);
+            final_text = apply_spoken_punctuation(&final_text, language);
         }
     } else if post_process {
         if let Some(processed_text) = post_process_transcription(&settings, &final_text).await {
@@ -645,7 +625,7 @@ pub(crate) async fn process_transcription_output(
         // Raw output is deliberately verbatim, and the LLM path handles its own formatting, so both
         // skip this step.
         if settings.format_numbers {
-            final_text = format_numbers(&final_text);
+            final_text = format_numbers(&final_text, language);
         }
         // Record the formatted variant for history whenever a deterministic transform (Chinese
         // conversion, number formatting) changed the text from the verbatim transcript.
@@ -921,7 +901,9 @@ impl ShortcutAction for TranscribeAction {
                     };
 
                     match transcription_result {
-                        Ok(transcription) => {
+                        Ok(transcribed) => {
+                            let language = transcribed.language;
+                            let transcription = transcribed.text;
                             debug!(
                                 "Transcription completed in {:?}: '{}'",
                                 transcription_time.elapsed(),
@@ -934,6 +916,7 @@ impl ShortcutAction for TranscribeAction {
                             let processed = process_transcription_output(
                                 &ah,
                                 &transcription,
+                                &language,
                                 post_process,
                                 effective_raw,
                             )
@@ -1199,7 +1182,7 @@ pub static ACTION_MAP: Lazy<HashMap<String, Arc<dyn ShortcutAction>>> = Lazy::ne
 
 #[cfg(test)]
 mod tests {
-    use super::{force_english_i_casing, transcription_error_already_notified};
+    use super::transcription_error_already_notified;
     use crate::managers::engine_limits::{
         MODEL_AUTO_LOAD_FAILED_ERROR, MODEL_NOT_LOADED_ERROR, WEDGED_ENGINE_ERROR,
     };
@@ -1218,28 +1201,5 @@ mod tests {
         assert!(!transcription_error_already_notified(
             "parakeet_input_too_long:391"
         ));
-    }
-
-    #[test]
-    fn force_english_i_casing_forces_when_translating() {
-        // Translation emits English regardless of the selected dictation language.
-        assert!(force_english_i_casing(true, "de"));
-        assert!(force_english_i_casing(true, "auto"));
-    }
-
-    #[test]
-    fn force_english_i_casing_forces_for_explicit_english() {
-        // An explicitly selected English language forces English "I" casing, including region tags.
-        assert!(force_english_i_casing(false, "en"));
-        assert!(force_english_i_casing(false, "en-US"));
-    }
-
-    #[test]
-    fn force_english_i_casing_defers_for_auto_and_non_english() {
-        // Auto-detect can't tell us the language, and an explicit non-English language is not
-        // English, so neither forces English rules -- strip_to_raw_text preserves the engine casing.
-        assert!(!force_english_i_casing(false, "auto"));
-        assert!(!force_english_i_casing(false, "fr"));
-        assert!(!force_english_i_casing(false, "de"));
     }
 }
