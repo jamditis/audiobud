@@ -249,6 +249,19 @@ async showMainWindowCommand() : Promise<Result<null, string>> {
     else return { status: "error", error: e  as any };
 }
 },
+/**
+ * Mark the settings React surface ready. The returned flag is a durable
+ * fallback for a request queued before its event listener existed.
+ */
+async mainWindowReady() : Promise<boolean> {
+    return await TAURI_INVOKE("main_window_ready");
+},
+/**
+ * The overlay calls this only after all first-state event listeners exist.
+ */
+async recordingOverlayReady() : Promise<void> {
+    await TAURI_INVOKE("recording_overlay_ready");
+},
 async cancelOperation() : Promise<void> {
     await TAURI_INVOKE("cancel_operation");
 },

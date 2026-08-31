@@ -64,14 +64,26 @@ const UpdateChecker: React.FC<UpdateCheckerProps> = ({
       return;
     }
 
-    checkForUpdates();
-
-    // Listen for update check events
+    // Listen before declaring this late-created webview ready. Rust retains a
+    // tray request made during creation and returns it through the handshake,
+    // so the first manual check cannot be lost between build and this effect.
+    // The handshake chooses the one initial check: a retained tray request is
+    // manual, otherwise this is the normal automatic startup check.
+    let cancelled = false;
     const updateUnlisten = listen("check-for-updates", () => {
       handleManualUpdateCheck();
     });
+    void updateUnlisten
+      .then(() => commands.mainWindowReady())
+      .then((pendingUpdateCheck) => {
+        if (cancelled) return;
+        if (pendingUpdateCheck) handleManualUpdateCheck();
+        else checkForUpdates();
+      })
+      .catch(() => {});
 
     return () => {
+      cancelled = true;
       if (upToDateTimeoutRef.current) {
         clearTimeout(upToDateTimeoutRef.current);
       }

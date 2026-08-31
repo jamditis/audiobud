@@ -356,7 +356,6 @@ dependencies = [
  "anyhow",
  "arboard",
  "chrono",
- "clap",
  "clipboard-win",
  "cpal",
  "enigo",
@@ -391,7 +390,6 @@ dependencies = [
  "tauri-build",
  "tauri-nspanel",
  "tauri-plugin-autostart",
- "tauri-plugin-clipboard-manager",
  "tauri-plugin-dialog",
  "tauri-plugin-fs",
  "tauri-plugin-global-shortcut",
@@ -6067,21 +6065,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "459383cebc193cdd03d1ba4acc40f2c408a7abce419d64bdcd2d745bc2886f70"
 dependencies = [
  "auto-launch",
- "serde",
- "serde_json",
- "tauri",
- "tauri-plugin",
- "thiserror 2.0.18",
-]
-
-[[package]]
-name = "tauri-plugin-clipboard-manager"
-version = "2.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "206dc20af4ed210748ba945c2774e60fd0acd52b9a73a028402caf809e9b6ecf"
-dependencies = [
- "arboard",
- "log",
  "serde",
  "serde_json",
  "tauri",

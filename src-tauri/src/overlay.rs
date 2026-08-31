@@ -1,8 +1,11 @@
 use crate::input;
+use crate::output_target::backend::TranscriptDeliveredEvent;
 use crate::settings;
 use crate::settings::{OverlayAnchor, OverlayPosition};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize};
+use tauri_specta::Event;
 
 #[cfg(not(target_os = "macos"))]
 use log::debug;
@@ -65,10 +68,85 @@ static OVERLAY_VISIBILITY_EPOCH: AtomicU64 = AtomicU64::new(0);
 /// quick one meant for a plain paste.
 static PENDING_DELIVERY_CONFIRMATION: AtomicBool = AtomicBool::new(false);
 
+#[derive(Clone, Copy)]
+struct PendingOverlayState {
+    state: &'static str,
+    raw: bool,
+}
+
+#[derive(Default)]
+pub struct RecordingOverlayLifecycle {
+    creating: AtomicBool,
+    ready: AtomicBool,
+    dispatch: Mutex<()>,
+    pending: Mutex<Option<PendingOverlayState>>,
+    pending_delivery: Mutex<Option<TranscriptDeliveredEvent>>,
+}
+
+impl RecordingOverlayLifecycle {
+    fn claim_creation(&self) -> bool {
+        self.creating
+            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+            .is_ok()
+    }
+
+    fn set_pending(&self, state: PendingOverlayState) {
+        *self
+            .pending
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(state);
+    }
+
+    fn take_pending(&self) -> Option<PendingOverlayState> {
+        self.pending
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .take()
+    }
+
+    fn dispatch_lock(&self) -> std::sync::MutexGuard<'_, ()> {
+        self.dispatch
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    fn set_pending_delivery(&self, event: TranscriptDeliveredEvent) {
+        *self
+            .pending_delivery
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(event);
+    }
+
+    fn take_pending_delivery(&self) -> Option<TranscriptDeliveredEvent> {
+        self.pending_delivery
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .take()
+    }
+}
+
+pub fn initialize(app: &AppHandle) {
+    app.manage(RecordingOverlayLifecycle::default());
+}
+
 /// Mark that a delivery confirmation chip was just shown on the overlay, so
 /// the hide that is about to follow gives it time to actually be read.
 pub fn mark_delivery_confirmation_pending() {
     PENDING_DELIVERY_CONFIRMATION.store(true, Ordering::SeqCst);
+}
+
+/// Emit a delivery confirmation without racing the overlay's first-listener
+/// handshake. Other webviews receive the normal broadcast immediately; a
+/// not-yet-ready overlay keeps one replay for its own listener.
+pub fn emit_delivery_confirmation(app: &AppHandle, event: TranscriptDeliveredEvent) {
+    let lifecycle = app.state::<RecordingOverlayLifecycle>();
+    let _dispatch = lifecycle.dispatch_lock();
+    if settings::get_settings(app).overlay_position != OverlayPosition::None
+        && !lifecycle.ready.load(Ordering::SeqCst)
+    {
+        lifecycle.set_pending_delivery(event.clone());
+    }
+    let _ = event.emit(app);
 }
 
 #[cfg(target_os = "macos")]
@@ -369,17 +447,16 @@ fn calculate_overlay_position(app_handle: &AppHandle) -> Option<(f64, f64)> {
     Some((x, y))
 }
 
-/// Creates the recording overlay window and keeps it hidden by default
+/// Creates the recording overlay window and keeps it hidden by default.
 #[cfg(not(target_os = "macos"))]
-pub fn create_recording_overlay(app_handle: &AppHandle) {
+fn build_recording_overlay(app_handle: &AppHandle) -> Result<(), String> {
     // On Linux (Wayland), monitor detection often fails, but we don't need exact coordinates
     // for Layer Shell as we use anchors. On other platforms, we require a monitor.
     #[cfg(not(target_os = "linux"))]
     {
         let position = calculate_overlay_position(app_handle);
         if position.is_none() {
-            debug!("Failed to determine overlay position, not creating overlay window");
-            return;
+            return Err("Failed to determine overlay position".to_string());
         }
     }
 
@@ -409,7 +486,6 @@ pub fn create_recording_overlay(app_handle: &AppHandle) {
         builder = builder.data_directory(data_dir.join("webview"));
     }
 
-    #[allow(unused_variables)]
     match builder.build() {
         Ok(window) => {
             #[cfg(target_os = "linux")]
@@ -426,48 +502,44 @@ pub fn create_recording_overlay(app_handle: &AppHandle) {
             set_overlay_noactivate(&window);
 
             debug!("Recording overlay window created successfully (hidden)");
+            Ok(())
         }
-        Err(e) => {
-            debug!("Failed to create recording overlay window: {}", e);
-        }
+        Err(error) => Err(format!(
+            "Failed to create recording overlay window: {error}"
+        )),
     }
 }
 
 /// Creates the recording overlay panel and keeps it hidden by default (macOS)
 #[cfg(target_os = "macos")]
-pub fn create_recording_overlay(app_handle: &AppHandle) {
-    if let Some((x, y)) = calculate_overlay_position(app_handle) {
-        // PanelBuilder creates a Tauri window then converts it to NSPanel.
-        // The window remains registered, so get_webview_window() still works.
-        match PanelBuilder::<_, RecordingOverlayPanel>::new(app_handle, "recording_overlay")
-            .url(WebviewUrl::App("src/overlay/index.html".into()))
-            .title("Recording")
-            .position(tauri::Position::Logical(tauri::LogicalPosition { x, y }))
-            .level(PanelLevel::Status)
-            .size(tauri::Size::Logical(tauri::LogicalSize {
-                width: OVERLAY_WIDTH,
-                height: OVERLAY_HEIGHT,
-            }))
-            .has_shadow(false)
-            .transparent(true)
-            .no_activate(true)
-            .corner_radius(0.0)
-            .with_window(|w| w.decorations(false).transparent(true))
-            .collection_behavior(
-                CollectionBehavior::new()
-                    .can_join_all_spaces()
-                    .full_screen_auxiliary(),
-            )
-            .build()
-        {
-            Ok(panel) => {
-                panel.hide();
-            }
-            Err(e) => {
-                log::error!("Failed to create recording overlay panel: {}", e);
-            }
-        }
-    }
+fn build_recording_overlay(app_handle: &AppHandle) -> Result<(), String> {
+    let (x, y) = calculate_overlay_position(app_handle)
+        .ok_or_else(|| "Failed to determine overlay position".to_string())?;
+
+    // PanelBuilder creates a Tauri window then converts it to NSPanel.
+    // The window remains registered, so get_webview_window() still works.
+    PanelBuilder::<_, RecordingOverlayPanel>::new(app_handle, "recording_overlay")
+        .url(WebviewUrl::App("src/overlay/index.html".into()))
+        .title("Recording")
+        .position(tauri::Position::Logical(tauri::LogicalPosition { x, y }))
+        .level(PanelLevel::Status)
+        .size(tauri::Size::Logical(tauri::LogicalSize {
+            width: OVERLAY_WIDTH,
+            height: OVERLAY_HEIGHT,
+        }))
+        .has_shadow(false)
+        .transparent(true)
+        .no_activate(true)
+        .corner_radius(0.0)
+        .with_window(|window| window.decorations(false).transparent(true))
+        .collection_behavior(
+            CollectionBehavior::new()
+                .can_join_all_spaces()
+                .full_screen_auxiliary(),
+        )
+        .build()
+        .map(|panel| panel.hide())
+        .map_err(|error| format!("Failed to create recording overlay panel: {error}"))
 }
 
 /// Payload for the `show-overlay` event. `raw` tells the overlay whether the current dictation
@@ -478,10 +550,144 @@ struct OverlayShowPayload<'a> {
     raw: bool,
 }
 
-fn show_overlay_state(app_handle: &AppHandle, state: &str, raw: bool) {
+fn dispatch_pending_state_locked(app_handle: &AppHandle, lifecycle: &RecordingOverlayLifecycle) {
+    if !lifecycle.ready.load(Ordering::SeqCst) {
+        return;
+    }
+    let Some(pending) = lifecycle.take_pending() else {
+        return;
+    };
+
+    if settings::get_settings(app_handle).overlay_position == OverlayPosition::None {
+        return;
+    }
+
+    update_overlay_position(app_handle);
+    if let Some(overlay_window) = app_handle.get_webview_window("recording_overlay") {
+        let _ = overlay_window.show();
+
+        #[cfg(target_os = "windows")]
+        force_overlay_topmost(&overlay_window);
+
+        let _ = overlay_window.emit(
+            "show-overlay",
+            OverlayShowPayload {
+                state: pending.state,
+                raw: pending.raw,
+            },
+        );
+    } else {
+        lifecycle.set_pending(pending);
+    }
+}
+
+fn schedule_native_overlay_hide(
+    overlay_window: tauri::webview::WebviewWindow,
+    delay_ms: u64,
+    epoch: u64,
+) {
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(delay_ms));
+        if OVERLAY_VISIBILITY_EPOCH.load(Ordering::SeqCst) == epoch {
+            let _ = overlay_window.hide();
+        }
+    });
+}
+
+fn dispatch_pending_delivery_locked(
+    app_handle: &AppHandle,
+    lifecycle: &RecordingOverlayLifecycle,
+    event: TranscriptDeliveredEvent,
+) {
+    if settings::get_settings(app_handle).overlay_position == OverlayPosition::None {
+        return;
+    }
+
+    update_overlay_position(app_handle);
+    let Some(overlay_window) = app_handle.get_webview_window("recording_overlay") else {
+        lifecycle.set_pending_delivery(event);
+        return;
+    };
+
+    // The pre-ready hide already scheduled by the delivery must not take this
+    // replayed confirmation down. Give the replay its own full confirmation
+    // lifetime and repeat the hide event that the frontend also missed.
+    let epoch = OVERLAY_VISIBILITY_EPOCH.fetch_add(1, Ordering::SeqCst) + 1;
+    PENDING_DELIVERY_CONFIRMATION.store(false, Ordering::SeqCst);
+    let _ = overlay_window.show();
+
+    #[cfg(target_os = "windows")]
+    force_overlay_topmost(&overlay_window);
+
+    let _ = overlay_window.emit("transcript-delivered-event", event);
+    let _ = overlay_window.emit("hide-overlay", ());
+    schedule_native_overlay_hide(
+        overlay_window,
+        OVERLAY_HIDE_DELAY_AFTER_CONFIRMATION_MS,
+        epoch,
+    );
+}
+
+fn dispatch_pending_state(app_handle: &AppHandle) {
+    let lifecycle = app_handle.state::<RecordingOverlayLifecycle>();
+    let _dispatch = lifecycle.dispatch_lock();
+    dispatch_pending_state_locked(app_handle, &lifecycle);
+}
+
+fn ensure_recording_overlay(app_handle: &AppHandle) {
+    if app_handle.get_webview_window("recording_overlay").is_some() {
+        return;
+    }
+
+    let lifecycle = app_handle.state::<RecordingOverlayLifecycle>();
+    if !lifecycle.claim_creation() {
+        return;
+    }
+
+    let app_for_create = app_handle.clone();
+    if let Err(error) = app_handle.run_on_main_thread(move || {
+        let result = if app_for_create
+            .get_webview_window("recording_overlay")
+            .is_some()
+        {
+            Ok(())
+        } else {
+            build_recording_overlay(&app_for_create)
+        };
+        let lifecycle = app_for_create.state::<RecordingOverlayLifecycle>();
+        lifecycle.creating.store(false, Ordering::SeqCst);
+        if let Err(error) = result {
+            log::error!("{error}");
+            return;
+        }
+        dispatch_pending_state(&app_for_create);
+    }) {
+        lifecycle.creating.store(false, Ordering::SeqCst);
+        log::error!("Failed to schedule recording overlay creation: {error}");
+    }
+}
+
+/// The overlay calls this only after all first-state event listeners exist.
+#[tauri::command]
+#[specta::specta]
+pub fn recording_overlay_ready(app: AppHandle) {
+    let lifecycle = app.state::<RecordingOverlayLifecycle>();
+    let _dispatch = lifecycle.dispatch_lock();
+    lifecycle.ready.store(true, Ordering::SeqCst);
+    dispatch_pending_state_locked(&app, &lifecycle);
+    if let Some(event) = lifecycle.take_pending_delivery() {
+        dispatch_pending_delivery_locked(&app, &lifecycle, event);
+    }
+}
+
+fn show_overlay_state(app_handle: &AppHandle, state: &'static str, raw: bool) {
+    let lifecycle = app_handle.state::<RecordingOverlayLifecycle>();
+    let dispatch = lifecycle.dispatch_lock();
+
     // Check if overlay should be shown based on position setting
     let settings = settings::get_settings(app_handle);
     if settings.overlay_position == OverlayPosition::None {
+        lifecycle.take_pending();
         return;
     }
 
@@ -501,17 +707,10 @@ fn show_overlay_state(app_handle: &AppHandle, state: &str, raw: bool) {
     // re-arms it only for the confirmation that is actually about to follow.
     PENDING_DELIVERY_CONFIRMATION.store(false, Ordering::SeqCst);
 
-    update_overlay_position(app_handle);
-
-    if let Some(overlay_window) = app_handle.get_webview_window("recording_overlay") {
-        let _ = overlay_window.show();
-
-        // On Windows, aggressively re-assert "topmost" in the native Z-order after showing
-        #[cfg(target_os = "windows")]
-        force_overlay_topmost(&overlay_window);
-
-        let _ = overlay_window.emit("show-overlay", OverlayShowPayload { state, raw });
-    }
+    lifecycle.set_pending(PendingOverlayState { state, raw });
+    drop(dispatch);
+    ensure_recording_overlay(app_handle);
+    dispatch_pending_state(app_handle);
 }
 
 /// Shows the recording overlay window with fade-in animation. `raw` reflects whether this
@@ -547,6 +746,18 @@ pub fn update_overlay_position(app_handle: &AppHandle) {
 
 /// Hides the recording overlay window with fade-out animation
 pub fn hide_recording_overlay(app_handle: &AppHandle) {
+    let lifecycle = app_handle.state::<RecordingOverlayLifecycle>();
+    let _dispatch = lifecycle.dispatch_lock();
+
+    // A stop/cancel can arrive while the first overlay webview is still being
+    // created. Clear the queued state before touching the window so its later
+    // ready signal cannot resurrect a dictation that already ended.
+    lifecycle.take_pending();
+
+    // Every hide supersedes an in-flight delayed hide and any pending show,
+    // even when the native window does not exist yet.
+    let epoch = OVERLAY_VISIBILITY_EPOCH.fetch_add(1, Ordering::SeqCst) + 1;
+
     // Always hide the overlay regardless of settings - if setting was changed while recording,
     // we still want to hide it properly
     if let Some(overlay_window) = app_handle.get_webview_window("recording_overlay") {
@@ -561,20 +772,11 @@ pub fn hide_recording_overlay(app_handle: &AppHandle) {
         } else {
             OVERLAY_HIDE_DELAY_MS
         };
-        let epoch = OVERLAY_VISIBILITY_EPOCH.fetch_add(1, Ordering::SeqCst) + 1;
 
-        // Hide the window after a short delay to allow animation to complete
-        let window_clone = overlay_window.clone();
-        std::thread::spawn(move || {
-            std::thread::sleep(std::time::Duration::from_millis(delay_ms));
-            // A newer show or hide instruction landed while this one slept
-            // (#279 review round 2); leave the window as that instruction
-            // left it instead of taking down state this hide no longer
-            // reflects.
-            if OVERLAY_VISIBILITY_EPOCH.load(Ordering::SeqCst) == epoch {
-                let _ = window_clone.hide();
-            }
-        });
+        // Hide the window after a short delay to allow animation to complete.
+        // A newer show or hide instruction changes the epoch and makes this
+        // sleeper a no-op.
+        schedule_native_overlay_hide(overlay_window, delay_ms, epoch);
     }
 }
 
@@ -591,6 +793,7 @@ pub fn emit_levels(app_handle: &AppHandle, levels: &Vec<f32>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Arc;
 
     // A 1920x1080 monitor at the origin with the standard overlay rect. The
     // assertions reference the offset constants (not raw numbers) so they hold
@@ -669,5 +872,63 @@ mod tests {
         );
         assert_eq!(x, 1920.0 + (1920.0 - OVERLAY_WIDTH) / 2.0);
         assert_eq!(y, 1080.0 - OVERLAY_HEIGHT - OVERLAY_BOTTOM_OFFSET);
+    }
+
+    #[test]
+    fn concurrent_overlay_creation_has_one_winner() {
+        let lifecycle = Arc::new(RecordingOverlayLifecycle::default());
+        let winners = std::thread::scope(|scope| {
+            let handles = (0..16)
+                .map(|_| {
+                    let lifecycle = Arc::clone(&lifecycle);
+                    scope.spawn(move || lifecycle.claim_creation())
+                })
+                .collect::<Vec<_>>();
+            handles
+                .into_iter()
+                .map(|handle| handle.join().expect("creation claimant did not panic"))
+                .filter(|won| *won)
+                .count()
+        });
+
+        assert_eq!(winners, 1);
+    }
+
+    #[test]
+    fn pending_overlay_state_keeps_the_latest_transition() {
+        let lifecycle = RecordingOverlayLifecycle::default();
+        lifecycle.set_pending(PendingOverlayState {
+            state: "recording",
+            raw: false,
+        });
+        lifecycle.set_pending(PendingOverlayState {
+            state: "processing",
+            raw: true,
+        });
+
+        let pending = lifecycle.take_pending().expect("pending overlay state");
+        assert_eq!(pending.state, "processing");
+        assert!(pending.raw);
+        assert!(lifecycle.take_pending().is_none());
+    }
+
+    #[test]
+    fn pending_delivery_keeps_the_latest_confirmation() {
+        use crate::output_target::backend::DeliverySource;
+
+        let lifecycle = RecordingOverlayLifecycle::default();
+        for title in ["first", "latest"] {
+            lifecycle.set_pending_delivery(TranscriptDeliveredEvent {
+                app: Some("Editor".to_string()),
+                title: Some(title.to_string()),
+                source: DeliverySource::Lock,
+            });
+        }
+
+        let pending = lifecycle
+            .take_pending_delivery()
+            .expect("pending delivery confirmation");
+        assert_eq!(pending.title.as_deref(), Some("latest"));
+        assert!(lifecycle.take_pending_delivery().is_none());
     }
 }

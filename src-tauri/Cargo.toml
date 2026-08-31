@@ -7,6 +7,9 @@ edition = "2021"
 license = "MIT"
 default-run = "audiobud"
 
+[features]
+generate-bindings = ["dep:specta-typescript"]
+
 [profile.dev]
 incremental = true # Compile your binary in smaller steps.
 
@@ -40,7 +43,6 @@ tauri-plugin-log = "2.7.1"
 tauri-plugin-opener = "2.5.2"
 tauri-plugin-store = "2.4.1"
 tauri-plugin-os = "2.3.2"
-tauri-plugin-clipboard-manager = "2.3.2"
 tauri-plugin-macos-permissions = "2.3.0"
 tauri-plugin-process = "2.3.1"
 rusqlite_migration = "2.3"
@@ -72,9 +74,8 @@ sha2 = "0.10"
 transcribe-rs = { version = "0.3.8", features = ["whisper-cpp", "onnx"] }
 handy-keys = "0.2.4"
 ferrous-opencc = "0.2.3"
-clap = { version = "4", features = ["derive"] }
 specta = "=2.0.0-rc.22"
-specta-typescript = "0.0.9"
+specta-typescript = { version = "0.0.9", optional = true }
 tauri-specta = { version = "=2.0.0-rc.21", features = ["derive", "typescript"] }
 tauri-plugin-dialog = "2.6"
 

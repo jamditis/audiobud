@@ -23,7 +23,7 @@
 //! with the transcript into the delivery queue and the paste.
 
 use crate::output_target::backend::Delivery;
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::sync::{Mutex, MutexGuard};
 
 /// One dictation's intent, fixed at recording start.
@@ -154,6 +154,41 @@ pub fn current_sequence(app: &tauri::AppHandle) -> u64 {
         .unwrap_or(0)
 }
 
+/// Idempotency gate at the final delivery boundary (#310).
+///
+/// The normal pipeline submits each sequence once, but a duplicated job must
+/// still be harmless: clipboard, focus, and keyboard actions are side effects
+/// that cannot be rolled back after the target application receives them. Keep
+/// a bounded set of recent nonzero sequences and claim one before any of those
+/// actions run. Sequence zero means the sequence counter was unavailable, so it
+/// deliberately keeps the existing best-effort delivery behavior.
+#[derive(Default)]
+pub struct DeliverySequenceGate(Mutex<VecDeque<u64>>);
+
+const RECENT_DELIVERY_SEQUENCE_CAPACITY: usize = 64;
+
+impl DeliverySequenceGate {
+    pub fn claim(&self, sequence: u64) -> bool {
+        if sequence == 0 {
+            return true;
+        }
+
+        let mut recent = self
+            .0
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if recent.contains(&sequence) {
+            return false;
+        }
+
+        recent.push_back(sequence);
+        if recent.len() > RECENT_DELIVERY_SEQUENCE_CAPACITY {
+            recent.pop_front();
+        }
+        true
+    }
+}
+
 /// Tauri-managed hand-off of in-flight dictation contexts, keyed by the shortcut
 /// binding that started the recording.
 ///
@@ -218,6 +253,7 @@ mod tests {
     use super::*;
     use crate::output_target::backend::DeliverySource;
     use crate::output_target::{class_fingerprint, PinnedTarget, WindowHandle, WindowIdentity};
+    use std::sync::Arc;
 
     /// A captured window: handle `h`, owned by process `pid` / thread `tid`.
     fn win(h: isize, pid: u32, tid: u32) -> WindowIdentity {
@@ -227,6 +263,43 @@ mod tests {
             thread_id: tid,
             class: class_fingerprint("Chrome_WidgetWin_1"),
         }
+    }
+
+    #[test]
+    fn a_delivery_sequence_can_be_claimed_only_once() {
+        let gate = DeliverySequenceGate::default();
+
+        assert!(gate.claim(7));
+        assert!(!gate.claim(7));
+        assert!(gate.claim(8));
+    }
+
+    #[test]
+    fn concurrent_duplicate_claims_have_one_winner() {
+        let gate = Arc::new(DeliverySequenceGate::default());
+        let winners = std::thread::scope(|scope| {
+            let handles = (0..16)
+                .map(|_| {
+                    let gate = Arc::clone(&gate);
+                    scope.spawn(move || gate.claim(42))
+                })
+                .collect::<Vec<_>>();
+            handles
+                .into_iter()
+                .map(|handle| handle.join().expect("delivery claimant did not panic"))
+                .filter(|won| *won)
+                .count()
+        });
+
+        assert_eq!(winners, 1);
+    }
+
+    #[test]
+    fn missing_sequence_state_keeps_best_effort_delivery() {
+        let gate = DeliverySequenceGate::default();
+
+        assert!(gate.claim(0));
+        assert!(gate.claim(0));
     }
 
     // The resolution rule must stay identical to actions.rs::effective_raw_output,

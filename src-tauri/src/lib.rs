@@ -13,6 +13,7 @@ mod dictation_context;
 mod helpers;
 mod input;
 mod llm_client;
+mod main_window;
 mod managers;
 mod output_profile;
 mod output_target;
@@ -28,7 +29,8 @@ mod utils;
 mod window_picker;
 
 pub use cli::CliArgs;
-#[cfg(any(debug_assertions, test))]
+use cli::CliParseOutcome;
+#[cfg(feature = "generate-bindings")]
 use specta_typescript::{BigIntExportBehavior, Typescript};
 use tauri_specta::{collect_commands, collect_events, Builder};
 
@@ -213,20 +215,6 @@ fn spawn_update_install(
     });
 }
 
-fn cli_option(args: &[String], option: &str) -> Option<String> {
-    args.iter().enumerate().find_map(|(index, argument)| {
-        if argument == option {
-            return args.get(index + 1).cloned();
-        }
-
-        argument
-            .strip_prefix(option)
-            .and_then(|suffix| suffix.strip_prefix('='))
-            .filter(|value| !value.is_empty())
-            .map(str::to_string)
-    })
-}
-
 fn level_filter_from_u8(value: u8) -> log::LevelFilter {
     match value {
         0 => log::LevelFilter::Off,
@@ -259,33 +247,6 @@ fn build_console_filter() -> env_filter::Filter {
     }
 
     builder.build()
-}
-
-fn show_main_window(app: &AppHandle) {
-    if let Some(main_window) = app.get_webview_window("main") {
-        if let Err(e) = main_window.unminimize() {
-            log::error!("Failed to unminimize webview window: {}", e);
-        }
-        if let Err(e) = main_window.show() {
-            log::error!("Failed to show webview window: {}", e);
-        }
-        if let Err(e) = main_window.set_focus() {
-            log::error!("Failed to focus webview window: {}", e);
-        }
-        #[cfg(target_os = "macos")]
-        {
-            if let Err(e) = app.set_activation_policy(tauri::ActivationPolicy::Regular) {
-                log::error!("Failed to set activation policy to Regular: {}", e);
-            }
-        }
-        return;
-    }
-
-    let webview_labels = app.webview_windows().keys().cloned().collect::<Vec<_>>();
-    log::error!(
-        "Main window not found. Webview labels: {:?}",
-        webview_labels
-    );
 }
 
 #[allow(unused_variables)]
@@ -397,13 +358,12 @@ fn initialize_core_logic(app_handle: &AppHandle) {
         .icon_as_template(true)
         .on_menu_event(|app, event| match event.id.as_ref() {
             "settings" => {
-                show_main_window(app);
+                main_window::show(app);
             }
             "check_updates" => {
                 let settings = settings::get_settings(app);
                 if update_checks_action_enabled(settings.update_checks_enabled) {
-                    show_main_window(app);
-                    let _ = app.emit("check-for-updates", ());
+                    main_window::show_for_update_check(app);
                 }
             }
             "copy_last_transcript" => {
@@ -549,6 +509,9 @@ fn initialize_core_logic(app_handle: &AppHandle) {
     // Counts dictations as they start, so a one-shot pick can be handed to the
     // dictation it was made for rather than to whichever paste lands first.
     app_handle.manage(dictation_context::DictationSequence::default());
+    // A completed dictation may cross the clipboard/focus/input boundary only
+    // once, even if an upstream race submits the same delivery twice (#310).
+    app_handle.manage(dictation_context::DeliverySequenceGate::default());
     let delivery_queue: delivery_queue::DeliveryQueue = delivery_queue::DeliveryQueue::default();
     app_handle.manage(delivery_queue);
     // The thread the queue's transcripts are actually pasted on. A paste blocks
@@ -596,9 +559,18 @@ fn initialize_core_logic(app_handle: &AppHandle) {
         // Disable autostart if user has opted out
         let _ = autostart_manager.disable();
     }
+}
 
-    // Create the recording overlay window (hidden by default)
-    utils::create_recording_overlay(app_handle);
+/// A hidden launch has no settings React surface to perform the post-onboarding
+/// initialization. Initialize the input services here so global shortcuts and
+/// transcript delivery work before Settings is opened for the first time.
+fn initialize_hidden_launch_input(app_handle: &AppHandle) {
+    if let Err(error) = commands::initialize_enigo(app_handle.clone()) {
+        log::warn!("Failed to initialize input system for hidden launch: {error}");
+    }
+    if let Err(error) = commands::initialize_shortcuts(app_handle.clone()) {
+        log::warn!("Failed to initialize shortcuts for hidden launch: {error}");
+    }
 }
 
 #[tauri::command]
@@ -616,7 +588,7 @@ fn trigger_update_check(app: AppHandle) -> Result<(), String> {
 #[tauri::command]
 #[specta::specta]
 fn show_main_window_command(app: AppHandle) -> Result<(), String> {
-    show_main_window(&app);
+    main_window::show(&app);
     Ok(())
 }
 
@@ -649,6 +621,8 @@ fn specta_builder() -> Builder<tauri::Wry> {
             shortcut::handy_keys::stop_handy_keys_recording,
             trigger_update_check,
             show_main_window_command,
+            main_window::main_window_ready,
+            overlay::recording_overlay_ready,
             commands::cancel_operation,
             commands::is_portable,
             commands::is_update_channel_available,
@@ -721,7 +695,7 @@ fn specta_builder() -> Builder<tauri::Wry> {
         ])
 }
 
-#[cfg(any(debug_assertions, test))]
+#[cfg(feature = "generate-bindings")]
 fn export_typescript_bindings(builder: &Builder<tauri::Wry>, output: &std::path::Path) {
     builder
         .export(
@@ -746,6 +720,13 @@ fn export_typescript_bindings(builder: &Builder<tauri::Wry>, output: &std::path:
     std::fs::write(output, normalized).expect("normalized bindings can be written");
 }
 
+/// Generate the checked-in TypeScript contract from the Rust command list.
+/// This is compiled only for the dedicated generator target.
+#[cfg(feature = "generate-bindings")]
+pub fn generate_typescript_bindings(output: &std::path::Path) {
+    export_typescript_bindings(&specta_builder(), output);
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run(cli_args: CliArgs) {
     // Detect portable mode before anything else
@@ -756,9 +737,6 @@ pub fn run(cli_args: CliArgs) {
     let console_filter = build_console_filter();
 
     let specta_builder = specta_builder();
-
-    #[cfg(debug_assertions)] // <- Only export on non-release builds
-    export_typescript_bindings(&specta_builder, std::path::Path::new("../src/bindings.ts"));
 
     let invoke_handler = specta_builder.invoke_handler();
 
@@ -820,28 +798,32 @@ pub fn run(cli_args: CliArgs) {
 
     builder
         .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
-            if args.iter().any(|a| a == "--install-update") {
-                spawn_update_install(
-                    app.clone(),
-                    false,
-                    cli_option(&args, "--install-update-endpoint"),
-                );
-            } else if args.iter().any(|a| a == "--toggle-transcription") {
+            let cli_args = match CliArgs::parse_from(args) {
+                Ok(CliParseOutcome::Run(arguments)) => arguments,
+                Ok(CliParseOutcome::Help | CliParseOutcome::Version) => return,
+                Err(error) => {
+                    log::error!("Rejected second-instance arguments: {error}");
+                    return;
+                }
+            };
+
+            if cli_args.install_update {
+                spawn_update_install(app.clone(), false, cli_args.install_update_endpoint);
+            } else if cli_args.toggle_transcription {
                 signal_handle::send_transcription_input(app, "transcribe", "CLI");
-            } else if args.iter().any(|a| a == "--toggle-post-process") {
+            } else if cli_args.toggle_post_process {
                 signal_handle::send_transcription_input(app, "transcribe_with_post_process", "CLI");
-            } else if args.iter().any(|a| a == "--toggle-raw") {
+            } else if cli_args.toggle_raw {
                 signal_handle::send_transcription_input(app, "transcribe_raw", "CLI");
-            } else if args.iter().any(|a| a == "--cancel") {
+            } else if cli_args.cancel {
                 crate::utils::cancel_current_operation(app);
             } else {
-                show_main_window(app);
+                main_window::show(app);
             }
         }))
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_os::init())
-        .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
@@ -853,22 +835,12 @@ pub fn run(cli_args: CliArgs) {
         .setup(move |app| {
             specta_builder.mount_events(app);
 
-            // Create main window programmatically so we can set data_directory
-            // for portable mode (redirects WebView2 cache to portable Data dir)
-            let mut win_builder =
-                tauri::WebviewWindowBuilder::new(app, "main", tauri::WebviewUrl::App("/".into()))
-                    .title("AudioBud")
-                    .inner_size(680.0, 570.0)
-                    .min_inner_size(680.0, 570.0)
-                    .resizable(true)
-                    .maximizable(false)
-                    .visible(false);
+            main_window::initialize(app.handle());
+            overlay::initialize(app.handle());
 
-            if let Some(data_dir) = portable::data_dir() {
-                win_builder = win_builder.data_directory(data_dir.join("webview"));
-            }
-
-            win_builder.build()?;
+            let clipboard_service =
+                clipboard_snapshot::ClipboardService::new().map_err(std::io::Error::other)?;
+            app.manage(clipboard_service);
 
             // This is the release E2E entry point: it exercises the same pinned
             // feed, signature verification, and installer as the UI without
@@ -918,14 +890,21 @@ pub fn run(cli_args: CliArgs) {
             // Show main window only if not starting hidden.
             // CLI --start-hidden flag overrides the setting.
             // But if permission onboarding is required, always show the window.
-            let should_hide = settings.start_hidden || cli_args.start_hidden;
             let should_force_show = should_force_show_permissions_window(&app_handle);
 
             // If start_hidden but tray is disabled, we must show the window
             // anyway. Without a tray icon, the dock is the only way back in.
             let tray_available = settings.show_tray_icon && !cli_args.no_tray;
-            if should_force_show || !should_hide || !tray_available {
-                show_main_window(&app_handle);
+            let main_window_required = main_window::required_at_launch(
+                settings.start_hidden,
+                cli_args.start_hidden,
+                should_force_show,
+                tray_available,
+            );
+            if main_window_required {
+                main_window::show(&app_handle);
+            } else {
+                initialize_hidden_launch_input(&app_handle);
             }
 
             Ok(())
@@ -987,7 +966,7 @@ pub fn run(cli_args: CliArgs) {
         .run(|app, event| {
             #[cfg(target_os = "macos")]
             if let tauri::RunEvent::Reopen { .. } = &event {
-                show_main_window(app);
+                main_window::show(app);
             }
             let _ = (app, event); // suppress unused warnings on non-macOS
         });
@@ -996,38 +975,10 @@ pub fn run(cli_args: CliArgs) {
 #[cfg(test)]
 mod updater_gate_tests {
     use super::{
-        cli_option, ensure_cli_update_supported, nsis_update_channel_available,
+        ensure_cli_update_supported, nsis_update_channel_available,
         update_checks_action_enabled_for_channel, UPDATER_FEED_READY,
     };
     use tauri::utils::config::BundleType;
-
-    #[cfg(not(windows))]
-    use super::{export_typescript_bindings, specta_builder};
-
-    // Keeping this generator test out of the Windows test harness avoids
-    // retaining Wry's WebView2 loader in the unit-test executable. The runner
-    // then fails at process startup before any Rust test can run. Linux still
-    // verifies the same deterministic tauri-specta output on every CI run.
-    #[cfg(not(windows))]
-    #[test]
-    fn checked_in_typescript_bindings_match_specta_export() {
-        let generated_path =
-            std::env::temp_dir().join(format!("audiobud-bindings-{}.ts", std::process::id()));
-        export_typescript_bindings(&specta_builder(), &generated_path);
-
-        let generated = std::fs::read_to_string(&generated_path)
-            .expect("temporary TypeScript bindings can be read");
-        std::fs::remove_file(&generated_path).expect("temporary bindings can be removed");
-        let checked_in_path =
-            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../src/bindings.ts");
-        let checked_in =
-            std::fs::read_to_string(checked_in_path).expect("checked-in bindings can be read");
-
-        assert_eq!(
-            generated, checked_in,
-            "src/bindings.ts is stale; run a debug AudioBud build and commit the generated file"
-        );
-    }
 
     /// Regression guard for issue #32. tauri_plugin_updater deserializes the
     /// `plugins.updater` block from tauri.conf.json when it builds, so the app
@@ -1125,18 +1076,5 @@ mod updater_gate_tests {
         assert!(!update_checks_action_enabled_for_channel(false, true));
         assert!(!update_checks_action_enabled_for_channel(true, false));
         assert!(!update_checks_action_enabled_for_channel(false, false));
-    }
-
-    #[test]
-    fn single_instance_cli_options_accept_both_clap_value_forms() {
-        let endpoint =
-            "https://github.com/jamditis/audiobud/releases/download/v0.4.2/latest-candidate.json";
-        let option = "--install-update-endpoint";
-        let separated = ["AudioBud.exe", option, endpoint].map(str::to_string);
-        let joined = ["AudioBud.exe".to_string(), format!("{option}={endpoint}")];
-
-        assert_eq!(cli_option(&separated, option).as_deref(), Some(endpoint));
-        assert_eq!(cli_option(&joined, option).as_deref(), Some(endpoint));
-        assert_eq!(cli_option(&separated, "--missing"), None);
     }
 }
