@@ -82,6 +82,7 @@ describe("experimental Windows output targeting", () => {
     expect(shortcutSettings).toContain(
       "if !settings.experimental_enabled {\n                    crate::output_target::backend::unlock_output_target(app);\n                    crate::window_picker::backend::abandon_pick(app);\n                    crate::window_picker::backend::close_picker(app);",
     );
+    expect(shortcutSettings).toContain("&tray::current_tray_state(app),");
     expect(shortcutSettings).toContain(
       ".filter(|(id, _)| shortcut_enabled_for_settings(id, &user_settings))",
     );
@@ -99,6 +100,12 @@ describe("experimental Windows output targeting", () => {
       pickerBackend.match(/experimental_targeting_guard\(\)/g),
     ).toHaveLength(3);
     expect(shortcutSettings).toContain("experimental_targeting_guard()");
+  });
+
+  it("marks a dismissal only when an open picker was abandoned", () => {
+    expect(pickerBackend).toContain(
+      "if super::abandon_pick(&session, &pending) {\n        note_dismissal(app);\n    }",
+    );
   });
 
   it("labels the lock and picker as experimental on their own surfaces", () => {

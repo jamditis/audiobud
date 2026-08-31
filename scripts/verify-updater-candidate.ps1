@@ -170,8 +170,15 @@ function Get-OptionalRegistryStringValue {
   return [string]$property.Value
 }
 
+function Normalize-AudioBudInstallDirectory {
+  param([string]$Path)
+  return $Path.Trim().Trim('"').TrimEnd('\')
+}
+
 function Get-AudioBudUninstallRegistryPaths {
   param([string]$InstallDirectory)
+  $normalizedInstallDirectory = Normalize-AudioBudInstallDirectory `
+    -Path $InstallDirectory
   $roots = @(
     'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall',
     'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall',
@@ -193,7 +200,8 @@ function Get-AudioBudUninstallRegistryPaths {
           -Name 'UninstallString'
         if (
           $displayName -ceq 'AudioBud' -or
-          $installLocation.TrimEnd('\') -ieq $InstallDirectory.TrimEnd('\') -or
+          (Normalize-AudioBudInstallDirectory -Path $installLocation) -ieq `
+            $normalizedInstallDirectory -or
           $uninstallString -like "*$InstallDirectory*"
         ) {
           $key.PSPath
@@ -209,6 +217,8 @@ function Assert-AudioBudUninstallRegistration {
     [string]$ExpectedVersion,
     [string]$Label
   )
+  $normalizedInstallDirectory = Normalize-AudioBudInstallDirectory `
+    -Path $InstallDirectory
   $registryPaths = @(
     foreach ($registryPath in @(
       Get-AudioBudUninstallRegistryPaths -InstallDirectory $InstallDirectory
@@ -222,7 +232,8 @@ function Assert-AudioBudUninstallRegistration {
         -Name 'InstallLocation'
       if (
         $displayName -ceq 'AudioBud' -and
-        $installLocation.TrimEnd('\') -ieq $InstallDirectory.TrimEnd('\')
+        (Normalize-AudioBudInstallDirectory -Path $installLocation) -ieq `
+          $normalizedInstallDirectory
       ) {
         $registryPath
       }
@@ -255,7 +266,10 @@ function Assert-AudioBudUninstallRegistration {
   if ($displayVersion -cne $ExpectedVersion) {
     throw "$Label registered DisplayVersion $displayVersion instead of $ExpectedVersion"
   }
-  if ($installLocation.TrimEnd('\') -ine $InstallDirectory.TrimEnd('\')) {
+  if (
+    (Normalize-AudioBudInstallDirectory -Path $installLocation) -ine `
+      $normalizedInstallDirectory
+  ) {
     throw "$Label registered an unexpected install location: $installLocation"
   }
   if ($uninstallString -notlike "*$InstallDirectory*uninstall.exe*") {

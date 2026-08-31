@@ -833,7 +833,7 @@ fn run_setting_effects(
             SettingEffect::RefreshTrayMenu => {
                 tray::update_tray_menu(
                     app,
-                    &tray::TrayIconState::Idle,
+                    &tray::current_tray_state(app),
                     Some(&settings.app_language),
                 );
             }

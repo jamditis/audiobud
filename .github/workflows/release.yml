@@ -1029,13 +1029,19 @@ jobs:
             }
           }
 
+          function Normalize-AudioBudInstallDirectory {
+            param([string] $Path)
+            return $Path.Trim().Trim('"').TrimEnd('\')
+          }
+
           function Assert-AudioBudUninstallRegistration {
             param(
               [Parameter(Mandatory = $true)][string] $InstallDirectory,
               [Parameter(Mandatory = $true)][string] $ExpectedVersion
             )
 
-            $normalizedInstallDirectory = $InstallDirectory.TrimEnd('\')
+            $normalizedInstallDirectory = Normalize-AudioBudInstallDirectory `
+              -Path $InstallDirectory
             $registrations = @(
               foreach ($root in @(
                 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall',
@@ -1064,7 +1070,8 @@ jobs:
                   )
                   if (
                     $displayName -ceq 'AudioBud' -and
-                    $installLocation.TrimEnd('\') -ieq $normalizedInstallDirectory
+                    (Normalize-AudioBudInstallDirectory -Path $installLocation) -ieq `
+                      $normalizedInstallDirectory
                   ) {
                     [pscustomobject]@{
                       Path = $key.PSPath

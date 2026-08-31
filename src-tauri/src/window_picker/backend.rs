@@ -272,8 +272,9 @@ pub fn abandon_pick(app: &AppHandle) {
     if session.is_open() {
         info!("The window picker was closed without a pick; nothing was armed");
     }
-    super::abandon_pick(&session, &pending);
-    note_dismissal(app);
+    if super::abandon_pick(&session, &pending) {
+        note_dismissal(app);
+    }
 }
 
 /// Remember that a pick was just dismissed, so the cancel shortcut arriving on

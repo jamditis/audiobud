@@ -247,8 +247,9 @@ describe("signed updater release artifacts", () => {
       "$displayName -ceq 'AudioBud' -and",
     );
     expect(registrationAssertion).toContain(
-      "$installLocation.TrimEnd('\\') -ieq $InstallDirectory.TrimEnd('\\')",
+      "Normalize-AudioBudInstallDirectory -Path $installLocation",
     );
+    expect(verifier).toContain(".Trim('\"')");
     expect(verifier).not.toContain("[string]$values.DisplayName");
     expect(verifier).not.toContain("[string]$values.InstallLocation");
     expect(verifier).not.toContain("[string]$values.UninstallString");
@@ -382,5 +383,7 @@ describe("signed updater release artifacts", () => {
     expect(packaging).toContain("-Name 'DisplayVersion'");
     expect(packaging).toContain("-ExpectedVersion $env:APP_VERSION");
     expect(packaging).toContain("-InstallDirectory $nsisDirectory");
+    expect(packaging).toContain("param([string] $Path)");
+    expect(packaging).toContain(".Trim('\"')");
   });
 });
