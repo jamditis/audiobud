@@ -5,14 +5,31 @@ on:
     types: [published]
   workflow_dispatch:
     inputs:
+      operation:
+        description: "Publish the latest release or restore an exact saved feed"
+        required: true
+        default: publish
+        type: choice
+        options:
+          - publish
+          - rollback
       tag:
-        description: "Published stable release tag to validate and republish"
+        description: "Target app release tag in vMAJOR.MINOR.PATCH form"
         required: true
         type: string
-      prior_tag:
-        description: "Optional prior updater-capable release for the Windows E2E"
+      manifest_sha256:
+        description: "Exact saved manifest SHA-256; required only for rollback"
         required: false
         type: string
+      expected_live_sha256:
+        description: "Expected current live manifest SHA-256; required only for rollback"
+        required: false
+        type: string
+      confirm_rollback:
+        description: "Confirm replacement of the live feed with the saved manifest"
+        required: false
+        default: false
+        type: boolean
 
 concurrency:
   group: publish-update-feed
@@ -27,48 +44,105 @@ jobs:
       contents: read
     outputs:
       publish: ${{ steps.gate.outputs.publish }}
+      rollback: ${{ steps.gate.outputs.rollback }}
       tag: ${{ steps.gate.outputs.tag }}
     steps:
       - name: Gate stable app release
         id: gate
         shell: bash
         env:
+          EVENT_NAME: ${{ github.event_name }}
           EVENT_TAG: ${{ github.event.release.tag_name }}
+          EXPECTED_LIVE_SHA256: ${{ inputs.expected_live_sha256 }}
+          INPUT_CONFIRM_ROLLBACK: ${{ inputs.confirm_rollback }}
+          INPUT_MANIFEST_SHA256: ${{ inputs.manifest_sha256 }}
+          INPUT_OPERATION: ${{ inputs.operation }}
           INPUT_TAG: ${{ inputs.tag }}
         run: |
           set -euo pipefail
+          OPERATION="${INPUT_OPERATION:-publish}"
           TAG="${EVENT_TAG:-$INPUT_TAG}"
-          if [[ -z "$TAG" ]]; then
-            echo "::error::A release tag is required"
+          if [[ ! "$TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            if [[ "$EVENT_NAME" == "release" ]]; then
+              echo "Skipping update feed publication for non-app release $TAG"
+              {
+                echo "publish=false"
+                echo "rollback=false"
+                echo "tag=$TAG"
+              } >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo "::error::The target tag must use vMAJOR.MINOR.PATCH"
             exit 1
           fi
 
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "Skipping update feed publication for non-app release $TAG"
-            echo "publish=false" >> "$GITHUB_OUTPUT"
+          if [[ "$OPERATION" == "rollback" ]]; then
+            if [[ "$EVENT_NAME" != "workflow_dispatch" ]]; then
+              echo "::error::Rollback is available only through manual workflow dispatch"
+              exit 1
+            fi
+            if [[ "$INPUT_CONFIRM_ROLLBACK" != "true" ]]; then
+              echo "::error::Rollback requires confirm_rollback"
+              exit 1
+            fi
+            if [[ ! "$INPUT_MANIFEST_SHA256" =~ ^[0-9a-f]{64}$ || ! "$EXPECTED_LIVE_SHA256" =~ ^[0-9a-f]{64}$ ]]; then
+              echo "::error::Rollback requires lowercase manifest and live SHA-256 values"
+              exit 1
+            fi
+            {
+              echo "publish=false"
+              echo "rollback=true"
+              echo "tag=$TAG"
+            } >> "$GITHUB_OUTPUT"
             exit 0
           fi
+          if [[ "$OPERATION" != "publish" ]]; then
+            echo "::error::Unknown update feed operation: $OPERATION"
+            exit 1
+          fi
+          if [[ -n "$INPUT_MANIFEST_SHA256" || -n "$EXPECTED_LIVE_SHA256" || "$INPUT_CONFIRM_ROLLBACK" == "true" ]]; then
+            echo "::error::Rollback-only inputs cannot be used for feed publication"
+            exit 1
+          fi
 
-          echo "publish=true" >> "$GITHUB_OUTPUT"
+          {
+            echo "tag=$TAG"
+            echo "publish=true"
+            echo "rollback=false"
+          } >> "$GITHUB_OUTPUT"
 
   prepare:
-    name: Prepare signed candidate manifest
+    name: Prepare verified update manifest
     needs: gate
     if: needs.gate.outputs.publish == 'true'
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 15
     permissions:
+      actions: read
       attestations: read
-      contents: write
+      contents: read
     outputs:
       tag: ${{ steps.release.outputs.tag }}
       commit: ${{ steps.release.outputs.commit }}
+      source-commit: ${{ steps.source.outputs.commit }}
+      artifact-name: ${{ steps.manifest.outputs.artifact_name }}
     steps:
       - name: Check out repository
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
+
+      - name: Record workflow source
+        id: source
+        shell: bash
+        run: |
+          set -euo pipefail
+          SOURCE_COMMIT=$(git rev-parse HEAD)
+          if [[ ! "$SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::Workflow source did not resolve to a commit"
+            exit 1
+          fi
+          echo "commit=$SOURCE_COMMIT" >> "$GITHUB_OUTPUT"
 
       - name: Set up Bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
@@ -95,11 +169,14 @@ jobs:
             exit 1
           fi
 
-          LATEST_JSON="$RUNNER_TEMP/latest-release.json"
-          gh api "repos/$GITHUB_REPOSITORY/releases/latest" > "$LATEST_JSON"
-          LATEST_TAG=$(jq -r ".tag_name" "$LATEST_JSON")
+          APP_RELEASES_JSON="$RUNNER_TEMP/app-releases.json"
+          gh api --paginate --slurp \
+            "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+            > "$APP_RELEASES_JSON"
+          LATEST_TAG=$(node scripts/select-latest-stable-app-release.mjs \
+            "$APP_RELEASES_JSON")
           if [[ "$LATEST_TAG" != "$TAG" ]]; then
-            echo "::error::Update feeds can only be published for GitHub's latest release ($LATEST_TAG)"
+            echo "::error::Update feeds can only be published for the latest stable app release ($LATEST_TAG)"
             exit 1
           fi
 
@@ -130,13 +207,15 @@ jobs:
             --dir "$ASSET_DIRECTORY" \
             --pattern "*.nsis.zip" \
             --pattern "*.nsis.zip.sig" \
-            --pattern "updater-signing-public-key.pub"
+            --pattern "updater-signing-public-key.pub" \
+            --pattern "updater-prepublication-evidence.json"
 
           mapfile -t ARCHIVES < <(find "$ASSET_DIRECTORY" -maxdepth 1 -type f -name '*.nsis.zip')
           mapfile -t SIGNATURES < <(find "$ASSET_DIRECTORY" -maxdepth 1 -type f -name '*.nsis.zip.sig')
           mapfile -t PUBLIC_KEYS < <(find "$ASSET_DIRECTORY" -maxdepth 1 -type f -name 'updater-signing-public-key.pub')
-          if [[ ${#ARCHIVES[@]} -ne 1 || ${#SIGNATURES[@]} -ne 1 || ${#PUBLIC_KEYS[@]} -ne 1 ]]; then
-            echo "::error::Expected one updater archive, signature, and signing public key"
+          mapfile -t EVIDENCE_FILES < <(find "$ASSET_DIRECTORY" -maxdepth 1 -type f -name 'updater-prepublication-evidence.json')
+          if [[ ${#ARCHIVES[@]} -ne 1 || ${#SIGNATURES[@]} -ne 1 || ${#PUBLIC_KEYS[@]} -ne 1 || ${#EVIDENCE_FILES[@]} -ne 1 ]]; then
+            echo "::error::Expected one updater archive, signature, signing public key, and evidence file"
             exit 1
           fi
           if [[ "${SIGNATURES[0]}" != "${ARCHIVES[0]}.sig" ]]; then
@@ -144,27 +223,39 @@ jobs:
             exit 1
           fi
 
+          VERSION="${TAG#v}"
+          EXPECTED_ARCHIVE="AudioBud_${VERSION}_x64-setup.nsis.zip"
+          if [[ "$(basename "${ARCHIVES[0]}")" != "$EXPECTED_ARCHIVE" ]]; then
+            echo "::error::Updater archive does not match $TAG"
+            exit 1
+          fi
+
           {
             echo "archive=${ARCHIVES[0]}"
             echo "signature=${SIGNATURES[0]}"
             echo "public_key=${PUBLIC_KEYS[0]}"
+            echo "evidence=${EVIDENCE_FILES[0]}"
           } >> "$GITHUB_OUTPUT"
 
       - name: Verify updater provenance
         shell: bash
         env:
           ARCHIVE: ${{ steps.updater.outputs.archive }}
+          EVIDENCE: ${{ steps.updater.outputs.evidence }}
           GH_TOKEN: ${{ github.token }}
           PUBLIC_KEY: ${{ steps.updater.outputs.public_key }}
           RELEASE_COMMIT: ${{ steps.release.outputs.commit }}
           SIGNATURE: ${{ steps.updater.outputs.signature }}
+          TAG: ${{ steps.release.outputs.tag }}
         run: |
           set -euo pipefail
-          for artifact in "$ARCHIVE" "$SIGNATURE" "$PUBLIC_KEY"; do
+          for artifact in "$ARCHIVE" "$SIGNATURE" "$PUBLIC_KEY" "$EVIDENCE"; do
             gh attestation verify "$artifact" \
               --repo "$GITHUB_REPOSITORY" \
               --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml" \
-              --source-digest "$RELEASE_COMMIT"
+              --source-ref "refs/tags/$TAG" \
+              --source-digest "$RELEASE_COMMIT" \
+              --deny-self-hosted-runners
           done
 
       - name: Verify updater signature
@@ -180,7 +271,7 @@ jobs:
             echo "::error::Updater signing public key is empty"
             exit 1
           fi
-          if [[ ! "$SIGNATURE_VALUE" =~ ^[A-Za-z0-9+/=]+$ ]]; then
+          if [[ ! "$SIGNATURE_VALUE" =~ ^[A-Za-z0-9+/]+={0,2}$ ]]; then
             echo "::error::Updater signature is not a single base64 value"
             exit 1
           fi
@@ -193,307 +284,135 @@ jobs:
               --manifest-path scripts/verify-updater-signature/Cargo.toml -- \
               "$PUBLIC_KEY" "$DECODED_SIGNATURE_PATH" "$ARCHIVE"
 
+      - name: Require successful private updater evidence
+        shell: bash
+        env:
+          ARCHIVE: ${{ steps.updater.outputs.archive }}
+          EVIDENCE: ${{ steps.updater.outputs.evidence }}
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_COMMIT: ${{ steps.release.outputs.commit }}
+          TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          set -euo pipefail
+          RUN_URL=$(jq -r '.workflow_run_url // empty' "$EVIDENCE")
+          RUN_PREFIX="https://github.com/$GITHUB_REPOSITORY/actions/runs/"
+          if [[ "$RUN_URL" != "$RUN_PREFIX"* ]]; then
+            echo "::error::Updater evidence has an invalid workflow run URL"
+            exit 1
+          fi
+          RUN_ID="${RUN_URL#"$RUN_PREFIX"}"
+          if [[ ! "$RUN_ID" =~ ^[0-9]+$ ]]; then
+            echo "::error::Updater evidence has an invalid workflow run ID"
+            exit 1
+          fi
+          RUN_ATTEMPT=$(jq -r '.workflow_run_attempt // empty' "$EVIDENCE")
+          if [[ ! "$RUN_ATTEMPT" =~ ^[1-9][0-9]*$ ]]; then
+            echo "::error::Updater evidence has an invalid workflow run attempt"
+            exit 1
+          fi
+
+          RUN_JSON="$RUNNER_TEMP/release-run.json"
+          gh api \
+            "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/attempts/$RUN_ATTEMPT" \
+            > "$RUN_JSON"
+          if ! jq -e \
+            --arg commit "$RELEASE_COMMIT" \
+            --arg tag "$TAG" \
+            --argjson run_attempt "$RUN_ATTEMPT" \
+            '(.conclusion == "success") and
+             (.head_sha == $commit) and
+             (.head_branch == $tag) and
+             (.run_attempt == $run_attempt) and
+             (.path == ".github/workflows/release.yml")' \
+            "$RUN_JSON" > /dev/null; then
+            echo "::error::Updater evidence does not name the exact successful release run"
+            exit 1
+          fi
+
+          VERSION="${TAG#v}"
+          ARCHIVE_NAME="AudioBud_${VERSION}_x64-setup.nsis.zip"
+          ARCHIVE_SHA256=$(sha256sum "$ARCHIVE" | cut -d' ' -f1)
+          if ! jq -e \
+            --arg archive "$ARCHIVE_NAME" \
+            --arg archive_sha256 "$ARCHIVE_SHA256" \
+            --arg commit "$RELEASE_COMMIT" \
+            --arg run_url "$RUN_URL" \
+            --arg tag "$TAG" \
+            --arg version "$VERSION" \
+            --argjson run_attempt "$RUN_ATTEMPT" \
+            '(.schema_version == 1) and
+             (.target_tag == $tag) and
+             (.target_commit == $commit) and
+             (.target_version == $version) and
+             (.workflow_run_url == $run_url) and
+             (.workflow_run_attempt == $run_attempt) and
+             (.prior_version | test("^[0-9]+\\.[0-9]+\\.[0-9]+$")) and
+             (.prior_tag == ("v" + .prior_version)) and
+             (.prior_installer == ("AudioBud_" + .prior_version + "_x64-setup.exe")) and
+             ((.prior_version | split(".") | map(tonumber)) < ($version | split(".") | map(tonumber))) and
+             (.prior_installer_sha256 | test("^[0-9a-f]{64}$")) and
+             (.updater_archive == $archive) and
+             (.updater_archive_sha256 == $archive_sha256) and
+             (.settings_value_before == true) and
+             (.settings_value_after == true) and
+             (.settings_value_before == .settings_value_after) and
+             (.model_name == "moonshine-tiny-streaming-en") and
+             (.model_file_count == 7) and
+             (.model_sha256_before | test("^[0-9a-f]{64}$")) and
+             (.model_sha256_before == .model_sha256_after) and
+             (.installed_version == $version or .installed_version == ($version + ".0")) and
+             (.prior_installer_signer | contains("CN=Joseph Amditis")) and
+             (.installed_signer | contains("CN=Joseph Amditis")) and
+             (.uninstall_passed == true)' \
+            "$EVIDENCE" > /dev/null; then
+            echo "::error::Private updater evidence does not match this release"
+            exit 1
+          fi
+
       - name: Generate latest.json
         id: manifest
         shell: bash
         env:
           RELEASE_JSON: ${{ steps.release.outputs.json }}
           SIGNATURE: ${{ steps.updater.outputs.signature }}
+          TAG: ${{ steps.release.outputs.tag }}
         run: |
           set -euo pipefail
-          MANIFEST="$RUNNER_TEMP/latest-candidate.json"
+          MANIFEST="$RUNNER_TEMP/latest.json"
           bun scripts/generate-update-manifest.ts \
             --release "$RELEASE_JSON" \
             --repository "$GITHUB_REPOSITORY" \
             --signature "$SIGNATURE" \
             --output "$MANIFEST"
-          jq -e . "$MANIFEST" > /dev/null
+          VERSION="${TAG#v}"
+          SIGNATURE_VALUE=$(<"$SIGNATURE")
+          EXPECTED_ARCHIVE_URL="https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/AudioBud_${VERSION}_x64-setup.nsis.zip"
+          if ! jq -e \
+            --arg archive_url "$EXPECTED_ARCHIVE_URL" \
+            --arg signature "$SIGNATURE_VALUE" \
+            --arg version "$VERSION" \
+            '(.version == $version) and
+             (.platforms["windows-x86_64"].url == $archive_url) and
+             (.platforms["windows-x86_64"].signature == $signature)' \
+            "$MANIFEST" > /dev/null; then
+            echo "::error::Generated update manifest does not match the verified release"
+            exit 1
+          fi
           echo "path=$MANIFEST" >> "$GITHUB_OUTPUT"
+          echo "artifact_name=audiobud-update-manifest-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" \
+            >> "$GITHUB_OUTPUT"
 
-      - name: Upload candidate manifest
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ steps.release.outputs.tag }}
-          MANIFEST: ${{ steps.manifest.outputs.path }}
-        run: |
-          set -euo pipefail
-          gh release upload "$TAG" "$MANIFEST" --clobber --repo "$GITHUB_REPOSITORY"
-          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" \
-            --json assets --jq '.assets[].name' | grep -Fx latest-candidate.json
-
-  verify_update:
-    name: Apply update from prior Windows release
-    needs: prepare
-    runs-on: windows-2025
-    timeout-minutes: 25
-    permissions:
-      contents: read
-    steps:
-      - name: Resolve prior updater-capable release
-        id: prior
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
-          INPUT_PRIOR_TAG: ${{ inputs.prior_tag }}
-          TARGET_TAG: ${{ needs.prepare.outputs.tag }}
-        run: |
-          $targetMatch = [regex]::Match($env:TARGET_TAG, '^v?(\d+\.\d+\.\d+)$')
-          if (-not $targetMatch.Success) {
-            throw "Target release tag is not stable semver: $env:TARGET_TAG"
-          }
-          $targetVersionText = $targetMatch.Groups[1].Value
-          $targetVersion = [version]$targetVersionText
-          $minimumPriorVersion = [version]'0.4.2'
-          $requestedPriorTag = $env:INPUT_PRIOR_TAG.Trim()
-
-          $releases = gh api "repos/$env:GITHUB_REPOSITORY/releases?per_page=100" |
-            ConvertFrom-Json
-          if ($LASTEXITCODE -ne 0) {
-            throw "Failed to list releases"
-          }
-
-          $candidates = foreach ($release in $releases) {
-            if ($release.draft -or $release.prerelease -or -not $release.published_at) {
-              continue
-            }
-            $match = [regex]::Match($release.tag_name, '^v?(\d+\.\d+\.\d+)$')
-            if (-not $match.Success) { continue }
-            $versionText = $match.Groups[1].Value
-            $version = [version]$versionText
-            if ($version -ge $targetVersion -or $version -lt $minimumPriorVersion) {
-              continue
-            }
-            if ($requestedPriorTag -and $release.tag_name -ne $requestedPriorTag) {
-              continue
-            }
-            $installerName = "AudioBud_$($versionText)_x64-setup.exe"
-            if ($release.assets.name -notcontains $installerName) { continue }
-
-            [PSCustomObject]@{
-              Tag = $release.tag_name
-              Version = $version
-              VersionText = $versionText
-              InstallerName = $installerName
-            }
-          }
-
-          $prior = $candidates | Sort-Object Version -Descending | Select-Object -First 1
-          if (-not $prior) {
-            if ($requestedPriorTag) {
-              throw "Requested prior release is not an eligible updater build: $requestedPriorTag"
-            }
-            "eligible=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-            "### Windows updater E2E`n`nNo earlier updater-capable release exists yet. The next stable release will exercise this path." |
-              Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
-            exit 0
-          }
-
-          "eligible=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-          "tag=$($prior.Tag)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-          "version=$($prior.VersionText)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-          "installer_name=$($prior.InstallerName)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-          "target_version=$targetVersionText" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-
-      - name: Install prior release
-        if: steps.prior.outputs.eligible == 'true'
-        id: install
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
-          INSTALLER_NAME: ${{ steps.prior.outputs.installer_name }}
-          PRIOR_TAG: ${{ steps.prior.outputs.tag }}
-          PRIOR_VERSION: ${{ steps.prior.outputs.version }}
-        run: |
-          $downloadDirectory = Join-Path $env:RUNNER_TEMP 'prior-release'
-          New-Item -ItemType Directory -Path $downloadDirectory | Out-Null
-          gh release download $env:PRIOR_TAG `
-            --repo $env:GITHUB_REPOSITORY `
-            --dir $downloadDirectory `
-            --pattern $env:INSTALLER_NAME
-          if ($LASTEXITCODE -ne 0) { throw "Failed to download $env:INSTALLER_NAME" }
-
-          $installer = Join-Path $downloadDirectory $env:INSTALLER_NAME
-          $installerSignature = Get-AuthenticodeSignature -LiteralPath $installer
-          if ($installerSignature.Status -ne [System.Management.Automation.SignatureStatus]::Valid) {
-            throw "Prior installer signature is invalid: $($installerSignature.StatusMessage)"
-          }
-          if ($installerSignature.SignerCertificate.Subject -notlike '*CN=Joseph Amditis*') {
-            throw "Prior installer has an unexpected signer: $($installerSignature.SignerCertificate.Subject)"
-          }
-
-          $installDirectory = "C:\au$env:GITHUB_RUN_ID"
-          if (Test-Path -LiteralPath $installDirectory) {
-            throw "Clean install directory already exists: $installDirectory"
-          }
-          $installProcess = Start-Process -FilePath $installer `
-            -ArgumentList @('/S', "/D=$installDirectory") -Wait -PassThru
-          if ($installProcess.ExitCode -ne 0) {
-            throw "Prior release installation failed with exit code $($installProcess.ExitCode)"
-          }
-
-          $executable = Join-Path $installDirectory 'AudioBud.exe'
-          if (-not (Test-Path -LiteralPath $executable -PathType Leaf)) {
-            throw "Installed executable was not found: $executable"
-          }
-          $installedVersion = (Get-Item -LiteralPath $executable).VersionInfo.ProductVersion
-          if ($installedVersion -notmatch "^$([regex]::Escape($env:PRIOR_VERSION))(\.0)?$") {
-            throw "Expected installed version $env:PRIOR_VERSION, found $installedVersion"
-          }
-          "executable=$executable" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-
-      - name: Apply signed update
-        if: steps.prior.outputs.eligible == 'true'
-        id: apply
-        shell: pwsh
-        env:
-          EXECUTABLE: ${{ steps.install.outputs.executable }}
-          TARGET_TAG: ${{ needs.prepare.outputs.tag }}
-          TARGET_VERSION: ${{ steps.prior.outputs.target_version }}
-        run: |
-          $manifestUrl = "https://github.com/$env:GITHUB_REPOSITORY/releases/download/$env:TARGET_TAG/latest-candidate.json"
-          $manifest = Invoke-RestMethod -Uri $manifestUrl
-          if ($manifest.version -ne $env:TARGET_VERSION) {
-            throw "Published feed describes $($manifest.version), expected $env:TARGET_VERSION"
-          }
-          $expectedArchive = "https://github.com/$env:GITHUB_REPOSITORY/releases/download/$env:TARGET_TAG/AudioBud_$($env:TARGET_VERSION)_x64-setup.nsis.zip"
-          if ($manifest.platforms.'windows-x86_64'.url -ne $expectedArchive) {
-            throw "Published feed has an unexpected Windows updater URL"
-          }
-
-          $diagnosticDirectory = Join-Path $env:RUNNER_TEMP 'audiobud-updater-diagnostics'
-          New-Item -ItemType Directory -Path $diagnosticDirectory -Force | Out-Null
-          $stdoutLog = Join-Path $diagnosticDirectory 'stdout.log'
-          $stderrLog = Join-Path $diagnosticDirectory 'stderr.log'
-          $process = Start-Process -FilePath $env:EXECUTABLE `
-            -ArgumentList @("--install-update", "--install-update-endpoint", $manifestUrl, '--start-hidden', '--no-tray') `
-            -RedirectStandardOutput $stdoutLog `
-            -RedirectStandardError $stderrLog `
-            -PassThru
-          if (-not $process.WaitForExit(480000)) {
-            Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
-            throw "Updater bootstrap process did not exit within 8 minutes"
-          }
-          if ($process.ExitCode -ne 0) {
-            throw "Updater bootstrap process failed with exit code $($process.ExitCode)"
-          }
-
-      - name: Assert installed version and signature
-        if: steps.prior.outputs.eligible == 'true'
-        shell: pwsh
-        env:
-          EXECUTABLE: ${{ steps.install.outputs.executable }}
-          TARGET_VERSION: ${{ steps.prior.outputs.target_version }}
-        run: |
-          $deadline = (Get-Date).AddMinutes(8)
-          $installedVersion = ''
-          while ((Get-Date) -lt $deadline) {
-            if (Test-Path -LiteralPath $env:EXECUTABLE -PathType Leaf) {
-              $installedVersion = (Get-Item -LiteralPath $env:EXECUTABLE).VersionInfo.ProductVersion
-              if ($installedVersion -match "^$([regex]::Escape($env:TARGET_VERSION))(\.0)?$") {
-                break
-              }
-            }
-
-            Start-Sleep -Seconds 5
-          }
-
-          if ($installedVersion -notmatch "^$([regex]::Escape($env:TARGET_VERSION))(\.0)?$") {
-            throw "Updater did not install $env:TARGET_VERSION; found $installedVersion"
-          }
-          $signature = Get-AuthenticodeSignature -LiteralPath $env:EXECUTABLE
-          if ($signature.Status -ne [System.Management.Automation.SignatureStatus]::Valid) {
-            throw "Updated executable signature is invalid: $($signature.StatusMessage)"
-          }
-          if ($signature.SignerCertificate.Subject -notlike '*CN=Joseph Amditis*') {
-            throw "Updated executable has an unexpected signer: $($signature.SignerCertificate.Subject)"
-          }
-
-          Get-Process -Name AudioBud -ErrorAction SilentlyContinue | Stop-Process -Force
-          "### Windows updater E2E`n`nInstalled, detected, downloaded, verified, and applied $env:TARGET_VERSION from a real prior release on a clean runner." |
-            Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
-
-      - name: Dump updater diagnostics
-        if: ${{ failure() && steps.prior.outputs.eligible == 'true' }}
-        shell: pwsh
-        run: |
-          $diagnosticDirectory = Join-Path $env:RUNNER_TEMP 'audiobud-updater-diagnostics'
-          foreach ($stream in @(
-            @{ Label = 'AudioBud updater stdout'; Path = Join-Path $diagnosticDirectory 'stdout.log' },
-            @{ Label = 'AudioBud updater stderr'; Path = Join-Path $diagnosticDirectory 'stderr.log' }
-          )) {
-            Write-Host "::group::$($stream.Label)"
-            if (Test-Path -LiteralPath $stream.Path -PathType Leaf) {
-              Get-Content -LiteralPath $stream.Path -Raw
-            } else {
-              Write-Host "No captured stream was written: $($stream.Path)"
-            }
-            Write-Host '::endgroup::'
-          }
-
-          Write-Host '::group::AudioBud file logs'
-          $logDirectories = @(
-            Join-Path $env:APPDATA 'tech.amditis.audiobud\logs'
-            Join-Path $env:LOCALAPPDATA 'tech.amditis.audiobud\logs'
-            Join-Path $env:APPDATA 'AudioBud\logs'
-            Join-Path $env:LOCALAPPDATA 'AudioBud\logs'
-          ) | Select-Object -Unique
-          $logFiles = foreach ($logDirectory in $logDirectories) {
-            if (Test-Path -LiteralPath $logDirectory -PathType Container) {
-              Get-ChildItem -LiteralPath $logDirectory -File -Recurse -ErrorAction SilentlyContinue
-            }
-          }
-          if (-not $logFiles) {
-            Write-Host "No AudioBud file logs were found under: $($logDirectories -join ', ')"
-          }
-          foreach ($logFile in @($logFiles)) {
-            Write-Host "--- $($logFile.FullName)"
-            Get-Content -LiteralPath $logFile.FullName -Tail 400 -ErrorAction Continue
-          }
-          Write-Host '::endgroup::'
-
-          Write-Host '::group::AudioBud updater temp directories'
-          $recentThreshold = (Get-Date).AddMinutes(-20)
-          $tempRoots = @($env:RUNNER_TEMP, $env:TEMP) | Select-Object -Unique
-          $tempDirectories = foreach ($tempRoot in $tempRoots) {
-            if (Test-Path -LiteralPath $tempRoot -PathType Container) {
-              Get-ChildItem -LiteralPath $tempRoot -Directory -Force -ErrorAction SilentlyContinue |
-                Where-Object {
-                  $_.LastWriteTime -ge $recentThreshold -or
-                  $_.Name -match '(?i)(audiobud|updat|nsis)'
-                }
-            }
-          }
-          if (-not $tempDirectories) {
-            Write-Host "No recent updater temp directories were found under: $($tempRoots -join ', ')"
-          }
-          foreach ($tempDirectory in @($tempDirectories | Sort-Object LastWriteTime -Descending)) {
-            Write-Host "--- $($tempDirectory.FullName) [$($tempDirectory.LastWriteTime.ToString('o'))]"
-            Get-ChildItem -LiteralPath $tempDirectory.FullName -Force -Recurse -ErrorAction SilentlyContinue |
-              Select-Object -First 100 FullName, Length, LastWriteTime |
-              Format-Table -AutoSize | Out-String | Write-Host
-          }
-          Write-Host '::endgroup::'
-
-          Write-Host '::group::AudioBud updater process state'
-          $relatedProcesses = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
-            Where-Object {
-              $_.Name -match '(?i)(audiobud|nsis|update)' -or
-              $_.ExecutablePath -match '(?i)(audiobud|nsis|update)' -or
-              $_.CommandLine -match '(?i)(audiobud|nsis|update)'
-            } |
-            Select-Object ProcessId, ParentProcessId, Name, ExecutablePath, CommandLine
-          if ($relatedProcesses) {
-            $relatedProcesses | Format-List | Out-String | Write-Host
-          } else {
-            Write-Host 'No related updater processes are running.'
-          }
-          Write-Host '::endgroup::'
+      - name: Upload prepared update manifest
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ${{ steps.manifest.outputs.artifact_name }}
+          path: ${{ steps.manifest.outputs.path }}
+          retention-days: 30
+          if-no-files-found: error
 
   finalize:
     name: Promote verified update feed
-    needs: [prepare, verify_update]
-    if: ${{ always() && needs.prepare.result == 'success' }}
+    needs: prepare
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
@@ -503,19 +422,28 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       TAG: ${{ needs.prepare.outputs.tag }}
     steps:
-      - name: Publish latest.json
-        if: needs.verify_update.result == 'success'
+      - name: Check out workflow source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ needs.prepare.outputs.source-commit }}
+          persist-credentials: false
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.3.14
+
+      - name: Download prepared update manifest
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: ${{ needs.prepare.outputs.artifact-name }}
+          path: prepared-update-manifest
+
+      - name: Backup live update feed
+        id: backup
         shell: bash
         run: |
           set -euo pipefail
-          LATEST_JSON="$RUNNER_TEMP/latest-release.json"
-          gh api "repos/$GITHUB_REPOSITORY/releases/latest" > "$LATEST_JSON"
-          LATEST_TAG=$(jq -r ".tag_name" "$LATEST_JSON")
-          if [[ "$LATEST_TAG" != "$TAG" ]]; then
-            echo "::error::Update feed promotion requires GitHub's latest release ($LATEST_TAG)"
-            exit 1
-          fi
-
           FEED_RELEASE_JSON="$RUNNER_TEMP/feed-release.json"
           gh api "repos/$GITHUB_REPOSITORY/releases/tags/$FEED_TAG" > "$FEED_RELEASE_JSON"
           if jq -e '.draft or .prerelease or (.published_at == null)' "$FEED_RELEASE_JSON" > /dev/null; then
@@ -523,30 +451,632 @@ jobs:
             exit 1
           fi
 
-          MANIFEST_DIRECTORY="$RUNNER_TEMP/update-manifest"
-          mkdir -p "$MANIFEST_DIRECTORY"
-          gh release download "$TAG" \
-            --repo "$GITHUB_REPOSITORY" \
-            --dir "$MANIFEST_DIRECTORY" \
-            --pattern "latest-candidate.json"
-          LIVE_MANIFEST="$MANIFEST_DIRECTORY/latest.json"
-          cp "$MANIFEST_DIRECTORY/latest-candidate.json" "$LIVE_MANIFEST"
-          gh release upload "$FEED_TAG" "$LIVE_MANIFEST" --clobber --repo "$GITHUB_REPOSITORY"
-          gh release view "$FEED_TAG" --repo "$GITHUB_REPOSITORY" \
-            --json assets --jq '.assets[].name' | grep -Fx latest.json
+          LIVE_MATCH_COUNT=$(jq \
+            '[.assets[] | select(.name == "latest.json")] | length' \
+            "$FEED_RELEASE_JSON")
+          if [[ "$LIVE_MATCH_COUNT" -gt 1 ]]; then
+            echo "::error::The update feed release has more than one latest.json asset"
+            exit 1
+          fi
+          if [[ "$LIVE_MATCH_COUNT" -eq 0 ]]; then
+            echo "had_live=false" >> "$GITHUB_OUTPUT"
+            {
+              echo "### No live update feed backup"
+              echo
+              echo "The update feed had no latest.json asset before publication."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
 
-      - name: Remove candidate manifest
-        if: always()
+          BACKUP_DIRECTORY="$RUNNER_TEMP/update-feed-backup"
+          mkdir -p "$BACKUP_DIRECTORY"
+          gh release download "$FEED_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --dir "$BACKUP_DIRECTORY" \
+            --pattern "latest.json"
+          BACKUP_MANIFEST="$BACKUP_DIRECTORY/latest.json"
+          if [[ ! -s "$BACKUP_MANIFEST" ]]; then
+            echo "::error::The current live update feed could not be backed up"
+            exit 1
+          fi
+          if ! jq -e '
+            (keys == ["notes", "platforms", "pub_date", "version"]) and
+            (.version | type == "string" and test("^[0-9]+\\.[0-9]+\\.[0-9]+$")) and
+            (.notes | type == "string") and
+            (.pub_date | (type == "string") and
+              (try (sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601 > 0) catch false)) and
+            (.platforms | keys == ["windows-x86_64"]) and
+            (.platforms["windows-x86_64"] | keys == ["signature", "url"]) and
+            (.platforms["windows-x86_64"].url | type == "string") and
+            (.platforms["windows-x86_64"].signature | type == "string" and test("^[A-Za-z0-9+/]+={0,2}$"))
+          ' "$BACKUP_MANIFEST" > /dev/null; then
+            echo "::error::The current live update feed has an invalid schema"
+            exit 1
+          fi
+          BACKUP_VERSION=$(jq -r ".version // empty" "$BACKUP_MANIFEST")
+          BACKUP_SHA256=$(sha256sum "$BACKUP_MANIFEST" | cut -d' ' -f1)
+          BACKUP_ASSET_NAME="latest-v${BACKUP_VERSION}-sha256-${BACKUP_SHA256}.json"
+          DURABLE_DIRECTORY="$RUNNER_TEMP/update-feed-durable-backup"
+          mkdir -p "$DURABLE_DIRECTORY"
+          DURABLE_BACKUP="$DURABLE_DIRECTORY/$BACKUP_ASSET_NAME"
+          cp -- "$BACKUP_MANIFEST" "$DURABLE_BACKUP"
+
+          FEED_ASSETS_JSON="$RUNNER_TEMP/feed-assets.json"
+          gh release view "$FEED_TAG" --repo "$GITHUB_REPOSITORY" \
+            --json assets > "$FEED_ASSETS_JSON"
+          MATCH_COUNT=$(jq --arg name "$BACKUP_ASSET_NAME" \
+            '[.assets[] | select(.name == $name)] | length' "$FEED_ASSETS_JSON")
+          if [[ "$MATCH_COUNT" -gt 1 ]]; then
+            echo "::error::More than one durable backup has the derived asset name"
+            exit 1
+          fi
+          if [[ "$MATCH_COUNT" -eq 0 ]]; then
+            gh release upload "$FEED_TAG" "$DURABLE_BACKUP" \
+              --repo "$GITHUB_REPOSITORY"
+          fi
+
+          gh release view "$FEED_TAG" --repo "$GITHUB_REPOSITORY" \
+            --json assets > "$FEED_ASSETS_JSON"
+          if ! jq -e --arg name "$BACKUP_ASSET_NAME" \
+            '[.assets[] | select(
+              (.name == $name) and (.state == "uploaded") and (.size > 0)
+            )] | length == 1' "$FEED_ASSETS_JSON" > /dev/null; then
+            echo "::error::The durable feed backup asset is missing or incomplete"
+            exit 1
+          fi
+          REPORTED_DIGEST=$(jq -r --arg name "$BACKUP_ASSET_NAME" \
+            '.assets[] | select(.name == $name) | .digest // empty' \
+            "$FEED_ASSETS_JSON")
+          if [[ -n "$REPORTED_DIGEST" && "$REPORTED_DIGEST" != "sha256:$BACKUP_SHA256" ]]; then
+            echo "::error::The durable feed backup has an unexpected GitHub digest"
+            exit 1
+          fi
+
+          SAVED_DIRECTORY="$RUNNER_TEMP/update-feed-saved-backup"
+          mkdir -p "$SAVED_DIRECTORY"
+          gh release download "$FEED_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --dir "$SAVED_DIRECTORY" \
+            --pattern "$BACKUP_ASSET_NAME"
+          SAVED_BACKUP="$SAVED_DIRECTORY/$BACKUP_ASSET_NAME"
+          if ! cmp --silent "$BACKUP_MANIFEST" "$SAVED_BACKUP"; then
+            echo "::error::The durable feed backup bytes do not match the live feed"
+            exit 1
+          fi
+          SAVED_SHA256=$(sha256sum "$SAVED_BACKUP" | cut -d' ' -f1)
+          if [[ "$SAVED_SHA256" != "$BACKUP_SHA256" ]]; then
+            echo "::error::The durable feed backup hash does not match the live feed"
+            exit 1
+          fi
+
+          {
+            echo "had_live=true"
+            echo "path=$BACKUP_MANIFEST"
+            echo "sha256=$BACKUP_SHA256"
+            echo "asset=$BACKUP_ASSET_NAME"
+          } >> "$GITHUB_OUTPUT"
+          {
+            echo "### Durable update feed backup"
+            echo
+            echo "- Asset: \`$BACKUP_ASSET_NAME\`"
+            echo "- Version: \`$BACKUP_VERSION\`"
+            echo "- SHA-256: \`$BACKUP_SHA256\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Promote and verify update feed
+        shell: bash
+        env:
+          BACKUP_MANIFEST: ${{ steps.backup.outputs.path }}
+          BACKUP_SHA256: ${{ steps.backup.outputs.sha256 }}
+          HAD_LIVE: ${{ steps.backup.outputs.had_live }}
+        run: |
+          set -eEuo pipefail
+          PREPARED_MANIFEST="$GITHUB_WORKSPACE/prepared-update-manifest/latest.json"
+          if [[ ! -s "$PREPARED_MANIFEST" ]]; then
+            echo "::error::Prepared update manifest is missing"
+            exit 1
+          fi
+
+          APP_RELEASES_JSON="$RUNNER_TEMP/app-releases-final.json"
+          gh api --paginate --slurp \
+            "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+            > "$APP_RELEASES_JSON"
+          LATEST_TAG=$(node scripts/select-latest-stable-app-release.mjs \
+            "$APP_RELEASES_JSON")
+          if [[ "$LATEST_TAG" != "$TAG" ]]; then
+            echo "::error::Update feed promotion requires the latest stable app release ($LATEST_TAG)"
+            exit 1
+          fi
+
+          PRE_PROMOTION_RELEASE="$RUNNER_TEMP/update-feed-pre-promotion.json"
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$FEED_TAG" \
+            > "$PRE_PROMOTION_RELEASE"
+          PRE_PROMOTION_MATCH_COUNT=$(jq \
+            '[.assets[] | select(.name == "latest.json")] | length' \
+            "$PRE_PROMOTION_RELEASE")
+          if [[ "$PRE_PROMOTION_MATCH_COUNT" -gt 1 ]]; then
+            echo "::error::The update feed release has more than one latest.json asset"
+            exit 1
+          fi
+          if [[ "$HAD_LIVE" == "true" ]]; then
+            if [[ "$PRE_PROMOTION_MATCH_COUNT" -ne 1 ]]; then
+              echo "::error::The live update feed disappeared after its durable backup"
+              exit 1
+            fi
+            PRE_PROMOTION_DIRECTORY="$RUNNER_TEMP/update-feed-pre-promotion"
+            mkdir -p "$PRE_PROMOTION_DIRECTORY"
+            gh release download "$FEED_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --dir "$PRE_PROMOTION_DIRECTORY" \
+              --pattern "latest.json"
+            PRE_PROMOTION_MANIFEST="$PRE_PROMOTION_DIRECTORY/latest.json"
+            PRE_PROMOTION_SHA256=$(sha256sum "$PRE_PROMOTION_MANIFEST" | cut -d' ' -f1)
+            if [[ "$PRE_PROMOTION_SHA256" != "$BACKUP_SHA256" ]]; then
+              echo "::error::The live update feed changed after its durable backup"
+              exit 1
+            fi
+          elif [[ "$HAD_LIVE" == "false" ]]; then
+            if [[ "$PRE_PROMOTION_MATCH_COUNT" -ne 0 ]]; then
+              echo "::error::The live update feed appeared after the empty-state check"
+              exit 1
+            fi
+          else
+            echo "::error::The update feed backup state is invalid"
+            exit 1
+          fi
+
+          latest_json_asset_count() {
+            release_json="$1"
+            jq -er '
+              if (type != "object") or ((.assets | type) != "array") then
+                error("release assets must be an array")
+              else
+                [.assets[] | select(
+                  (type == "object") and (.name == "latest.json")
+                )] | length
+              end
+            ' "$release_json"
+          }
+
+          restore_previous_absence() {
+            failure_status="$1"
+            for restore_attempt in 1 2 3; do
+              ABSENCE_RELEASE_JSON="$RUNNER_TEMP/update-feed-absence-$restore_attempt.json"
+              if ! gh api "repos/$GITHUB_REPOSITORY/releases/tags/$FEED_TAG" \
+                > "$ABSENCE_RELEASE_JSON"; then
+                echo "::warning::Could not inspect the feed during absence restore attempt $restore_attempt"
+              else
+                if ! ABSENCE_MATCH_COUNT=$(latest_json_asset_count \
+                  "$ABSENCE_RELEASE_JSON"); then
+                  echo "::error::Could not parse the feed during absence restore attempt $restore_attempt"
+                  exit 1
+                fi
+                if [[ "$ABSENCE_MATCH_COUNT" -eq 0 ]]; then
+                  break
+                fi
+                if [[ "$ABSENCE_MATCH_COUNT" -gt 1 ]]; then
+                  echo "::error::More than one latest.json asset exists during absence restore"
+                  exit 1
+                fi
+                if ! FEED_ASSET_ID=$(jq -er '
+                  .assets[] |
+                  select(.name == "latest.json") |
+                  .id |
+                  select((type == "number") and (. > 0) and (floor == .))
+                ' "$ABSENCE_RELEASE_JSON"); then
+                  echo "::error::The update feed asset has an invalid id"
+                  exit 1
+                fi
+                if ! gh api --method DELETE "repos/$GITHUB_REPOSITORY/releases/assets/$FEED_ASSET_ID"; then
+                  echo "::warning::Absence restore delete attempt $restore_attempt failed"
+                fi
+              fi
+              if [[ "$restore_attempt" -lt 3 ]]; then
+                sleep $((restore_attempt * 2))
+              fi
+            done
+            FINAL_ABSENCE_JSON="$RUNNER_TEMP/update-feed-absence-final.json"
+            if ! gh api "repos/$GITHUB_REPOSITORY/releases/tags/$FEED_TAG" \
+              > "$FINAL_ABSENCE_JSON"; then
+              echo "::error::Could not verify the restored empty feed state"
+              exit 1
+            fi
+            if ! FINAL_ABSENCE_COUNT=$(latest_json_asset_count \
+              "$FINAL_ABSENCE_JSON"); then
+              echo "::error::Could not verify the restored empty feed state"
+              exit 1
+            fi
+            if [[ "$FINAL_ABSENCE_COUNT" -ne 0 ]]; then
+              echo "::error::Could not restore the prior empty update feed"
+              exit 1
+            fi
+            echo "::notice::The prior empty update feed was restored"
+            exit "$failure_status"
+          }
+
+          restore_previous_feed() {
+            failure_status=$?
+            trap - ERR
+            set +e
+            if [[ "$HAD_LIVE" == "false" ]]; then
+              restore_previous_absence "$failure_status"
+            fi
+            echo "::warning::Update feed promotion failed; restoring the prior latest.json"
+            restore_uploaded=false
+            for restore_attempt in 1 2 3; do
+              if gh release upload "$FEED_TAG" "$BACKUP_MANIFEST" \
+                --clobber --repo "$GITHUB_REPOSITORY"; then
+                restore_uploaded=true
+                break
+              fi
+              echo "::warning::Restore upload attempt $restore_attempt failed"
+              if [[ "$restore_attempt" -lt 3 ]]; then
+                sleep $((restore_attempt * 2))
+              fi
+            done
+            if [[ "$restore_uploaded" != "true" ]]; then
+              echo "::error::Could not restore the prior update feed after three attempts"
+              exit 1
+            fi
+            RESTORE_DIRECTORY="$RUNNER_TEMP/update-feed-restore-check"
+            mkdir -p "$RESTORE_DIRECTORY"
+            if ! gh release download "$FEED_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --dir "$RESTORE_DIRECTORY" \
+              --pattern "latest.json"; then
+              echo "::error::Could not download the restored update feed"
+              exit 1
+            fi
+            RESTORED_MANIFEST="$RESTORE_DIRECTORY/latest.json"
+            if ! cmp --silent "$BACKUP_MANIFEST" "$RESTORED_MANIFEST"; then
+              echo "::error::Restored update feed bytes do not match the backup"
+              exit 1
+            fi
+            RESTORED_SHA256=$(sha256sum "$RESTORED_MANIFEST" | cut -d' ' -f1)
+            if [[ "$RESTORED_SHA256" != "$BACKUP_SHA256" ]]; then
+              echo "::error::Restored update feed hash does not match the backup"
+              exit 1
+            fi
+            echo "::notice::The prior update feed was restored"
+            exit "$failure_status"
+          }
+          trap restore_previous_feed ERR
+
+          gh release upload "$FEED_TAG" "$PREPARED_MANIFEST" \
+            --clobber --repo "$GITHUB_REPOSITORY"
+          READBACK_DIRECTORY="$RUNNER_TEMP/update-feed-readback"
+          mkdir -p "$READBACK_DIRECTORY"
+          gh release download "$FEED_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --dir "$READBACK_DIRECTORY" \
+            --pattern "latest.json"
+          READBACK_MANIFEST="$READBACK_DIRECTORY/latest.json"
+          cmp --silent "$PREPARED_MANIFEST" "$READBACK_MANIFEST"
+          trap - ERR
+          echo "::notice::Published and read back the exact update feed for $TAG"
+
+  rollback:
+    name: Restore verified update feed backup
+    needs: gate
+    if: needs.gate.outputs.rollback == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      attestations: read
+      contents: write
+    env:
+      EXPECTED_LIVE_SHA256: ${{ inputs.expected_live_sha256 }}
+      FEED_TAG: update-feed
+      GH_TOKEN: ${{ github.token }}
+      MANIFEST_SHA256: ${{ inputs.manifest_sha256 }}
+      TAG: ${{ needs.gate.outputs.tag }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+        with:
+          toolchain: stable
+
+      - name: Validate saved rollback feed and signed updater
+        id: rollback_source
         shell: bash
         run: |
           set -euo pipefail
-          ASSET_ID=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" \
-            --jq '.assets[] | select(.name == "latest-candidate.json") | .id')
-          if [[ -n "$ASSET_ID" ]]; then
-            gh api --method DELETE "repos/$GITHUB_REPOSITORY/releases/assets/$ASSET_ID"
-          fi
-          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" \
-            --json assets --jq '.assets[].name' | grep -Fx latest-candidate.json; then
-            echo "::error::Candidate update manifest remains published"
+          VERSION="${TAG#v}"
+          ROLLBACK_ASSET="latest-${TAG}-sha256-${MANIFEST_SHA256}.json"
+          ROLLBACK_DIRECTORY="$RUNNER_TEMP/update-feed-rollback-source"
+          mkdir -p "$ROLLBACK_DIRECTORY"
+          gh release download "$FEED_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --dir "$ROLLBACK_DIRECTORY" \
+            --pattern "$ROLLBACK_ASSET"
+          ROLLBACK_MANIFEST="$ROLLBACK_DIRECTORY/$ROLLBACK_ASSET"
+          if [[ ! -s "$ROLLBACK_MANIFEST" ]]; then
+            echo "::error::The selected rollback feed is empty"
             exit 1
           fi
+          ACTUAL_SHA256=$(sha256sum "$ROLLBACK_MANIFEST" | cut -d' ' -f1)
+          if [[ "$ACTUAL_SHA256" != "$MANIFEST_SHA256" ]]; then
+            echo "::error::The selected rollback feed does not match manifest_sha256"
+            exit 1
+          fi
+
+          ARCHIVE_NAME="AudioBud_${VERSION}_x64-setup.nsis.zip"
+          EXPECTED_URL="https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/$ARCHIVE_NAME"
+          if ! jq -e \
+            --arg expected_url "$EXPECTED_URL" \
+            --arg version "$VERSION" '
+              (keys == ["notes", "platforms", "pub_date", "version"]) and
+              (.version == $version) and
+              (.notes | type == "string") and
+              (.pub_date | (type == "string") and
+                (try (sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601 > 0) catch false)) and
+              (.platforms | keys == ["windows-x86_64"]) and
+              (.platforms["windows-x86_64"] | keys == ["signature", "url"]) and
+              (.platforms["windows-x86_64"].url == $expected_url) and
+              (.platforms["windows-x86_64"].signature | type == "string" and test("^[A-Za-z0-9+/]+={0,2}$"))
+            ' "$ROLLBACK_MANIFEST" > /dev/null; then
+            echo "::error::The selected rollback feed does not match the strict updater schema"
+            exit 1
+          fi
+          ROLLBACK_SIGNATURE=$(jq -r '.platforms["windows-x86_64"].signature' \
+            "$ROLLBACK_MANIFEST")
+
+          SOURCE_RELEASE_JSON="$RUNNER_TEMP/rollback-source-release.json"
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" > "$SOURCE_RELEASE_JSON"
+          if jq -e '.draft or .prerelease or (.published_at == null)' \
+            "$SOURCE_RELEASE_JSON" > /dev/null; then
+            echo "::error::The rollback target must be a published stable release"
+            exit 1
+          fi
+          RELEASE_COMMIT=$(gh api "repos/$GITHUB_REPOSITORY/commits/$TAG" --jq '.sha')
+          if [[ ! "$RELEASE_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::The rollback release tag did not resolve to a commit"
+            exit 1
+          fi
+
+          SOURCE_DIRECTORY="$RUNNER_TEMP/rollback-updater-assets"
+          mkdir -p "$SOURCE_DIRECTORY"
+          gh release download "$TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --dir "$SOURCE_DIRECTORY" \
+            --pattern "$ARCHIVE_NAME" \
+            --pattern "$ARCHIVE_NAME.sig"
+          ARCHIVE="$SOURCE_DIRECTORY/$ARCHIVE_NAME"
+          SIGNATURE="$SOURCE_DIRECTORY/$ARCHIVE_NAME.sig"
+          if [[ ! -s "$ARCHIVE" || ! -s "$SIGNATURE" ]]; then
+            echo "::error::The rollback updater archive or signature is missing"
+            exit 1
+          fi
+          SIGNATURE_VALUE=$(<"$SIGNATURE")
+          if [[ "$SIGNATURE_VALUE" != "$ROLLBACK_SIGNATURE" ]]; then
+            echo "::error::The rollback feed signature does not match its release asset"
+            exit 1
+          fi
+
+          PUBLIC_KEY="$SOURCE_DIRECTORY/updater-signing-public-key.pub"
+          if [[ "$TAG" == "v0.5.0" ]]; then
+            LEGACY_COMMIT="5a25482ba3e82410a7fb19ee0f48cd3f87564a7d"
+            if [[ "$RELEASE_COMMIT" != "$LEGACY_COMMIT" ]]; then
+              echo "::error::Legacy v0.5.0 no longer resolves to its pinned commit"
+              exit 1
+            fi
+            LEGACY_CONFIG="$SOURCE_DIRECTORY/v0.5.0-tauri.conf.json"
+            gh api \
+              "repos/$GITHUB_REPOSITORY/contents/src-tauri/tauri.conf.json?ref=$LEGACY_COMMIT" \
+              --jq '.content' | tr -d '\n' | base64 --decode > "$LEGACY_CONFIG"
+            jq -er '.plugins.updater.pubkey' "$LEGACY_CONFIG" | \
+              base64 --decode > "$PUBLIC_KEY"
+          else
+            gh release download "$TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --dir "$SOURCE_DIRECTORY" \
+              --pattern "updater-signing-public-key.pub"
+          fi
+          if [[ ! -s "$PUBLIC_KEY" ]]; then
+            echo "::error::The rollback updater public key is empty"
+            exit 1
+          fi
+
+          if [[ "$TAG" == "v0.5.0" ]]; then
+            for artifact in "$ARCHIVE" "$SIGNATURE"; do
+              if ! gh attestation verify "$artifact" \
+                --repo "$GITHUB_REPOSITORY" \
+                --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml" \
+                --source-ref "refs/tags/$TAG" \
+                --source-digest "$RELEASE_COMMIT" \
+                --deny-self-hosted-runners; then
+                echo "::warning::Legacy v0.5.0 has no required attestation for $(basename "$artifact")"
+              fi
+            done
+          else
+            for artifact in "$ARCHIVE" "$SIGNATURE" "$PUBLIC_KEY"; do
+              gh attestation verify "$artifact" \
+                --repo "$GITHUB_REPOSITORY" \
+                --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml" \
+                --source-ref "refs/tags/$TAG" \
+                --source-digest "$RELEASE_COMMIT" \
+                --deny-self-hosted-runners
+            done
+          fi
+
+          DECODED_SIGNATURE_PATH="$RUNNER_TEMP/rollback-updater-signature.sig"
+          printf '%s' "$SIGNATURE_VALUE" | base64 --decode > "$DECODED_SIGNATURE_PATH"
+          CARGO_TARGET_DIR="$RUNNER_TEMP/rollback-signature-target" \
+            cargo run --locked --release \
+              --manifest-path scripts/verify-updater-signature/Cargo.toml -- \
+              "$PUBLIC_KEY" "$DECODED_SIGNATURE_PATH" "$ARCHIVE"
+
+          CURRENT_DIRECTORY="$RUNNER_TEMP/update-feed-current-before-rollback"
+          mkdir -p "$CURRENT_DIRECTORY"
+          gh release download "$FEED_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --dir "$CURRENT_DIRECTORY" \
+            --pattern "latest.json"
+          CURRENT_MANIFEST="$CURRENT_DIRECTORY/latest.json"
+          CURRENT_SHA256=$(sha256sum "$CURRENT_MANIFEST" | cut -d' ' -f1)
+          if [[ "$CURRENT_SHA256" != "$EXPECTED_LIVE_SHA256" ]]; then
+            echo "::error::The live update feed changed after rollback approval"
+            exit 1
+          fi
+          LIVE_VERSION=$(jq -r '.version // empty' "$CURRENT_MANIFEST")
+          if [[ ! "$LIVE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::The live update feed has an invalid version"
+            exit 1
+          fi
+
+          NO_OP=false
+          if cmp --silent "$ROLLBACK_MANIFEST" "$CURRENT_MANIFEST"; then
+            NO_OP=true
+            echo "::notice::The selected rollback feed is already live"
+          elif ! jq -en --arg target "$VERSION" --arg live "$LIVE_VERSION" \
+            '($target | split(".") | map(tonumber)) < ($live | split(".") | map(tonumber))' \
+            > /dev/null; then
+            echo "::error::Rollback requires a lower semantic version than the live feed"
+            exit 1
+          fi
+
+          {
+            echo "manifest=$ROLLBACK_MANIFEST"
+            echo "current=$CURRENT_MANIFEST"
+            echo "current_sha256=$CURRENT_SHA256"
+            echo "no_op=$NO_OP"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Save current feed before rollback
+        id: rollback_backup
+        if: steps.rollback_source.outputs.no_op != 'true'
+        shell: bash
+        env:
+          CURRENT_MANIFEST: ${{ steps.rollback_source.outputs.current }}
+          CURRENT_SHA256: ${{ steps.rollback_source.outputs.current_sha256 }}
+        run: |
+          set -euo pipefail
+          CURRENT_VERSION=$(jq -r '.version // empty' "$CURRENT_MANIFEST")
+          BACKUP_ASSET_NAME="latest-v${CURRENT_VERSION}-sha256-${CURRENT_SHA256}.json"
+          DURABLE_DIRECTORY="$RUNNER_TEMP/rollback-outgoing-backup"
+          mkdir -p "$DURABLE_DIRECTORY"
+          DURABLE_BACKUP="$DURABLE_DIRECTORY/$BACKUP_ASSET_NAME"
+          cp -- "$CURRENT_MANIFEST" "$DURABLE_BACKUP"
+
+          FEED_ASSETS_JSON="$RUNNER_TEMP/rollback-feed-assets.json"
+          gh release view "$FEED_TAG" --repo "$GITHUB_REPOSITORY" \
+            --json assets > "$FEED_ASSETS_JSON"
+          MATCH_COUNT=$(jq --arg name "$BACKUP_ASSET_NAME" \
+            '[.assets[] | select(.name == $name)] | length' "$FEED_ASSETS_JSON")
+          if [[ "$MATCH_COUNT" -gt 1 ]]; then
+            echo "::error::More than one outgoing backup has the derived asset name"
+            exit 1
+          fi
+          if [[ "$MATCH_COUNT" -eq 0 ]]; then
+            gh release upload "$FEED_TAG" "$DURABLE_BACKUP" \
+              --repo "$GITHUB_REPOSITORY"
+          fi
+
+          SAVED_DIRECTORY="$RUNNER_TEMP/rollback-outgoing-readback"
+          mkdir -p "$SAVED_DIRECTORY"
+          gh release download "$FEED_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --dir "$SAVED_DIRECTORY" \
+            --pattern "$BACKUP_ASSET_NAME"
+          SAVED_BACKUP="$SAVED_DIRECTORY/$BACKUP_ASSET_NAME"
+          if ! cmp --silent "$CURRENT_MANIFEST" "$SAVED_BACKUP"; then
+            echo "::error::The outgoing rollback backup bytes do not match"
+            exit 1
+          fi
+          SAVED_SHA256=$(sha256sum "$SAVED_BACKUP" | cut -d' ' -f1)
+          if [[ "$SAVED_SHA256" != "$CURRENT_SHA256" ]]; then
+            echo "::error::The outgoing rollback backup hash does not match"
+            exit 1
+          fi
+          echo "path=$CURRENT_MANIFEST" >> "$GITHUB_OUTPUT"
+          echo "sha256=$CURRENT_SHA256" >> "$GITHUB_OUTPUT"
+          {
+            echo "### Durable pre-rollback feed backup"
+            echo
+            echo "- Asset: \`$BACKUP_ASSET_NAME\`"
+            echo "- SHA-256: \`$CURRENT_SHA256\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Restore and verify saved update feed
+        if: steps.rollback_source.outputs.no_op != 'true'
+        shell: bash
+        env:
+          BACKUP_MANIFEST: ${{ steps.rollback_backup.outputs.path }}
+          BACKUP_SHA256: ${{ steps.rollback_backup.outputs.sha256 }}
+          ROLLBACK_MANIFEST: ${{ steps.rollback_source.outputs.manifest }}
+        run: |
+          set -eEuo pipefail
+          PUBLISH_DIRECTORY="$RUNNER_TEMP/update-feed-rollback-publish"
+          mkdir -p "$PUBLISH_DIRECTORY"
+          PUBLISH_MANIFEST="$RUNNER_TEMP/update-feed-rollback-publish/latest.json"
+          cp -- "$ROLLBACK_MANIFEST" "$PUBLISH_MANIFEST"
+
+          PRE_ROLLBACK_DIRECTORY="$RUNNER_TEMP/update-feed-pre-rollback"
+          mkdir -p "$PRE_ROLLBACK_DIRECTORY"
+          gh release download "$FEED_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --dir "$PRE_ROLLBACK_DIRECTORY" \
+            --pattern "latest.json"
+          PRE_ROLLBACK_MANIFEST="$PRE_ROLLBACK_DIRECTORY/latest.json"
+          PRE_ROLLBACK_SHA256=$(sha256sum "$PRE_ROLLBACK_MANIFEST" | cut -d' ' -f1)
+          if [[ "$PRE_ROLLBACK_SHA256" != "$BACKUP_SHA256" ]]; then
+            echo "::error::The live update feed changed after its rollback backup"
+            exit 1
+          fi
+
+          restore_outgoing_feed() {
+            failure_status=$?
+            trap - ERR
+            set +e
+            restore_uploaded=false
+            for restore_attempt in 1 2 3; do
+              if gh release upload "$FEED_TAG" "$BACKUP_MANIFEST" \
+                --clobber --repo "$GITHUB_REPOSITORY"; then
+                restore_uploaded=true
+                break
+              fi
+              echo "::warning::Restore upload attempt $restore_attempt failed"
+              if [[ "$restore_attempt" -lt 3 ]]; then
+                sleep $((restore_attempt * 2))
+              fi
+            done
+            if [[ "$restore_uploaded" != "true" ]]; then
+              echo "::error::Rollback failed and the outgoing feed could not be restored"
+              exit 1
+            fi
+            RESTORE_DIRECTORY="$RUNNER_TEMP/update-feed-rollback-restore-check"
+            mkdir -p "$RESTORE_DIRECTORY"
+            if ! gh release download "$FEED_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --dir "$RESTORE_DIRECTORY" \
+              --pattern "latest.json"; then
+              echo "::error::Could not read back the restored outgoing feed"
+              exit 1
+            fi
+            RESTORED_MANIFEST="$RESTORE_DIRECTORY/latest.json"
+            if ! cmp --silent "$BACKUP_MANIFEST" "$RESTORED_MANIFEST"; then
+              echo "::error::Restored outgoing feed bytes do not match"
+              exit 1
+            fi
+            echo "::notice::The outgoing feed was restored after rollback failure"
+            exit "$failure_status"
+          }
+          trap restore_outgoing_feed ERR
+
+          gh release upload "$FEED_TAG" "$PUBLISH_MANIFEST" \
+            --clobber --repo "$GITHUB_REPOSITORY"
+          READBACK_DIRECTORY="$RUNNER_TEMP/update-feed-rollback-readback"
+          mkdir -p "$READBACK_DIRECTORY"
+          gh release download "$FEED_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --dir "$READBACK_DIRECTORY" \
+            --pattern "latest.json"
+          READBACK_MANIFEST="$READBACK_DIRECTORY/latest.json"
+          cmp --silent "$PUBLISH_MANIFEST" "$READBACK_MANIFEST"
+          trap - ERR
+          echo "::notice::Restored and read back the exact update feed for $TAG"

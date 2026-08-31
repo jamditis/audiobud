@@ -33,6 +33,20 @@ use crate::tray;
 
 const UNCERTAIN_SHORTCUT_STATE: &str = "shortcut state may remain active";
 const PRIMARY_SHORTCUT_ID: &str = "transcribe";
+const EXPERIMENTAL_TARGETING_SHORTCUT_IDS: [&str; 2] = ["toggle_target_lock", "pick_output_window"];
+
+fn shortcut_enabled_for_settings(id: &str, settings: &settings::AppSettings) -> bool {
+    if id == "cancel" {
+        return false;
+    }
+    if id == "transcribe_with_post_process" {
+        return settings.post_process_enabled;
+    }
+    if EXPERIMENTAL_TARGETING_SHORTCUT_IDS.contains(&id) {
+        return settings.experimental_enabled;
+    }
+    true
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum ShortcutRegistrationStage {
@@ -123,10 +137,7 @@ pub(super) fn configured_initial_bindings(app: &AppHandle) -> Vec<(String, Short
 
     default_bindings
         .into_iter()
-        .filter(|(id, _)| id != "cancel")
-        .filter(|(id, _)| {
-            id != "transcribe_with_post_process" || user_settings.post_process_enabled
-        })
+        .filter(|(id, _)| shortcut_enabled_for_settings(id, &user_settings))
         .map(|(id, default_binding)| {
             let binding = user_settings
                 .bindings
@@ -584,11 +595,9 @@ fn unregister_all_shortcuts(
     let current_settings = settings::get_settings(app);
     let mut failures = Vec::new();
 
-    for (id, binding) in current_settings.bindings {
-        // Skip cancel shortcut as it's dynamically registered
-        if id == "cancel"
-            || (id == "transcribe_with_post_process" && !current_settings.post_process_enabled)
-        {
+    for (id, binding) in current_settings.bindings.clone() {
+        // Skip shortcuts that are dynamically registered for enabled features.
+        if !shortcut_enabled_for_settings(&id, &current_settings) {
             continue;
         }
 
@@ -624,13 +633,8 @@ fn register_all_shortcuts_for_implementation(
     let mut current_settings = settings::get_settings(app);
 
     for (id, default_binding) in &default_bindings {
-        // Skip cancel shortcut as it's dynamically registered
-        if id == "cancel" {
-            continue;
-        }
-
-        // Skip post-processing shortcut when the feature is disabled
-        if id == "transcribe_with_post_process" && !current_settings.post_process_enabled {
+        // Skip shortcuts that are dynamically registered for enabled features.
+        if !shortcut_enabled_for_settings(id, &current_settings) {
             continue;
         }
 
@@ -751,8 +755,12 @@ pub(crate) enum SettingEffect {
     ReloadAccelerator,
     /// Register or unregister the post-processing shortcut.
     SyncPostProcessShortcut,
+    /// Register or release the target lock and picker shortcuts with the gate.
+    SyncExperimentalTargetingShortcuts,
     /// Drop an active target-lock that delivery can no longer use (#162).
     ClearTargetLockIfFocusFree,
+    /// Clear every live target lock and pick state when its gate closes.
+    DisableExperimentalTargeting,
 }
 
 /// What each setting requires beyond the write itself. Settings with no entry
@@ -770,6 +778,12 @@ pub(crate) fn effects_for_setting(key: &str) -> &'static [SettingEffect] {
         // application, so editing the list can strand a lock exactly as
         // changing the global settings can (#123).
         "output_profiles" => &[ClearTargetLockIfFocusFree, EmitChanged],
+        "experimental_enabled" => &[
+            DisableExperimentalTargeting,
+            SyncExperimentalTargetingShortcuts,
+            RefreshTrayMenu,
+            EmitChanged,
+        ],
         "post_process_enabled" => &[SyncPostProcessShortcut],
         "app_language" => &[RefreshTrayMenu],
         "show_tray_icon" => &[SetTrayVisibility],
@@ -819,7 +833,7 @@ fn run_setting_effects(
             SettingEffect::RefreshTrayMenu => {
                 tray::update_tray_menu(
                     app,
-                    &tray::TrayIconState::Idle,
+                    &tray::current_tray_state(app),
                     Some(&settings.app_language),
                 );
             }
@@ -837,8 +851,32 @@ fn run_setting_effects(
                     };
                 }
             }
+            SettingEffect::SyncExperimentalTargetingShortcuts => {
+                for id in EXPERIMENTAL_TARGETING_SHORTCUT_IDS {
+                    let Some(binding) = settings.bindings.get(id).cloned() else {
+                        warn!("Experimental shortcut binding '{id}' was not found");
+                        continue;
+                    };
+                    let result = if settings.experimental_enabled {
+                        register_shortcut(app, binding)
+                    } else {
+                        unregister_shortcut(app, binding)
+                    };
+                    if let Err(error) = result {
+                        warn!("Failed to synchronize experimental shortcut '{id}': {error}");
+                    }
+                }
+            }
             SettingEffect::ClearTargetLockIfFocusFree => {
                 clear_target_lock_if_focus_free(app, settings)
+            }
+            SettingEffect::DisableExperimentalTargeting => {
+                let _targeting_guard = output_target::experimental_targeting_guard();
+                if !settings.experimental_enabled {
+                    crate::output_target::backend::unlock_output_target(app);
+                    crate::window_picker::backend::abandon_pick(app);
+                    crate::window_picker::backend::close_picker(app);
+                }
             }
         }
     }
@@ -1572,6 +1610,29 @@ mod tests {
         // The settings window and the tray quick-toggle (#12) share this
         // setting, so a change from either has to be broadcast.
         assert!(effects_for_setting("auto_submit").contains(&SettingEffect::EmitChanged));
+    }
+
+    #[test]
+    fn disabling_experimental_features_clears_targeting_and_notifies_the_ui() {
+        let effects = effects_for_setting("experimental_enabled");
+        assert!(effects.contains(&SettingEffect::DisableExperimentalTargeting));
+        assert!(effects.contains(&SettingEffect::SyncExperimentalTargetingShortcuts));
+        assert!(effects.contains(&SettingEffect::RefreshTrayMenu));
+        assert!(effects.contains(&SettingEffect::EmitChanged));
+    }
+
+    #[test]
+    fn experimental_targeting_shortcuts_follow_the_feature_gate() {
+        let mut settings = settings::get_default_settings();
+        settings.experimental_enabled = false;
+        for id in EXPERIMENTAL_TARGETING_SHORTCUT_IDS {
+            assert!(!shortcut_enabled_for_settings(id, &settings));
+        }
+
+        settings.experimental_enabled = true;
+        for id in EXPERIMENTAL_TARGETING_SHORTCUT_IDS {
+            assert!(shortcut_enabled_for_settings(id, &settings));
+        }
     }
 
     #[test]

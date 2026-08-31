@@ -291,6 +291,8 @@ describe("Windows release signing workflow", () => {
     const steps = [
       "Resolve SBOM path",
       "Generate release SBOM",
+      "Complete Windows SBOM file checksums",
+      "Validate release SBOM file checksums",
       "Write SHA256SUMS",
       "Attest release provenance",
       "Attest release SBOM",
@@ -299,6 +301,45 @@ describe("Windows release signing workflow", () => {
     for (let index = 1; index < steps.length; index += 1) {
       expect(steps[index]).toBeGreaterThan(steps[index - 1]);
     }
+  });
+
+  test("rejects SBOM file records with placeholder checksums", () => {
+    const sbomStep = stepBlock("Generate release SBOM");
+    expect(sbomStep).toMatch(/^\s+SYFT_FILE_METADATA_SELECTION: all\s*$/m);
+
+    const completionStep = stepBlock("Complete Windows SBOM file checksums");
+    expect(completionStep).toContain(
+      "SBOM_PATH: ${{ steps.sbom-path.outputs.path }}",
+    );
+    expect(completionStep).toContain(
+      "PAYLOAD_PATH: ${{ steps.packaged-payload.outputs.path }}",
+    );
+    expect(completionStep).toContain("--complete-windows-placeholders");
+    expect(completionStep).toContain('"$env:SBOM_PATH"');
+    expect(completionStep).toContain('"$env:PAYLOAD_PATH"');
+
+    const validationStep = stepBlock("Validate release SBOM file checksums");
+    expect(validationStep).toContain(
+      "SBOM_PATH: ${{ steps.sbom-path.outputs.path }}",
+    );
+    expect(validationStep).toContain(
+      "PAYLOAD_PATH: ${{ steps.packaged-payload.outputs.path }}",
+    );
+    expect(validationStep).toContain('"$env:PAYLOAD_PATH"');
+    expect(validationStep).toContain(
+      "bun run scripts/validate-sbom-file-checksums.ts",
+    );
+    expect(validationStep).toContain('"$env:SBOM_PATH"');
+
+    expect(stepPosition("Generate release SBOM")).toBeLessThan(
+      stepPosition("Complete Windows SBOM file checksums"),
+    );
+    expect(stepPosition("Complete Windows SBOM file checksums")).toBeLessThan(
+      stepPosition("Validate release SBOM file checksums"),
+    );
+    expect(stepPosition("Validate release SBOM file checksums")).toBeLessThan(
+      stepPosition("Write SHA256SUMS"),
+    );
   });
 
   test("attests provenance for every uploaded release artifact before publication", () => {

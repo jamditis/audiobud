@@ -322,10 +322,13 @@ impl PickerSession {
 /// Both halves have to go. A session left behind still reads as a pick in
 /// progress ([`picker_is_open`]), which would withhold every later transcript
 /// until the picker was opened again; and closing the window is a dismissal, so
-/// like Escape it leaves nothing armed.
-pub fn abandon_pick(session: &PickerSession, pending: &PendingPick) {
+/// like Escape it leaves nothing armed. Returns whether a picker session was
+/// open, so callers only create a dismissal shield for a real dismissal.
+pub fn abandon_pick(session: &PickerSession, pending: &PendingPick) -> bool {
+    let was_open = session.is_open();
     session.clear();
     pending.clear();
+    was_open
 }
 
 /// Start a fresh offer: whatever an earlier pick armed is superseded.
@@ -1317,13 +1320,23 @@ mod tests {
         session.offer(offer(vec![raw(1, "Mail", None, true)]));
         pending.arm(PendingRoute::Window(identity(1, 100, 200)), 0);
 
-        abandon_pick(&session, &pending);
+        assert!(abandon_pick(&session, &pending));
 
         assert!(!session.is_open());
         assert!(!pending.is_armed());
         // Which is exactly what a dismissal leaves: a transcript now follows the
         // usual rules rather than being held or redirected.
         assert!(!picker_is_open(None, session.is_open()));
+    }
+
+    #[test]
+    fn cleanup_without_an_open_picker_is_not_a_dismissal() {
+        let session = PickerSession::default();
+        let pending = PendingPick::default();
+        pending.arm(PendingRoute::Window(identity(1, 100, 200)), 0);
+
+        assert!(!abandon_pick(&session, &pending));
+        assert!(!pending.is_armed());
     }
 
     #[test]

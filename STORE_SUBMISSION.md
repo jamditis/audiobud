@@ -34,7 +34,10 @@ Use this Windows Store "What's new" draft:
 > AudioBud 0.6.0 improves shortcut startup, settings saves, audio recovery,
 > transcript delivery, and release verification. Windows x64 keeps the signed
 > in-app update channel. This update also includes smaller binaries and clearer
-> error recovery.
+> error recovery. Experimental output targeting is off by default. Windows can
+> refuse to activate the selected window. If this occurs, AudioBud does not send
+> input to a different window. The transcript stays available in history and
+> clipboard when copying is enabled.
 
 The final Partner Center record must capture the submission ID, hosted URL,
 SHA-256, workflow run, commit, validation result, and certification result.

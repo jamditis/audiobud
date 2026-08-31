@@ -101,9 +101,25 @@ The macOS release artifact contains:
 - `AudioBud_<version>_macos_aarch64_sbom.spdx.json`
 - `SHA256SUMS-macos.txt`
 
-GitHub also records provenance and SBOM attestations. Publication waits for the
-Windows and macOS build jobs. A build artifact or draft release is not approval
-to publish the tag or release.
+GitHub also records provenance and SBOM attestations. The joint draft waits for
+the Windows and macOS build jobs and the private Windows updater test. A build
+artifact, updater-test artifact, or draft release is not approval to publish
+the tag or release.
+
+Syft must collect metadata for every staged app entry. Before attestation, the
+workflow runs `scripts/validate-sbom-file-checksums.ts` against the app root. It
+requires one unique SPDX record for every filesystem entry. Syft's placeholder
+is permitted for actual directories and symlinks. Syft does not follow those
+symlinks. Every regular-file checksum must be real, supported, and equal to the
+staged bytes, and each regular-file record must include SHA-256. Any inventory
+or checksum mismatch stops the job before attestation.
+
+The Windows release job uses the same final validation contract. Syft 1.49.0
+cannot collect directory-source file digests on Windows, so that job first
+completes only Syft's exact zero-SHA-1 regular-file placeholder form from the
+staged bytes. A changed document records the completion tool and a derived SPDX
+namespace. A document with native valid digests stays byte-for-byte unchanged.
+The macOS job does not use this Windows-only compatibility step.
 
 ## Local credential handling
 

@@ -62,6 +62,10 @@ and that its notarization ticket validates. The full commands are in
 
 ## Known limits
 
+- Experimental output targeting is Windows-only and off by default. Windows
+  can refuse to activate the selected window. If this occurs, AudioBud does not
+  send input to a different window. The transcript stays available in history
+  and clipboard when copying is enabled.
 - Apple Intelligence post-processing is optional and depends on Apple's own
   availability checks. It is not required for local transcription.
 - A native macOS shortcut constructor that never returns can outlive its

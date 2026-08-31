@@ -84,13 +84,23 @@ describe("v0.6.0 release documentation", () => {
     );
     expect(build).toContain("SDKROOT");
     expect(build).toContain("FoundationModels.framework");
+    expect(build).toContain("validate-sbom-file-checksums.ts");
+    expect(build).toContain("placeholder value");
+    expect(build).toContain("audiobud-sbom-checksum-completer-1");
+    expect(build).toMatch(/byte-for-byte\s+unchanged/);
+    expect(build).toContain("Special filesystem entries are rejected");
     expect(macRelease).toContain(
       "/Applications/Xcode_26.0.1.app/Contents/Developer",
     );
     expect(macRelease).toContain("macOS 26 SDK");
     expect(macRelease).toContain("SDKROOT");
     expect(macRelease).toContain("FoundationModels.framework");
+    expect(macRelease).toContain("validate-sbom-file-checksums.ts");
+    expect(macRelease).toContain("placeholder");
+    expect(macRelease).toMatch(/derived SPDX\s+namespace/);
     expect(macRelease).toContain("final app binary");
+    expect(macRelease).toContain("private Windows updater test");
+    expect(macRelease).toContain("updater-test artifact");
     expect(updater).toContain("Windows NSIS builds only");
     expect(updater).toContain("macOS uses manual updates");
     expect(macRelease).not.toContain("3Y74X55F58");
@@ -122,19 +132,22 @@ describe("v0.6.0 release documentation", () => {
     expect(
       todoSource.match(/^#{2,3} (current )?release decision$/gim),
     ).toHaveLength(1);
-    expect(todo).toContain("pull request 309 is open");
-    expect(todo).toContain("follow-up fixes are local and uncommitted");
-    expect(todo).toContain(
-      "481 frontend tests with 2,180 assertions across 45 files",
-    );
-    expect(todo).toContain("503 Rust library tests");
-    expect(todo).toContain("explicit approval to commit and push");
-    expect(todo).toContain("Do not merge until");
-    expect(todo).toContain("branch protection");
-    expect(todo).toContain("Do not create a tag");
+    expect(todo).toContain("local and remote `main` point to `1dcea94`");
+    expect(todo).toContain("Pull request 319 merged");
+    expect(todo).toContain("Candidate run `33226723040` failed closed");
+    expect(todo).toContain("macOS job passed");
+    expect(todo).toContain("339 Windows regular-file records");
+    expect(todo).toContain("upstream Syft Windows directory-resolver bug");
+    expect(todo).toContain("Complete Windows SBOM file checksums");
+    expect(todo).toContain("dedicated bug-fix pull request");
+    expect(todo).toContain("Pull requests 311 through 317 stay outside v0.6.0");
+    expect(todo).toContain("clean Apple Silicon Mac");
+    expect(todo).toContain("Do not create or push the v0.6.0 tag");
     expect(todo).toContain("Session handoff for August 28, 2026");
-    expect(todo).toContain("clean-Mac tests");
-    expect(todo).toContain("later approval gates");
+    expect(todo).toContain("user's end-to-end release approval");
+    expect(todo).toContain("Partner Center");
+    expect(todo).not.toContain("pull request 309 is open");
+    expect(todo).not.toContain("follow-up fixes are local and uncommitted");
     expect(todo).not.toContain("finish the independent review");
     expect(todo).not.toContain("complete phase 0");
   });

@@ -119,6 +119,27 @@ Do not use a local signed artifact as a public release. Use the protected
 workflow so checksums, the SBOM, provenance, architecture checks, Gatekeeper
 checks, and notarization checks all refer to the same bytes.
 
+The macOS and Windows SBOM jobs select every staged package entry for metadata
+and digest collection. `scripts/validate-sbom-file-checksums.ts` walks the
+staged payload and requires one unique SPDX record for every filesystem entry,
+including the payload root. Directory records can carry Syft's required
+placeholder value, as can symlink records, which Syft does not follow. Every
+regular-file record must include SHA-256, and every listed checksum must be
+real, supported, and equal to the staged bytes. The job stops before checksums
+or attestations are created on any inventory or checksum error.
+
+Syft 1.49.0 has a Windows directory-resolver defect that catalogs each staged
+entry but cannot resolve those same paths for digest collection. The Windows
+job completes only Syft's exact single zero-SHA-1 placeholder form for actual
+regular files by calculating SHA-1 and SHA-256 from the staged bytes. It does
+not change directory or symlink placeholders and does not replace mixed,
+missing, malformed, unsupported, or real-but-stale values. The completed SPDX
+document identifies `audiobud-sbom-checksum-completer-1` as a creator and uses
+a derived document namespace. It is written only after the normal inventory
+and byte checks pass. A document that needs no completion stays byte-for-byte
+unchanged. Special filesystem entries are rejected instead of opened. The
+macOS job does not use this Windows-only compatibility step.
+
 The credential names, command order, failure rules, and local verification
 commands are in [docs/macos-release.md](docs/macos-release.md).
 

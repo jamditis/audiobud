@@ -138,7 +138,7 @@ build of the current source checkpoint.
 | DMG                        | 16,948,931 bytes                | 16,044,070 bytes               | -904,861 bytes (-5.34%)                     |
 | Packaged app idle memory   | 105,840 KiB after eight seconds | 92,640 KiB after eight seconds | -13,200 KiB (-12.47%)                       |
 
-The current isolated source checkpoint passed these checks:
+The merged source checkpoint at `e417154` passed these checks:
 
 - 481 frontend tests and 2,180 assertions across 45 files.
 - 503 Rust library tests and the dictionary integration test.
@@ -149,7 +149,7 @@ The current isolated source checkpoint passed these checks:
 - The size report, with a 647.3 KiB raw and 188.6 KiB gzip main initial
   payload.
 
-The earlier signed candidate passed these package checks:
+The earlier local signed candidate passed these package checks:
 
 - Developer ID signing and hardened run time for the app and DMG.
 - Separate accepted Apple notarization and stapled tickets for the app and DMG.
@@ -167,17 +167,82 @@ value is
 This hash is local evidence only. The public checksum must come from the exact
 tag-built draft asset after that asset passes the release tests.
 
+### Protected candidate evidence from August 28, 2026
+
+GitHub Actions run `33195432598` built the candidate from exact `main` commit
+`e417154` with release publication and Store packaging disabled. The downloaded
+DMG is
+`/private/tmp/audiobud-v060-candidate.taVo6P/macos/AudioBud_0.6.0_macos_aarch64.dmg`.
+Its SHA-256 value is
+`ac1ecc5661473f4fe7533cd971df5c91b654e1a1848a543dcfcdf7534f49f566`.
+
+The exact downloaded candidate passed these package checks:
+
+- Its `SHA256SUMS-macos.txt` entry matches.
+- GitHub provenance binds the DMG, SBOM, and checksum file to run `33195432598`
+  and commit `e417154`. The DMG has a cryptographically valid SPDX SBOM
+  attestation.
+- The app and DMG have valid Developer ID signatures, accepted notarization
+  tickets, and Gatekeeper acceptance.
+- The main executable is arm64 only, version 0.6.0, and requires macOS 11.0 or
+  newer.
+- The main executable links `FoundationModels.framework`. All Mach-O run-time
+  dependencies use system paths, with no Homebrew or `/usr/local` path.
+- Audio-input and microphone entitlements are present.
+- A temporary copy of the packaged app remained alive for eight seconds, then
+  stopped only after a controlled `SIGTERM`.
+
+The candidate fails the SBOM content gate. `Contents/Info.plist` has real SHA-1
+and SHA-256 values, but `Contents/MacOS/audiobud` has an all-zero SHA-1
+placeholder. The local test-first fix makes Syft collect metadata for every app
+entry and requires one unique SPDX record for each staged filesystem entry.
+Directory and symlink placeholders are permitted, but every regular-file
+record must include SHA-256, and every listed checksum must be real, supported,
+and equal to the staged bytes. A new protected candidate must prove the fix on
+GitHub's macOS and Windows runners.
+
+## Replacement candidate run 33226723040
+
+Pull request 319 merged the first checksum gate into `main` at
+`1dcea94049497e24ba67ca8ba2e67f5fd3e141e1`. Protected candidate run
+`33226723040` used that exact commit with release and Store publication
+disabled.
+
+The macOS job passed in 21 minutes and 17 seconds. Signing, app and DMG
+notarization, stapling, Gatekeeper, SBOM generation, the new SBOM checksum gate,
+provenance, SBOM attestation, and artifact upload all passed. The uploaded
+artifact is `audiobud-macos-aarch64-v0.6.0-1`, artifact id `9707382447`, with
+17,687,762 uploaded bytes and a September 28, 2026 expiration date.
+
+The Windows job passed compilation, installer bundling, updater signing,
+Authenticode checks, portable installation, packaged-file signature checks,
+and SBOM generation. It then failed closed at `Validate release SBOM file
+checksums`. Syft received `SYFT_FILE_METADATA_SELECTION=all`, cataloged the
+staged inventory, but left 339 regular-file records with invalid placeholder
+checksums. The upstream Syft Windows directory resolver cannot resolve the
+paths it reports for digest collection. Windows checksums, attestations,
+release writes, and artifact upload were skipped. No Windows artifact escaped
+the failed gate.
+
+The test-first compatibility fix completes only an actual regular file whose
+SPDX record contains exactly one all-zero SHA-1 checksum. It calculates SHA-1
+and SHA-256 from the staged bytes, writes the document atomically only after the
+existing exact-inventory and byte checks pass, and leaves every other invalid or
+stale form to fail. It rejects special filesystem entries, records the
+completion tool and a derived SPDX namespace when it changes a document, and
+leaves an already-valid document byte-for-byte unchanged. macOS remains on
+Syft's native digest path.
+
 ## v0.6.0 remaining limits
 
 - Time to interactive is not measured because the smoke harness observes only process state.
 - Clean first-launch, permission-state, transcription, paste, display, sleep, and device-change tests are pending on a clean Apple Silicon Mac.
-- The current isolated source checkpoint has not been signed, notarized, or
-  packaged. The signed evidence above applies to the August 27 candidate.
-- Pull request 309 is open at `db89c23`. Five remote checks passed. The real
-  Windows engine check failed on a redundant closure that is fixed locally.
-- An independent review of `db89c23` plus the Clippy fix found an optional
-  shortcut regression and two macOS workflow proof gaps. Their fixes pass the
-  full local validation suite. Fresh local and Claude Code reviews found no
-  unresolved P1, P2, or P3 issue in the complete follow-up checkpoint.
-- The protected signed candidate workflow has not run from reviewed `main`.
+- The protected candidate is not the final public artifact. The tag workflow
+  will create new bytes that need the same checks.
+- The earlier candidate at `e417154` is rejected because its macOS
+  main-executable record and all 67 Windows SPDX file records contain all-zero
+  checksum placeholders. It must not be tagged or published.
+- Replacement run `33226723040` proved the macOS checksum gate and failed
+  safely on the upstream Windows digest defect. A new protected run must prove
+  the narrow Windows compatibility step before artifact testing continues.
 - The Windows installers, signed updater path, and Microsoft Store package URL are not ready for submission.

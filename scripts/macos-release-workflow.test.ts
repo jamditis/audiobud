@@ -33,7 +33,9 @@ describe("signed macOS release workflow", () => {
     expect(macOS).toContain("inputs.store_candidate != true");
     const windows = jobBlock("build-windows");
     expect(windows).toContain("group: release-windows");
-    expect(workflow).not.toMatch(/^concurrency:/m);
+    expect(workflow).toMatch(
+      /^concurrency:\n  group: release-\$\{\{ github\.ref \}\}\n  cancel-in-progress: false$/m,
+    );
   });
 
   test("selects the reviewed Xcode 26 SDK before build setup", () => {
@@ -205,7 +207,9 @@ describe("signed macOS release workflow", () => {
       "uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
     );
 
-    expect(publish).toContain("needs: [build-windows, build-macos]");
+    expect(publish).toContain(
+      "needs: [build-windows, verify-updater-candidate, build-macos]",
+    );
     expect(publish).toContain(
       "uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093",
     );
@@ -213,5 +217,34 @@ describe("signed macOS release workflow", () => {
     expect(publish).toContain("--clobber");
     expect(publish).toContain("isDraft");
     expect(publish).toContain("targetCommitish");
+  });
+
+  test("rejects macOS SBOM file records with placeholder checksums", () => {
+    const macOS = jobBlock("build-macos");
+    const generate = stepPosition(macOS, "Generate macOS SBOM");
+    const validate = stepPosition(macOS, "Validate macOS SBOM file checksums");
+    const writeChecksums = stepPosition(macOS, "Write macOS SHA256SUMS");
+    const attestProvenance = stepPosition(
+      macOS,
+      "Attest macOS release provenance",
+    );
+    const attestSbom = stepPosition(macOS, "Attest macOS release SBOM");
+    const validationStep = macOS.slice(validate, writeChecksums);
+
+    expect(macOS.slice(generate, validate)).toMatch(
+      /^\s+SYFT_FILE_METADATA_SELECTION: all\s*$/m,
+    );
+    expect(validationStep).toContain(
+      "bun run scripts/validate-sbom-file-checksums.ts",
+    );
+    expect(validationStep).toContain(
+      "SBOM_PATH: ${{ steps.macos-artifacts.outputs.sbom }}",
+    );
+    expect(validationStep).toContain('"$SBOM_PATH"');
+    expect(validationStep).toContain('"$APP_PATH"');
+    expect(generate).toBeLessThan(validate);
+    expect(validate).toBeLessThan(writeChecksums);
+    expect(writeChecksums).toBeLessThan(attestProvenance);
+    expect(attestProvenance).toBeLessThan(attestSbom);
   });
 });
