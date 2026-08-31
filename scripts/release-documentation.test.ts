@@ -7,23 +7,32 @@ const read = (path: string) => readFileSync(join(root, path), "utf8");
 const compact = (value: string) => value.replace(/\s+/g, " ");
 
 describe("v0.6.0 release documentation", () => {
-  it("keeps one draft changelog entry and complete draft release notes", () => {
+  it("keeps one dated changelog entry and complete public release notes", () => {
     expect(existsSync(join(root, "RELEASE_NOTES.md"))).toBe(true);
 
     const changelog = compact(read("CHANGELOG.md"));
     const notes = compact(read("RELEASE_NOTES.md"));
 
-    expect(changelog).toContain("## 0.6.0 - Unreleased");
+    expect(changelog).toContain("## 0.6.0 - 2026-08-31");
     expect(changelog).toContain("Apple Silicon");
     expect(changelog).toContain("signed and notarized");
-    expect(notes).toContain("# AudioBud v0.6.0 draft release notes");
-    expect(notes).toContain("AudioBud v0.6.0 is not published yet");
+    expect(notes).toContain("# AudioBud v0.6.0 release notes");
     expect(notes).toContain("Apple Silicon Macs running macOS 11 or later");
     expect(notes).toContain("macOS updates are manual");
     expect(notes).toContain("Microsoft Store still serves v0.4.4");
     expect(notes).toContain("AudioBud_<version>_macos_aarch64.dmg");
     expect(notes).toContain("SHA256SUMS-macos.txt");
     expect(notes).toContain("No Intel Mac build is included");
+
+    const readme = compact(read("README.md"));
+    const home = compact(read("docs/index.html"));
+    const roadmap = compact(read("docs/roadmap.html"));
+    expect(readme).toContain("Apple Silicon macOS release");
+    expect(readme).not.toContain("public Mac download is not available");
+    expect(home).toContain("macOS downloads");
+    expect(home).not.toContain("macOS release candidate");
+    expect(roadmap).toContain("status-pill status-shipped");
+    expect(roadmap).not.toContain("active v0.6.0 release candidate");
   });
 
   it("states the validated platform boundary", () => {

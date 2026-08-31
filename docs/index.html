@@ -3,10 +3,10 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>AudioBud - private local dictation for Windows</title>
+    <title>AudioBud - private local dictation for Windows and macOS</title>
     <meta
       name="description"
-      content="AudioBud is a private, local-first dictation app for Windows with an Apple Silicon macOS release candidate. Press a hotkey, speak, and keep speech-to-text on your machine."
+      content="AudioBud is a private, local-first dictation app for Windows and Apple Silicon macOS. Press a hotkey, speak, and keep speech-to-text on your machine."
     />
     <link rel="canonical" href="https://audiobud.amditis.tech/" />
     <link
@@ -16,11 +16,11 @@
     />
     <meta
       property="og:title"
-      content="AudioBud - private local dictation for Windows"
+      content="AudioBud - private local dictation for Windows and macOS"
     />
     <meta
       property="og:description"
-      content="Get private, local dictation for Windows x64. An Apple Silicon macOS release candidate is in testing."
+      content="Get private, local dictation for Windows x64 and Apple Silicon macOS."
     />
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://audiobud.amditis.tech/" />
@@ -37,11 +37,11 @@
     <meta name="twitter:card" content="summary_large_image" />
     <meta
       name="twitter:title"
-      content="AudioBud - private local dictation for Windows"
+      content="AudioBud - private local dictation for Windows and macOS"
     />
     <meta
       name="twitter:description"
-      content="Get private, local dictation for Windows x64. An Apple Silicon macOS release candidate is in testing."
+      content="Get private, local dictation for Windows x64 and Apple Silicon macOS."
     />
     <meta
       name="twitter:image"
@@ -79,7 +79,7 @@
         <div class="wrap hero-grid">
           <div class="hero-copy" data-reveal>
             <p class="eyebrow">
-              <span></span>Windows x64 · macOS release candidate
+              <span></span>Windows x64 · Apple Silicon macOS
             </p>
             <h1 id="hero-title" tabindex="-1">
               Talk naturally.<br />
@@ -94,12 +94,13 @@
               <a
                 class="button primary"
                 data-download-windows="_x64-setup.exe"
+                data-download-macos="_macos_aarch64.dmg"
                 href="https://github.com/jamditis/audiobud/releases/latest"
               >
                 <svg viewBox="0 0 24 24" aria-hidden="true">
                   <path d="M12 3v12m0 0 5-5m-5 5-5-5M5 20h14" />
                 </svg>
-                Windows downloads
+                Download AudioBud
               </a>
               <a
                 class="button ghost"
@@ -378,20 +379,19 @@
             <img src="./favicon.svg" alt="" />
           </div>
           <div class="cta-copy">
-            <p class="eyebrow">Windows downloads · macOS release candidate</p>
-            <h2>Install the current Windows release.</h2>
+            <p class="eyebrow">Windows and macOS downloads</p>
+            <h2>Install AudioBud.</h2>
             <p>
-              The macOS release candidate targets Apple Silicon Macs running
-              macOS 11 or later. The public DMG is not available until
-              clean-Mac, remote candidate, and exact draft-asset checks pass.
+              The macOS release supports Apple Silicon Macs running macOS 11 or
+              later. Open the DMG, drag AudioBud to Applications, and grant
+              Microphone and Accessibility permissions when asked.
             </p>
             <p class="install-note">
-              After the Mac release is published, updates will be manual: use
-              AudioBud's release link to download and install the next DMG. For
-              U.S. users, the Microsoft Store remains on its current Windows
-              release until the Partner Center update is accepted. New Store
-              installs use the signed NSIS package and AudioBud's signed update
-              feed.
+              Mac updates are manual: use AudioBud's release link to download
+              and install the next DMG. For U.S. users, the Microsoft Store
+              remains on its current Windows release until the Partner Center
+              update is accepted. New Store installs use the signed NSIS package
+              and AudioBud's signed update feed.
               <strong>Still on the original Store MSI?</strong> That package
               cannot receive in-app updates. Uninstall it in Windows Settings,
               then install from the Store again or run the current NSIS setup
@@ -406,8 +406,9 @@
             <a
               class="button primary"
               data-download-windows="_x64-setup.exe"
+              data-download-macos="_macos_aarch64.dmg"
               href="https://github.com/jamditis/audiobud/releases/latest"
-              >Windows downloads</a
+              >Download AudioBud</a
             >
             <a
               class="text-link"
@@ -436,8 +437,8 @@
               <h2>Using a direct download?</h2>
             </div>
             <p>
-              Windows installers are signed and timestamped. The planned Mac DMG
-              is signed and notarized. Confirm that a direct download is genuine
+              Windows installers are signed and timestamped. The Mac DMG is
+              signed and notarized. Confirm that a direct download is genuine
               before running it.
             </p>
           </div>
@@ -491,10 +492,9 @@
                 rather than every byte, so it cannot stand in for the checksum
                 below. Run both checks.
               </p>
-              <h4>Planned macOS release</h4>
+              <h4>macOS release</h4>
               <p>
-                Before any Mac release is published, Gatekeeper must accept its
-                DMG as
+                Gatekeeper must accept the DMG as
                 <strong
                   >Developer ID Application: Joe Amditis (5624SD289G)</strong
                 >. Stapler must also validate its notarization ticket:
@@ -515,9 +515,8 @@ xcrun stapler validate "./AudioBud_&lt;version&gt;_macos_aarch64.dmg"</code></pr
               No hashes and no version live in this markup. Every release would
               need them rewritten, and a stale digest is worse than none: it
               tells someone holding a good installer that it is bad. The list
-              fills in from the release below. The Windows checksum manifest is
-              the current fallback. The Mac manifest will be added here only
-              after the Mac release exists.
+              fills in from the release below. The Windows and Mac checksum
+              manifests are the fallback.
             -->
             <ul class="checksum-list" data-checksum-list>
               <li class="checksum-row checksum-row-pending">
@@ -526,6 +525,14 @@ xcrun stapler validate "./AudioBud_&lt;version&gt;_macos_aarch64.dmg"</code></pr
                   class="checksum-value"
                   href="https://github.com/jamditis/audiobud/releases/latest/download/SHA256SUMS.txt"
                   >Open SHA256SUMS.txt</a
+                >
+              </li>
+              <li class="checksum-row checksum-row-pending">
+                <span class="checksum-name">macOS checksums</span>
+                <a
+                  class="checksum-value"
+                  href="https://github.com/jamditis/audiobud/releases/latest/download/SHA256SUMS-macos.txt"
+                  >Open SHA256SUMS-macos.txt</a
                 >
               </li>
             </ul>

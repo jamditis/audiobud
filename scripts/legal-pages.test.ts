@@ -1118,16 +1118,16 @@ describe("AudioBud public policy pages", () => {
     });
   }
 
-  it("keeps candidate platform status and the Store status beside the download CTA", () => {
+  it("keeps released platform status and the Store status beside the download CTA", () => {
     const home = read("index.html");
     const homeText = readText("index.html");
 
     expect(home).toContain('class="install-note"');
-    expect(homeText).toContain("Windows downloads · macOS release candidate");
+    expect(homeText).toContain("Windows and macOS downloads");
     expect(homeText).toContain("Apple Silicon");
     expect(homeText).toContain("macOS 11 or later");
-    expect(homeText).toContain("public DMG is not available");
-    expect(homeText).toContain("After the Mac release is published");
+    expect(homeText).toContain("Open the DMG, drag AudioBud to Applications");
+    expect(homeText).toContain("Mac updates are manual");
     expect(homeText).toContain(
       "Microsoft Store remains on its current Windows release until the Partner Center update is accepted",
     );
@@ -1174,14 +1174,13 @@ describe("AudioBud public policy pages", () => {
     );
   });
 
-  it("marks the Apple Silicon 0.6.0 milestone as a candidate", () => {
+  it("marks the Apple Silicon 0.6.0 milestone as shipped", () => {
     const roadmap = read("roadmap.html").replace(/\s+/g, " ");
 
     expect(roadmap).toMatch(
-      /<h3>v0\.6\.0<\/h3> <span class="status-pill status-in-progress">candidate<\/span>/,
+      /<h3>v0\.6\.0<\/h3> <span class="status-pill status-shipped">shipped<\/span>/,
     );
-    expect(roadmap).not.toContain("releases/tag/v0.6.0");
-    expect(roadmap).toContain("blob/main/RELEASE_NOTES.md");
+    expect(roadmap).toContain("releases/tag/v0.6.0");
     expect(roadmap).toContain("Apple Silicon");
     expect(roadmap).toContain("signed and notarized macOS DMG");
   });
@@ -1332,7 +1331,7 @@ describe("AudioBud public policy pages", () => {
     expect(readme).not.toContain("https://jamditis.github.io/audiobud");
   });
 
-  it("describes the signed Windows release and macOS candidate accurately in README", () => {
+  it("describes the signed Windows and macOS releases accurately in README", () => {
     const readme = readRoot("README.md");
     const readmeText = readme.replace(/\s+/g, " ");
 
@@ -1355,12 +1354,10 @@ describe("AudioBud public policy pages", () => {
       "SmartScreen can still show a reputation warning for direct downloads",
     );
     expect(readmeText).toContain(
-      "release candidate adds support for Apple Silicon Macs running macOS 11 or later",
+      "v0.6.0 adds support for Apple Silicon Macs running macOS 11 or later",
     );
-    expect(readmeText).toContain("public Mac download is not available");
-    expect(readmeText).toContain(
-      "planned macOS v0.6.0 release uses manual updates",
-    );
+    expect(readmeText).toContain("The public DMG passed Developer ID signing");
+    expect(readmeText).toContain("macOS v0.6.0 release uses manual updates");
     expect(readmeText).toContain(
       "Developer ID Application: Joe Amditis (5624SD289G)",
     );

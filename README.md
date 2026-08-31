@@ -1,7 +1,7 @@
 # AudioBud
 
-AudioBud is a local-first dictation app with a Windows release and an Apple
-Silicon macOS release candidate. Press a hotkey, speak, and AudioBud types the
+AudioBud is a local-first dictation app with Windows and Apple Silicon macOS
+releases. Press a hotkey, speak, and AudioBud types the
 transcript into the focused text field. Audio stays on your machine unless you
 explicitly enable optional LLM post-processing.
 
@@ -22,11 +22,10 @@ release paths, and local model choices tuned for this fork.
 
 ## Current status
 
-The AudioBud v0.6.0 release candidate adds support for Apple Silicon Macs
-running macOS 11 or later. A pre-final local DMG passed Developer ID,
-notarization, stapling, Gatekeeper, and runtime-dependency checks. The public Mac
-download is not available until clean-Mac, remote candidate, and draft-asset
-tests pass. No Intel Mac build is planned for v0.6.0.
+AudioBud v0.6.0 adds support for Apple Silicon Macs running macOS 11 or later.
+The public DMG passed Developer ID signing, notarization, stapling, Gatekeeper,
+checksum, SBOM, and provenance checks. No Intel Mac build is included in
+v0.6.0.
 
 AudioBud v0.4.4 is approved and available in the
 [Microsoft Store](https://apps.microsoft.com/detail/xpff8hfmd98gnd). The Store
@@ -36,15 +35,15 @@ separate v0.6.0 Partner Center update is tested, submitted, and accepted.
 
 Direct GitHub release installers remain available for portable installs, deployment tooling, and users who cannot access the Store listing. Beginning with v0.4.0, Windows release installers are signed and timestamped through Microsoft Artifact Signing. The signature identifies Joseph Amditis as the publisher. SmartScreen can still show a reputation warning for direct downloads while a new release builds reputation.
 
-Windows x64 is the validated public target. Apple Silicon macOS is the v0.6.0
-candidate target. Intel Mac and Linux builds are not validated.
+Windows x64 and Apple Silicon macOS are validated public targets. Intel Mac and
+Linux builds are not validated.
 
 Beginning with v0.4.2, installed Windows NSIS builds check AudioBud's signed
 GitHub release feed for updates by default. You can opt out in Settings >
 Advanced. The current Microsoft Store package uses that same NSIS update
 channel. If you installed the original Store v0.4.1 MSI before August 3, 2026,
-it requires one manual transition onto the current NSIS release. The planned
-macOS v0.6.0 release uses manual updates: use the release link in the app footer,
+it requires one manual transition onto the current NSIS release. The macOS
+v0.6.0 release uses manual updates: use the release link in the app footer,
 download the next DMG, and replace AudioBud in Applications.
 
 ## How it works
@@ -121,15 +120,15 @@ Signed downloads remain available from the
 - `AudioBud_<version>_x64-setup.exe` — the setup wizard, which can install normally or in portable mode
 - `AudioBud_<version>_x64_en-US.msi` — the MSI package, for deployment tooling
 
-The planned v0.6.0 release adds
+The v0.6.0 release includes
 `AudioBud_<version>_macos_aarch64.dmg`, a signed and notarized Apple Silicon Mac
-disk image. It is not part of the current public release yet.
+disk image.
 
 If you installed AudioBud from the Store before August 3, 2026, open Settings > About and check the version. A v0.4.1 install is the original MSI package and cannot receive the signed in-app updates. Uninstall that copy in Windows Settings, then install from the Store again or run the current NSIS setup executable once. Later releases can then arrive through AudioBud.
 
 On Windows, run the setup executable and grant microphone permission on first
-use. After the Mac release is published, open the DMG, drag AudioBud to
-Applications, and open it from there. Grant both Microphone and Accessibility
+use. On macOS, open the DMG, drag AudioBud to Applications, and open it from
+there. Grant both Microphone and Accessibility
 permissions when AudioBud asks. Choose a model if one is not already installed.
 
 ## Verify your download
@@ -162,7 +161,7 @@ gh attestation verify .\AudioBud_<version>_x64-setup.exe --repo jamditis/audiobu
 
 The attestation identifies the GitHub build workflow and source commit. It does not replace the signature and hash checks above.
 
-For a tested v0.6.0 Mac candidate or later published Mac release, compare the
+For the v0.6.0 Mac release or a later published Mac release, compare the
 DMG hash with its row in `SHA256SUMS-macos.txt` from the same CI artifact or
 GitHub release:
 

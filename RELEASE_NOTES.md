@@ -1,15 +1,11 @@
-# AudioBud v0.6.0 draft release notes
+# AudioBud v0.6.0 release notes
 
-Status: draft. AudioBud v0.6.0 is not published yet. Clean-Mac checks, remote
-Windows and macOS candidate tests, and exact draft-asset verification must pass
-before publication.
-
-AudioBud v0.6.0 prepares the first supported Mac release and hardens the shared
+AudioBud v0.6.0 provides the first supported Mac release and hardens the shared
 app for Windows and macOS.
 
 ## What is new
 
-- The release candidate targets Apple Silicon Macs running macOS 11 or later
+- The release supports Apple Silicon Macs running macOS 11 or later
   with a signed and notarized Developer ID DMG.
 - Whisper Turbo is the recommended Mac model and uses Metal acceleration.
   Whisper Small is the lighter option. Parakeet remains available through CPU
@@ -18,22 +14,28 @@ app for Windows and macOS.
   access, including access that is later revoked.
 - Shortcut, settings, slider, input, audio, and model-loading failures now
   recover without duplicate listeners, stale state, or stuck modifier keys.
-- The pre-final local candidate binary was about 4.7% smaller than the v0.5.0
+- AudioBud creates the settings and recording windows only when they are
+  needed, so a normal background launch does less work.
+- Text formatting, history retries, and correction learning now use the
+  transcription's effective language. English-only rules skip unknown and
+  non-English output.
+- Repeated delivery jobs for one dictation are stopped before they can touch
+  the clipboard, keyboard, or target window.
+- The tested macOS binary was about 4.7% smaller than the v0.5.0
   baseline. Its measured idle memory use was about 4.4% lower on the test Mac.
 - Release assets include SHA-256 checksums, an SPDX SBOM, and GitHub build
   provenance.
 
-## Planned downloads
+## Downloads
 
 - macOS: `AudioBud_<version>_macos_aarch64.dmg`
 - Windows setup: `AudioBud_<version>_x64-setup.exe`
 - Windows MSI: `AudioBud_<version>_x64_en-US.msi`
 
-These names describe the planned v0.6.0 release assets. They are not public
-downloads until the release is published. The Mac DMG is for Apple Silicon. No
-Intel Mac build is included. Linux builds are not validated for this release.
+The Mac DMG is for Apple Silicon. No Intel Mac build is included. Linux builds
+are not validated for this release.
 
-## Install on macOS after publication
+## Install on macOS
 
 1. Open the DMG.
 2. Drag AudioBud to Applications.

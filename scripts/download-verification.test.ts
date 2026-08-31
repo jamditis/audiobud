@@ -89,7 +89,7 @@ describe("download verification guidance", () => {
     expect(home).not.toMatch(/AudioBud_\d/);
   });
 
-  it("falls back only to the checksum manifest that exists publicly", () => {
+  it("falls back to both published checksum manifests", () => {
     // Before the API answers -- or if it never does -- the row has to lead
     // somewhere that still lets a user check their file.
     const fallbackRows = [
@@ -97,12 +97,15 @@ describe("download verification guidance", () => {
         /<li class="checksum-row checksum-row-pending">[\s\S]*?<\/li>/g,
       ),
     ].map(([row]) => compact(row));
-    expect(fallbackRows).toHaveLength(1);
+    expect(fallbackRows).toHaveLength(2);
     expect(fallbackRows.join(" ")).toContain(
       'href="https://github.com/jamditis/audiobud/releases/latest/download/SHA256SUMS.txt"',
     );
     expect(fallbackRows.join(" ")).toContain("Windows checksums");
-    expect(fallbackRows.join(" ")).not.toContain("Mac checksums");
+    expect(fallbackRows.join(" ")).toContain(
+      'href="https://github.com/jamditis/audiobud/releases/latest/download/SHA256SUMS-macos.txt"',
+    );
+    expect(fallbackRows.join(" ")).toContain("macOS checksums");
 
     // That row holds a link, not a digest, so it must not inherit the
     // select-all monospace styling that makes a hash look copyable.
@@ -182,11 +185,9 @@ describe("download verification guidance", () => {
     // The href in the markup stays on the releases page: it can never 404 and
     // it names no version, so a release does not drag a site edit behind it.
     expect(compactHome).toMatch(
-      /<a class="button primary" data-download-windows="_x64-setup\.exe" href="https:\/\/github\.com\/jamditis\/audiobud\/releases\/latest"/,
+      /<a class="button primary" data-download-windows="_x64-setup\.exe" data-download-macos="_macos_aarch64\.dmg" href="https:\/\/github\.com\/jamditis\/audiobud\/releases\/latest"/,
     );
-    expect(compactHome).not.toContain(
-      'data-download-macos="_macos_aarch64.dmg"',
-    );
+    expect(compactHome).toContain('data-download-macos="_macos_aarch64.dmg"');
 
     // Direct-downloading the .exe hides the MSI and the notes, so the card has
     // to keep a way through to the release itself.

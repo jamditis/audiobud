@@ -8,11 +8,11 @@ AudioBud is a detached fork of [Handy](https://github.com/cjpais/Handy) by CJ Pa
 restate Handy's own history. AudioBud versions independently of Handy, starting at
 `0.1.0`. Windows releases are code-signed beginning with `0.4.0`.
 
-## 0.6.0 - Unreleased
+## 0.6.0 - 2026-08-31
 
-A macOS and reliability release candidate. AudioBud is preparing a signed and
-notarized DMG for Apple Silicon Macs running macOS 11 or later. The candidate
-also reduces startup races and failure leaks in permissions, shortcuts,
+A macOS and reliability release. AudioBud now provides a signed and notarized
+DMG for Apple Silicon Macs running macOS 11 or later. This release also reduces
+startup races and failure leaks in permissions, shortcuts,
 settings, audio, transcription, and transcript delivery. Windows x64 remains
 supported.
 
@@ -20,7 +20,7 @@ supported.
 
 - An Apple Silicon macOS release path with Developer ID signing, Apple
   notarization, a stapled DMG ticket, checksums, an SBOM, and GitHub build
-  provenance. Publication waits for the clean-Mac and remote candidate gates.
+  provenance.
 - Platform-aware downloads and SHA-256 instructions on the AudioBud website.
 - A single macOS permission controller for Microphone and Accessibility state,
   including retry, focus refresh, and revoked-permission handling.
@@ -34,7 +34,7 @@ supported.
   send input to a different window. The transcript stays available in history
   and clipboard when copying is enabled. Per-application output profiles are
   not part of this experimental gate.
-- The planned macOS artifact requires version 11 or later and is Apple Silicon
+- The macOS artifact requires version 11 or later and is Apple Silicon
   only. Intel Mac and Linux builds are not validated.
 - macOS updates are manual. Windows NSIS builds keep the signed in-app update
   channel.
@@ -42,6 +42,11 @@ supported.
   Turbo with Metal acceleration, while Windows keeps Parakeet V3 with
   DirectML. Parakeet remains available for CPU inference on macOS.
 - The direct macOS paste option is migrated to supported clipboard delivery.
+- Command-line startup uses one fixed parser, clipboard operations use one
+  owned backend, and each webview imports only its generated command contract.
+- The effective transcription language now stays attached through filtering,
+  formatting, history retries, and correction learning. English-only text
+  rules no longer run when the output language is unknown or non-English.
 - Git dependencies are pinned to exact revisions for repeatable builds.
 - The release workflow tests the full codebase before it exposes signing
   credentials, then verifies signatures, notarization, architecture, bundled
@@ -58,6 +63,8 @@ supported.
   panics, which prevents stuck Command, Control, or Shift keys.
 - Model loading, audio stream replacement, mute changes, and settings startup
   now report failures without leaving partial state or duplicate listeners.
+- A repeated delivery job for the same dictation is stopped before it can touch
+  the clipboard, keyboard, or target window.
 - The macOS DMG is notarized and stapled separately after Tauri notarizes the
   app bundle. Gatekeeper now accepts both the app and the DMG.
 
@@ -68,10 +75,10 @@ supported.
 
 ### Performance
 
-- The pre-final local candidate binary was about 4.7% smaller than the v0.5.0
-  baseline, and its measured idle memory use was about 4.4% lower on the test
-  Mac. Final release values will replace these figures after the exact-tree
-  build.
+- The tested macOS binary was about 4.7% smaller than the v0.5.0 baseline, and
+  its measured idle memory use was about 4.4% lower on the test Mac.
+- The settings and recording webviews are created only when they are needed,
+  which removes both hidden windows from the normal background startup path.
 
 ## 0.5.0 - 2026-08-27
 
