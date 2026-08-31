@@ -13,6 +13,7 @@ mod dictation_context;
 mod helpers;
 mod input;
 mod llm_client;
+mod main_window;
 mod managers;
 mod output_profile;
 mod output_target;
@@ -248,33 +249,6 @@ fn build_console_filter() -> env_filter::Filter {
     builder.build()
 }
 
-fn show_main_window(app: &AppHandle) {
-    if let Some(main_window) = app.get_webview_window("main") {
-        if let Err(e) = main_window.unminimize() {
-            log::error!("Failed to unminimize webview window: {}", e);
-        }
-        if let Err(e) = main_window.show() {
-            log::error!("Failed to show webview window: {}", e);
-        }
-        if let Err(e) = main_window.set_focus() {
-            log::error!("Failed to focus webview window: {}", e);
-        }
-        #[cfg(target_os = "macos")]
-        {
-            if let Err(e) = app.set_activation_policy(tauri::ActivationPolicy::Regular) {
-                log::error!("Failed to set activation policy to Regular: {}", e);
-            }
-        }
-        return;
-    }
-
-    let webview_labels = app.webview_windows().keys().cloned().collect::<Vec<_>>();
-    log::error!(
-        "Main window not found. Webview labels: {:?}",
-        webview_labels
-    );
-}
-
 #[allow(unused_variables)]
 fn should_force_show_permissions_window(app: &AppHandle) -> bool {
     #[cfg(target_os = "windows")]
@@ -384,13 +358,12 @@ fn initialize_core_logic(app_handle: &AppHandle) {
         .icon_as_template(true)
         .on_menu_event(|app, event| match event.id.as_ref() {
             "settings" => {
-                show_main_window(app);
+                main_window::show(app);
             }
             "check_updates" => {
                 let settings = settings::get_settings(app);
                 if update_checks_action_enabled(settings.update_checks_enabled) {
-                    show_main_window(app);
-                    let _ = app.emit("check-for-updates", ());
+                    main_window::show_for_update_check(app);
                 }
             }
             "copy_last_transcript" => {
@@ -588,6 +561,18 @@ fn initialize_core_logic(app_handle: &AppHandle) {
     utils::create_recording_overlay(app_handle);
 }
 
+/// A hidden launch has no settings React surface to perform the post-onboarding
+/// initialization. Initialize the input services here so global shortcuts and
+/// transcript delivery work before Settings is opened for the first time.
+fn initialize_hidden_launch_input(app_handle: &AppHandle) {
+    if let Err(error) = commands::initialize_enigo(app_handle.clone()) {
+        log::warn!("Failed to initialize input system for hidden launch: {error}");
+    }
+    if let Err(error) = commands::initialize_shortcuts(app_handle.clone()) {
+        log::warn!("Failed to initialize shortcuts for hidden launch: {error}");
+    }
+}
+
 #[tauri::command]
 #[specta::specta]
 fn trigger_update_check(app: AppHandle) -> Result<(), String> {
@@ -603,7 +588,7 @@ fn trigger_update_check(app: AppHandle) -> Result<(), String> {
 #[tauri::command]
 #[specta::specta]
 fn show_main_window_command(app: AppHandle) -> Result<(), String> {
-    show_main_window(&app);
+    main_window::show(&app);
     Ok(())
 }
 
@@ -636,6 +621,7 @@ fn specta_builder() -> Builder<tauri::Wry> {
             shortcut::handy_keys::stop_handy_keys_recording,
             trigger_update_check,
             show_main_window_command,
+            main_window::main_window_ready,
             commands::cancel_operation,
             commands::is_portable,
             commands::is_update_channel_available,
@@ -831,7 +817,7 @@ pub fn run(cli_args: CliArgs) {
             } else if cli_args.cancel {
                 crate::utils::cancel_current_operation(app);
             } else {
-                show_main_window(app);
+                main_window::show(app);
             }
         }))
         .plugin(tauri_plugin_fs::init())
@@ -848,26 +834,11 @@ pub fn run(cli_args: CliArgs) {
         .setup(move |app| {
             specta_builder.mount_events(app);
 
+            main_window::initialize(app.handle());
+
             let clipboard_service =
                 clipboard_snapshot::ClipboardService::new().map_err(std::io::Error::other)?;
             app.manage(clipboard_service);
-
-            // Create main window programmatically so we can set data_directory
-            // for portable mode (redirects WebView2 cache to portable Data dir)
-            let mut win_builder =
-                tauri::WebviewWindowBuilder::new(app, "main", tauri::WebviewUrl::App("/".into()))
-                    .title("AudioBud")
-                    .inner_size(680.0, 570.0)
-                    .min_inner_size(680.0, 570.0)
-                    .resizable(true)
-                    .maximizable(false)
-                    .visible(false);
-
-            if let Some(data_dir) = portable::data_dir() {
-                win_builder = win_builder.data_directory(data_dir.join("webview"));
-            }
-
-            win_builder.build()?;
 
             // This is the release E2E entry point: it exercises the same pinned
             // feed, signature verification, and installer as the UI without
@@ -917,14 +888,21 @@ pub fn run(cli_args: CliArgs) {
             // Show main window only if not starting hidden.
             // CLI --start-hidden flag overrides the setting.
             // But if permission onboarding is required, always show the window.
-            let should_hide = settings.start_hidden || cli_args.start_hidden;
             let should_force_show = should_force_show_permissions_window(&app_handle);
 
             // If start_hidden but tray is disabled, we must show the window
             // anyway. Without a tray icon, the dock is the only way back in.
             let tray_available = settings.show_tray_icon && !cli_args.no_tray;
-            if should_force_show || !should_hide || !tray_available {
-                show_main_window(&app_handle);
+            let main_window_required = main_window::required_at_launch(
+                settings.start_hidden,
+                cli_args.start_hidden,
+                should_force_show,
+                tray_available,
+            );
+            if main_window_required {
+                main_window::show(&app_handle);
+            } else {
+                initialize_hidden_launch_input(&app_handle);
             }
 
             Ok(())
@@ -986,7 +964,7 @@ pub fn run(cli_args: CliArgs) {
         .run(|app, event| {
             #[cfg(target_os = "macos")]
             if let tauri::RunEvent::Reopen { .. } = &event {
-                show_main_window(app);
+                main_window::show(app);
             }
             let _ = (app, event); // suppress unused warnings on non-macOS
         });
