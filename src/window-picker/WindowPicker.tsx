@@ -10,7 +10,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { commands } from "@/bindings";
+import { commands } from "../bindings/window-picker";
 import i18n, { syncLanguageFromSettings } from "@/i18n";
 import {
   chooseAt,

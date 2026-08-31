@@ -7,6 +7,9 @@ edition = "2021"
 license = "MIT"
 default-run = "audiobud"
 
+[features]
+generate-bindings = ["dep:specta-typescript"]
+
 [profile.dev]
 incremental = true # Compile your binary in smaller steps.
 
@@ -72,7 +75,7 @@ transcribe-rs = { version = "0.3.8", features = ["whisper-cpp", "onnx"] }
 handy-keys = "0.2.4"
 ferrous-opencc = "0.2.3"
 specta = "=2.0.0-rc.22"
-specta-typescript = "0.0.9"
+specta-typescript = { version = "0.0.9", optional = true }
 tauri-specta = { version = "=2.0.0-rc.21", features = ["derive", "typescript"] }
 tauri-plugin-dialog = "2.6"
 
