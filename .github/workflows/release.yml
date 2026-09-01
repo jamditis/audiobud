@@ -28,8 +28,12 @@ on:
         description: "Build a Microsoft Store candidate CI artifact with offline WebView2 packaging"
         type: boolean
         default: false
+      verify_existing_draft:
+        description: "Verify the updater from an existing draft without rebuilding"
+        type: boolean
+        default: false
       expected_commit_sha:
-        description: "Exact 40-character commit SHA required for every Store candidate"
+        description: "Exact 40-character commit SHA required for Store or existing-draft verification"
         type: string
         required: false
         default: ""
@@ -45,12 +49,15 @@ jobs:
   build-windows:
     name: Build and sign Windows installers
     if: >-
-      github.ref == 'refs/heads/main' ||
+      inputs.verify_existing_draft != true &&
       (
-        startsWith(github.ref, 'refs/tags/v') &&
+        github.ref == 'refs/heads/main' ||
         (
-          !contains(github.ref_name, '-store-candidate-') ||
-          (github.event_name == 'workflow_dispatch' && inputs.store_candidate)
+          startsWith(github.ref, 'refs/tags/v') &&
+          (
+            !contains(github.ref_name, '-store-candidate-') ||
+            (github.event_name == 'workflow_dispatch' && inputs.store_candidate)
+          )
         )
       )
     environment: artifact-signing
@@ -1518,7 +1525,15 @@ jobs:
   verify-updater-candidate:
     name: Verify private Windows updater candidate
     needs: build-windows
-    if: ${{ inputs.store_candidate != true && github.ref_type == 'tag' && (github.event_name != 'workflow_dispatch' || inputs.make_release) }}
+    if: >-
+      ${{
+        always() &&
+        inputs.store_candidate != true &&
+        (
+          (github.ref_type == 'tag' && (github.event_name != 'workflow_dispatch' || inputs.make_release)) ||
+          (github.event_name == 'workflow_dispatch' && inputs.verify_existing_draft)
+        )
+      }}
     environment: artifact-signing
     runs-on: windows-2025
     timeout-minutes: 35
@@ -1550,8 +1565,10 @@ jobs:
         id: updater-meta
         shell: pwsh
         env:
+          EXPECTED_COMMIT_SHA: ${{ inputs.expected_commit_sha }}
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ github.ref_name }}
+          VERIFY_EXISTING_DRAFT: ${{ inputs.verify_existing_draft }}
         run: |
           $config = Get-Content -LiteralPath 'src-tauri/tauri.conf.json' -Raw |
             ConvertFrom-Json
@@ -1559,7 +1576,12 @@ jobs:
           if ($version -notmatch '^\d+\.\d+\.\d+$') {
             throw "Application version is not stable semver: $version"
           }
-          if ($env:RELEASE_TAG -cne "v$version") {
+          if ($env:VERIFY_EXISTING_DRAFT -eq 'true') {
+            if ($env:EXPECTED_COMMIT_SHA -notmatch '^[0-9a-f]{40}$') {
+              throw 'Existing-draft verification requires an exact lowercase 40-character commit SHA'
+            }
+            $env:RELEASE_TAG = "v$version"
+          } elseif ($env:RELEASE_TAG -cne "v$version") {
             throw "Release tag $env:RELEASE_TAG does not match application version $version"
           }
 
@@ -1567,27 +1589,32 @@ jobs:
           if ($LASTEXITCODE -ne 0 -or -not $tagCommit) {
             throw "Release tag $env:RELEASE_TAG was not checked out"
           }
-          if ($tagCommit -cne $env:GITHUB_SHA) {
-            throw "Release tag $env:RELEASE_TAG points to $tagCommit, not $env:GITHUB_SHA"
+          $expectedTagCommit = if ($env:VERIFY_EXISTING_DRAFT -eq 'true') {
+            $env:EXPECTED_COMMIT_SHA
+          } else {
+            $env:GITHUB_SHA
+          }
+          if ($tagCommit -cne $expectedTagCommit) {
+            throw "Release tag $env:RELEASE_TAG points to $tagCommit, not $expectedTagCommit"
           }
 
-          $releaseJson = gh api `
-            "repos/$env:GITHUB_REPOSITORY/releases/tags/$env:RELEASE_TAG"
+          $releaseJson = gh release view $env:RELEASE_TAG `
+            --json isDraft,isPrerelease,tagName,targetCommitish
           if ($LASTEXITCODE -ne 0) {
             throw "Draft release $env:RELEASE_TAG was not found"
           }
           $release = $releaseJson | ConvertFrom-Json
-          if (-not $release.draft) {
+          if (-not $release.isDraft) {
             throw "Release $env:RELEASE_TAG is not a draft"
           }
-          if ($release.prerelease) {
+          if ($release.isPrerelease) {
             throw "Release $env:RELEASE_TAG is marked as a prerelease"
           }
-          if ($null -ne $release.published_at) {
-            throw "Release $env:RELEASE_TAG already has a publication time"
+          if ([string]$release.tagName -cne $env:RELEASE_TAG) {
+            throw "Draft release returned the wrong tag: $($release.tagName)"
           }
-          if ([string]$release.tag_name -cne $env:RELEASE_TAG) {
-            throw "Draft release returned the wrong tag: $($release.tag_name)"
+          if ([string]$release.targetCommitish -cne $tagCommit) {
+            throw "Draft release targets $($release.targetCommitish), not $tagCommit"
           }
 
           $releasePagesJson = gh api --paginate --slurp `
@@ -1613,6 +1640,8 @@ jobs:
           "prior_tag=$priorTag" |
             Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           "prior_version=$priorVersion" |
+            Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "target_commit=$tagCommit" |
             Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           "evidence_artifact=audiobud-updater-prepublication-$env:RELEASE_TAG-$env:GITHUB_RUN_ATTEMPT" |
             Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
@@ -1672,6 +1701,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ steps.updater-meta.outputs.tag }}
+          TARGET_COMMIT: ${{ steps.updater-meta.outputs.target_commit }}
           UPDATER_ARCHIVE: ${{ steps.updater-files.outputs.archive }}
           UPDATER_SIGNATURE: ${{ steps.updater-files.outputs.signature }}
           UPDATER_PUBLIC_KEY: ${{ steps.updater-files.outputs.public_key }}
@@ -1685,7 +1715,7 @@ jobs:
               --repo $env:GITHUB_REPOSITORY `
               --signer-workflow "$env:GITHUB_REPOSITORY/.github/workflows/release.yml" `
               --source-ref "refs/tags/$env:RELEASE_TAG" `
-              --source-digest $env:GITHUB_SHA `
+              --source-digest $env:TARGET_COMMIT `
               --deny-self-hosted-runners
             if ($LASTEXITCODE -ne 0) {
               throw "Release provenance verification failed: $path"
@@ -1761,6 +1791,7 @@ jobs:
         shell: pwsh
         env:
           TARGET_TAG: ${{ steps.updater-meta.outputs.tag }}
+          TARGET_COMMIT: ${{ steps.updater-meta.outputs.target_commit }}
           TARGET_VERSION: ${{ steps.updater-meta.outputs.version }}
           PRIOR_TAG: ${{ steps.updater-meta.outputs.prior_tag }}
           PRIOR_VERSION: ${{ steps.updater-meta.outputs.prior_version }}
@@ -1771,7 +1802,7 @@ jobs:
           $evidenceDirectory = Join-Path $env:RUNNER_TEMP `
             "audiobud-updater-evidence-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
           & scripts/verify-updater-candidate.ps1 `
-            -TargetCommit $env:GITHUB_SHA `
+            -TargetCommit $env:TARGET_COMMIT `
             -TargetTag $env:TARGET_TAG `
             -TargetVersion $env:TARGET_VERSION `
             -ArchivePath $env:UPDATER_ARCHIVE `
@@ -1795,6 +1826,7 @@ jobs:
     name: Build, sign, and notarize macOS Apple Silicon
     if: >-
       inputs.store_candidate != true &&
+      inputs.verify_existing_draft != true &&
       (
         github.ref == 'refs/heads/main' ||
         (

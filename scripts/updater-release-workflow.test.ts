@@ -121,9 +121,8 @@ describe("signed updater release artifacts", () => {
     const jobStart = workflow.indexOf("  verify-updater-candidate:");
     const jobEnd = workflow.indexOf("\n  build-macos:", jobStart);
     const verificationJob = workflow.slice(jobStart, jobEnd);
-    expect(verificationJob).toContain(
-      "if: ${{ inputs.store_candidate != true && github.ref_type == 'tag' && (github.event_name != 'workflow_dispatch' || inputs.make_release) }}",
-    );
+    expect(verificationJob).toContain("always() &&");
+    expect(verificationJob).toContain("inputs.verify_existing_draft");
     expect(verificationJob).toContain("environment: artifact-signing");
     expect(verificationJob).toContain("contents: write");
     expect(verificationJob).toContain(
@@ -157,6 +156,9 @@ describe("signed updater release artifacts", () => {
     expect(verification).not.toContain("dangerousInsecureTransportProtocol");
 
     const metadata = stepBlock("Resolve private updater draft");
+    expect(metadata).toContain("gh release view");
+    expect(metadata).toContain("target_commit=$tagCommit");
+    expect(metadata).not.toContain("releases/tags/$env:RELEASE_TAG");
     expect(metadata).toContain("releases?per_page=100");
     expect(metadata).toContain("--paginate --slurp");
     expect(metadata).toContain("scripts/select-latest-stable-app-release.mjs");
