@@ -193,7 +193,10 @@ describe("signed updater release artifacts", () => {
     expect(verifier).toContain("X509Certificates.X509Store");
     expect(verifier).toContain("StoreLocation]::CurrentUser");
     expect(verifier).toContain("OpenFlags]::ReadWrite");
+    expect(verifier).toContain("OpenFlags]::ReadOnly");
     expect(verifier).toContain("$rootStore.Add($certificate)");
+    expect(verifier).toContain("$cleanupRootStore.Remove($trustedMatch)");
+    expect(verifier).toContain("Expected one trusted updater certificate");
     expect(verifier).toContain("create-updater-test-certificate.ps1");
     expect(verifier).toContain("$certificateProcess.WaitForExit(60000)");
     expect(verifier).toContain("certificate_script_sha256");
@@ -235,7 +238,7 @@ describe("signed updater release artifacts", () => {
     expect(certificateHelper).toContain("-DnsName 'localhost'");
     expect(certificateHelper).toContain("-Type SSLServerAuthentication");
     expect(certificateHelper).toContain("Cert:\\CurrentUser\\My");
-    expect(verifier).toContain("Cert:\\CurrentUser\\Root");
+    expect(verifier).toContain("StoreName]::Root");
     expect(verifier).toContain("finally");
     expect(verifier).toContain("--install-update-endpoint");
     expect(verifier).toContain("model_sha256_before");

@@ -558,16 +558,26 @@ try {
     [System.Security.Cryptography.X509Certificates.StoreLocation]::CurrentUser
   )
   try {
-    $rootStore.Open(
+    $rootOpenFlags = if ($usePreparedCertificate) {
+      [System.Security.Cryptography.X509Certificates.OpenFlags]::ReadOnly
+    } else {
       [System.Security.Cryptography.X509Certificates.OpenFlags]::ReadWrite
+    }
+    $rootStore.Open($rootOpenFlags)
+    if (-not $usePreparedCertificate) {
+      $rootStore.Add($certificate)
+    }
+    $trustedCertificates = $rootStore.Certificates.Find(
+      [System.Security.Cryptography.X509Certificates.X509FindType]::FindByThumbprint,
+      $certificate.Thumbprint,
+      $false
     )
-    $rootStore.Add($certificate)
+    if ($trustedCertificates.Count -ne 1) {
+      throw "Expected one trusted updater certificate, found $($trustedCertificates.Count)"
+    }
   } finally {
     $rootStore.Close()
   }
-  Get-Item `
-    -LiteralPath "Cert:\CurrentUser\Root\$($certificate.Thumbprint)" `
-    -ErrorAction Stop | Out-Null
   Write-VerificationStage -Message 'Disposable updater certificate trusted'
 
   $pubDate = (Get-Date).ToUniversalTime().ToString('o')
@@ -1058,13 +1068,33 @@ try {
 
   foreach ($trustedCertificate in @($certificate)) {
     if ($null -eq $trustedCertificate) { continue }
-    $trustedPath = "Cert:\CurrentUser\Root\$($trustedCertificate.Thumbprint)"
     try {
-      if (Test-Path -LiteralPath $trustedPath) {
-        Remove-Item -LiteralPath $trustedPath -Force -ErrorAction Stop
-      }
-      if (Test-Path -LiteralPath $trustedPath) {
-        throw "Certificate remains at $trustedPath"
+      $cleanupRootStore = [System.Security.Cryptography.X509Certificates.X509Store]::new(
+        [System.Security.Cryptography.X509Certificates.StoreName]::Root,
+        [System.Security.Cryptography.X509Certificates.StoreLocation]::CurrentUser
+      )
+      try {
+        $cleanupRootStore.Open(
+          [System.Security.Cryptography.X509Certificates.OpenFlags]::ReadWrite
+        )
+        $trustedMatches = $cleanupRootStore.Certificates.Find(
+          [System.Security.Cryptography.X509Certificates.X509FindType]::FindByThumbprint,
+          $trustedCertificate.Thumbprint,
+          $false
+        )
+        foreach ($trustedMatch in $trustedMatches) {
+          $cleanupRootStore.Remove($trustedMatch)
+        }
+        $remainingTrustedMatches = $cleanupRootStore.Certificates.Find(
+          [System.Security.Cryptography.X509Certificates.X509FindType]::FindByThumbprint,
+          $trustedCertificate.Thumbprint,
+          $false
+        )
+        if ($remainingTrustedMatches.Count -gt 0) {
+          throw "Certificate remains in the current-user root store: $($trustedCertificate.Thumbprint)"
+        }
+      } finally {
+        $cleanupRootStore.Close()
       }
     } catch {
       $cleanupErrors.Add("Trusted root certificate cleanup failed: $($_.Exception.Message)")
