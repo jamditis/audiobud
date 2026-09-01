@@ -251,6 +251,16 @@ describe("signed updater release artifacts", () => {
       "465addcfca9e86117415677dfdc98b21edc53537210333a3ecdb58509a80abaf",
     );
     expect(verifier).toContain("Get-DirectoryInventorySha256");
+    expect(verifier).toContain("$expectedModelFiles");
+    expect(verifier).toContain('"._$expectedModelFile"');
+    expect(verifier).toContain("Remove-Item -LiteralPath $appleDoublePath");
+    expect(verifier).toContain("$missingExtractedPaths");
+    expect(verifier).toContain("Extracted $modelName layout is invalid");
+    expect(verifier).toContain("$appleDoubleLength = 163");
+    expect(verifier).toContain(
+      "2e2671d9b193a0927ad711cfe480bfeb9ad99c2eb1cd58d462417609ed1606ce",
+    );
+    expect(verifier).toContain("Pinned $modelName file layout is invalid");
     expect(verifier).not.toContain("release-preservation-sentinel.bin");
     expect(verifier).toContain("Wait-ForUpdaterQuiescence");
     expect(verifier).not.toContain("Wait-ForUpdaterRelaunch");

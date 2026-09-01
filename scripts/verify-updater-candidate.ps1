@@ -415,6 +415,17 @@ $modelName = 'moonshine-tiny-streaming-en'
 $modelArchiveName = 'moonshine-tiny-streaming-en.tar.gz'
 $modelArchivePath = Join-Path $temporaryRoot "$executionIdValue-$modelArchiveName"
 $modelDirectory = Join-Path $modelsDirectory $modelName
+$expectedModelFiles = @(
+  'adapter.ort',
+  'cross_kv.ort',
+  'decoder_kv.ort',
+  'encoder.ort',
+  'frontend.ort',
+  'streaming_config.json',
+  'tokenizer.bin'
+)
+$appleDoubleLength = 163
+$appleDoubleSha256 = '2e2671d9b193a0927ad711cfe480bfeb9ad99c2eb1cd58d462417609ed1606ce'
 $modelAssetUrl = "https://github.com/jamditis/audiobud/releases/download/model-assets-v1/$modelArchiveName"
 $modelArchiveSha256 = '465addcfca9e86117415677dfdc98b21edc53537210333a3ecdb58509a80abaf'
 $readyPath = Join-Path $temporaryRoot "$executionIdValue-candidate-server-ready.json"
@@ -710,12 +721,59 @@ try {
   if ($LASTEXITCODE -ne 0) {
     throw "Failed to extract the pinned $modelName model"
   }
-  $modelFileCount = @(
+  $extractedModelFiles = @(
     Get-ChildItem -LiteralPath $modelDirectory -File -Recurse
-  ).Count
-  if ($modelFileCount -ne 7) {
-    throw "Expected seven files in $modelName, found $modelFileCount"
+  )
+  $allowedExtractedPaths = @($expectedModelFiles)
+  $allowedExtractedPaths += @(
+    $expectedModelFiles | ForEach-Object { "._$_" }
+  )
+  $extractedRelativePaths = @(
+    $extractedModelFiles |
+      ForEach-Object {
+        [System.IO.Path]::GetRelativePath($modelDirectory, $_.FullName).Replace('\', '/')
+      }
+  )
+  $missingExtractedPaths = @(
+    $allowedExtractedPaths | Where-Object { $_ -cnotin $extractedRelativePaths }
+  )
+  $unexpectedExtractedPaths = @(
+    $extractedRelativePaths | Where-Object { $_ -cnotin $allowedExtractedPaths }
+  )
+  if ($missingExtractedPaths.Count -gt 0 -or $unexpectedExtractedPaths.Count -gt 0) {
+    throw "Extracted $modelName layout is invalid; missing: $($missingExtractedPaths -join ', '); unexpected: $($unexpectedExtractedPaths -join ', ')"
   }
+  foreach ($expectedModelFile in $expectedModelFiles) {
+    $appleDoublePath = Join-Path $modelDirectory "._$expectedModelFile"
+    Assert-File -Path $appleDoublePath -Label "AppleDouble metadata for $expectedModelFile"
+    if ((Get-Item -LiteralPath $appleDoublePath).Length -ne $appleDoubleLength) {
+      throw "AppleDouble metadata has an unexpected size: $appleDoublePath"
+    }
+    if ((Get-Sha256 -Path $appleDoublePath) -cne $appleDoubleSha256) {
+      throw "AppleDouble metadata has an unexpected hash: $appleDoublePath"
+    }
+    Remove-Item -LiteralPath $appleDoublePath -Force -ErrorAction Stop
+    if (Test-Path -LiteralPath $appleDoublePath) {
+      throw "AppleDouble metadata remains in $modelName`: $appleDoublePath"
+    }
+  }
+  $actualModelFiles = @(
+    Get-ChildItem -LiteralPath $modelDirectory -File -Recurse |
+      ForEach-Object {
+        [System.IO.Path]::GetRelativePath($modelDirectory, $_.FullName).Replace('\', '/')
+      } |
+      Sort-Object
+  )
+  $missingModelFiles = @(
+    $expectedModelFiles | Where-Object { $_ -cnotin $actualModelFiles }
+  )
+  $unexpectedModelFiles = @(
+    $actualModelFiles | Where-Object { $_ -cnotin $expectedModelFiles }
+  )
+  if ($missingModelFiles.Count -gt 0 -or $unexpectedModelFiles.Count -gt 0) {
+    throw "Pinned $modelName file layout is invalid; missing: $($missingModelFiles -join ', '); unexpected: $($unexpectedModelFiles -join ', ')"
+  }
+  $modelFileCount = $actualModelFiles.Count
   $modelSha256Before = Get-DirectoryInventorySha256 -Path $modelDirectory
   Write-VerificationStage -Message 'Preservation model prepared'
 
