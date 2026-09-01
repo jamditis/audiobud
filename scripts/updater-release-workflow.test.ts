@@ -188,7 +188,10 @@ describe("signed updater release artifacts", () => {
     expect(verifier).toContain("models");
     expect(verifier).toContain("Get-FileHash");
     expect(verifier).toContain("https://localhost");
-    expect(verifier).toContain("Import-Certificate");
+    expect(verifier).toContain(
+      "& certutil.exe -user -addstore -f Root $cerPath 2>&1",
+    );
+    expect(verifier).not.toContain("Import-Certificate");
     expect(verifier).toContain("Cert:\\CurrentUser\\Root");
     expect(verifier).toContain("finally");
     expect(verifier).toContain("--install-update-endpoint");
@@ -333,7 +336,7 @@ describe("signed updater release artifacts", () => {
       "foreach ($updaterDirectory in @($updaterExtractionDirectories))",
     );
     const certificateCleanupStart = verifier.indexOf(
-      "foreach ($trustedCertificate in @($rootCertificate))",
+      "foreach ($trustedCertificate in @($certificate))",
     );
     expect(updaterCleanupStart).toBeGreaterThan(-1);
     expect(certificateCleanupStart).toBeGreaterThan(updaterCleanupStart);

@@ -417,7 +417,6 @@ $serverScript = Join-Path $PSScriptRoot 'serve-updater-candidate.mjs'
 
 $certificate = $null
 $serverProcess = $null
-$rootCertificate = $null
 $verificationError = $null
 $cleanupErrors = [System.Collections.Generic.List[string]]::new()
 $updaterDirectoriesBefore = @()
@@ -446,9 +445,15 @@ try {
   $pfxPassword = ConvertTo-SecureString -String $pfxPasswordText -AsPlainText -Force
   Export-PfxCertificate -Cert $certificate -FilePath $pfxPath -Password $pfxPassword | Out-Null
   Export-Certificate -Cert $certificate -FilePath $cerPath -Type CERT | Out-Null
-  $rootCertificate = Import-Certificate `
-    -FilePath $cerPath `
-    -CertStoreLocation 'Cert:\CurrentUser\Root'
+  $certutilOutput = @(
+    & certutil.exe -user -addstore -f Root $cerPath 2>&1
+  )
+  if ($LASTEXITCODE -ne 0) {
+    throw "Failed to trust the disposable updater certificate: $($certutilOutput -join [Environment]::NewLine)"
+  }
+  Get-Item `
+    -LiteralPath "Cert:\CurrentUser\Root\$($certificate.Thumbprint)" `
+    -ErrorAction Stop | Out-Null
 
   $env:AUDIOBUD_CANDIDATE_PFX_PASSWORD = $pfxPasswordText
   $pubDate = (Get-Date).ToUniversalTime().ToString('o')
@@ -926,7 +931,7 @@ try {
     }
   }
 
-  foreach ($trustedCertificate in @($rootCertificate)) {
+  foreach ($trustedCertificate in @($certificate)) {
     if ($null -eq $trustedCertificate) { continue }
     $trustedPath = "Cert:\CurrentUser\Root\$($trustedCertificate.Thumbprint)"
     try {
