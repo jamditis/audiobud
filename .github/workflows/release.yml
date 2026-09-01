@@ -1535,7 +1535,7 @@ jobs:
         )
       }}
     runs-on: windows-2025
-    timeout-minutes: 35
+    timeout-minutes: 60
     outputs:
       artifact-name: ${{ steps.updater-meta.outputs.evidence_artifact }}
     permissions:
