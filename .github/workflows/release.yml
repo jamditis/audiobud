@@ -1800,6 +1800,8 @@ jobs:
         run: |
           $evidenceDirectory = Join-Path $env:RUNNER_TEMP `
             "audiobud-updater-evidence-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
+          "UPDATER_EVIDENCE_DIRECTORY=$evidenceDirectory" |
+            Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           & scripts/verify-updater-candidate.ps1 `
             -TargetCommit $env:TARGET_COMMIT `
             -TargetTag $env:TARGET_TAG `
@@ -1810,10 +1812,14 @@ jobs:
             -EvidenceDirectory $evidenceDirectory `
             -PriorTag $env:PRIOR_TAG `
             -PriorVersion $env:PRIOR_VERSION
-          "UPDATER_EVIDENCE_DIRECTORY=$evidenceDirectory" |
-            Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
       - name: Upload private updater verification evidence
+        if: >-
+          ${{
+            always() &&
+            steps.updater-meta.outputs.evidence_artifact != '' &&
+            env.UPDATER_EVIDENCE_DIRECTORY != ''
+          }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: ${{ steps.updater-meta.outputs.evidence_artifact }}

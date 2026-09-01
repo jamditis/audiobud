@@ -210,6 +210,16 @@ describe("signed updater release artifacts", () => {
     expect(verifier).not.toContain("[string]$PriorVersion = '0.5.0'");
     expect(verifier).toContain("TimeStamperCertificate");
     expect(verifier).toContain("uninstall.exe");
+    expect(verifier).not.toContain("    -Wait `");
+    expect(verifier).toContain("$installProcess.WaitForExit(300000)");
+    expect(verifier).toContain("$uninstallProcess.WaitForExit(300000)");
+    expect(verifier.match(/\.Kill\(\$true\)/g) ?? []).toHaveLength(3);
+    expect(verifier).toContain("updater-verification-stage.log");
+    expect(verifier).toContain("updater-verification-error.log");
+    expect(verifier).toContain("updater-prepublication-failure.json");
+    expect(verifier).toContain("failure_stage");
+    expect(verifier).toContain("ConnectionTimeoutSeconds");
+    expect(verifier).toContain("OperationTimeoutSeconds");
     expect(verifier).toContain("Get-AudioBudUninstallRegistryPaths");
     expect(verifier).toContain("Get-OptionalRegistryStringValue");
     const optionalValueReader = verifier.slice(
@@ -358,6 +368,22 @@ describe("signed updater release artifacts", () => {
     expect(verifier).toContain("updater-prepublication-evidence.json");
     expect(workflow).toContain(
       "audiobud-updater-prepublication-$env:RELEASE_TAG-$env:GITHUB_RUN_ATTEMPT",
+    );
+    const verificationStep = stepBlock(
+      "Apply private updater and preserve user data",
+    );
+    expect(verificationStep.indexOf("UPDATER_EVIDENCE_DIRECTORY")).toBeLessThan(
+      verificationStep.indexOf("& scripts/verify-updater-candidate.ps1"),
+    );
+    const evidenceUploadStep = stepBlock(
+      "Upload private updater verification evidence",
+    );
+    expect(evidenceUploadStep).toContain("always()");
+    expect(evidenceUploadStep).toContain(
+      "steps.updater-meta.outputs.evidence_artifact != ''",
+    );
+    expect(evidenceUploadStep).toContain(
+      "env.UPDATER_EVIDENCE_DIRECTORY != ''",
     );
     expect(workflow).toContain(
       "- name: Download private updater verification evidence",

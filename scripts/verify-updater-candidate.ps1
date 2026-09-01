@@ -339,6 +339,20 @@ New-Item -ItemType Directory -Path $EvidenceDirectory -Force | Out-Null
 $evidencePath = Join-Path $EvidenceDirectory 'updater-prepublication-evidence.json'
 $diagnosticDirectory = Join-Path $EvidenceDirectory 'diagnostics'
 New-Item -ItemType Directory -Path $diagnosticDirectory -Force | Out-Null
+$stagePath = Join-Path $diagnosticDirectory 'updater-verification-stage.log'
+$errorPath = Join-Path $diagnosticDirectory 'updater-verification-error.log'
+$failurePath = Join-Path $EvidenceDirectory 'updater-prepublication-failure.json'
+$failureStage = ''
+
+function Write-VerificationStage {
+  param([string]$Message)
+  $script:failureStage = $Message
+  $entry = "$([DateTime]::UtcNow.ToString('o'))`t$Message"
+  Write-Output $entry
+  Add-Content -LiteralPath $stagePath -Value $entry -Encoding utf8
+}
+
+Write-VerificationStage -Message 'Verifier initialized'
 
 $installDirectory = Join-Path $env:RUNNER_TEMP "audiobud-update-$env:GITHUB_RUN_ID"
 $appDataDirectory = Join-Path $env:APPDATA 'tech.amditis.audiobud'
@@ -433,7 +447,10 @@ try {
   if ([string]$ready.archive_sha256 -cne (Get-Sha256 -Path $ArchivePath)) {
     throw 'Candidate server selected the wrong updater archive bytes'
   }
-  $manifest = Invoke-RestMethod -Uri $manifestUrl
+  $manifest = Invoke-RestMethod `
+    -Uri $manifestUrl `
+    -ConnectionTimeoutSeconds 30 `
+    -OperationTimeoutSeconds 30
   if ($manifest.version -cne $TargetVersion) {
     throw "Candidate manifest describes $($manifest.version), expected $TargetVersion"
   }
@@ -441,18 +458,29 @@ try {
   if ($manifest.platforms.'windows-x86_64'.url -cne $expectedLocalArchive) {
     throw "Candidate manifest selected an unexpected archive URL"
   }
+  Write-VerificationStage -Message 'Private candidate endpoint verified'
 
   $priorSignature = Assert-AudioBudSignature `
     -Path $PriorInstallerPath `
     -Label "$PriorTag installer"
+  Write-VerificationStage -Message "Starting $PriorTag installer"
   $installProcess = Start-Process `
     -FilePath $PriorInstallerPath `
     -ArgumentList @('/S', "/D=$installDirectory") `
-    -Wait `
     -PassThru
+  if (-not $installProcess.WaitForExit(300000)) {
+    try {
+      $installProcess.Kill($true)
+      $null = $installProcess.WaitForExit(30000)
+    } catch {
+      throw "$PriorTag installer timed out and its process tree could not be stopped: $($_.Exception.Message)"
+    }
+    throw "$PriorTag installer did not exit within 5 minutes"
+  }
   if ($installProcess.ExitCode -ne 0) {
     throw "$PriorTag installation failed with exit code $($installProcess.ExitCode)"
   }
+  Write-VerificationStage -Message "$PriorTag installer exited successfully"
 
   $executable = Join-Path $installDirectory 'AudioBud.exe'
   Assert-File -Path $executable -Label "Installed $PriorTag executable"
@@ -470,6 +498,7 @@ try {
     -SettingsPath $settingsPath `
     -ModelsPath $modelsDirectory
   Stop-AudioBudProcesses
+  Write-VerificationStage -Message "$PriorTag initialized user data"
 
   $settingsStore = Get-Content -LiteralPath $settingsPath -Raw | ConvertFrom-Json
   if ($settingsStore.PSObject.Properties.Name -notcontains 'settings') {
@@ -482,9 +511,12 @@ try {
   $settingsStore | ConvertTo-Json -Depth 100 -Compress |
     Set-Content -LiteralPath $settingsPath -Encoding utf8 -NoNewline
 
+  Write-VerificationStage -Message 'Downloading preservation model'
   Invoke-WebRequest `
     -Uri $modelAssetUrl `
     -OutFile $modelArchivePath `
+    -ConnectionTimeoutSeconds 30 `
+    -OperationTimeoutSeconds 60 `
     -MaximumRetryCount 3 `
     -RetryIntervalSec 5
   if ((Get-Sha256 -Path $modelArchivePath) -cne $modelArchiveSha256) {
@@ -503,6 +535,7 @@ try {
     throw "Expected seven files in $modelName, found $modelFileCount"
   }
   $modelSha256Before = Get-DirectoryInventorySha256 -Path $modelDirectory
+  Write-VerificationStage -Message 'Preservation model prepared'
 
   $installedRegistryPaths = @(
     Get-AudioBudUninstallRegistryPaths -InstallDirectory $installDirectory
@@ -531,6 +564,7 @@ try {
   if ((Get-DirectoryInventorySha256 -Path $modelDirectory) -cne $modelSha256Before) {
     throw "$PriorTag changed the pinned $modelName model before the update"
   }
+  Write-VerificationStage -Message "$PriorTag preservation state prepared"
 
   $updaterDirectoriesBefore = @(
     Get-AudioBudUpdaterDirectories `
@@ -539,6 +573,7 @@ try {
   )
   $updaterDirectoryBaselineRecorded = $true
 
+  Write-VerificationStage -Message "Starting update to $TargetTag"
   $updateProcess = Start-Process `
     -FilePath $executable `
     -ArgumentList @(
@@ -551,12 +586,18 @@ try {
     -RedirectStandardError $updaterStderr `
     -PassThru
   if (-not $updateProcess.WaitForExit(480000)) {
-    Stop-Process -Id $updateProcess.Id -Force -ErrorAction SilentlyContinue
+    try {
+      $updateProcess.Kill($true)
+      $null = $updateProcess.WaitForExit(30000)
+    } catch {
+      throw "Updater process timed out and its process tree could not be stopped: $($_.Exception.Message)"
+    }
     throw 'Updater process did not exit within 8 minutes'
   }
   if ($updateProcess.ExitCode -ne 0) {
     throw "Updater process failed with exit code $($updateProcess.ExitCode)"
   }
+  Write-VerificationStage -Message 'Updater process exited successfully'
 
   $versionDeadline = (Get-Date).AddMinutes(8)
   $installedTargetVersion = ''
@@ -575,6 +616,7 @@ try {
   $targetSignature = Assert-AudioBudSignature `
     -Path $executable `
     -Label "Installed $TargetVersion executable"
+  Write-VerificationStage -Message "$TargetTag installation verified"
 
   Wait-ForUpdaterQuiescence -TargetVersion $TargetVersion
   $newUpdaterDirectories = @(
@@ -601,6 +643,7 @@ try {
     throw "$TargetVersion did not launch after update: $($targetProcess.ExitCode)"
   }
   Stop-AudioBudProcesses
+  Write-VerificationStage -Message "$TargetTag launched successfully"
 
   $settingsValueAfter = Read-AudioFeedbackSetting -SettingsPath $settingsPath
   if (-not $settingsValueAfter) {
@@ -624,14 +667,24 @@ try {
 
   $uninstaller = Join-Path $installDirectory 'uninstall.exe'
   Assert-File -Path $uninstaller -Label 'Updated NSIS uninstaller'
+  Write-VerificationStage -Message "Starting $TargetTag uninstaller"
   $uninstallProcess = Start-Process `
     -FilePath $uninstaller `
     -ArgumentList @('/S') `
-    -Wait `
     -PassThru
+  if (-not $uninstallProcess.WaitForExit(300000)) {
+    try {
+      $uninstallProcess.Kill($true)
+      $null = $uninstallProcess.WaitForExit(30000)
+    } catch {
+      throw "$TargetTag uninstaller timed out and its process tree could not be stopped: $($_.Exception.Message)"
+    }
+    throw "$TargetTag uninstaller did not exit within 5 minutes"
+  }
   if ($uninstallProcess.ExitCode -ne 0) {
     throw "Updated uninstall failed with exit code $($uninstallProcess.ExitCode)"
   }
+  Write-VerificationStage -Message "$TargetTag uninstaller exited successfully"
   $uninstallDeadline = (Get-Date).AddSeconds(60)
   while ((Get-Date) -lt $uninstallDeadline -and (Test-Path -LiteralPath $installDirectory)) {
     Start-Sleep -Seconds 2
@@ -693,18 +746,60 @@ try {
   $evidence | ConvertTo-Json -Depth 10 |
     Set-Content -LiteralPath $evidencePath -Encoding utf8 -NoNewline
   Assert-File -Path $evidencePath -Label 'Updater prepublication evidence'
+  Write-VerificationStage -Message 'Updater prepublication evidence written'
 } catch {
-  foreach ($logPath in @($serverStdout, $serverStderr, $updaterStdout, $updaterStderr)) {
-    Write-Host "::group::$logPath"
-    if (Test-Path -LiteralPath $logPath -PathType Leaf) {
-      Get-Content -LiteralPath $logPath -Raw
-    } else {
-      Write-Host 'No log was written.'
-    }
-    Write-Host '::endgroup::'
-  }
   $verificationError = $_
+  try {
+    $failureEvidence = [ordered]@{
+      schema_version = 1
+      result = 'failed'
+      failure_stage = $failureStage
+      error = $verificationError.Exception.Message
+      target_tag = $TargetTag
+      target_commit = $TargetCommit
+      target_version = $TargetVersion
+      prior_tag = $PriorTag
+      prior_version = $PriorVersion
+      workflow_run_url = "$env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID"
+      workflow_run_attempt = [int]$env:GITHUB_RUN_ATTEMPT
+      prior_installer = (Split-Path -Leaf $PriorInstallerPath)
+      prior_installer_sha256 = Get-Sha256 -Path $PriorInstallerPath
+      updater_archive = (Split-Path -Leaf $ArchivePath)
+      updater_archive_sha256 = Get-Sha256 -Path $ArchivePath
+    }
+    $failureEvidence | ConvertTo-Json -Depth 10 |
+      Set-Content -LiteralPath $failurePath -Encoding utf8 -NoNewline
+  } catch {
+    $cleanupErrors.Add("Failure evidence write failed: $($_.Exception.Message)")
+  }
+  try {
+    $verificationError | Out-String |
+      Set-Content -LiteralPath $errorPath -Encoding utf8 -NoNewline
+    Write-VerificationStage `
+      -Message "Verifier failed: $($verificationError.Exception.Message)"
+  } catch {
+    $cleanupErrors.Add("Failure diagnostic write failed: $($_.Exception.Message)")
+  }
+  foreach ($logPath in @($serverStdout, $serverStderr, $updaterStdout, $updaterStderr)) {
+    try {
+      Write-Host "::group::$logPath"
+      if (Test-Path -LiteralPath $logPath -PathType Leaf) {
+        Get-Content -LiteralPath $logPath -Raw
+      } else {
+        Write-Host 'No log was written.'
+      }
+    } catch {
+      $cleanupErrors.Add("Failure log read failed for ${logPath}: $($_.Exception.Message)")
+    } finally {
+      Write-Host '::endgroup::'
+    }
+  }
 } finally {
+  try {
+    Write-VerificationStage -Message 'Verifier cleanup started'
+  } catch {
+    $cleanupErrors.Add("Cleanup start logging failed: $($_.Exception.Message)")
+  }
   try {
     Stop-AudioBudProcesses
     if (@(Get-Process -Name AudioBud -ErrorAction SilentlyContinue).Count -gt 0) {
@@ -834,6 +929,11 @@ try {
     } catch {
       $cleanupErrors.Add("Temporary file cleanup failed: $($_.Exception.Message)")
     }
+  }
+  try {
+    Write-VerificationStage -Message 'Verifier cleanup finished'
+  } catch {
+    $cleanupErrors.Add("Cleanup finish logging failed: $($_.Exception.Message)")
   }
 }
 
