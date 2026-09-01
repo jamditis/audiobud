@@ -13,6 +13,12 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+Import-Module Microsoft.PowerShell.Security -ErrorAction Stop
+Import-Module PKI -ErrorAction Stop
+if (-not (Get-PSDrive -Name Cert -ErrorAction SilentlyContinue)) {
+  throw 'The Cert PowerShell drive is unavailable'
+}
+
 $pfxPasswordText = $env:AUDIOBUD_CANDIDATE_PFX_PASSWORD
 if (-not $pfxPasswordText) {
   throw 'AUDIOBUD_CANDIDATE_PFX_PASSWORD is required'
