@@ -29,7 +29,13 @@ param(
 
   [Parameter(Mandatory = $true)]
   [ValidatePattern('^\d+\.\d+\.\d+$')]
-  [string]$PriorVersion
+  [string]$PriorVersion,
+
+  [ValidateSet('github-actions', 'local-windows')]
+  [string]$ExecutionEnvironment = 'github-actions',
+
+  [ValidatePattern('^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$')]
+  [string]$ExecutionId = ''
 )
 
 Set-StrictMode -Version Latest
@@ -335,7 +341,43 @@ if ($signatureValue -notmatch '^[A-Za-z0-9+/]+={0,2}$') {
   throw 'Updater signature must be one base64 line'
 }
 
-New-Item -ItemType Directory -Path $EvidenceDirectory -Force | Out-Null
+if ($ExecutionEnvironment -eq 'github-actions') {
+  if ($env:GITHUB_ACTIONS -cne 'true') {
+    throw 'GitHub Actions execution requires GITHUB_ACTIONS=true'
+  }
+  foreach ($environmentVariable in @(
+    'GITHUB_RUN_ID',
+    'GITHUB_RUN_ATTEMPT',
+    'GITHUB_SERVER_URL',
+    'GITHUB_REPOSITORY',
+    'RUNNER_TEMP'
+  )) {
+    if (-not [Environment]::GetEnvironmentVariable($environmentVariable)) {
+      throw "GitHub Actions execution requires $environmentVariable"
+    }
+  }
+  $executionIdValue = "github-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
+  $temporaryRoot = $env:RUNNER_TEMP
+  $workflowRunUrl = "$env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID"
+  $workflowRunAttempt = [int]$env:GITHUB_RUN_ATTEMPT
+} else {
+  if (-not $ExecutionId) {
+    throw 'Local Windows execution requires ExecutionId'
+  }
+  $executionIdValue = $ExecutionId
+  $temporaryRoot = [System.IO.Path]::GetTempPath()
+  $workflowRunUrl = $null
+  $workflowRunAttempt = $null
+}
+$verifierScriptSha256 = Get-Sha256 -Path $PSCommandPath
+$hostName = $env:COMPUTERNAME
+$windowsVersion = [Environment]::OSVersion.VersionString
+$hostArchitecture = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString()
+
+if (Test-Path -LiteralPath $EvidenceDirectory) {
+  throw "Evidence directory must not already exist: $EvidenceDirectory"
+}
+New-Item -ItemType Directory -Path $EvidenceDirectory | Out-Null
 $evidencePath = Join-Path $EvidenceDirectory 'updater-prepublication-evidence.json'
 $diagnosticDirectory = Join-Path $EvidenceDirectory 'diagnostics'
 New-Item -ItemType Directory -Path $diagnosticDirectory -Force | Out-Null
@@ -354,19 +396,19 @@ function Write-VerificationStage {
 
 Write-VerificationStage -Message 'Verifier initialized'
 
-$installDirectory = Join-Path $env:RUNNER_TEMP "audiobud-update-$env:GITHUB_RUN_ID"
+$installDirectory = Join-Path $temporaryRoot "audiobud-update-$executionIdValue"
 $appDataDirectory = Join-Path $env:APPDATA 'tech.amditis.audiobud'
 $settingsPath = Join-Path $appDataDirectory 'settings_store.json'
 $modelsDirectory = Join-Path $appDataDirectory 'models'
 $modelName = 'moonshine-tiny-streaming-en'
 $modelArchiveName = 'moonshine-tiny-streaming-en.tar.gz'
-$modelArchivePath = Join-Path $env:RUNNER_TEMP $modelArchiveName
+$modelArchivePath = Join-Path $temporaryRoot "$executionIdValue-$modelArchiveName"
 $modelDirectory = Join-Path $modelsDirectory $modelName
 $modelAssetUrl = "https://github.com/jamditis/audiobud/releases/download/model-assets-v1/$modelArchiveName"
 $modelArchiveSha256 = '465addcfca9e86117415677dfdc98b21edc53537210333a3ecdb58509a80abaf'
-$readyPath = Join-Path $env:RUNNER_TEMP 'audiobud-candidate-server-ready.json'
-$pfxPath = Join-Path $env:RUNNER_TEMP 'audiobud-candidate-localhost.pfx'
-$cerPath = Join-Path $env:RUNNER_TEMP 'audiobud-candidate-localhost.cer'
+$readyPath = Join-Path $temporaryRoot "$executionIdValue-candidate-server-ready.json"
+$pfxPath = Join-Path $temporaryRoot "$executionIdValue-candidate-localhost.pfx"
+$cerPath = Join-Path $temporaryRoot "$executionIdValue-candidate-localhost.cer"
 $serverStdout = Join-Path $diagnosticDirectory 'candidate-server.stdout.log'
 $serverStderr = Join-Path $diagnosticDirectory 'candidate-server.stderr.log'
 $updaterStdout = Join-Path $diagnosticDirectory 'updater.stdout.log'
@@ -721,11 +763,17 @@ try {
 
   $evidence = [ordered]@{
     schema_version = 1
+    execution_environment = $ExecutionEnvironment
+    execution_id = $executionIdValue
+    verifier_script_sha256 = $verifierScriptSha256
+    host_name = $hostName
+    windows_version = $windowsVersion
+    host_architecture = $hostArchitecture
     target_tag = $TargetTag
     target_commit = $TargetCommit
     target_version = $TargetVersion
-    workflow_run_url = "$env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID"
-    workflow_run_attempt = [int]$env:GITHUB_RUN_ATTEMPT
+    workflow_run_url = $workflowRunUrl
+    workflow_run_attempt = $workflowRunAttempt
     prior_tag = $PriorTag
     prior_version = $PriorVersion
     prior_installer = (Split-Path -Leaf $PriorInstallerPath)
@@ -753,6 +801,12 @@ try {
     $failureEvidence = [ordered]@{
       schema_version = 1
       result = 'failed'
+      execution_environment = $ExecutionEnvironment
+      execution_id = $executionIdValue
+      verifier_script_sha256 = $verifierScriptSha256
+      host_name = $hostName
+      windows_version = $windowsVersion
+      host_architecture = $hostArchitecture
       failure_stage = $failureStage
       error = $verificationError.Exception.Message
       target_tag = $TargetTag
@@ -760,8 +814,8 @@ try {
       target_version = $TargetVersion
       prior_tag = $PriorTag
       prior_version = $PriorVersion
-      workflow_run_url = "$env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID"
-      workflow_run_attempt = [int]$env:GITHUB_RUN_ATTEMPT
+      workflow_run_url = $workflowRunUrl
+      workflow_run_attempt = $workflowRunAttempt
       prior_installer = (Split-Path -Leaf $PriorInstallerPath)
       prior_installer_sha256 = Get-Sha256 -Path $PriorInstallerPath
       updater_archive = (Split-Path -Leaf $ArchivePath)

@@ -220,6 +220,17 @@ describe("signed updater release artifacts", () => {
     expect(verifier).toContain("failure_stage");
     expect(verifier).toContain("ConnectionTimeoutSeconds");
     expect(verifier).toContain("OperationTimeoutSeconds");
+    expect(verifier).toContain(
+      "[ValidateSet('github-actions', 'local-windows')]",
+    );
+    expect(verifier).toContain("Local Windows execution requires ExecutionId");
+    expect(verifier).toContain(
+      "GitHub Actions execution requires GITHUB_ACTIONS=true",
+    );
+    expect(verifier).toContain("Evidence directory must not already exist");
+    expect(verifier).toContain("execution_environment");
+    expect(verifier).toContain("verifier_script_sha256");
+    expect(verifier).toContain("host_architecture");
     expect(verifier).toContain("Get-AudioBudUninstallRegistryPaths");
     expect(verifier).toContain("Get-OptionalRegistryStringValue");
     const optionalValueReader = verifier.slice(
