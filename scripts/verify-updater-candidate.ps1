@@ -416,6 +416,8 @@ $updaterStderr = Join-Path $diagnosticDirectory 'updater.stderr.log'
 $serverScript = Join-Path $PSScriptRoot 'serve-updater-candidate.mjs'
 
 $certificate = $null
+$certificateKey = $null
+$rootCertificate = $null
 $serverProcess = $null
 $verificationError = $null
 $cleanupErrors = [System.Collections.Generic.List[string]]::new()
@@ -432,19 +434,53 @@ try {
   }
   Remove-Item -LiteralPath $readyPath, $pfxPath, $cerPath -Force -ErrorAction SilentlyContinue
 
-  $certificate = New-SelfSignedCertificate `
-    -DnsName 'localhost' `
-    -CertStoreLocation 'Cert:\CurrentUser\My' `
-    -FriendlyName 'AudioBud disposable updater verification' `
-    -KeyAlgorithm RSA `
-    -KeyExportPolicy Exportable `
-    -KeyLength 2048 `
-    -NotAfter (Get-Date).AddHours(2) `
-    -Type SSLServerAuthentication
+  Write-VerificationStage -Message 'Creating disposable updater certificate'
+  $certificateKey = [System.Security.Cryptography.RSA]::Create(2048)
+  $certificateRequest = [System.Security.Cryptography.X509Certificates.CertificateRequest]::new(
+    'CN=localhost',
+    $certificateKey,
+    [System.Security.Cryptography.HashAlgorithmName]::SHA256,
+    [System.Security.Cryptography.RSASignaturePadding]::Pkcs1
+  )
+  $subjectAlternativeName = [System.Security.Cryptography.X509Certificates.SubjectAlternativeNameBuilder]::new()
+  $subjectAlternativeName.AddDnsName('localhost')
+  $certificateRequest.CertificateExtensions.Add($subjectAlternativeName.Build())
+  $serverAuthenticationOids = [System.Security.Cryptography.OidCollection]::new()
+  $serverAuthenticationOids.Add(
+    [System.Security.Cryptography.Oid]::new('1.3.6.1.5.5.7.3.1')
+  ) | Out-Null
+  $certificateRequest.CertificateExtensions.Add(
+    [System.Security.Cryptography.X509Certificates.X509EnhancedKeyUsageExtension]::new(
+      $serverAuthenticationOids,
+      $false
+    )
+  )
+  $certificateRequest.CertificateExtensions.Add(
+    [System.Security.Cryptography.X509Certificates.X509KeyUsageExtension]::new(
+      [System.Security.Cryptography.X509Certificates.X509KeyUsageFlags]::DigitalSignature -bor
+        [System.Security.Cryptography.X509Certificates.X509KeyUsageFlags]::KeyEncipherment,
+      $false
+    )
+  )
+  $certificate = $certificateRequest.CreateSelfSigned(
+    [DateTimeOffset]::UtcNow.AddMinutes(-5),
+    [DateTimeOffset]::UtcNow.AddHours(2)
+  )
   $pfxPasswordText = [Guid]::NewGuid().ToString('N')
-  $pfxPassword = ConvertTo-SecureString -String $pfxPasswordText -AsPlainText -Force
-  Export-PfxCertificate -Cert $certificate -FilePath $pfxPath -Password $pfxPassword | Out-Null
-  Export-Certificate -Cert $certificate -FilePath $cerPath -Type CERT | Out-Null
+  [System.IO.File]::WriteAllBytes(
+    $pfxPath,
+    $certificate.Export(
+      [System.Security.Cryptography.X509Certificates.X509ContentType]::Pfx,
+      $pfxPasswordText
+    )
+  )
+  $certificateBytes = $certificate.Export(
+    [System.Security.Cryptography.X509Certificates.X509ContentType]::Cert
+  )
+  [System.IO.File]::WriteAllBytes($cerPath, $certificateBytes)
+  $rootCertificate = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new(
+    $certificateBytes
+  )
   $rootStore = [System.Security.Cryptography.X509Certificates.X509Store]::new(
     [System.Security.Cryptography.X509Certificates.StoreName]::Root,
     [System.Security.Cryptography.X509Certificates.StoreLocation]::CurrentUser
@@ -453,13 +489,14 @@ try {
     $rootStore.Open(
       [System.Security.Cryptography.X509Certificates.OpenFlags]::ReadWrite
     )
-    $rootStore.Add($certificate)
+    $rootStore.Add($rootCertificate)
   } finally {
     $rootStore.Close()
   }
   Get-Item `
     -LiteralPath "Cert:\CurrentUser\Root\$($certificate.Thumbprint)" `
     -ErrorAction Stop | Out-Null
+  Write-VerificationStage -Message 'Disposable updater certificate trusted'
 
   $env:AUDIOBUD_CANDIDATE_PFX_PASSWORD = $pfxPasswordText
   $pubDate = (Get-Date).ToUniversalTime().ToString('o')
@@ -964,6 +1001,20 @@ try {
       }
     } catch {
       $cleanupErrors.Add("Personal certificate cleanup failed: $($_.Exception.Message)")
+    }
+  }
+
+  foreach ($disposableCertificateObject in @(
+    $rootCertificate,
+    $certificate,
+    $certificateKey
+  )) {
+    if ($null -ne $disposableCertificateObject) {
+      try {
+        $disposableCertificateObject.Dispose()
+      } catch {
+        $cleanupErrors.Add("Certificate object disposal failed: $($_.Exception.Message)")
+      }
     }
   }
 

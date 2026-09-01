@@ -189,11 +189,17 @@ describe("signed updater release artifacts", () => {
     expect(verifier).toContain("Get-FileHash");
     expect(verifier).toContain("https://localhost");
     expect(verifier).toContain("X509Certificates.X509Store");
+    expect(verifier).toContain("X509Certificates.CertificateRequest");
+    expect(verifier).toContain("SubjectAlternativeNameBuilder");
+    expect(verifier).toContain(
+      "$subjectAlternativeName.AddDnsName('localhost')",
+    );
     expect(verifier).toContain("StoreLocation]::CurrentUser");
     expect(verifier).toContain("OpenFlags]::ReadWrite");
-    expect(verifier).toContain("$rootStore.Add($certificate)");
+    expect(verifier).toContain("$rootStore.Add($rootCertificate)");
     expect(verifier).not.toContain("certutil.exe");
     expect(verifier).not.toContain("Import-Certificate");
+    expect(verifier).not.toContain("New-SelfSignedCertificate");
     expect(verifier).toContain("Cert:\\CurrentUser\\Root");
     expect(verifier).toContain("finally");
     expect(verifier).toContain("--install-update-endpoint");
