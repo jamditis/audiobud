@@ -213,9 +213,11 @@ describe("signed updater release artifacts", () => {
       : "";
     expect(certificateHelper).toContain("New-SelfSignedCertificate");
     expect(certificateHelper).not.toContain("Import-Module");
-    expect(certificateHelper).toContain("-PSProvider Certificate");
-    expect(certificateHelper).toContain("New-PSDrive");
+    expect(certificateHelper).not.toContain("New-PSDrive");
     expect(certificateHelper).toContain("Get-PSDrive -Name Cert");
+    expect(verifier).toContain("$nativePsModulePath");
+    expect(verifier).toContain("$env:PSModulePath = $nativePsModulePath");
+    expect(verifier).toContain("$env:PSModulePath = $parentPsModulePath");
     expect(certificateHelper).toContain("-DnsName 'localhost'");
     expect(certificateHelper).toContain("-Type SSLServerAuthentication");
     expect(certificateHelper).toContain("Cert:\\CurrentUser\\My");

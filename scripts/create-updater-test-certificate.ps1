@@ -16,14 +16,7 @@ $ErrorActionPreference = 'Stop'
 Get-Command -Name New-SelfSignedCertificate -CommandType Cmdlet -ErrorAction Stop |
   Out-Null
 if (-not (Get-PSDrive -Name Cert -ErrorAction SilentlyContinue)) {
-  New-PSDrive `
-    -Name Cert `
-    -PSProvider Certificate `
-    -Root '\' `
-    -Scope Script | Out-Null
-}
-if (-not (Get-PSDrive -Name Cert -ErrorAction SilentlyContinue)) {
-  throw 'The Cert PowerShell drive could not be created'
+  throw 'The native Cert PowerShell drive is unavailable'
 }
 
 $pfxPasswordText = $env:AUDIOBUD_CANDIDATE_PFX_PASSWORD

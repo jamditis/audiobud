@@ -452,20 +452,31 @@ try {
   Write-VerificationStage -Message 'Creating disposable updater certificate'
   $pfxPasswordText = [Guid]::NewGuid().ToString('N')
   $env:AUDIOBUD_CANDIDATE_PFX_PASSWORD = $pfxPasswordText
-  $certificateProcess = Start-Process `
-    -FilePath 'powershell.exe' `
-    -ArgumentList @(
-      '-NoLogo',
-      '-NoProfile',
-      '-ExecutionPolicy', 'Bypass',
-      '-File', "`"$certificateScript`"",
-      '-PfxPath', "`"$pfxPath`"",
-      '-CerPath', "`"$cerPath`"",
-      '-ExecutionId', $executionIdValue
-    ) `
-    -RedirectStandardOutput $certificateStdout `
-    -RedirectStandardError $certificateStderr `
-    -PassThru
+  $parentPsModulePath = $env:PSModulePath
+  $nativePsModulePath = @(
+    (Join-Path $env:USERPROFILE 'Documents\WindowsPowerShell\Modules'),
+    (Join-Path $env:ProgramFiles 'WindowsPowerShell\Modules'),
+    (Join-Path $env:SystemRoot 'system32\WindowsPowerShell\v1.0\Modules')
+  ) -join ';'
+  try {
+    $env:PSModulePath = $nativePsModulePath
+    $certificateProcess = Start-Process `
+      -FilePath 'powershell.exe' `
+      -ArgumentList @(
+        '-NoLogo',
+        '-NoProfile',
+        '-ExecutionPolicy', 'Bypass',
+        '-File', "`"$certificateScript`"",
+        '-PfxPath', "`"$pfxPath`"",
+        '-CerPath', "`"$cerPath`"",
+        '-ExecutionId', $executionIdValue
+      ) `
+      -RedirectStandardOutput $certificateStdout `
+      -RedirectStandardError $certificateStderr `
+      -PassThru
+  } finally {
+    $env:PSModulePath = $parentPsModulePath
+  }
   if (-not $certificateProcess.WaitForExit(60000)) {
     try {
       $certificateProcess.Kill($true)
