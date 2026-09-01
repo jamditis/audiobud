@@ -13,10 +13,17 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-Import-Module Microsoft.PowerShell.Security -ErrorAction Stop
-Import-Module PKI -ErrorAction Stop
+Get-Command -Name New-SelfSignedCertificate -CommandType Cmdlet -ErrorAction Stop |
+  Out-Null
 if (-not (Get-PSDrive -Name Cert -ErrorAction SilentlyContinue)) {
-  throw 'The Cert PowerShell drive is unavailable'
+  New-PSDrive `
+    -Name Cert `
+    -PSProvider Certificate `
+    -Root '\' `
+    -Scope Script | Out-Null
+}
+if (-not (Get-PSDrive -Name Cert -ErrorAction SilentlyContinue)) {
+  throw 'The Cert PowerShell drive could not be created'
 }
 
 $pfxPasswordText = $env:AUDIOBUD_CANDIDATE_PFX_PASSWORD

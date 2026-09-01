@@ -212,10 +212,9 @@ describe("signed updater release artifacts", () => {
       ? readFileSync(certificatePath, "utf8")
       : "";
     expect(certificateHelper).toContain("New-SelfSignedCertificate");
-    expect(certificateHelper).toContain(
-      "Import-Module Microsoft.PowerShell.Security",
-    );
-    expect(certificateHelper).toContain("Import-Module PKI");
+    expect(certificateHelper).not.toContain("Import-Module");
+    expect(certificateHelper).toContain("-PSProvider Certificate");
+    expect(certificateHelper).toContain("New-PSDrive");
     expect(certificateHelper).toContain("Get-PSDrive -Name Cert");
     expect(certificateHelper).toContain("-DnsName 'localhost'");
     expect(certificateHelper).toContain("-Type SSLServerAuthentication");
