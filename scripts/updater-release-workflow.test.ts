@@ -197,6 +197,20 @@ describe("signed updater release artifacts", () => {
     expect(verifier).toContain("create-updater-test-certificate.ps1");
     expect(verifier).toContain("$certificateProcess.WaitForExit(60000)");
     expect(verifier).toContain("certificate_script_sha256");
+    expect(verifier).toContain("certificate_source");
+    expect(verifier).toContain("prepared-native-windows");
+    expect(verifier).toContain(
+      "Prepared certificate mode is limited to local Windows execution",
+    );
+    expect(verifier).toContain(
+      "Prepared certificate escaped the verifier directory",
+    );
+    expect(verifier).toContain('"$executionIdValue-prepared-localhost.pfx"');
+    expect(verifier).toContain('"$executionIdValue-prepared-localhost.cer"');
+    expect(verifier).toContain("Prepared certificate has an unexpected name");
+    expect(verifier).toContain(
+      "Loading prepared disposable updater certificate",
+    );
     expect(verifier).toContain(
       "Where-Object FriendlyName -CEQ $certificateFriendlyName",
     );

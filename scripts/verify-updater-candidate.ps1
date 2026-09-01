@@ -35,7 +35,11 @@ param(
   [string]$ExecutionEnvironment = 'github-actions',
 
   [ValidatePattern('^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$')]
-  [string]$ExecutionId = ''
+  [string]$ExecutionId = '',
+
+  [string]$PreparedPfxPath = '',
+
+  [string]$PreparedCerPath = ''
 )
 
 Set-StrictMode -Version Latest
@@ -369,6 +373,13 @@ if ($ExecutionEnvironment -eq 'github-actions') {
   $workflowRunUrl = $null
   $workflowRunAttempt = $null
 }
+$usePreparedCertificate = [bool]$PreparedPfxPath -and [bool]$PreparedCerPath
+if ([bool]$PreparedPfxPath -xor [bool]$PreparedCerPath) {
+  throw 'Prepared certificate mode requires both PFX and CER paths'
+}
+if ($usePreparedCertificate -and $ExecutionEnvironment -ne 'local-windows') {
+  throw 'Prepared certificate mode is limited to local Windows execution'
+}
 $verifierScriptSha256 = Get-Sha256 -Path $PSCommandPath
 $hostName = $env:COMPUTERNAME
 $windowsVersion = [Environment]::OSVersion.VersionString
@@ -407,8 +418,35 @@ $modelDirectory = Join-Path $modelsDirectory $modelName
 $modelAssetUrl = "https://github.com/jamditis/audiobud/releases/download/model-assets-v1/$modelArchiveName"
 $modelArchiveSha256 = '465addcfca9e86117415677dfdc98b21edc53537210333a3ecdb58509a80abaf'
 $readyPath = Join-Path $temporaryRoot "$executionIdValue-candidate-server-ready.json"
-$pfxPath = Join-Path $temporaryRoot "$executionIdValue-candidate-localhost.pfx"
-$cerPath = Join-Path $temporaryRoot "$executionIdValue-candidate-localhost.cer"
+$pfxPath = if ($usePreparedCertificate) {
+  [System.IO.Path]::GetFullPath($PreparedPfxPath)
+} else {
+  Join-Path $temporaryRoot "$executionIdValue-candidate-localhost.pfx"
+}
+$cerPath = if ($usePreparedCertificate) {
+  [System.IO.Path]::GetFullPath($PreparedCerPath)
+} else {
+  Join-Path $temporaryRoot "$executionIdValue-candidate-localhost.cer"
+}
+if ($usePreparedCertificate) {
+  $scriptRootFullPath = [System.IO.Path]::GetFullPath($PSScriptRoot).TrimEnd('\')
+  $expectedPreparedCertificateNames = [ordered]@{
+    $pfxPath = "$executionIdValue-prepared-localhost.pfx"
+    $cerPath = "$executionIdValue-prepared-localhost.cer"
+  }
+  foreach ($preparedCertificateEntry in $expectedPreparedCertificateNames.GetEnumerator()) {
+    $preparedCertificatePath = $preparedCertificateEntry.Key
+    $preparedCertificateParent = [System.IO.Path]::GetDirectoryName(
+      $preparedCertificatePath
+    ).TrimEnd('\')
+    if ($preparedCertificateParent -ine $scriptRootFullPath) {
+      throw "Prepared certificate escaped the verifier directory: $preparedCertificatePath"
+    }
+    if ((Split-Path -Leaf $preparedCertificatePath) -cne $preparedCertificateEntry.Value) {
+      throw "Prepared certificate has an unexpected name: $preparedCertificatePath"
+    }
+  }
+}
 $serverStdout = Join-Path $diagnosticDirectory 'candidate-server.stdout.log'
 $serverStderr = Join-Path $diagnosticDirectory 'candidate-server.stderr.log'
 $certificateStdout = Join-Path $diagnosticDirectory 'certificate.stdout.log'
@@ -419,6 +457,11 @@ $serverScript = Join-Path $PSScriptRoot 'serve-updater-candidate.mjs'
 $certificateScript = Join-Path $PSScriptRoot 'create-updater-test-certificate.ps1'
 $certificateScriptSha256 = ''
 $certificateFriendlyName = "AudioBud disposable updater verification $executionIdValue"
+$certificateSource = if ($usePreparedCertificate) {
+  'prepared-native-windows'
+} else {
+  'native-helper'
+}
 
 $certificate = $null
 $certificateProcess = $null
@@ -447,52 +490,63 @@ try {
     throw "Updater certificate identity is not clean: $certificateFriendlyName"
   }
   $ownsCertificateFriendlyName = $true
-  Remove-Item -LiteralPath $readyPath, $pfxPath, $cerPath -Force -ErrorAction SilentlyContinue
+  Remove-Item -LiteralPath $readyPath -Force -ErrorAction SilentlyContinue
+  if (-not $usePreparedCertificate) {
+    Remove-Item -LiteralPath $pfxPath, $cerPath -Force -ErrorAction SilentlyContinue
+  }
 
-  Write-VerificationStage -Message 'Creating disposable updater certificate'
-  $pfxPasswordText = [Guid]::NewGuid().ToString('N')
-  $env:AUDIOBUD_CANDIDATE_PFX_PASSWORD = $pfxPasswordText
-  $parentPsModulePath = $env:PSModulePath
-  $nativePsModulePath = @(
-    (Join-Path $env:USERPROFILE 'Documents\WindowsPowerShell\Modules'),
-    (Join-Path $env:ProgramFiles 'WindowsPowerShell\Modules'),
-    (Join-Path $env:SystemRoot 'system32\WindowsPowerShell\v1.0\Modules')
-  ) -join ';'
-  try {
-    $env:PSModulePath = $nativePsModulePath
-    $certificateProcess = Start-Process `
-      -FilePath 'powershell.exe' `
-      -ArgumentList @(
-        '-NoLogo',
-        '-NoProfile',
-        '-ExecutionPolicy', 'Bypass',
-        '-File', "`"$certificateScript`"",
-        '-PfxPath', "`"$pfxPath`"",
-        '-CerPath', "`"$cerPath`"",
-        '-ExecutionId', $executionIdValue
-      ) `
-      -RedirectStandardOutput $certificateStdout `
-      -RedirectStandardError $certificateStderr `
-      -PassThru
-  } finally {
-    $env:PSModulePath = $parentPsModulePath
-  }
-  if (-not $certificateProcess.WaitForExit(60000)) {
+  if ($usePreparedCertificate) {
+    Write-VerificationStage -Message 'Loading prepared disposable updater certificate'
+    $pfxPasswordText = $env:AUDIOBUD_CANDIDATE_PFX_PASSWORD
+    if (-not $pfxPasswordText) {
+      throw 'Prepared certificate mode requires AUDIOBUD_CANDIDATE_PFX_PASSWORD'
+    }
+  } else {
+    Write-VerificationStage -Message 'Creating disposable updater certificate'
+    $pfxPasswordText = [Guid]::NewGuid().ToString('N')
+    $env:AUDIOBUD_CANDIDATE_PFX_PASSWORD = $pfxPasswordText
+    $parentPsModulePath = $env:PSModulePath
+    $nativePsModulePath = @(
+      (Join-Path $env:USERPROFILE 'Documents\WindowsPowerShell\Modules'),
+      (Join-Path $env:ProgramFiles 'WindowsPowerShell\Modules'),
+      (Join-Path $env:SystemRoot 'system32\WindowsPowerShell\v1.0\Modules')
+    ) -join ';'
     try {
-      $certificateProcess.Kill($true)
-      $null = $certificateProcess.WaitForExit(30000)
-    } catch {
-      throw "Certificate helper timed out and its process tree could not be stopped: $($_.Exception.Message)"
+      $env:PSModulePath = $nativePsModulePath
+      $certificateProcess = Start-Process `
+        -FilePath 'powershell.exe' `
+        -ArgumentList @(
+          '-NoLogo',
+          '-NoProfile',
+          '-ExecutionPolicy', 'Bypass',
+          '-File', "`"$certificateScript`"",
+          '-PfxPath', "`"$pfxPath`"",
+          '-CerPath', "`"$cerPath`"",
+          '-ExecutionId', $executionIdValue
+        ) `
+        -RedirectStandardOutput $certificateStdout `
+        -RedirectStandardError $certificateStderr `
+        -PassThru
+    } finally {
+      $env:PSModulePath = $parentPsModulePath
     }
-    throw 'Certificate helper did not exit within 1 minute'
-  }
-  if ($certificateProcess.ExitCode -ne 0) {
-    $certificateError = if (Test-Path -LiteralPath $certificateStderr) {
-      Get-Content -LiteralPath $certificateStderr -Raw
-    } else {
-      'No certificate helper error output was captured.'
+    if (-not $certificateProcess.WaitForExit(60000)) {
+      try {
+        $certificateProcess.Kill($true)
+        $null = $certificateProcess.WaitForExit(30000)
+      } catch {
+        throw "Certificate helper timed out and its process tree could not be stopped: $($_.Exception.Message)"
+      }
+      throw 'Certificate helper did not exit within 1 minute'
     }
-    throw "Certificate helper failed with exit code $($certificateProcess.ExitCode): $certificateError"
+    if ($certificateProcess.ExitCode -ne 0) {
+      $certificateError = if (Test-Path -LiteralPath $certificateStderr) {
+        Get-Content -LiteralPath $certificateStderr -Raw
+      } else {
+        'No certificate helper error output was captured.'
+      }
+      throw "Certificate helper failed with exit code $($certificateProcess.ExitCode): $certificateError"
+    }
   }
   Assert-File -Path $pfxPath -Label 'Disposable updater PFX'
   Assert-File -Path $cerPath -Label 'Disposable updater certificate'
@@ -832,6 +886,7 @@ try {
     execution_id = $executionIdValue
     verifier_script_sha256 = $verifierScriptSha256
     certificate_script_sha256 = $certificateScriptSha256
+    certificate_source = $certificateSource
     host_name = $hostName
     windows_version = $windowsVersion
     host_architecture = $hostArchitecture
@@ -871,6 +926,7 @@ try {
       execution_id = $executionIdValue
       verifier_script_sha256 = $verifierScriptSha256
       certificate_script_sha256 = $certificateScriptSha256
+      certificate_source = $certificateSource
       host_name = $hostName
       windows_version = $windowsVersion
       host_architecture = $hostArchitecture
