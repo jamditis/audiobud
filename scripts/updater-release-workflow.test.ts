@@ -123,7 +123,7 @@ describe("signed updater release artifacts", () => {
     const verificationJob = workflow.slice(jobStart, jobEnd);
     expect(verificationJob).toContain("always() &&");
     expect(verificationJob).toContain("inputs.verify_existing_draft");
-    expect(verificationJob).toContain("environment: artifact-signing");
+    expect(verificationJob).not.toContain("environment: artifact-signing");
     expect(verificationJob).toContain("contents: write");
     expect(verificationJob).toContain(
       "artifact-name: ${{ steps.updater-meta.outputs.evidence_artifact }}",
