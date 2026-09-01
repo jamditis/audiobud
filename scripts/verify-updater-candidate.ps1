@@ -462,6 +462,17 @@ $certificateSource = if ($usePreparedCertificate) {
 } else {
   'native-helper'
 }
+$certificateStoreName = if ($usePreparedCertificate) {
+  [System.Security.Cryptography.X509Certificates.StoreName]::TrustedPeople
+} else {
+  [System.Security.Cryptography.X509Certificates.StoreName]::Root
+}
+$certificateStoreLocation = if ($usePreparedCertificate) {
+  [System.Security.Cryptography.X509Certificates.StoreLocation]::LocalMachine
+} else {
+  [System.Security.Cryptography.X509Certificates.StoreLocation]::CurrentUser
+}
+$certificateStore = "$certificateStoreLocation/$certificateStoreName"
 
 $certificate = $null
 $certificateProcess = $null
@@ -553,21 +564,21 @@ try {
   $certificate = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new(
     $cerPath
   )
-  $rootStore = [System.Security.Cryptography.X509Certificates.X509Store]::new(
-    [System.Security.Cryptography.X509Certificates.StoreName]::Root,
-    [System.Security.Cryptography.X509Certificates.StoreLocation]::CurrentUser
+  $trustedStore = [System.Security.Cryptography.X509Certificates.X509Store]::new(
+    $certificateStoreName,
+    $certificateStoreLocation
   )
   try {
-    $rootOpenFlags = if ($usePreparedCertificate) {
+    $trustedOpenFlags = if ($usePreparedCertificate) {
       [System.Security.Cryptography.X509Certificates.OpenFlags]::ReadOnly
     } else {
       [System.Security.Cryptography.X509Certificates.OpenFlags]::ReadWrite
     }
-    $rootStore.Open($rootOpenFlags)
+    $trustedStore.Open($trustedOpenFlags)
     if (-not $usePreparedCertificate) {
-      $rootStore.Add($certificate)
+      $trustedStore.Add($certificate)
     }
-    $trustedCertificates = $rootStore.Certificates.Find(
+    $trustedCertificates = $trustedStore.Certificates.Find(
       [System.Security.Cryptography.X509Certificates.X509FindType]::FindByThumbprint,
       $certificate.Thumbprint,
       $false
@@ -576,7 +587,7 @@ try {
       throw "Expected one trusted updater certificate, found $($trustedCertificates.Count)"
     }
   } finally {
-    $rootStore.Close()
+    $trustedStore.Close()
   }
   Write-VerificationStage -Message 'Disposable updater certificate trusted'
 
@@ -897,6 +908,7 @@ try {
     verifier_script_sha256 = $verifierScriptSha256
     certificate_script_sha256 = $certificateScriptSha256
     certificate_source = $certificateSource
+    certificate_store = $certificateStore
     host_name = $hostName
     windows_version = $windowsVersion
     host_architecture = $hostArchitecture
@@ -937,6 +949,7 @@ try {
       verifier_script_sha256 = $verifierScriptSha256
       certificate_script_sha256 = $certificateScriptSha256
       certificate_source = $certificateSource
+      certificate_store = $certificateStore
       host_name = $hostName
       windows_version = $windowsVersion
       host_architecture = $hostArchitecture
@@ -1069,35 +1082,35 @@ try {
   foreach ($trustedCertificate in @($certificate)) {
     if ($null -eq $trustedCertificate) { continue }
     try {
-      $cleanupRootStore = [System.Security.Cryptography.X509Certificates.X509Store]::new(
-        [System.Security.Cryptography.X509Certificates.StoreName]::Root,
-        [System.Security.Cryptography.X509Certificates.StoreLocation]::CurrentUser
+      $cleanupTrustedStore = [System.Security.Cryptography.X509Certificates.X509Store]::new(
+        $certificateStoreName,
+        $certificateStoreLocation
       )
       try {
-        $cleanupRootStore.Open(
+        $cleanupTrustedStore.Open(
           [System.Security.Cryptography.X509Certificates.OpenFlags]::ReadWrite
         )
-        $trustedMatches = $cleanupRootStore.Certificates.Find(
+        $trustedMatches = $cleanupTrustedStore.Certificates.Find(
           [System.Security.Cryptography.X509Certificates.X509FindType]::FindByThumbprint,
           $trustedCertificate.Thumbprint,
           $false
         )
         foreach ($trustedMatch in $trustedMatches) {
-          $cleanupRootStore.Remove($trustedMatch)
+          $cleanupTrustedStore.Remove($trustedMatch)
         }
-        $remainingTrustedMatches = $cleanupRootStore.Certificates.Find(
+        $remainingTrustedMatches = $cleanupTrustedStore.Certificates.Find(
           [System.Security.Cryptography.X509Certificates.X509FindType]::FindByThumbprint,
           $trustedCertificate.Thumbprint,
           $false
         )
         if ($remainingTrustedMatches.Count -gt 0) {
-          throw "Certificate remains in the current-user root store: $($trustedCertificate.Thumbprint)"
+          throw "Certificate remains in $certificateStore`: $($trustedCertificate.Thumbprint)"
         }
       } finally {
-        $cleanupRootStore.Close()
+        $cleanupTrustedStore.Close()
       }
     } catch {
-      $cleanupErrors.Add("Trusted root certificate cleanup failed: $($_.Exception.Message)")
+      $cleanupErrors.Add("Trusted certificate cleanup failed: $($_.Exception.Message)")
     }
   }
 

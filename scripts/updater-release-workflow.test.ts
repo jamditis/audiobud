@@ -192,15 +192,18 @@ describe("signed updater release artifacts", () => {
     expect(verifier).toContain("https://localhost");
     expect(verifier).toContain("X509Certificates.X509Store");
     expect(verifier).toContain("StoreLocation]::CurrentUser");
+    expect(verifier).toContain("StoreLocation]::LocalMachine");
+    expect(verifier).toContain("StoreName]::TrustedPeople");
     expect(verifier).toContain("OpenFlags]::ReadWrite");
     expect(verifier).toContain("OpenFlags]::ReadOnly");
-    expect(verifier).toContain("$rootStore.Add($certificate)");
-    expect(verifier).toContain("$cleanupRootStore.Remove($trustedMatch)");
+    expect(verifier).toContain("$trustedStore.Add($certificate)");
+    expect(verifier).toContain("$cleanupTrustedStore.Remove($trustedMatch)");
     expect(verifier).toContain("Expected one trusted updater certificate");
     expect(verifier).toContain("create-updater-test-certificate.ps1");
     expect(verifier).toContain("$certificateProcess.WaitForExit(60000)");
     expect(verifier).toContain("certificate_script_sha256");
     expect(verifier).toContain("certificate_source");
+    expect(verifier).toContain("certificate_store");
     expect(verifier).toContain("prepared-native-windows");
     expect(verifier).toContain(
       "Prepared certificate mode is limited to local Windows execution",
@@ -423,7 +426,7 @@ describe("signed updater release artifacts", () => {
       /Remove-Item[\s\S]{0,400}?-Path[\s\S]{0,400}?AudioBud-[^\r\n]{0,200}-updater-\*/,
     );
     expect(verifier).toContain("cleanupErrors");
-    expect(verifier).toContain("Trusted root certificate cleanup failed");
+    expect(verifier).toContain("Trusted certificate cleanup failed");
     expect(verifier).toContain("Candidate server cleanup failed");
     expect(verifier).toContain("updater-prepublication-evidence.json");
     expect(workflow).toContain(
