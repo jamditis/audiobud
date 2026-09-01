@@ -121,7 +121,7 @@ jobs:
       - name: Check generated Rust bindings
         working-directory: src-tauri
         run: |
-          cargo run --features generate-bindings --bin generate-bindings
+          cargo run --features generate-bindings --example generate-bindings
           git diff --exit-code -- ../src/bindings.ts
 
   rust-tests-windows:

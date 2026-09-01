@@ -22,11 +22,6 @@ incremental = true # Compile your binary in smaller steps.
 name = "handy_app_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
-[[bin]]
-name = "generate-bindings"
-path = "src/bin/generate-bindings.rs"
-required-features = ["generate-bindings"]
-
 # [[bin]]
 # name = "cli"
 # path = "src/audio_toolkit/bin/cli.rs"
