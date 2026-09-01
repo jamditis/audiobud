@@ -445,11 +445,17 @@ try {
   $pfxPassword = ConvertTo-SecureString -String $pfxPasswordText -AsPlainText -Force
   Export-PfxCertificate -Cert $certificate -FilePath $pfxPath -Password $pfxPassword | Out-Null
   Export-Certificate -Cert $certificate -FilePath $cerPath -Type CERT | Out-Null
-  $certutilOutput = @(
-    & certutil.exe -user -addstore -f Root $cerPath 2>&1
+  $rootStore = [System.Security.Cryptography.X509Certificates.X509Store]::new(
+    [System.Security.Cryptography.X509Certificates.StoreName]::Root,
+    [System.Security.Cryptography.X509Certificates.StoreLocation]::CurrentUser
   )
-  if ($LASTEXITCODE -ne 0) {
-    throw "Failed to trust the disposable updater certificate: $($certutilOutput -join [Environment]::NewLine)"
+  try {
+    $rootStore.Open(
+      [System.Security.Cryptography.X509Certificates.OpenFlags]::ReadWrite
+    )
+    $rootStore.Add($certificate)
+  } finally {
+    $rootStore.Close()
   }
   Get-Item `
     -LiteralPath "Cert:\CurrentUser\Root\$($certificate.Thumbprint)" `

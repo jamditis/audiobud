@@ -188,9 +188,11 @@ describe("signed updater release artifacts", () => {
     expect(verifier).toContain("models");
     expect(verifier).toContain("Get-FileHash");
     expect(verifier).toContain("https://localhost");
-    expect(verifier).toContain(
-      "& certutil.exe -user -addstore -f Root $cerPath 2>&1",
-    );
+    expect(verifier).toContain("X509Certificates.X509Store");
+    expect(verifier).toContain("StoreLocation]::CurrentUser");
+    expect(verifier).toContain("OpenFlags]::ReadWrite");
+    expect(verifier).toContain("$rootStore.Add($certificate)");
+    expect(verifier).not.toContain("certutil.exe");
     expect(verifier).not.toContain("Import-Certificate");
     expect(verifier).toContain("Cert:\\CurrentUser\\Root");
     expect(verifier).toContain("finally");
