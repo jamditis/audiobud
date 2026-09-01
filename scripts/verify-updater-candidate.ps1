@@ -411,14 +411,19 @@ $pfxPath = Join-Path $temporaryRoot "$executionIdValue-candidate-localhost.pfx"
 $cerPath = Join-Path $temporaryRoot "$executionIdValue-candidate-localhost.cer"
 $serverStdout = Join-Path $diagnosticDirectory 'candidate-server.stdout.log'
 $serverStderr = Join-Path $diagnosticDirectory 'candidate-server.stderr.log'
+$certificateStdout = Join-Path $diagnosticDirectory 'certificate.stdout.log'
+$certificateStderr = Join-Path $diagnosticDirectory 'certificate.stderr.log'
 $updaterStdout = Join-Path $diagnosticDirectory 'updater.stdout.log'
 $updaterStderr = Join-Path $diagnosticDirectory 'updater.stderr.log'
 $serverScript = Join-Path $PSScriptRoot 'serve-updater-candidate.mjs'
+$certificateScript = Join-Path $PSScriptRoot 'create-updater-test-certificate.ps1'
+$certificateScriptSha256 = ''
+$certificateFriendlyName = "AudioBud disposable updater verification $executionIdValue"
 
 $certificate = $null
-$certificateKey = $null
-$rootCertificate = $null
+$certificateProcess = $null
 $serverProcess = $null
+$ownsCertificateFriendlyName = $false
 $verificationError = $null
 $cleanupErrors = [System.Collections.Generic.List[string]]::new()
 $updaterDirectoriesBefore = @()
@@ -426,60 +431,62 @@ $updaterDirectoryBaselineRecorded = $false
 $updaterExtractionDirectories = [System.Collections.Generic.List[string]]::new()
 
 try {
+  Assert-File -Path $certificateScript -Label 'Updater test certificate helper'
+  $certificateScriptSha256 = Get-Sha256 -Path $certificateScript
   if (Test-Path -LiteralPath $installDirectory) {
     throw "Updater install directory is not clean: $installDirectory"
   }
   if (Test-Path -LiteralPath $appDataDirectory) {
     throw "Updater app-data directory is not clean: $appDataDirectory"
   }
+  $preexistingPersonalCertificates = @(
+    Get-ChildItem -LiteralPath 'Cert:\CurrentUser\My' |
+      Where-Object FriendlyName -CEQ $certificateFriendlyName
+  )
+  if ($preexistingPersonalCertificates.Count -gt 0) {
+    throw "Updater certificate identity is not clean: $certificateFriendlyName"
+  }
+  $ownsCertificateFriendlyName = $true
   Remove-Item -LiteralPath $readyPath, $pfxPath, $cerPath -Force -ErrorAction SilentlyContinue
 
   Write-VerificationStage -Message 'Creating disposable updater certificate'
-  $certificateKey = [System.Security.Cryptography.RSA]::Create(2048)
-  $certificateRequest = [System.Security.Cryptography.X509Certificates.CertificateRequest]::new(
-    'CN=localhost',
-    $certificateKey,
-    [System.Security.Cryptography.HashAlgorithmName]::SHA256,
-    [System.Security.Cryptography.RSASignaturePadding]::Pkcs1
-  )
-  $subjectAlternativeName = [System.Security.Cryptography.X509Certificates.SubjectAlternativeNameBuilder]::new()
-  $subjectAlternativeName.AddDnsName('localhost')
-  $certificateRequest.CertificateExtensions.Add($subjectAlternativeName.Build())
-  $serverAuthenticationOids = [System.Security.Cryptography.OidCollection]::new()
-  $serverAuthenticationOids.Add(
-    [System.Security.Cryptography.Oid]::new('1.3.6.1.5.5.7.3.1')
-  ) | Out-Null
-  $certificateRequest.CertificateExtensions.Add(
-    [System.Security.Cryptography.X509Certificates.X509EnhancedKeyUsageExtension]::new(
-      $serverAuthenticationOids,
-      $false
-    )
-  )
-  $certificateRequest.CertificateExtensions.Add(
-    [System.Security.Cryptography.X509Certificates.X509KeyUsageExtension]::new(
-      [System.Security.Cryptography.X509Certificates.X509KeyUsageFlags]::DigitalSignature -bor
-        [System.Security.Cryptography.X509Certificates.X509KeyUsageFlags]::KeyEncipherment,
-      $false
-    )
-  )
-  $certificate = $certificateRequest.CreateSelfSigned(
-    [DateTimeOffset]::UtcNow.AddMinutes(-5),
-    [DateTimeOffset]::UtcNow.AddHours(2)
-  )
   $pfxPasswordText = [Guid]::NewGuid().ToString('N')
-  [System.IO.File]::WriteAllBytes(
-    $pfxPath,
-    $certificate.Export(
-      [System.Security.Cryptography.X509Certificates.X509ContentType]::Pfx,
-      $pfxPasswordText
-    )
-  )
-  $certificateBytes = $certificate.Export(
-    [System.Security.Cryptography.X509Certificates.X509ContentType]::Cert
-  )
-  [System.IO.File]::WriteAllBytes($cerPath, $certificateBytes)
-  $rootCertificate = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new(
-    $certificateBytes
+  $env:AUDIOBUD_CANDIDATE_PFX_PASSWORD = $pfxPasswordText
+  $certificateProcess = Start-Process `
+    -FilePath 'powershell.exe' `
+    -ArgumentList @(
+      '-NoLogo',
+      '-NoProfile',
+      '-ExecutionPolicy', 'Bypass',
+      '-File', "`"$certificateScript`"",
+      '-PfxPath', "`"$pfxPath`"",
+      '-CerPath', "`"$cerPath`"",
+      '-ExecutionId', $executionIdValue
+    ) `
+    -RedirectStandardOutput $certificateStdout `
+    -RedirectStandardError $certificateStderr `
+    -PassThru
+  if (-not $certificateProcess.WaitForExit(60000)) {
+    try {
+      $certificateProcess.Kill($true)
+      $null = $certificateProcess.WaitForExit(30000)
+    } catch {
+      throw "Certificate helper timed out and its process tree could not be stopped: $($_.Exception.Message)"
+    }
+    throw 'Certificate helper did not exit within 1 minute'
+  }
+  if ($certificateProcess.ExitCode -ne 0) {
+    $certificateError = if (Test-Path -LiteralPath $certificateStderr) {
+      Get-Content -LiteralPath $certificateStderr -Raw
+    } else {
+      'No certificate helper error output was captured.'
+    }
+    throw "Certificate helper failed with exit code $($certificateProcess.ExitCode): $certificateError"
+  }
+  Assert-File -Path $pfxPath -Label 'Disposable updater PFX'
+  Assert-File -Path $cerPath -Label 'Disposable updater certificate'
+  $certificate = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new(
+    $cerPath
   )
   $rootStore = [System.Security.Cryptography.X509Certificates.X509Store]::new(
     [System.Security.Cryptography.X509Certificates.StoreName]::Root,
@@ -489,7 +496,7 @@ try {
     $rootStore.Open(
       [System.Security.Cryptography.X509Certificates.OpenFlags]::ReadWrite
     )
-    $rootStore.Add($rootCertificate)
+    $rootStore.Add($certificate)
   } finally {
     $rootStore.Close()
   }
@@ -498,7 +505,6 @@ try {
     -ErrorAction Stop | Out-Null
   Write-VerificationStage -Message 'Disposable updater certificate trusted'
 
-  $env:AUDIOBUD_CANDIDATE_PFX_PASSWORD = $pfxPasswordText
   $pubDate = (Get-Date).ToUniversalTime().ToString('o')
   $serverProcess = Start-Process `
     -FilePath 'node' `
@@ -814,6 +820,7 @@ try {
     execution_environment = $ExecutionEnvironment
     execution_id = $executionIdValue
     verifier_script_sha256 = $verifierScriptSha256
+    certificate_script_sha256 = $certificateScriptSha256
     host_name = $hostName
     windows_version = $windowsVersion
     host_architecture = $hostArchitecture
@@ -852,6 +859,7 @@ try {
       execution_environment = $ExecutionEnvironment
       execution_id = $executionIdValue
       verifier_script_sha256 = $verifierScriptSha256
+      certificate_script_sha256 = $certificateScriptSha256
       host_name = $hostName
       windows_version = $windowsVersion
       host_architecture = $hostArchitecture
@@ -882,7 +890,14 @@ try {
   } catch {
     $cleanupErrors.Add("Failure diagnostic write failed: $($_.Exception.Message)")
   }
-  foreach ($logPath in @($serverStdout, $serverStderr, $updaterStdout, $updaterStderr)) {
+  foreach ($logPath in @(
+    $certificateStdout,
+    $certificateStderr,
+    $serverStdout,
+    $serverStderr,
+    $updaterStdout,
+    $updaterStderr
+  )) {
     try {
       Write-Host "::group::$logPath"
       if (Test-Path -LiteralPath $logPath -PathType Leaf) {
@@ -989,26 +1004,33 @@ try {
     }
   }
 
-  foreach ($personalCertificate in @($certificate)) {
-    if ($null -eq $personalCertificate) { continue }
-    $personalPath = "Cert:\CurrentUser\My\$($personalCertificate.Thumbprint)"
+  if ($ownsCertificateFriendlyName) {
     try {
-      if (Test-Path -LiteralPath $personalPath) {
-        Remove-Item -LiteralPath $personalPath -Force -ErrorAction Stop
+      foreach ($personalCertificate in @(
+        Get-ChildItem -LiteralPath 'Cert:\CurrentUser\My' |
+          Where-Object FriendlyName -CEQ $certificateFriendlyName
+      )) {
+        $personalPath = "Cert:\CurrentUser\My\$($personalCertificate.Thumbprint)"
+        if (Test-Path -LiteralPath $personalPath) {
+          Remove-Item -LiteralPath $personalPath -Force -ErrorAction Stop
+        }
+        if (Test-Path -LiteralPath $personalPath) {
+          throw "Certificate remains at $personalPath"
+        }
       }
-      if (Test-Path -LiteralPath $personalPath) {
-        throw "Certificate remains at $personalPath"
+      $remainingPersonalCertificates = @(
+        Get-ChildItem -LiteralPath 'Cert:\CurrentUser\My' |
+          Where-Object FriendlyName -CEQ $certificateFriendlyName
+      )
+      if ($remainingPersonalCertificates.Count -gt 0) {
+        throw "Certificate identity remains in the personal store: $certificateFriendlyName"
       }
     } catch {
       $cleanupErrors.Add("Personal certificate cleanup failed: $($_.Exception.Message)")
     }
   }
 
-  foreach ($disposableCertificateObject in @(
-    $rootCertificate,
-    $certificate,
-    $certificateKey
-  )) {
+  foreach ($disposableCertificateObject in @($certificate)) {
     if ($null -ne $disposableCertificateObject) {
       try {
         $disposableCertificateObject.Dispose()

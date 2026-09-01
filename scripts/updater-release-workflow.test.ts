@@ -177,8 +177,10 @@ describe("signed updater release artifacts", () => {
   test("retains private proof that settings and models survive", () => {
     const verifierPath = "scripts/verify-updater-candidate.ps1";
     const serverPath = "scripts/serve-updater-candidate.mjs";
+    const certificatePath = "scripts/create-updater-test-certificate.ps1";
     expect(existsSync(verifierPath)).toBe(true);
     expect(existsSync(serverPath)).toBe(true);
+    expect(existsSync(certificatePath)).toBe(true);
 
     const verifier = existsSync(verifierPath)
       ? readFileSync(verifierPath, "utf8")
@@ -189,17 +191,30 @@ describe("signed updater release artifacts", () => {
     expect(verifier).toContain("Get-FileHash");
     expect(verifier).toContain("https://localhost");
     expect(verifier).toContain("X509Certificates.X509Store");
-    expect(verifier).toContain("X509Certificates.CertificateRequest");
-    expect(verifier).toContain("SubjectAlternativeNameBuilder");
-    expect(verifier).toContain(
-      "$subjectAlternativeName.AddDnsName('localhost')",
-    );
     expect(verifier).toContain("StoreLocation]::CurrentUser");
     expect(verifier).toContain("OpenFlags]::ReadWrite");
-    expect(verifier).toContain("$rootStore.Add($rootCertificate)");
+    expect(verifier).toContain("$rootStore.Add($certificate)");
+    expect(verifier).toContain("create-updater-test-certificate.ps1");
+    expect(verifier).toContain("$certificateProcess.WaitForExit(60000)");
+    expect(verifier).toContain("certificate_script_sha256");
+    expect(verifier).toContain(
+      "Where-Object FriendlyName -CEQ $certificateFriendlyName",
+    );
+    expect(verifier).toContain("Updater certificate identity is not clean");
+    expect(verifier).toContain("$ownsCertificateFriendlyName = $true");
+    expect(verifier).toContain("if ($ownsCertificateFriendlyName)");
+    expect(verifier).toContain(
+      "Certificate identity remains in the personal store",
+    );
     expect(verifier).not.toContain("certutil.exe");
     expect(verifier).not.toContain("Import-Certificate");
-    expect(verifier).not.toContain("New-SelfSignedCertificate");
+    const certificateHelper = existsSync(certificatePath)
+      ? readFileSync(certificatePath, "utf8")
+      : "";
+    expect(certificateHelper).toContain("New-SelfSignedCertificate");
+    expect(certificateHelper).toContain("-DnsName 'localhost'");
+    expect(certificateHelper).toContain("-Type SSLServerAuthentication");
+    expect(certificateHelper).toContain("Cert:\\CurrentUser\\My");
     expect(verifier).toContain("Cert:\\CurrentUser\\Root");
     expect(verifier).toContain("finally");
     expect(verifier).toContain("--install-update-endpoint");
@@ -224,7 +239,7 @@ describe("signed updater release artifacts", () => {
     expect(verifier).not.toContain("    -Wait `");
     expect(verifier).toContain("$installProcess.WaitForExit(300000)");
     expect(verifier).toContain("$uninstallProcess.WaitForExit(300000)");
-    expect(verifier.match(/\.Kill\(\$true\)/g) ?? []).toHaveLength(3);
+    expect(verifier.match(/\.Kill\(\$true\)/g) ?? []).toHaveLength(4);
     expect(verifier).toContain("updater-verification-stage.log");
     expect(verifier).toContain("updater-verification-error.log");
     expect(verifier).toContain("updater-prepublication-failure.json");
