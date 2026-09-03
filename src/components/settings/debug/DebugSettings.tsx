@@ -8,6 +8,7 @@ import { SettingsGroup } from "../../ui/SettingsGroup";
 import { AlwaysOnMicrophone } from "../AlwaysOnMicrophone";
 import { SoundPicker } from "../SoundPicker";
 import { ClamshellMicrophoneSelector } from "../ClamshellMicrophoneSelector";
+import { DebugPaths } from "./DebugPaths";
 
 export const DebugSettings: React.FC = () => {
   const { t } = useTranslation();
@@ -25,6 +26,7 @@ export const DebugSettings: React.FC = () => {
         <RecordingBuffer descriptionMode="tooltip" grouped={true} />
         <AlwaysOnMicrophone descriptionMode="tooltip" grouped={true} />
         <ClamshellMicrophoneSelector descriptionMode="tooltip" grouped={true} />
+        <DebugPaths descriptionMode="tooltip" grouped={true} />
       </SettingsGroup>
     </div>
   );
