@@ -60,7 +60,7 @@ milestone-A security pass (TDD, commits noted inline); the sub-threshold ones ar
       (`0492b0c`, with the signed artifact/feed pipeline in `6d0054f`). `src-tauri/tauri.conf.json` now
       pins AudioBud's updater public key and `jamditis/audiobud` feed, the portable-update link targets
       AudioBud releases, and the updater gates are enabled only for the signed Windows channel. The
-      inherited `signCommand` was removed earlier (`af83841`); Windows signing now comes from AudioBud's
+      inherited `signCommand` was removed earlier (`d096954`); Windows signing now comes from AudioBud's
       release-only signing configuration and protected workflow.
 
 - [ ] **Hardening - self-host the Bungee/Fredoka fonts.** `index.html:7-9` loads the wordmark/body
@@ -88,15 +88,14 @@ milestone-A security pass (TDD, commits noted inline); the sub-threshold ones ar
 
 ### Milestone B (release pipeline + native packaging CI)
 
-Surfaced by the Codex 5.4 low review of the CI bootstrap (2026-06-21). The CI bootstrap (`9c7e843`)
-removed the inherited cjpais release/build workflows. That is deliberate for milestone A (local
-prototype, no releases). These rebuild in milestone B with AudioBud's own provenance - do not restore
-the cjpais versions (they carry upstream's signing identity + updater feed, the provenance finding above).
+The CI bootstrap (`9c7e843`, 2026-06-21) removed the inherited cjpais release/build workflows.
+AudioBud's signed release and updater pipeline has since shipped. Release packaging and native
+build validation on pull requests are separate checks; the latter remains tracked below.
 
-- [ ] **Release + updater pipeline (was inherited `release.yml`).** Milestone A ships no installers, so
-      the cjpais release workflow was removed. Milestone B builds a fresh signed-release + `latest.json`
-      updater pipeline using AudioBud's Authenticode/Tauri signing identity (pairs with the provenance
-      item above: `tauri.conf.json` `signCommand` + updater `pubkey`/`endpoints`).
+- [x] **Release + updater pipeline (was inherited `release.yml`).** Resolved 2026-07-31
+      (`6d0054f`, updater configuration in `0492b0c`). AudioBud's release and feed workflows sign its
+      Windows artifacts and publish the `latest.json` feed using its own signing identity. See the resolved
+      provenance item above; do not restore the cjpais signing identity or updater feed.
 
 - [ ] **Native build/packaging validation in CI (was inherited `build.yml`/`main-build.yml`).** The
       current `ci.yml` runs `cargo test` against the mock transcription backend, so it does not compile
