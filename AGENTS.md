@@ -202,11 +202,11 @@ Handy supports command-line parameters on all platforms for integration with scr
 
 Access debug features: `Cmd+Shift+D` (macOS) or `Ctrl+Shift+D` (Windows/Linux)
 
-## Platform Notes
+## Platform notes
 
-- **macOS**: Metal acceleration, accessibility permissions required for keyboard shortcuts
-- **Windows**: Vulkan acceleration, code signing
-- **Linux**: OpenBLAS + Vulkan, limited Wayland support, overlay uses GTK layer shell (disable with `HANDY_NO_GTK_LAYER_SHELL=1`)
+- **Windows x64**: Validated public target. Release installers are signed, and local transcription uses Vulkan and DirectML acceleration.
+- **Apple Silicon macOS**: v0.6.0 release-candidate target. Local transcription uses Metal, and microphone and Accessibility permissions are required. The public release does not include an Intel Mac artifact.
+- **Linux and Intel Mac**: Inherited source-build paths only; neither is a validated release target. Linux uses Vulkan, has limited Wayland support, and its overlay uses GTK layer shell (disable with `HANDY_NO_GTK_LAYER_SHELL=1`).
 
 ## Troubleshooting
 
