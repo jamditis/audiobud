@@ -56,21 +56,12 @@ milestone-A security pass (TDD, commits noted inline); the sub-threshold ones ar
       user-chosen custom host vs. exploitable under XSS). Fix later: confirm/validate the destination
       before attaching a stored key. Largely mitigated once the CSP lands.
 
-- [ ] **Provenance - updater feed + signing still point at cjpais/Handy.**
-      `src-tauri/tauri.conf.json:61` (`signCommand` ... `Handy`, `cjpais-dev`) and `:69-72` (updater
-      `pubkey` + `endpoints` = `github.com/cjpais/Handy`). A detached fork would pull/trust upstream's
-      signed releases, not AudioBud's. Not an egress/crypto vuln (TLS + minisign chain intact), but wrong
-      provenance. Fix in milestone B (release pipeline) - cross-ref the Milestone B section.
-      Mitigated for milestone A by a frontend gate: `UPDATER_FEED_READY` in `src/lib/updater.ts` (consumed
-      by `UpdateChecker.tsx` via `updateChecksActive`) stops `check()` from ever running while the feed is
-      upstream, regardless of the stored setting or an optimistic toggle. `check()` is the only place the
-      updater queries the feed, so this is the single chokepoint. The Settings toggle is disabled
-      (`UpdateChecksToggle.tsx`) and the field default is `false` for fresh installs. The stored
-      `update_checks_enabled` value is left untouched on the backend (no load-time mutation), so a user's
-      prior preference is preserved and takes effect again once milestone B flips `UPDATER_FEED_READY` to
-      true and repoints the feed/signing. The portable-update dialog's hardcoded
-      `github.com/cjpais/Handy/releases/latest` link (`UpdateChecker.tsx`) is dormant until then; repoint it
-      with the feed.
+- [x] **Provenance - updater feed + signing pointed at cjpais/Handy.** Resolved 2026-07-31
+      (`0492b0c`, with the signed artifact/feed pipeline in `6d0054f`). `src-tauri/tauri.conf.json` now
+      pins AudioBud's updater public key and `jamditis/audiobud` feed, the portable-update link targets
+      AudioBud releases, and the updater gates are enabled only for the signed Windows channel. The
+      inherited `signCommand` was removed earlier (`d096954`); Windows signing now comes from AudioBud's
+      release-only signing configuration and protected workflow.
 
 - [ ] **Hardening - self-host the Bungee/Fredoka fonts.** `index.html:7-9` loads the wordmark/body
       fonts from `fonts.googleapis.com`/`fonts.gstatic.com`, which forced those hosts into the CSP
@@ -97,15 +88,14 @@ milestone-A security pass (TDD, commits noted inline); the sub-threshold ones ar
 
 ### Milestone B (release pipeline + native packaging CI)
 
-Surfaced by the Codex 5.4 low review of the CI bootstrap (2026-06-21). The CI bootstrap (`9c7e843`)
-removed the inherited cjpais release/build workflows. That is deliberate for milestone A (local
-prototype, no releases). These rebuild in milestone B with AudioBud's own provenance - do not restore
-the cjpais versions (they carry upstream's signing identity + updater feed, the provenance finding above).
+The CI bootstrap (`9c7e843`, 2026-06-21) removed the inherited cjpais release/build workflows.
+AudioBud's signed release and updater pipeline has since shipped. Release packaging and native
+build validation on pull requests are separate checks; the latter remains tracked below.
 
-- [ ] **Release + updater pipeline (was inherited `release.yml`).** Milestone A ships no installers, so
-      the cjpais release workflow was removed. Milestone B builds a fresh signed-release + `latest.json`
-      updater pipeline using AudioBud's Authenticode/Tauri signing identity (pairs with the provenance
-      item above: `tauri.conf.json` `signCommand` + updater `pubkey`/`endpoints`).
+- [x] **Release + updater pipeline (was inherited `release.yml`).** Resolved 2026-07-31
+      (`6d0054f`, updater configuration in `0492b0c`). AudioBud's release and feed workflows sign its
+      Windows artifacts and publish the `latest.json` feed using its own signing identity. See the resolved
+      provenance item above; do not restore the cjpais signing identity or updater feed.
 
 - [ ] **Native build/packaging validation in CI (was inherited `build.yml`/`main-build.yml`).** The
       current `ci.yml` runs `cargo test` against the mock transcription backend, so it does not compile
@@ -396,9 +386,3 @@ lower-severity findings held back to avoid regressions in shared widgets mid-flo
 
 - [x] **`tests/app.spec.ts` used the old `"Handy App"` label.** Issue #149 removed the test with the
       rest of the low-value Playwright suite.
-
-## Milestone B (out of milestone-A scope)
-
-- [ ] **Updater still points at `cjpais/Handy`.** `src/components/update-checker/UpdateChecker.tsx:206`
-      and `src-tauri/tauri.conf.json:71` reference the upstream Handy release feed. Repoint to the
-      AudioBud release feed once it exists. (Milestone B: R2 model host + release pipeline.)
