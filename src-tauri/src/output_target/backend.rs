@@ -522,7 +522,7 @@ pub fn announce_delivered(app: &AppHandle, identity: WindowIdentity, source: Del
     crate::overlay::mark_delivery_confirmation_pending();
     // The window title routinely carries sensitive context -- document names,
     // page titles, client names -- and the app's default log_level (Debug)
-    // admits everything down to `debug!` into the persistent handy.log, so
+    // admits everything down to `debug!` into the persistent audiobud.log, so
     // `debug!` is not an opt-in tier here (#279 review round 3): the title is
     // left out of the log entirely, not merely demoted. Only the handle and
     // app/process name, which is already what the lock/unlock events log

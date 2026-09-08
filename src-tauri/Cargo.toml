@@ -19,7 +19,7 @@ incremental = true # Compile your binary in smaller steps.
 # The `_lib` suffix may seem redundant but it is necessary
 # to make the lib name unique and wouldn't conflict with the bin name.
 # This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
-name = "handy_app_lib"
+name = "audiobud_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 # [[bin]]
