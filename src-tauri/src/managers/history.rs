@@ -11,10 +11,12 @@ use tauri::AppHandle;
 use tauri_specta::Event;
 
 /// Returns true only for a single, plain filename with no path navigation.
-/// Recording names are always server-generated (`handy-<timestamp>.wav`), so this
-/// rejects any webview-supplied `file_name` that contains a separator, `..`, an
-/// absolute/drive/UNC prefix, or an embedded NUL. Combined with the join in
-/// `HistoryManager::get_audio_file_path`, a path can never escape `recordings_dir`.
+/// Recording names are server-generated (`audiobud-<timestamp>.wav`, or the
+/// legacy `handy-<timestamp>.wav`). This rejects any webview-supplied
+/// `file_name` that contains a separator, `..`, an absolute/drive/UNC prefix,
+/// or an embedded NUL. Combined with the join in
+/// `HistoryManager::get_audio_file_path`, a path can never escape
+/// `recordings_dir`.
 pub(crate) fn is_safe_recording_filename(name: &str) -> bool {
     if name.is_empty() || name.contains('/') || name.contains('\\') || name.contains('\0') {
         return false;
@@ -922,7 +924,7 @@ mod tests {
                 raw_requested
             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
             params![
-                format!("handy-{}.wav", timestamp),
+                format!("audiobud-{}.wav", timestamp),
                 timestamp,
                 false,
                 format!("Recording {}", timestamp),
@@ -968,7 +970,7 @@ mod tests {
                 post_processed_text, post_process_prompt, post_process_requested, raw_requested
             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
             params![
-                "handy-300.wav",
+                "audiobud-300.wav",
                 300,
                 false,
                 "Recording 300",
@@ -1004,8 +1006,9 @@ mod tests {
     }
 
     #[test]
-    fn is_safe_recording_filename_accepts_generated_names() {
-        // Recording names are always server-generated as handy-<timestamp>.wav.
+    fn is_safe_recording_filename_accepts_current_and_legacy_generated_names() {
+        assert!(is_safe_recording_filename("audiobud-1700000000.wav"));
+        // Existing history rows keep pointing at recordings made before the rename.
         assert!(is_safe_recording_filename("handy-1700000000.wav"));
         assert!(is_safe_recording_filename("custom_start.wav"));
     }
@@ -1054,15 +1057,17 @@ mod tests {
     }
 
     #[test]
-    fn delete_entry_removes_row_with_valid_file_name() {
+    fn delete_entry_removes_legacy_recording() {
         let conn = setup_conn();
-        insert_entry(&conn, 100, "completed", None);
-        let dir = std::env::temp_dir();
+        insert_entry_with_file_name(&conn, "handy-100.wav", 100);
+        let dir = tempfile::tempdir().expect("create temp recordings dir");
+        let wav_path = dir.path().join("handy-100.wav");
+        std::fs::write(&wav_path, b"RIFF").expect("write legacy wav file");
 
-        // The audio file does not exist on disk, so this only removes the row.
-        HistoryManager::delete_entry_with_conn(&conn, &dir, 1).expect("delete entry");
+        HistoryManager::delete_entry_with_conn(&conn, dir.path(), 1).expect("delete entry");
 
         assert_eq!(row_count(&conn, 1), 0);
+        assert!(!wav_path.exists());
     }
 
     fn all_row_count(conn: &Connection) -> i64 {
@@ -1079,7 +1084,7 @@ mod tests {
             .map(|i| {
                 let timestamp = i * 100;
                 insert_entry(conn, timestamp, "text", None);
-                let path = dir.join(format!("handy-{}.wav", timestamp));
+                let path = dir.join(format!("audiobud-{}.wav", timestamp));
                 std::fs::write(&path, b"RIFF").expect("write wav file");
                 path
             })
@@ -1141,8 +1146,8 @@ mod tests {
         .expect("mark entry saved");
 
         let stale_list = vec![
-            (1i64, "handy-100.wav".to_string()),
-            (2i64, "handy-200.wav".to_string()),
+            (1i64, "audiobud-100.wav".to_string()),
+            (2i64, "audiobud-200.wav".to_string()),
         ];
         let deleted_ids = HistoryManager::delete_entries_and_files(&conn, dir.path(), &stale_list)
             .expect("delete entries");
@@ -1180,7 +1185,7 @@ mod tests {
             [],
         )
         .expect("mark entry saved");
-        let saved_wav = dir.path().join("handy-50.wav");
+        let saved_wav = dir.path().join("audiobud-50.wav");
         std::fs::write(&saved_wav, b"RIFF").expect("write saved wav file");
 
         let mut deleted_ids = HistoryManager::cleanup_old_entries_with_conn(

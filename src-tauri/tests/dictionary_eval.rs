@@ -11,7 +11,7 @@
 //!
 //! Run with `cargo test --test dictionary_eval -- --nocapture` to see the metrics table.
 
-use handy_app_lib::audio_toolkit::apply_custom_words;
+use audiobud_lib::audio_toolkit::apply_custom_words;
 
 /// Joe's real default; the matcher's per-length floors now dominate this dial.
 const THRESHOLD: f64 = 0.18;
