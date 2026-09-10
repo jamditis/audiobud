@@ -553,7 +553,7 @@ pub fn get_keyboard_implementation(app: AppHandle) -> String {
     let settings = settings::get_settings(&app);
     match settings.keyboard_implementation {
         KeyboardImplementation::Tauri => "tauri".to_string(),
-        KeyboardImplementation::HandyKeys => "handy_keys".to_string(),
+        KeyboardImplementation::HandyKeys => "audiobud_keys".to_string(),
     }
 }
 
@@ -576,7 +576,7 @@ fn validate_shortcut_for_implementation(
 fn parse_keyboard_implementation(s: &str) -> KeyboardImplementation {
     match s {
         "tauri" => KeyboardImplementation::Tauri,
-        "handy_keys" => KeyboardImplementation::HandyKeys,
+        "audiobud_keys" | "handy_keys" => KeyboardImplementation::HandyKeys,
         other => {
             warn!(
                 "Invalid keyboard implementation '{}', defaulting to tauri",

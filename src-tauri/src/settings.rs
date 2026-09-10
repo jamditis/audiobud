@@ -315,6 +315,7 @@ pub enum RecordingRetentionPeriod {
 #[serde(rename_all = "snake_case")]
 pub enum KeyboardImplementation {
     Tauri,
+    #[serde(rename = "audiobud_keys", alias = "handy_keys")]
     HandyKeys,
 }
 
@@ -1266,6 +1267,17 @@ fn settings_store(app: &AppHandle) -> Option<Arc<Store<tauri::Wry>>> {
     }
 }
 
+/// Read settings while identifying the released `handy_keys` value that must
+/// be rewritten in AudioBud's current encoding.
+fn deserialize_app_settings(stored: serde_json::Value) -> serde_json::Result<(AppSettings, bool)> {
+    let has_legacy_keyboard_implementation = stored
+        .get("keyboard_implementation")
+        .and_then(serde_json::Value::as_str)
+        == Some("handy_keys");
+    let settings = serde_json::from_value(stored)?;
+    Ok((settings, has_legacy_keyboard_implementation))
+}
+
 /// Apply a JSON value to a single [`AppSettings`] field, addressed by its
 /// serialized key.
 ///
@@ -1371,8 +1383,8 @@ pub fn load_or_create_app_settings(app: &AppHandle) -> AppSettings {
 
     let mut settings = if let Some(settings_value) = store.get("settings") {
         // Parse the entire settings object
-        match serde_json::from_value::<AppSettings>(settings_value) {
-            Ok(mut settings) => {
+        match deserialize_app_settings(settings_value) {
+            Ok((mut settings, migrated_keyboard_implementation)) => {
                 debug!("Found existing settings: {:?}", settings);
                 let default_settings = get_default_settings();
                 let mut updated = false;
@@ -1388,8 +1400,13 @@ pub fn load_or_create_app_settings(app: &AppHandle) -> AppSettings {
                     }
                 }
 
-                if updated {
-                    debug!("Settings updated with new bindings");
+                if updated || migrated_keyboard_implementation {
+                    if updated {
+                        debug!("Settings updated with new bindings");
+                    }
+                    if migrated_keyboard_implementation {
+                        debug!("Migrated keyboard implementation to audiobud_keys");
+                    }
                     store.set("settings", serde_json::to_value(&settings).unwrap());
                     mutated = true;
                 }
@@ -1508,12 +1525,18 @@ pub fn get_settings(app: &AppHandle) -> AppSettings {
 fn read_settings_from_open_store(store: &Store<tauri::Wry>) -> (AppSettings, bool) {
     let mut mutated = false;
     let mut settings = if let Some(settings_value) = store.get("settings") {
-        serde_json::from_value::<AppSettings>(settings_value).unwrap_or_else(|_| {
-            let default_settings = get_default_settings();
-            store.set("settings", serde_json::to_value(&default_settings).unwrap());
-            mutated = true;
-            default_settings
-        })
+        match deserialize_app_settings(settings_value) {
+            Ok((settings, migrated_keyboard_implementation)) => {
+                mutated = migrated_keyboard_implementation;
+                settings
+            }
+            Err(_) => {
+                let default_settings = get_default_settings();
+                store.set("settings", serde_json::to_value(&default_settings).unwrap());
+                mutated = true;
+                default_settings
+            }
+        }
     } else {
         let default_settings = get_default_settings();
         store.set("settings", serde_json::to_value(&default_settings).unwrap());
@@ -1673,6 +1696,26 @@ mod tests {
             serde_json::to_value(settings.log_level).unwrap(),
             json!("warn"),
             "a migrated level is rewritten in the current string encoding"
+        );
+    }
+
+    #[test]
+    fn legacy_keyboard_implementation_migrates_without_changing_backend() {
+        let mut stored = serde_json::to_value(get_default_settings()).unwrap();
+        stored["keyboard_implementation"] = json!("handy_keys");
+
+        let (settings, migrated) =
+            deserialize_app_settings(stored).expect("legacy settings deserialize");
+
+        assert!(migrated, "the loader must rewrite the released value");
+        assert_eq!(
+            settings.keyboard_implementation,
+            KeyboardImplementation::HandyKeys,
+            "migration must preserve the selected backend"
+        );
+        assert_eq!(
+            serde_json::to_value(settings).unwrap()["keyboard_implementation"],
+            json!("audiobud_keys")
         );
     }
 
