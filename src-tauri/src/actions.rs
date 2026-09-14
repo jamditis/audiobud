@@ -573,6 +573,16 @@ pub(crate) struct ProcessedTranscription {
     pub post_process_prompt: Option<String>,
 }
 
+impl ProcessedTranscription {
+    fn empty_if_blank(transcription: &str) -> Option<Self> {
+        transcription.trim().is_empty().then(|| Self {
+            final_text: String::new(),
+            post_processed_text: None,
+            post_process_prompt: None,
+        })
+    }
+}
+
 pub(crate) async fn process_transcription_output(
     app: &AppHandle,
     transcription: &str,
@@ -580,6 +590,10 @@ pub(crate) async fn process_transcription_output(
     post_process: bool,
     effective_raw: bool,
 ) -> ProcessedTranscription {
+    // Silence must not reach conversion or an LLM, and callers treat empty output as no delivery.
+    if let Some(empty) = ProcessedTranscription::empty_if_blank(transcription) {
+        return empty;
+    }
     let settings = get_settings(app);
     let mut final_text = transcription.to_string();
     let mut post_processed_text: Option<String> = None;
@@ -1182,10 +1196,21 @@ pub static ACTION_MAP: Lazy<HashMap<String, Arc<dyn ShortcutAction>>> = Lazy::ne
 
 #[cfg(test)]
 mod tests {
-    use super::transcription_error_already_notified;
+    use super::{transcription_error_already_notified, ProcessedTranscription};
     use crate::managers::engine_limits::{
         MODEL_AUTO_LOAD_FAILED_ERROR, MODEL_NOT_LOADED_ERROR, WEDGED_ENGINE_ERROR,
     };
+
+    #[test]
+    fn blank_transcripts_have_no_output_or_post_process_metadata() {
+        for text in ["", " ", "\t\r\n", "\u{2003}\u{3000}"] {
+            let output = ProcessedTranscription::empty_if_blank(text).expect("blank transcript");
+            assert!(output.final_text.is_empty());
+            assert!(output.post_processed_text.is_none());
+            assert!(output.post_process_prompt.is_none());
+        }
+        assert!(ProcessedTranscription::empty_if_blank(" hello ").is_none());
+    }
 
     #[test]
     fn suppresses_generic_toasts_for_model_failures_with_specific_events() {
