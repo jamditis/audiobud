@@ -25,6 +25,12 @@ pub(crate) fn is_safe_recording_filename(name: &str) -> bool {
     matches!(components.next(), Some(Component::Normal(_))) && components.next().is_none()
 }
 
+#[derive(Debug, Default)]
+struct CleanupDeletion {
+    deleted_ids: Vec<i64>,
+    deleted_files: usize,
+}
+
 /// Database migrations for transcription history.
 /// Each migration is applied in order. The library tracks which migrations
 /// have been applied using SQLite's user_version pragma.
@@ -512,14 +518,14 @@ impl HistoryManager {
     ) {
     }
 
-    /// Returns the ids of the rows that were actually deleted (a stale entry
-    /// saved since selection is skipped and not reported).
+    /// Reports deleted row ids and successful file removals. A stale entry
+    /// saved since selection is skipped and not reported.
     fn delete_entries_and_files(
         conn: &Connection,
         recordings_dir: &Path,
         entries: &[(i64, String)],
-    ) -> Result<Vec<i64>> {
-        let mut deleted_ids = Vec::new();
+    ) -> Result<CleanupDeletion> {
+        let mut deletion = CleanupDeletion::default();
 
         for (id, file_name) in entries {
             // Re-check `saved` at delete time: the entry list was SELECTed
@@ -536,7 +542,15 @@ impl HistoryManager {
                 debug!("Skipping cleanup of entry {}: saved since selection", id);
                 continue;
             }
-            deleted_ids.push(*id);
+            deletion.deleted_ids.push(*id);
+
+            if !is_safe_recording_filename(file_name) {
+                warn!(
+                    "Skipping unsafe recording filename during cleanup of entry {}",
+                    id
+                );
+                continue;
+            }
 
             // Delete WAV file
             let file_path = recordings_dir.join(file_name);
@@ -544,12 +558,18 @@ impl HistoryManager {
                 if let Err(e) = fs::remove_file(&file_path) {
                     error!("Failed to delete WAV file {}: {}", file_name, e);
                 } else {
+                    deletion.deleted_files += 1;
                     debug!("Deleted old WAV file: {}", file_name);
                 }
             }
         }
 
-        Ok(deleted_ids)
+        debug!(
+            "History cleanup deleted {} rows and {} recording files",
+            deletion.deleted_ids.len(),
+            deletion.deleted_files
+        );
+        Ok(deletion)
     }
 
     fn cleanup_by_count_with_conn(
@@ -574,7 +594,8 @@ impl HistoryManager {
         if entries.len() > limit {
             let entries_to_delete = &entries[limit..];
             let deleted_ids =
-                Self::delete_entries_and_files(conn, recordings_dir, entries_to_delete)?;
+                Self::delete_entries_and_files(conn, recordings_dir, entries_to_delete)?
+                    .deleted_ids;
 
             if !deleted_ids.is_empty() {
                 debug!(
@@ -616,7 +637,8 @@ impl HistoryManager {
             entries_to_delete.push(row?);
         }
 
-        let deleted_ids = Self::delete_entries_and_files(conn, recordings_dir, &entries_to_delete)?;
+        let deleted_ids =
+            Self::delete_entries_and_files(conn, recordings_dir, &entries_to_delete)?.deleted_ids;
 
         if !deleted_ids.is_empty() {
             debug!(
@@ -1150,7 +1172,8 @@ mod tests {
             (2i64, "audiobud-200.wav".to_string()),
         ];
         let deleted_ids = HistoryManager::delete_entries_and_files(&conn, dir.path(), &stale_list)
-            .expect("delete entries");
+            .expect("delete entries")
+            .deleted_ids;
 
         // Only the row that was actually deleted is reported; the skipped
         // saved entry must not produce a Deleted event upstream.
@@ -1168,6 +1191,68 @@ mod tests {
         );
         assert_eq!(row_count(&conn, 2), 0);
         assert!(!wav_paths[1].exists());
+    }
+
+    #[test]
+    fn cleanup_rejects_unsafe_recording_paths() {
+        let conn = setup_conn();
+        let root = tempfile::tempdir().expect("temp root");
+        let recordings = root.path().join("recordings");
+        fs::create_dir(&recordings).expect("recordings dir");
+        let outside = root.path().join("outside.wav");
+        fs::write(&outside, b"synthetic outside file").expect("outside fixture");
+        let names = [
+            "../outside.wav".to_string(),
+            outside.to_string_lossy().into_owned(),
+            "..\\outside.wav".to_string(),
+        ];
+        let mut entries = Vec::new();
+        for (index, name) in names.iter().enumerate() {
+            insert_entry(&conn, index as i64, "synthetic", None);
+            let id = conn.last_insert_rowid();
+            conn.execute(
+                "UPDATE transcription_history SET file_name = ?1 WHERE id = ?2",
+                params![name, id],
+            )
+            .expect("unsafe fixture name");
+            entries.push((id, name.clone()));
+        }
+        let deletion = HistoryManager::delete_entries_and_files(&conn, &recordings, &entries)
+            .expect("cleanup unsafe rows");
+        assert_eq!(deletion.deleted_ids.len(), 3);
+        assert_eq!(deletion.deleted_files, 0);
+        assert_eq!(
+            fs::read(&outside).expect("outside survives"),
+            b"synthetic outside file"
+        );
+        assert_eq!(all_row_count(&conn), 0);
+    }
+
+    #[test]
+    fn cleanup_counts_rows_and_successful_file_unlinks_separately() {
+        let conn = setup_conn();
+        let dir = tempfile::tempdir().expect("recordings dir");
+        let paths = seed_entries_with_files(&conn, dir.path(), 4);
+        fs::remove_file(&paths[1]).expect("already missing recording");
+        fs::remove_file(&paths[2]).expect("replace recording with directory");
+        fs::create_dir(&paths[2]).expect("unlink failure fixture");
+        conn.execute(
+            "UPDATE transcription_history SET saved = 1 WHERE id = 4",
+            [],
+        )
+        .expect("save fourth entry");
+        let mut entries: Vec<_> = (1..=4)
+            .map(|id| (id, format!("audiobud-{}.wav", id * 100)))
+            .collect();
+        entries.push((999, "absent.wav".to_string()));
+        let deletion = HistoryManager::delete_entries_and_files(&conn, dir.path(), &entries)
+            .expect("cleanup entries");
+        assert_eq!(deletion.deleted_ids, vec![1, 2, 3]);
+        assert_eq!(deletion.deleted_files, 1);
+        assert_eq!(all_row_count(&conn), 1);
+        assert!(!paths[0].exists());
+        assert!(paths[2].is_dir());
+        assert!(paths[3].exists());
     }
 
     #[test]

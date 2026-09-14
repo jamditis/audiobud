@@ -1,5 +1,7 @@
 # AudioBud
 
+Track maintenance in the [AudioBud Project](https://github.com/users/jamditis/projects/25).
+
 AudioBud is a local-first dictation app with a Windows release and an Apple
 Silicon macOS release candidate. Press a hotkey, speak, and AudioBud types the
 transcript into the focused text field. Audio stays on your machine unless you
