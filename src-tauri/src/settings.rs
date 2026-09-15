@@ -254,9 +254,10 @@ pub enum ModelUnloadTimeout {
 /// window is focused. See [`PasteMethod::requires_focus`] for the capability
 /// this drives (issue #162): target-lock (#120) is meaningless for a method
 /// that has no window to lock.
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Type)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, Default, PartialEq, Eq, Type)]
 #[serde(rename_all = "snake_case")]
 pub enum PasteMethod {
+    #[default]
     CtrlV,
     Direct,
     None,
@@ -311,23 +312,12 @@ pub enum RecordingRetentionPeriod {
     Months3,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Type)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, Default, PartialEq, Eq, Type)]
 #[serde(rename_all = "snake_case")]
 pub enum KeyboardImplementation {
     Tauri,
+    #[default]
     HandyKeys,
-}
-
-impl Default for KeyboardImplementation {
-    fn default() -> Self {
-        KeyboardImplementation::HandyKeys
-    }
-}
-
-impl Default for PasteMethod {
-    fn default() -> Self {
-        PasteMethod::CtrlV
-    }
 }
 
 impl ModelUnloadTimeout {
