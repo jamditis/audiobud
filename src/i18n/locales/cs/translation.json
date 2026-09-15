@@ -299,7 +299,7 @@
       "acceleration": {
         "whisper": {
           "title": "Akcelerace Whisper",
-          "description": "Hardwarová akcelerace pro modely Whisper. Automatický režim používá GPU, pokud je k dispozici (Metal na macOS, Vulkan na Windows/Linux)."
+          "description": "Hardwarová akcelerace pro modely Whisper. Automatický režim používá GPU, pokud je k dispozici (Metal na macOS, Vulkan na Windows)."
         },
         "ort": {
           "title": "Akcelerace ONNX",
@@ -325,7 +325,7 @@
       },
       "overlay": {
         "title": "Pozice překryvu",
-        "description": "Zobrazovat vizuální překryv během nahrávání a přepisu. Na Linuxu je doporučeno 'Žádné'.",
+        "description": "Zobrazovat vizuální překryv během nahrávání a přepisu.",
         "options": {
           "none": "Žádné",
           "bottom": "Dole",
@@ -384,13 +384,6 @@
         "tooLong": "Název aplikace musí mít méně než {{max}} znaků",
         "remove": "Odebrat nastavení výstupu pro {{app}}"
       },
-      "typingTool": {
-        "title": "Nástroj pro psaní",
-        "description": "Vyberte, který linuxový nástroj pro psaní použít pro metodu přímého vložení. Auto automaticky zjistí a použije nejlepší dostupný nástroj pro váš systém.",
-        "options": {
-          "auto": "Auto (Doporučeno)"
-        }
-      },
       "clipboardHandling": {
         "title": "Práce se schránkou",
         "description": "'Neměnit schránku' zachová po přepisu aktuální obsah schránky. 'Kopírovat do schránky' ponechá po vložení výsledek přepisu ve schránce.",
@@ -401,7 +394,7 @@
       },
       "autoSubmit": {
         "title": "Automatické odeslání",
-        "description": "Automaticky odešle vybranou kombinaci kláves po vložení textu. Cmd+Enter platí pro macOS, zatímco Windows/Linux používají Super+Enter.",
+        "description": "Automaticky odešle vybranou kombinaci kláves po vložení textu. Cmd+Enter platí pro macOS, zatímco Windows používají Super+Enter.",
         "options": {
           "off": "Vypnuto",
           "enter": "Enter",
@@ -828,8 +821,7 @@
     "micPermissionDenied": {
       "generic": "Přístup k mikrofonu byl odepřen operačním systémem. Povolte prosím přístup k mikrofonu v nastavení systému.",
       "windows": "Povolte přístup k mikrofonu v Nastavení → Soukromí a zabezpečení → Mikrofon (včetně přístupu desktopových aplikací).",
-      "macos": "Povolte přístup k mikrofonu v Nastavení systému → Soukromí a zabezpečení → Mikrofon.",
-      "linux": "Povolte přístup k mikrofonu v nastavení zvuku nebo soukromí vašeho systému."
+      "macos": "Povolte přístup k mikrofonu v Nastavení systému → Soukromí a zabezpečení → Mikrofon."
     },
     "noInputDeviceTitle": "Mikrofon nebyl nalezen",
     "noInputDevice": "Nebylo detekováno žádné zvukové vstupní zařízení. Připojte mikrofon nebo sluchátka a zkuste to znovu.",

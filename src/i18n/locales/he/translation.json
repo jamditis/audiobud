@@ -299,7 +299,7 @@
       "acceleration": {
         "whisper": {
           "title": "האצת Whisper",
-          "description": "האצת חומרה למודלי Whisper. מצב אוטומטי משתמש ב-GPU אם זמין (Metal ב-macOS, Vulkan ב-Windows/Linux)."
+          "description": "האצת חומרה למודלי Whisper. מצב אוטומטי משתמש ב-GPU אם זמין (Metal ב-macOS, Vulkan ב-Windows)."
         },
         "ort": {
           "title": "האצת ONNX",
@@ -384,13 +384,6 @@
         "tooLong": "שם האפליקציה חייב להיות קצר מ־{{max}} תווים",
         "remove": "הסרת הגדרות הפלט של {{app}}"
       },
-      "typingTool": {
-        "title": "כלי הקלדה",
-        "description": "בחר איזה כלי הקלדה בלינוקס ישמש עבור הדבקה ישירה. מצב אוטומטי יזהה וישתמש בכלי המתאים ביותר למערכת שלך.",
-        "options": {
-          "auto": "אוטומטי (מומלץ)"
-        }
-      },
       "clipboardHandling": {
         "title": "התנהגות הלוח",
         "description": "אל תשנה את הלוח ישמור על תוכן הלוח הנוכחי שלך אחרי התמלול. העתק ללוח ישאיר את תוצאת התמלול בלוח אחרי ההדבקה.",
@@ -401,7 +394,7 @@
       },
       "autoSubmit": {
         "title": "שליחה אוטומטית",
-        "description": "שלח אוטומטית את צירוף המקשים שנבחר אחרי הכנסת הטקסט. ב-macOS יופעל Cmd+Enter, וב-Windows/Linux יופעל Super+Enter.",
+        "description": "שלח אוטומטית את צירוף המקשים שנבחר אחרי הכנסת הטקסט. ב-macOS יופעל Cmd+Enter, וב-Windows יופעל Super+Enter.",
         "options": {
           "off": "כבוי",
           "enter": "Enter",
@@ -828,8 +821,7 @@
     "micPermissionDenied": {
       "generic": "מערכת ההפעלה חסמה את הגישה למיקרופון. תן הרשאת מיקרופון בהגדרות המערכת.",
       "windows": "הפעל גישה למיקרופון ב-Settings > Privacy & security > Microphone, כולל גישה לאפליקציות שולחן עבודה.",
-      "macos": "תן גישה למיקרופון ב-System Settings > Privacy & Security > Microphone.",
-      "linux": "תן גישה למיקרופון דרך הגדרות השמע או הפרטיות במערכת שלך."
+      "macos": "תן גישה למיקרופון ב-System Settings > Privacy & Security > Microphone."
     },
     "noInputDeviceTitle": "לא נמצא מיקרופון",
     "noInputDevice": "לא זוהה התקן קלט שמע. חבר מיקרופון או אוזנייה ונסה שוב.",

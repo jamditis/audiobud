@@ -31,7 +31,8 @@ app for Windows and macOS.
 
 These names describe the planned v0.6.0 release assets. They are not public
 downloads until the release is published. The Mac DMG is for Apple Silicon. No
-Intel Mac build is included. Linux builds are not validated for this release.
+Intel Mac build is included. Linux application builds and Nix packaging are no longer supported. See
+[platform support](docs/platform-support.md) for existing-user guidance.
 
 ## Install on macOS after publication
 
@@ -73,4 +74,4 @@ and that its notarization ticket validates. The full commands are in
   native library can end that detached call.
 - macOS updates are manual. The in-app updater is enabled for Windows NSIS
   builds only.
-- Intel Mac and Linux builds are not validated.
+- Intel Mac builds are not validated. Linux application builds and Nix packaging are retired.

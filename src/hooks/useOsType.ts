@@ -9,7 +9,7 @@ export function useOsType(): OSType {
   const osType = type();
   // type() returns "macos" | "windows" | "linux" | "ios" | "android"
   // OSType expects "macos" | "windows" | "linux" | "unknown"
-  if (osType === "macos" || osType === "windows" || osType === "linux") {
+  if (osType === "macos" || osType === "windows") {
     return osType;
   }
   return "unknown";

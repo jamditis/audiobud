@@ -32,8 +32,9 @@ describe("v0.6.0 release documentation", () => {
     expect(requirements).toContain("Windows 10 or 11 on x64");
     expect(requirements).toContain("macOS 11 or later on Apple Silicon");
     expect(requirements).toContain("Microphone and Accessibility permissions");
+    expect(requirements).toContain("Intel Mac builds are not validated");
     expect(requirements).toContain(
-      "Intel Mac and Linux builds are not validated",
+      "Linux application builds and Nix packaging are no longer supported",
     );
     expect(requirements).toContain("Apple Intelligence is optional");
   });

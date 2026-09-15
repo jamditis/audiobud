@@ -299,7 +299,7 @@
       "acceleration": {
         "whisper": {
           "title": "Whisper-acceleration",
-          "description": "Hårdvaruacceleration för Whisper-modeller. Auto använder GPU om tillgängligt (Metal på macOS, Vulkan på Windows/Linux)."
+          "description": "Hårdvaruacceleration för Whisper-modeller. Auto använder GPU om tillgängligt (Metal på macOS, Vulkan på Windows)."
         },
         "ort": {
           "title": "ONNX-acceleration",
@@ -325,7 +325,7 @@
       },
       "overlay": {
         "title": "Överlagringsposition",
-        "description": "Visa visuell återkoppling under inspelning och transkription. På Linux rekommenderas 'Ingen'.",
+        "description": "Visa visuell återkoppling under inspelning och transkription.",
         "options": {
           "none": "Ingen",
           "bottom": "Nederst",
@@ -384,13 +384,6 @@
         "tooLong": "Appnamnet måste vara kortare än {{max}} tecken",
         "remove": "Ta bort utmatningsinställningar för {{app}}"
       },
-      "typingTool": {
-        "title": "Skrivverktyg",
-        "description": "Välj vilket Linux-skrivverktyg som ska användas för metoden Direkt klistra in. Auto kommer automatiskt att upptäcka och använda det bästa tillgängliga verktyget för ditt system.",
-        "options": {
-          "auto": "Auto (Rekommenderas)"
-        }
-      },
       "clipboardHandling": {
         "title": "Hantering av urklipp",
         "description": "Ändra inte urklipp bevarar ditt nuvarande urklippsinnehåll efter transkription. Kopiera till urklipp lämnar transkriptionsresultatet i ditt urklipp efter att ha klistrat in.",
@@ -401,7 +394,7 @@
       },
       "autoSubmit": {
         "title": "Skicka automatiskt",
-        "description": "Skicka automatiskt den valda tangentkombinationen efter textinsättning. Cmd+Enter gäller på macOS, medan Windows/Linux använder Super+Enter.",
+        "description": "Skicka automatiskt den valda tangentkombinationen efter textinsättning. Cmd+Enter gäller på macOS, medan Windows använder Super+Enter.",
         "options": {
           "off": "Av",
           "enter": "Enter",
@@ -826,8 +819,7 @@
     "micPermissionDenied": {
       "generic": "Mikrofonåtkomst nekades av operativsystemet. Bevilja mikrofonbehörighet i dina systeminställningar.",
       "windows": "Aktivera mikrofonåtkomst i Inställningar → Integritet och säkerhet → Mikrofon (inklusive åtkomst till skrivbordsappar).",
-      "macos": "Bevilja mikrofonåtkomst i Systeminställningar → Integritet och säkerhet → Mikrofon.",
-      "linux": "Bevilja mikrofonåtkomst i systemets ljud- eller integritetsinställningar."
+      "macos": "Bevilja mikrofonåtkomst i Systeminställningar → Integritet och säkerhet → Mikrofon."
     },
     "noInputDeviceTitle": "Ingen mikrofon hittades",
     "noInputDevice": "Ingen ljudenhet hittades. Anslut en mikrofon eller ett headset och försök igen.",

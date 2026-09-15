@@ -299,7 +299,7 @@
       "acceleration": {
         "whisper": {
           "title": "Whisper アクセラレーション",
-          "description": "Whisper モデルのハードウェアアクセラレーション。自動モードでは利用可能な場合 GPU を使用します（macOS では Metal、Windows/Linux では Vulkan）。"
+          "description": "Whisper モデルのハードウェアアクセラレーション。自動モードでは利用可能な場合 GPU を使用します（macOS では Metal、Windows では Vulkan）。"
         },
         "ort": {
           "title": "ONNX アクセラレーション",
@@ -325,7 +325,7 @@
       },
       "overlay": {
         "title": "オーバーレイ位置",
-        "description": "録音と文字起こし中に視覚的なフィードバックオーバーレイを表示。Linuxでは「なし」を推奨。",
+        "description": "録音と文字起こし中に視覚的なフィードバックオーバーレイを表示。",
         "options": {
           "none": "なし",
           "bottom": "下",
@@ -384,13 +384,6 @@
         "tooLong": "アプリ名は {{max}} 文字未満にしてください",
         "remove": "{{app}} の出力設定を削除"
       },
-      "typingTool": {
-        "title": "タイピングツール",
-        "description": "直接貼り付け方式で使用する Linux のタイピングツールを選択します。Auto は自動的に最適なツールを検出して使用します。",
-        "options": {
-          "auto": "Auto（推奨）"
-        }
-      },
       "clipboardHandling": {
         "title": "クリップボードの処理",
         "description": "クリップボードを変更しないを選択すると、文字起こし後も現在のクリップボード内容が保持されます。クリップボードにコピーを選択すると、貼り付け後も文字起こし結果がクリップボードに残ります。",
@@ -401,7 +394,7 @@
       },
       "autoSubmit": {
         "title": "自動送信",
-        "description": "テキスト挿入後に選択したキーの組み合わせを自動的に送信します。macOSではCmd+Enter、Windows/LinuxではSuper+Enterが適用されます。",
+        "description": "テキスト挿入後に選択したキーの組み合わせを自動的に送信します。macOSではCmd+Enter、WindowsではSuper+Enterが適用されます。",
         "options": {
           "off": "オフ",
           "enter": "Enter",
@@ -826,8 +819,7 @@
     "micPermissionDenied": {
       "generic": "オペレーティングシステムによりマイクへのアクセスが拒否されました。システム設定でマイクの許可を付与してください。",
       "windows": "設定 → プライバシーとセキュリティ → マイク（デスクトップアプリのアクセスを含む）でマイクへのアクセスを有効にしてください。",
-      "macos": "システム設定 → プライバシーとセキュリティ → マイクでマイクへのアクセスを許可してください。",
-      "linux": "システムのサウンドまたはプライバシー設定でマイクへのアクセスを許可してください。"
+      "macos": "システム設定 → プライバシーとセキュリティ → マイクでマイクへのアクセスを許可してください。"
     },
     "noInputDeviceTitle": "マイクが見つかりません",
     "noInputDevice": "オーディオ入力デバイスが検出されませんでした。マイクまたはヘッドセットを接続してから再試行してください。",

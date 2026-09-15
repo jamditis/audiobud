@@ -1,5 +1,10 @@
 # Contributing to AudioBud
 
+Native application work targets Windows and the Apple Silicon macOS release
+candidate. Linux application support and Nix packaging are retired. Frontend
+work can still use Linux. Read [platform support](docs/platform-support.md)
+before changing platform code or CI.
+
 Thank you for your interest in contributing to AudioBud! This guide will help you get started with contributing to this open source speech-to-text application.
 
 ## Priorities

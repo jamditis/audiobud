@@ -39,7 +39,9 @@ separate v0.6.0 Partner Center update is tested, submitted, and accepted.
 Direct GitHub release installers remain available for portable installs, deployment tooling, and users who cannot access the Store listing. Beginning with v0.4.0, Windows release installers are signed and timestamped through Microsoft Artifact Signing. The signature identifies Joseph Amditis as the publisher. SmartScreen can still show a reputation warning for direct downloads while a new release builds reputation.
 
 Windows x64 is the validated public target. Apple Silicon macOS is the v0.6.0
-candidate target. Intel Mac and Linux builds are not validated.
+candidate target. Intel Mac builds are not validated. Linux application builds
+and Nix packaging are no longer supported. See [platform support](docs/platform-support.md)
+for the decision and existing-user guidance.
 
 Beginning with v0.4.2, installed Windows NSIS builds check AudioBud's signed
 GitHub release feed for updates by default. You can opt out in Settings >
@@ -246,7 +248,6 @@ Use the in-app downloader when possible. If a proxy or firewall blocks it, insta
 1. Open **Settings -> About** or debug mode to find the app data directory.
    - Windows: `C:\Users\{username}\AppData\Roaming\tech.amditis.audiobud\`
    - macOS: `~/Library/Application Support/tech.amditis.audiobud/`
-   - Linux: `~/.config/tech.amditis.audiobud/`
 2. Create a `models` folder inside that directory if needed.
 3. Download the model you want:
    - Whisper small: `https://github.com/jamditis/audiobud/releases/download/model-assets-v1/ggml-small.bin`
@@ -260,7 +261,7 @@ Custom Whisper GGML `.bin` files placed in `models/` are auto-discovered. The di
 
 ## Debug mode
 
-Open debug mode with `Ctrl+Shift+D` on Windows and Linux, or `Cmd+Shift+D` on macOS. It shows app data paths, logs, keyboard implementation settings, recording buffer controls, paste delay, and other diagnostics.
+Open debug mode with `Ctrl+Shift+D` on Windows, or `Cmd+Shift+D` on macOS. It shows app data paths, logs, keyboard implementation settings, recording buffer controls, paste delay, and other diagnostics.
 
 ## Project layout
 

@@ -1,14 +1,7 @@
-# AudioBud CI (milestone A): fast correctness checks on every push/PR - lint,
-# formatting, types, and unit tests (frontend) plus cargo test against a mock
-# transcription backend (no GPU). Native packaging/bundling and the signed
-# release + updater pipeline are deliberately milestone B: they need AudioBud's
-# own signing identity and provenance, not the inherited cjpais/Handy config.
-# See superpowers/DEFERRED-issues.md ("Milestone B" section).
-#
-# The two Rust jobs below mock the transcription engine to stay fast. That is a
-# deliberate trade, not full coverage: engine.yml builds the real engine on
-# Windows whenever src-tauri changes, so the code these jobs skip is still
-# compiled and tested before it can reach a release (issue #146).
+# AudioBud correctness checks. Linux hosts frontend and secret checks only.
+# The legacy required Rust check runs real Apple Silicon tests and a native
+# build. Windows keeps its mock regression job plus the real-engine workflow.
+# Signing and release publication remain confined to release.yml.
 name: CI
 
 on:
@@ -76,53 +69,83 @@ jobs:
         run: bun run test
 
   rust-tests:
+    # Legacy name is required by branch protection. This job now validates the
+    # real Apple Silicon engine instead of a Linux mock. Do not rename the
+    # check without a separate branch-protection change.
     name: Rust tests (mock transcription, no GPU)
-    runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    runs-on: macos-15
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    env:
+      MACOSX_DEPLOYMENT_TARGET: "11.0"
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Install system dependencies
-        timeout-minutes: 8
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Require Apple Silicon host
+        run: test "$(uname -m)" = arm64
+      - name: Select reviewed Xcode 26 toolchain
+        shell: bash
         run: |
-          # DEBIAN_FRONTEND must ride inside sudo (env_reset strips a step-level
-          # env: before apt/dpkg ever see it), so set it as a sudo argument.
-          sudo DEBIAN_FRONTEND=noninteractive apt-get update -o Acquire::Retries=3
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -o Acquire::Retries=3 libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev libasound2-dev libssl-dev libgtk-layer-shell-dev
+          set -euo pipefail
+          XCODE_DEVELOPER_DIR="/Applications/Xcode_26.0.1.app/Contents/Developer"
+          if [[ ! -d "$XCODE_DEVELOPER_DIR" ]]; then
+            echo "::error::Reviewed Xcode 26 toolchain is missing at $XCODE_DEVELOPER_DIR."
+            exit 1
+          fi
 
+          export DEVELOPER_DIR="$XCODE_DEVELOPER_DIR"
+          xcodebuild -version
+          SDK_PATH=$(xcrun --sdk macosx --show-sdk-path)
+          SDK_VERSION=$(xcrun --sdk macosx --show-sdk-version)
+          if [[ "$SDK_VERSION" != 26.* ]]; then
+            echo "::error::Expected the reviewed macOS 26 SDK, found $SDK_VERSION at $SDK_PATH."
+            exit 1
+          fi
+
+          FOUNDATION_MODELS_FRAMEWORK="$SDK_PATH/System/Library/Frameworks/FoundationModels.framework"
+          if [[ ! -d "$FOUNDATION_MODELS_FRAMEWORK" ]]; then
+            echo "::error::FoundationModels.framework is missing from the reviewed macOS 26 SDK."
+            exit 1
+          fi
+
+          {
+            echo "DEVELOPER_DIR=$XCODE_DEVELOPER_DIR"
+            echo "SDKROOT=$SDK_PATH"
+          } >> "$GITHUB_ENV"
+
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4
+        with:
+          toolchain: stable
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version: 1.3.14
+      - name: Install frontend dependencies
+        run: bun install --frozen-lockfile
       - uses: swatinem/rust-cache@v2
         with:
           workspaces: "./src-tauri -> target"
-
-      - name: Use mock TranscriptionManager (CI only)
+          shared-key: macos-real-engine
+      - name: Download the VAD model
         working-directory: src-tauri
         run: |
-          # Swap to the mock adapter so cargo test does not compile whisper/Vulkan/ONNX.
-          # The real transcription.rs is compiled and tested by engine.yml.
-          cp src/managers/transcription_mock.rs src/managers/transcription.rs
-          sed -i '/^transcribe-rs/d' Cargo.toml
-
-      - name: Download the VAD model (unicode-path ONNX regression test)
-        working-directory: src-tauri
-        run: |
-          # silero_vad_loads_from_unicode_directory fails in CI when the model
-          # is absent instead of skipping silently, so keep this step ahead of
-          # cargo test.
           mkdir -p resources/models
           model="resources/models/silero_vad_v4.onnx"
           curl --fail --location --retry 3 -o "$model" "$MODEL_ASSET_BASE_URL/silero_vad_v4.onnx"
-          test "$(wc -c < "$model")" -eq "$SILERO_VAD_BYTES"
-          echo "$SILERO_VAD_SHA256  $model" | sha256sum -c -
-
-      - name: Run Rust tests
+          test "$(wc -c < "$model" | tr -d ' ')" -eq "$SILERO_VAD_BYTES"
+          echo "$SILERO_VAD_SHA256  $model" | shasum -a 256 -c -
+      - name: Test the real Apple Silicon transcription engine
         working-directory: src-tauri
-        run: cargo test
-
+        run: cargo test --locked
       - name: Check generated Rust bindings
         working-directory: src-tauri
         run: |
-          cargo run --features generate-bindings --bin generate-bindings
+          cargo run --locked --features generate-bindings --bin generate-bindings
           git diff --exit-code -- ../src/bindings.ts
+      - name: Build the unsigned Apple Silicon application
+        # No bundle, signing environment, credentials, release writes, or uploads.
+        run: bun run tauri build --no-bundle --ci
 
   rust-tests-windows:
     name: Rust tests (Windows, mock transcription, no GPU)

@@ -179,7 +179,7 @@ For translation contribution guidelines, see [CONTRIBUTING_TRANSLATIONS.md](CONT
 
 ## CLI Parameters
 
-Handy supports command-line parameters on all platforms for integration with scripts, window managers, and autostart configurations.
+AudioBud supports command-line parameters on its retained platforms for integration with scripts, window managers, and autostart configurations.
 
 **Implementation:** `cli.rs` (definitions), `main.rs` (parsing), `lib.rs` (applying), `signal_handle.rs` (shared logic)
 
@@ -200,13 +200,14 @@ Handy supports command-line parameters on all platforms for integration with scr
 
 ## Debug Mode
 
-Access debug features: `Cmd+Shift+D` (macOS) or `Ctrl+Shift+D` (Windows/Linux)
+Access debug features: `Cmd+Shift+D` (macOS) or `Ctrl+Shift+D` (Windows)
 
 ## Platform notes
 
 - **Windows x64**: Validated public target. Release installers are signed, and local transcription uses Vulkan and DirectML acceleration.
 - **Apple Silicon macOS**: v0.6.0 release-candidate target. Local transcription uses Metal, and microphone and Accessibility permissions are required. The public release does not include an Intel Mac artifact.
-- **Linux and Intel Mac**: Inherited source-build paths only; neither is a validated release target. Linux uses Vulkan, has limited Wayland support, and its overlay uses GTK layer shell (disable with `HANDY_NO_GTK_LAYER_SHELL=1`).
+- **Intel Mac**: Inherited and unvalidated source path. No Intel artifact is planned.
+- **Linux and Nix**: Retired from the maintained application scope. Do not restore Linux backends, bundles, or Nix hooks without a new approved validation proposal. See [platform support](docs/platform-support.md). Linux-hosted frontend checks do not imply application support.
 
 ## Troubleshooting
 

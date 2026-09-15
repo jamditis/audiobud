@@ -299,7 +299,7 @@
       "acceleration": {
         "whisper": {
           "title": "Accélération Whisper",
-          "description": "Accélération matérielle pour les modèles Whisper. Auto utilise le GPU si disponible (Metal sur macOS, Vulkan sur Windows/Linux)."
+          "description": "Accélération matérielle pour les modèles Whisper. Auto utilise le GPU si disponible (Metal sur macOS, Vulkan sur Windows)."
         },
         "ort": {
           "title": "Accélération ONNX",
@@ -325,7 +325,7 @@
       },
       "overlay": {
         "title": "Position de la fenêtre d'enregistrement",
-        "description": "Afficher un retour visuel pendant l'enregistrement et la transcription. Sur Linux, 'Aucune' est recommandé.",
+        "description": "Afficher un retour visuel pendant l'enregistrement et la transcription.",
         "options": {
           "none": "Aucune",
           "bottom": "Bas",
@@ -384,13 +384,6 @@
         "tooLong": "Le nom de l'application doit faire moins de {{max}} caractères",
         "remove": "Retirer les réglages de sortie de {{app}}"
       },
-      "typingTool": {
-        "title": "Outil de frappe",
-        "description": "Choisissez quel outil de frappe Linux utiliser pour la méthode de collage direct. Auto détectera et utilisera automatiquement le meilleur outil disponible pour votre système.",
-        "options": {
-          "auto": "Auto (Recommandé)"
-        }
-      },
       "clipboardHandling": {
         "title": "Gestion du presse-papiers",
         "description": "Ne pas modifier le presse-papiers préserve le contenu actuel de votre presse-papiers après la transcription. Copier dans le presse-papiers laisse le résultat de la transcription dans votre presse-papiers après le collage.",
@@ -401,7 +394,7 @@
       },
       "autoSubmit": {
         "title": "Envoi automatique",
-        "description": "Envoie automatiquement la combinaison de touches sélectionnée après l'insertion du texte. Cmd+Enter s'applique sur macOS, tandis que Windows/Linux utilisent Super+Enter.",
+        "description": "Envoie automatiquement la combinaison de touches sélectionnée après l'insertion du texte. Cmd+Enter s'applique sur macOS, tandis que Windows utilisent Super+Enter.",
         "options": {
           "off": "Désactivé",
           "enter": "Entrée",
@@ -826,8 +819,7 @@
     "micPermissionDenied": {
       "generic": "L'accès au microphone a été refusé par le système d'exploitation. Veuillez accorder l'autorisation du microphone dans les paramètres système.",
       "windows": "Activez l'accès au microphone dans Paramètres → Confidentialité et sécurité → Microphone (y compris l'accès des applications de bureau).",
-      "macos": "Accordez l'accès au microphone dans Réglages du système → Confidentialité et sécurité → Microphone.",
-      "linux": "Accordez l'accès au microphone dans les paramètres de son ou de confidentialité de votre système."
+      "macos": "Accordez l'accès au microphone dans Réglages du système → Confidentialité et sécurité → Microphone."
     },
     "noInputDeviceTitle": "Aucun microphone trouvé",
     "noInputDevice": "Aucun périphérique d'entrée audio n'a été détecté. Veuillez connecter un microphone ou un casque et réessayer.",

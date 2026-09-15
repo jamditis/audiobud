@@ -299,7 +299,7 @@
       "acceleration": {
         "whisper": {
           "title": "Whisper acceleration",
-          "description": "Hardware acceleration for Whisper models. Auto uses GPU if available (Metal on macOS, Vulkan on Windows/Linux)."
+          "description": "Hardware acceleration for Whisper models. Auto uses GPU if available (Metal on macOS, Vulkan on Windows)."
         },
         "ort": {
           "title": "ONNX acceleration",
@@ -325,7 +325,7 @@
       },
       "overlay": {
         "title": "Overlay position",
-        "description": "Display visual feedback overlay during recording and transcription. On Linux 'None' is recommended.",
+        "description": "Display visual feedback overlay during recording and transcription.",
         "options": {
           "none": "None",
           "bottom": "Bottom",
@@ -384,13 +384,6 @@
         "tooLong": "Keep the app name under {{max}} characters",
         "remove": "Remove output settings for {{app}}"
       },
-      "typingTool": {
-        "title": "Typing tool",
-        "description": "Choose which Linux typing tool to use for Direct paste method. Auto will automatically detect and use the best available tool for your system.",
-        "options": {
-          "auto": "Auto (recommended)"
-        }
-      },
       "clipboardHandling": {
         "title": "Clipboard handling",
         "description": "Don't modify clipboard preserves your current clipboard contents after transcription. Copy to clipboard leaves the transcription result in your clipboard after pasting.",
@@ -401,7 +394,7 @@
       },
       "autoSubmit": {
         "title": "Auto submit",
-        "description": "Automatically send the selected key combination after text insertion. Cmd+Enter applies on macOS, while Windows/Linux use Super+Enter.",
+        "description": "Automatically send the selected key combination after text insertion. Cmd+Enter applies on macOS, while Windows use Super+Enter.",
         "options": {
           "off": "Off",
           "enter": "Enter",
@@ -826,8 +819,7 @@
     "micPermissionDenied": {
       "generic": "Microphone access was denied by the operating system. Please grant microphone permission in your system settings.",
       "windows": "Enable microphone access in Settings → Privacy & security → Microphone (including desktop app access).",
-      "macos": "Grant microphone access in System Settings → Privacy & Security → Microphone.",
-      "linux": "Grant microphone access in your system's sound or privacy settings."
+      "macos": "Grant microphone access in System Settings → Privacy & Security → Microphone."
     },
     "noInputDeviceTitle": "No microphone found",
     "noInputDevice": "No audio input device was detected. Please connect a microphone or headset and try again.",

@@ -10,18 +10,14 @@ export function pasteMethodModifierForOs(osType: OSType): "Cmd" | "Ctrl" {
 export function pasteMethodsForOs(osType: OSType): PasteMethod[] {
   const methods: PasteMethod[] = ["ctrl_v"];
 
-  if (osType === "windows" || osType === "linux") {
+  if (osType === "windows") {
     methods.push("direct");
   }
 
   methods.push("none");
 
-  if (osType === "windows" || osType === "linux") {
+  if (osType === "windows") {
     methods.push("ctrl_shift_v", "shift_insert");
-  }
-
-  if (osType === "linux") {
-    methods.push("external_script");
   }
 
   return methods;

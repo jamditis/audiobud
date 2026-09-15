@@ -110,10 +110,6 @@ image = { version = "0.25", default-features = false, features = ["png"] }
 tauri-nspanel = { git = "https://github.com/ahkohd/tauri-nspanel", rev = "da9c9a8d4eb7f0524a2508988df1a7d9585b4904" }
 transcribe-rs = { version = "0.3.3", features = ["whisper-metal"] }
 
-[target.'cfg(target_os = "linux")'.dependencies]
-gtk-layer-shell = { version = "0.8", features = ["v0_6"] }
-gtk = "0.18"
-transcribe-rs = { version = "0.3.3", features = ["whisper-vulkan"] }
 
 [patch.crates-io]
 tauri-runtime = { git = "https://github.com/cjpais/tauri.git", rev = "ad9ba9448b82b1a1628333ae06459e4def470db3" }

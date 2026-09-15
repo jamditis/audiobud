@@ -299,7 +299,7 @@
       "acceleration": {
         "whisper": {
           "title": "Akceleracja Whisper",
-          "description": "Akceleracja sprzętowa dla modeli Whisper. Tryb automatyczny używa GPU, jeśli jest dostępny (Metal na macOS, Vulkan na Windows/Linux)."
+          "description": "Akceleracja sprzętowa dla modeli Whisper. Tryb automatyczny używa GPU, jeśli jest dostępny (Metal na macOS, Vulkan na Windows)."
         },
         "ort": {
           "title": "Akceleracja ONNX",
@@ -325,7 +325,7 @@
       },
       "overlay": {
         "title": "Pozycja nakładki",
-        "description": "Wyświetlaj wizualną nakładkę podczas nagrywania i transkrypcji. Na Linuxie zalecane 'Brak'.",
+        "description": "Wyświetlaj wizualną nakładkę podczas nagrywania i transkrypcji.",
         "options": {
           "none": "Brak",
           "bottom": "Dół",
@@ -384,13 +384,6 @@
         "tooLong": "Nazwa aplikacji musi mieć mniej niż {{max}} znaków",
         "remove": "Usuń ustawienia wyjścia dla {{app}}"
       },
-      "typingTool": {
-        "title": "Narzędzie do wpisywania",
-        "description": "Wybierz, którego narzędzia do wpisywania w Linuxie użyć dla metody bezpośredniego wklejania. Auto automatycznie wykryje i użyje najlepszego dostępnego narzędzia dla Twojego systemu.",
-        "options": {
-          "auto": "Auto (Zalecane)"
-        }
-      },
       "clipboardHandling": {
         "title": "Obsługa schowka",
         "description": "Nie modyfikuj schowka zachowuje jego zawartość. Kopiuj do schowka pozostawia wynik transkrypcji w schowku.",
@@ -401,7 +394,7 @@
       },
       "autoSubmit": {
         "title": "Automatyczne wysyłanie",
-        "description": "Automatycznie wysyła wybraną kombinację klawiszy po wstawieniu tekstu. Cmd+Enter dotyczy macOS, natomiast Windows/Linux używają Super+Enter.",
+        "description": "Automatycznie wysyła wybraną kombinację klawiszy po wstawieniu tekstu. Cmd+Enter dotyczy macOS, natomiast Windows używają Super+Enter.",
         "options": {
           "off": "Wyłączone",
           "enter": "Enter",
@@ -830,8 +823,7 @@
     "micPermissionDenied": {
       "generic": "System operacyjny odmówił dostępu do mikrofonu. Przyznaj uprawnienia do mikrofonu w ustawieniach systemowych.",
       "windows": "Włącz dostęp do mikrofonu w Ustawienia → Prywatność i zabezpieczenia → Mikrofon (w tym dostęp aplikacji klasycznych).",
-      "macos": "Przyznaj dostęp do mikrofonu w Ustawienia systemowe → Prywatność i ochrona → Mikrofon.",
-      "linux": "Przyznaj dostęp do mikrofonu w ustawieniach dźwięku lub prywatności systemu."
+      "macos": "Przyznaj dostęp do mikrofonu w Ustawienia systemowe → Prywatność i ochrona → Mikrofon."
     },
     "noInputDeviceTitle": "Nie znaleziono mikrofonu",
     "noInputDevice": "Nie wykryto żadnego urządzenia wejściowego audio. Podłącz mikrofon lub słuchawki i spróbuj ponownie.",

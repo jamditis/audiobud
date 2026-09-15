@@ -299,7 +299,7 @@
       "acceleration": {
         "whisper": {
           "title": "Whisper Hızlandırma",
-          "description": "Whisper modelleri için donanım hızlandırma. Otomatik mod, mevcutsa GPU kullanır (macOS'ta Metal, Windows/Linux'ta Vulkan)."
+          "description": "Whisper modelleri için donanım hızlandırma. Otomatik mod, mevcutsa GPU kullanır (macOS'ta Metal, Windows'ta Vulkan)."
         },
         "ort": {
           "title": "ONNX Hızlandırma",
@@ -325,7 +325,7 @@
       },
       "overlay": {
         "title": "Overlay Konumu",
-        "description": "Kayıt ve transkripsiyon sırasında görsel geri bildirim kaplamasını gösterir. Linux'ta 'Yok' önerilir.",
+        "description": "Kayıt ve transkripsiyon sırasında görsel geri bildirim kaplamasını gösterir.",
         "options": {
           "none": "Yok",
           "bottom": "Alt",
@@ -384,13 +384,6 @@
         "tooLong": "Uygulama adı {{max}} karakterden kısa olmalı",
         "remove": "{{app}} için çıkış ayarlarını kaldır"
       },
-      "typingTool": {
-        "title": "Yazma Aracı",
-        "description": "Doğrudan yapıştırma yöntemi için hangi Linux yazma aracının kullanılacağını seçin. Auto, sisteminiz için mevcut en iyi aracı otomatik olarak algılar ve kullanır.",
-        "options": {
-          "auto": "Auto (Önerilen)"
-        }
-      },
       "clipboardHandling": {
         "title": "Pano Yönetimi",
         "description": "Panoyu Değiştirme, transkripsiyon sonrası mevcut pano içeriğini korur. Panoya Kopyala ise yapıştırma işleminden sonra transkripsiyon sonucunu panoda bırakır.",
@@ -401,7 +394,7 @@
       },
       "autoSubmit": {
         "title": "Otomatik Gönder",
-        "description": "Metin eklendikten sonra seçilen tuş kombinasyonunu otomatik olarak gönderir. macOS'ta Cmd+Enter, Windows/Linux'ta Super+Enter geçerlidir.",
+        "description": "Metin eklendikten sonra seçilen tuş kombinasyonunu otomatik olarak gönderir. macOS'ta Cmd+Enter, Windows'ta Super+Enter geçerlidir.",
         "options": {
           "off": "Kapalı",
           "enter": "Enter",
@@ -826,8 +819,7 @@
     "micPermissionDenied": {
       "generic": "Mikrofon erişimi işletim sistemi tarafından reddedildi. Lütfen sistem ayarlarından mikrofon iznini verin.",
       "windows": "Ayarlar → Gizlilik ve güvenlik → Mikrofon (masaüstü uygulama erişimi dahil) bölümünden mikrofon erişimini etkinleştirin.",
-      "macos": "Sistem Ayarları → Gizlilik ve Güvenlik → Mikrofon bölümünden mikrofon erişimini verin.",
-      "linux": "Sisteminizin ses veya gizlilik ayarlarından mikrofon erişimini verin."
+      "macos": "Sistem Ayarları → Gizlilik ve Güvenlik → Mikrofon bölümünden mikrofon erişimini verin."
     },
     "noInputDeviceTitle": "Mikrofon bulunamadı",
     "noInputDevice": "Ses giriş aygıtı algılanamadı. Lütfen bir mikrofon veya kulaklık bağlayın ve tekrar deneyin.",

@@ -29,13 +29,18 @@ supported.
 
 ### Changed
 
+- Removed unmaintained Linux application backends and bundles, Nix packaging,
+  generated Nix dependency files, and the Nix installation hook. Windows and
+  Apple Silicon macOS work are retained. Existing users should read
+  [platform support](docs/platform-support.md) before updating source revisions.
+
 - Experimental output targeting is Windows-only and off by default. Windows
   can refuse to activate the selected window. If this occurs, AudioBud does not
   send input to a different window. The transcript stays available in history
   and clipboard when copying is enabled. Per-application output profiles are
   not part of this experimental gate.
 - The planned macOS artifact requires version 11 or later and is Apple Silicon
-  only. Intel Mac and Linux builds are not validated.
+  only. Intel Mac builds are not validated.
 - macOS updates are manual. Windows NSIS builds keep the signed in-app update
   channel.
 - Model recommendations are now system-specific. macOS recommends Whisper

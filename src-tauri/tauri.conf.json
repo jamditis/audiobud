@@ -55,20 +55,6 @@
       "signingIdentity": "-",
       "entitlements": "Entitlements.plist"
     },
-    "linux": {
-      "deb": {
-        "depends": ["libgtk-layer-shell0"]
-      },
-      "rpm": {
-        "compression": {
-          "type": "none"
-        }
-      },
-      "appimage": {
-        "bundleMediaFramework": true,
-        "files": {}
-      }
-    },
     "windows": {
       "nsis": {
         "template": "nsis/installer.nsi",

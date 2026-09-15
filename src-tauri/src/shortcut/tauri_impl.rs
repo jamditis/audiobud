@@ -7,7 +7,6 @@ use log::{error, warn};
 use tauri::AppHandle;
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 
-#[cfg(not(target_os = "linux"))]
 use crate::settings::get_settings;
 use crate::settings::ShortcutBinding;
 
@@ -142,14 +141,6 @@ pub fn unregister_shortcut(app: &AppHandle, binding: ShortcutBinding) -> Result<
 
 /// Register the cancel shortcut (called when recording starts)
 pub fn register_cancel_shortcut(app: &AppHandle) {
-    // Cancel shortcut is disabled on Linux due to instability with dynamic shortcut registration
-    #[cfg(target_os = "linux")]
-    {
-        let _ = app;
-        return;
-    }
-
-    #[cfg(not(target_os = "linux"))]
     {
         let app_clone = app.clone();
         tauri::async_runtime::spawn(async move {
@@ -164,14 +155,6 @@ pub fn register_cancel_shortcut(app: &AppHandle) {
 
 /// Unregister the cancel shortcut (called when recording stops)
 pub fn unregister_cancel_shortcut(app: &AppHandle) {
-    // Cancel shortcut is disabled on Linux due to instability with dynamic shortcut registration
-    #[cfg(target_os = "linux")]
-    {
-        let _ = app;
-        return;
-    }
-
-    #[cfg(not(target_os = "linux"))]
     {
         let app_clone = app.clone();
         tauri::async_runtime::spawn(async move {

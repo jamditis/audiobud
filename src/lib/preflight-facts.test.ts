@@ -125,7 +125,7 @@ describe("buildSystemFacts assembles typed facts from a raw probe", () => {
       buildSystemFacts({ platform: "windows", arch: "   " }).arch,
     ).toBeUndefined();
     // A real reading is still carried, trimmed of stray probe whitespace.
-    expect(buildSystemFacts({ platform: "linux", arch: " arm64 " }).arch).toBe(
+    expect(buildSystemFacts({ platform: "macos", arch: " arm64 " }).arch).toBe(
       "arm64",
     );
   });
