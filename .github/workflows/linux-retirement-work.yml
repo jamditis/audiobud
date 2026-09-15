@@ -5,7 +5,7 @@ on:
     branches: [work/linux-retirement-20260915]
     paths:
       - .github/workflows/linux-retirement-work.yml
-      - scripts/linux-retirement-work.py
+      - scripts/linux-retirement-*.py
 
 permissions:
   contents: read
@@ -26,6 +26,8 @@ jobs:
       - name: Select the reviewed source base
         run: |
           cp scripts/linux-retirement-work.py /tmp/linux-retirement-work.py
+          cp scripts/linux-retirement-fixes.py /tmp/linux-retirement-fixes.py
+          python3 /tmp/linux-retirement-fixes.py
           git fetch --depth=1 origin 720896a55e5bfecdd8dcfd7dd1716dfce833c729
           git checkout --detach 720896a55e5bfecdd8dcfd7dd1716dfce833c729
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
@@ -72,6 +74,7 @@ jobs:
         run: |
           test ! -f .github/workflows/linux-retirement-work.yml
           test ! -f scripts/linux-retirement-work.py
+          test ! -f scripts/linux-retirement-fixes.py
           git add -A
           git diff --cached --check
           git diff --cached --stat
@@ -107,6 +110,7 @@ jobs:
           git apply --index /tmp/retirement-patch/linux-retirement.patch
           test ! -f .github/workflows/linux-retirement-work.yml
           test ! -f scripts/linux-retirement-work.py
+          test ! -f scripts/linux-retirement-fixes.py
           git diff --cached --check
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
