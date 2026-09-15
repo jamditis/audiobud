@@ -1,94 +1,59 @@
-name: Linux retirement preparation
+name: Linux retirement follow-up
 
 on:
   push:
     branches: [work/linux-retirement-20260915]
-    paths:
-      - .github/workflows/linux-retirement-work.yml
-      - scripts/linux-retirement-*.py
+    paths: [.github/workflows/linux-retirement-work.yml]
 
 permissions:
   contents: read
 
-concurrency:
-  group: linux-retirement-preparation
-  cancel-in-progress: true
-
 jobs:
-  prepare:
+  check:
     if: github.repository == 'jamditis/audiobud' && github.ref == 'refs/heads/work/linux-retirement-20260915'
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
+          ref: 070ab7fa27d7fd18dc844b6d24cbc587810f22cf
           persist-credentials: false
-      - name: Select the reviewed source base
-        run: |
-          cp scripts/linux-retirement-work.py /tmp/linux-retirement-work.py
-          cp scripts/linux-retirement-fixes.py /tmp/linux-retirement-fixes.py
-          python3 /tmp/linux-retirement-fixes.py
-          git fetch --depth=1 origin 720896a55e5bfecdd8dcfd7dd1716dfce833c729
-          git checkout --detach 720896a55e5bfecdd8dcfd7dd1716dfce833c729
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
         with:
           bun-version: 1.3.14
-      - name: Install source parser
+      - name: Remove the obsolete Linux overlay warning
         run: |
-          python3 -m venv /tmp/retirement-parser
-          /tmp/retirement-parser/bin/pip install tree-sitter==0.25.0 tree-sitter-rust==0.24.0
-      - name: Apply the scoped source edits
-        run: /tmp/retirement-parser/bin/python /tmp/linux-retirement-work.py
-      - name: Resolve the reduced Cargo graph without upgrading dependencies
-        run: |
-          cargo metadata --manifest-path src-tauri/Cargo.toml --format-version 1 > /tmp/audiobud-metadata.json
           python3 - <<'PY'
           from pathlib import Path
-          import subprocess, tomllib
-          before = tomllib.loads(subprocess.check_output(['git','show','HEAD:src-tauri/Cargo.lock'], text=True))
-          after = tomllib.loads(Path('src-tauri/Cargo.lock').read_text())
-          key = lambda p: (p['name'], p['version'], p.get('source'))
-          old = {key(p) for p in before['package']}
-          new = {key(p) for p in after['package']}
-          assert new <= old, ('unexpected dependency changes', new - old)
-          print('Removed lockfile entries:', sorted(old - new))
+          import json
+          path = Path('src/i18n/locales/lt/translation.json')
+          source = path.read_text()
+          data = json.loads(source)
+          old = data['settings']['advanced']['overlay']['description']
+          assert 'Linux' in old
+          new = 'Rodyti vaizdinį indikatorių įrašymo ir transkripcijos metu.'
+          assert old.startswith(new)
+          assert source.count(json.dumps(old, ensure_ascii=False)) == 1
+          path.write_text(source.replace(json.dumps(old, ensure_ascii=False), json.dumps(new, ensure_ascii=False)))
           PY
-      - name: Install and format the changed source
+      - name: Validate translation and formatting
         run: |
           bun install --frozen-lockfile
-          git add -A
-          git diff --cached --name-only --diff-filter=ACM -z | xargs -0 -r bunx --no-install prettier --write --ignore-unknown
-          cargo fmt --manifest-path src-tauri/Cargo.toml
-      - name: Frontend and source-contract validation
-        run: |
-          bun run check:rebrand
           bun run check:translations
-          bun run lint
-          bunx --no-install tsc --noEmit
-          bun run bindings:check
+          bunx --no-install prettier --check src/i18n/locales/lt/translation.json
           bun run test
-          bun run build
-          bun run format:check
-          bun run tauri --version
-      - name: Record the reviewed patch
-        run: |
-          test ! -f .github/workflows/linux-retirement-work.yml
-          test ! -f scripts/linux-retirement-work.py
-          test ! -f scripts/linux-retirement-fixes.py
-          git add -A
-          git diff --cached --check
-          git diff --cached --stat
-          git diff --cached --binary > /tmp/linux-retirement.patch
-          git diff --cached -- src-tauri/src/clipboard.rs src-tauri/src/overlay.rs src-tauri/src/settings.rs src-tauri/src/tray.rs .github/workflows/ci.yml .github/workflows/engine.yml
+          git diff --check
+          git diff -- src/i18n/locales/lt/translation.json
+          git diff --binary > /tmp/linux-retirement-follow-up.patch
       - uses: actions/upload-artifact@v4
         with:
-          name: linux-retirement-patch
-          path: /tmp/linux-retirement.patch
+          name: linux-retirement-follow-up
+          path: /tmp/linux-retirement-follow-up.patch
           retention-days: 3
           if-no-files-found: error
 
-  prepare-review-branch:
-    needs: prepare
+  record-commit:
+    needs: check
     if: github.repository == 'jamditis/audiobud' && github.ref == 'refs/heads/work/linux-retirement-20260915'
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -97,33 +62,30 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          ref: 720896a55e5bfecdd8dcfd7dd1716dfce833c729
+          ref: 070ab7fa27d7fd18dc844b6d24cbc587810f22cf
           persist-credentials: false
       - uses: actions/download-artifact@v4
         with:
-          name: linux-retirement-patch
-          path: /tmp/retirement-patch
-      - name: Apply the validated patch
-        run: |
-          test "$(git rev-parse HEAD)" = 720896a55e5bfecdd8dcfd7dd1716dfce833c729
-          git apply --index --check /tmp/retirement-patch/linux-retirement.patch
-          git apply --index /tmp/retirement-patch/linux-retirement.patch
-          test ! -f .github/workflows/linux-retirement-work.yml
-          test ! -f scripts/linux-retirement-work.py
-          test ! -f scripts/linux-retirement-fixes.py
-          git diff --cached --check
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git commit -m 'chore: retire Linux application paths and preserve native CI coverage'
-      - name: Create only the review branch
+          name: linux-retirement-follow-up
+          path: /tmp/retirement-follow-up
+      - name: Record a commit object without changing any branch
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          set -euo pipefail
-          test "$GITHUB_REPOSITORY" = jamditis/audiobud
-          test "$GITHUB_REF" = refs/heads/work/linux-retirement-20260915
-          test -z "$(git ls-remote --heads origin refs/heads/chore/remove-linux-target)"
-          gh auth setup-git
-          git push origin HEAD:refs/heads/chore/remove-linux-target
-          echo "Review commit: $(git rev-parse HEAD)"
-          echo "No merge, tag, release, or default-branch write was performed." >> "$GITHUB_STEP_SUMMARY"
+          git apply --index --check /tmp/retirement-follow-up/linux-retirement-follow-up.patch
+          git apply --index /tmp/retirement-follow-up/linux-retirement-follow-up.patch
+          python3 - <<'PY'
+          import json, subprocess
+          from pathlib import Path
+          base = '070ab7fa27d7fd18dc844b6d24cbc587810f22cf'
+          assert subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip() == base
+          changed = subprocess.check_output(['git', 'diff', '--cached', '--name-only'], text=True).splitlines()
+          assert changed == ['src/i18n/locales/lt/translation.json'], changed
+          def api(endpoint, body):
+              response = subprocess.check_output(['gh', 'api', '--method', 'POST', f'repos/jamditis/audiobud/git/{endpoint}', '--input', '-'], input=json.dumps(body), text=True)
+              return json.loads(response)
+          tree = api('trees', {'base_tree': '984c98ef2586efc5182552f321e3eb9f4f71e649', 'tree': [{'path': changed[0], 'mode': '100644', 'type': 'blob', 'content': Path(changed[0]).read_text()}]})
+          commit = api('commits', {'message': 'fix: remove retired Linux overlay advice from the Lithuanian translation', 'tree': tree['sha'], 'parents': [base]})
+          print('VALIDATED_REVIEW_COMMIT=' + commit['sha'])
+          print('No branch, tag, release, or default-branch change was performed.')
+          PY
