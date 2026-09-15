@@ -1,0 +1,58 @@
+name: Linux retirement source audit
+
+on:
+  push:
+    branches: [work/linux-retirement-20260915]
+    paths:
+      - .github/workflows/linux-retirement-work.yml
+      - scripts/linux-retirement-work.py
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    if: github.repository == 'jamditis/audiobud' && github.ref == 'refs/heads/work/linux-retirement-20260915'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Inspect platform-specific source
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          roots = [Path('src-tauri/src'), Path('src'), Path('scripts')]
+          for root in roots:
+              for path in sorted(root.rglob('*')):
+                  if path.suffix not in {'.rs', '.ts', '.tsx', '.css', '.mjs'}:
+                      continue
+                  if 'bindings' in path.name or path.name == 'linux-retirement-work.py':
+                      continue
+                  lines = path.read_text().splitlines()
+                  hits = [i for i, line in enumerate(lines) if re.search(r'linux|wayland|x11|TypingTool|typing_tool|gtk_layer_shell', line, re.I)]
+                  if not hits:
+                      continue
+                  print(f'\n=== {path} ({len(lines)} lines) ===')
+                  indices = sorted({j for i in hits for j in range(max(0, i - 4), min(len(lines), i + 9))})
+                  previous = -2
+                  for i in indices:
+                      if i != previous + 1:
+                          print('...')
+                      print(f'{i+1:04d}: {lines[i]}')
+                      previous = i
+          for name in ['src-tauri/build.rs', 'src-tauri/capabilities/desktop.json', 'src-tauri/src/bin/generate-bindings.rs', 'scripts/release-documentation.test.ts']:
+              path = Path(name)
+              if path.exists():
+                  print(f'\n=== FULL {name} ===\n{path.read_text()}')
+          path = Path('.github/workflows/release.yml')
+          lines = path.read_text().splitlines()
+          for i, line in enumerate(lines):
+              if re.search(r'build-macos:|runs-on: macos|Xcode_26|MACOSX_DEPLOYMENT_TARGET|SDKROOT', line):
+                  print('\n=== RELEASE CONTEXT ===')
+                  for j in range(max(0, i-3), min(len(lines), i+12)):
+                      print(f'{j+1:04d}: {lines[j]}')
+          PY
