@@ -299,7 +299,7 @@
       "acceleration": {
         "whisper": {
           "title": "Aceleração Whisper",
-          "description": "Aceleração por hardware para modelos Whisper. Auto usa GPU se disponível (Metal no macOS, Vulkan no Windows/Linux)."
+          "description": "Aceleração por hardware para modelos Whisper. Auto usa GPU se disponível (Metal no macOS, Vulkan no Windows)."
         },
         "ort": {
           "title": "Aceleração ONNX",
@@ -325,7 +325,7 @@
       },
       "overlay": {
         "title": "Posição da Sobreposição",
-        "description": "Exibir sobreposição de feedback visual durante gravação e transcrição. No Linux, 'Nenhum' é recomendado.",
+        "description": "Exibir sobreposição de feedback visual durante gravação e transcrição.",
         "options": {
           "none": "Nenhum",
           "bottom": "Inferior",
@@ -384,13 +384,6 @@
         "tooLong": "O nome da aplicação deve ter menos de {{max}} caracteres",
         "remove": "Remover as definições de saída de {{app}}"
       },
-      "typingTool": {
-        "title": "Ferramenta de digitação",
-        "description": "Escolha qual ferramenta de digitação do Linux usar para o método de colagem direta. Auto detectará e usará automaticamente a melhor ferramenta disponível para o seu sistema.",
-        "options": {
-          "auto": "Auto (Recomendado)"
-        }
-      },
       "clipboardHandling": {
         "title": "Manipulação da Área de Transferência",
         "description": "Não Modificar Área de Transferência preserva o conteúdo atual da área de transferência após a transcrição. Copiar para Área de Transferência deixa o resultado da transcrição na área de transferência após colar.",
@@ -401,7 +394,7 @@
       },
       "autoSubmit": {
         "title": "Envio automático",
-        "description": "Envia automaticamente a combinação de teclas selecionada após a inserção do texto. Cmd+Enter aplica-se no macOS, enquanto Windows/Linux usam Super+Enter.",
+        "description": "Envia automaticamente a combinação de teclas selecionada após a inserção do texto. Cmd+Enter aplica-se no macOS, enquanto Windows usam Super+Enter.",
         "options": {
           "off": "Desativado",
           "enter": "Enter",
@@ -826,8 +819,7 @@
     "micPermissionDenied": {
       "generic": "O acesso ao microfone foi negado pelo sistema operacional. Conceda a permissão do microfone nas configurações do sistema.",
       "windows": "Ative o acesso ao microfone em Configurações → Privacidade e segurança → Microfone (incluindo acesso de aplicativos da área de trabalho).",
-      "macos": "Conceda o acesso ao microfone em Ajustes do Sistema → Privacidade e Segurança → Microfone.",
-      "linux": "Conceda o acesso ao microfone nas configurações de som ou privacidade do seu sistema."
+      "macos": "Conceda o acesso ao microfone em Ajustes do Sistema → Privacidade e Segurança → Microfone."
     },
     "noInputDeviceTitle": "Nenhum microfone encontrado",
     "noInputDevice": "Nenhum dispositivo de entrada de áudio foi detectado. Conecte um microfone ou fone de ouvido e tente novamente.",

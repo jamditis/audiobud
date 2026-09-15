@@ -299,7 +299,7 @@
       "acceleration": {
         "whisper": {
           "title": "Whisper 加速",
-          "description": "Whisper 模型的硬件加速。自动模式在可用时使用 GPU（macOS 上使用 Metal，Windows/Linux 上使用 Vulkan）。"
+          "description": "Whisper 模型的硬件加速。自动模式在可用时使用 GPU（macOS 上使用 Metal，Windows 上使用 Vulkan）。"
         },
         "ort": {
           "title": "ONNX 加速",
@@ -325,7 +325,7 @@
       },
       "overlay": {
         "title": "悬浮窗位置",
-        "description": "在录制和转录期间显示可视反馈悬浮窗。在 Linux 上建议选择「无」。",
+        "description": "在录制和转录期间显示可视反馈悬浮窗。",
         "options": {
           "none": "无",
           "bottom": "底部",
@@ -384,13 +384,6 @@
         "tooLong": "应用名称需少于 {{max}} 个字符",
         "remove": "删除 {{app}} 的输出设置"
       },
-      "typingTool": {
-        "title": "输入工具",
-        "description": "选择在直接粘贴方式下使用的 Linux 输入工具。Auto 会自动检测并使用系统中可用的最佳工具。",
-        "options": {
-          "auto": "Auto（推荐）"
-        }
-      },
       "clipboardHandling": {
         "title": "剪贴板处理",
         "description": "不修改剪贴板将在转录后保留当前剪贴板内容。复制到剪贴板将在粘贴后将转录结果留在剪贴板中。",
@@ -401,7 +394,7 @@
       },
       "autoSubmit": {
         "title": "自动提交",
-        "description": "在文本插入后自动发送所选的按键组合。macOS 上使用 Cmd+Enter，Windows/Linux 上使用 Super+Enter。",
+        "description": "在文本插入后自动发送所选的按键组合。macOS 上使用 Cmd+Enter，Windows 上使用 Super+Enter。",
         "options": {
           "off": "关闭",
           "enter": "Enter",
@@ -826,8 +819,7 @@
     "micPermissionDenied": {
       "generic": "操作系统拒绝了麦克风访问。请在系统设置中授予麦克风权限。",
       "windows": "在设置 → 隐私和安全性 → 麦克风（包括桌面应用访问）中启用麦克风访问。",
-      "macos": "在系统设置 → 隐私与安全性 → 麦克风中授予麦克风访问权限。",
-      "linux": "在系统的声音或隐私设置中授予麦克风访问权限。"
+      "macos": "在系统设置 → 隐私与安全性 → 麦克风中授予麦克风访问权限。"
     },
     "noInputDeviceTitle": "未找到麦克风",
     "noInputDevice": "未检测到音频输入设备。请连接麦克风或耳机后重试。",

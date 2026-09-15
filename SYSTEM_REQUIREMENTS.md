@@ -53,9 +53,13 @@ does not require Apple Intelligence or macOS 26.
 
 ## Other platforms
 
-Intel Mac and Linux builds are not validated. No Intel Mac artifact is
-published. Contributors can still build inherited Linux and Intel paths from
-source, but those paths are outside the v0.6.0 release support boundary.
+Intel Mac builds are not validated. No Intel Mac artifact is published. The
+inherited Intel source path remains outside the v0.6.0 release support boundary.
+
+Linux application builds and Nix packaging are no longer supported. See
+[platform support](docs/platform-support.md) for the last reviewed source
+revision and existing-user guidance. Frontend-only development can still run on
+Linux; it is not a Linux application build.
 
 ## Why these numbers
 

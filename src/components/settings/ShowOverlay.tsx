@@ -4,7 +4,6 @@ import { Dropdown } from "../ui/Dropdown";
 import { SettingContainer } from "../ui/SettingContainer";
 import { Button } from "../ui/Button";
 import { useSettings } from "../../hooks/useSettings";
-import { useOsType } from "../../hooks/useOsType";
 import type { OverlayAnchor, OverlayPosition } from "@/bindings";
 
 interface ShowOverlayProps {
@@ -69,12 +68,7 @@ export const ShowOverlay: React.FC<ShowOverlayProps> = React.memo(
     const customPosition = getSetting("overlay_custom_position");
     const updating = isUpdating("overlay_position");
 
-    // The fine grid free-positions the overlay, which Windows and macOS honor
-    // via set_position. Linux's GTK layer-shell can only anchor to the Top or
-    // Bottom edge, so offering 9 cells there would let users save a placement
-    // the overlay silently ignores. Linux keeps the coarse Top/Bottom dropdown.
-    const osType = useOsType();
-    const supportsFineGrid = osType !== "linux";
+    // Both retained platforms honor the fine grid through set_position.
 
     // The grid highlights the saved anchor; with no custom placement it falls
     // back to the centered cell matching the coarse Top/Bottom choice.
@@ -100,7 +94,7 @@ export const ShowOverlay: React.FC<ShowOverlayProps> = React.memo(
           />
         </SettingContainer>
 
-        {selectedPosition !== "none" && supportsFineGrid && (
+        {selectedPosition !== "none" && (
           <SettingContainer
             title={t("settings.advanced.overlay.fine.title")}
             description={t("settings.advanced.overlay.fine.description")}

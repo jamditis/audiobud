@@ -52,49 +52,6 @@ fn set_mute(mute: bool) -> Result<(), String> {
         Ok(())
     }
 
-    #[cfg(target_os = "linux")]
-    {
-        use std::process::Command;
-
-        let mute_val = if mute { "1" } else { "0" };
-        let amixer_state = if mute { "mute" } else { "unmute" };
-
-        // Try multiple backends to increase compatibility
-        // 1. PipeWire (wpctl)
-        if Command::new("wpctl")
-            .args(["set-mute", "@DEFAULT_AUDIO_SINK@", mute_val])
-            .output()
-            .map(|o| o.status.success())
-            .unwrap_or(false)
-        {
-            return Ok(());
-        }
-
-        // 2. PulseAudio (pactl)
-        if Command::new("pactl")
-            .args(["set-sink-mute", "@DEFAULT_SINK@", mute_val])
-            .output()
-            .map(|o| o.status.success())
-            .unwrap_or(false)
-        {
-            return Ok(());
-        }
-
-        // 3. ALSA (amixer)
-        let output = Command::new("amixer")
-            .args(["set", "Master", amixer_state])
-            .output()
-            .map_err(|error| format!("Failed to run a system mute command: {error}"))?;
-        if output.status.success() {
-            Ok(())
-        } else {
-            Err(format!(
-                "System mute command failed with status {}",
-                output.status
-            ))
-        }
-    }
-
     #[cfg(target_os = "macos")]
     {
         use std::process::Command;
@@ -116,7 +73,7 @@ fn set_mute(mute: bool) -> Result<(), String> {
         }
     }
 
-    #[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "macos")))]
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
     Ok(())
 }
 
@@ -1029,11 +986,11 @@ mod tests {
         fs::remove_dir_all(&dir).ok();
     }
 
-    // A path that is not valid UTF-8 (possible on Windows and Linux) must be
+    // A path that is not valid UTF-8 (possible on Windows) must be
     // handed to the engine untouched instead of panicking in a &str round-trip.
     // macOS is excluded: APFS rejects non-UTF-8 file names at creation.
     #[test]
-    #[cfg(any(windows, target_os = "linux"))]
+    #[cfg(target_os = "windows")]
     fn vad_engine_path_survives_non_utf8_paths() {
         #[cfg(windows)]
         let dir_name = {
@@ -1041,11 +998,6 @@ mod tests {
             let mut wide: Vec<u16> = "audiobud-vad-".encode_utf16().collect();
             wide.push(0xD800); // unpaired surrogate: valid in Windows paths, not valid UTF-8
             OsString::from_wide(&wide)
-        };
-        #[cfg(target_os = "linux")]
-        let dir_name = {
-            use std::os::unix::ffi::OsStringExt;
-            OsString::from_vec(b"audiobud-vad-\xff".to_vec())
         };
 
         let (dir, model) = model_in_dir(dir_name);

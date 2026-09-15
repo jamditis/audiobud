@@ -21,7 +21,7 @@
 // a machine that is actually fine but whose probe failed is never hard-blocked
 // (issue open question: "don't scare off users whose machines are fine").
 
-export type Platform = "windows" | "macos" | "linux";
+export type Platform = "windows" | "macos";
 
 /** A hard requirement blocks launch when missing; a soft one only warns. */
 export type Severity = "hard" | "soft";

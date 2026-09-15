@@ -9,14 +9,14 @@ describe("paste methods by platform", () => {
   it("uses the platform modifier in clipboard labels", () => {
     expect(pasteMethodModifierForOs("macos")).toBe("Cmd");
     expect(pasteMethodModifierForOs("windows")).toBe("Ctrl");
-    expect(pasteMethodModifierForOs("linux")).toBe("Ctrl");
+    expect(pasteMethodModifierForOs("unknown")).toBe("Ctrl");
   });
 
   it("does not offer direct typing on macOS", () => {
     expect(pasteMethodsForOs("macos")).toEqual(["ctrl_v", "none"]);
   });
 
-  it("keeps the platform-specific methods on Windows and Linux", () => {
+  it("keeps the platform-specific methods on Windows", () => {
     expect(pasteMethodsForOs("windows")).toEqual([
       "ctrl_v",
       "direct",
@@ -24,14 +24,7 @@ describe("paste methods by platform", () => {
       "ctrl_shift_v",
       "shift_insert",
     ]);
-    expect(pasteMethodsForOs("linux")).toEqual([
-      "ctrl_v",
-      "direct",
-      "none",
-      "ctrl_shift_v",
-      "shift_insert",
-      "external_script",
-    ]);
+    expect(pasteMethodsForOs("unknown")).toEqual(["ctrl_v", "none"]);
   });
 });
 
@@ -40,8 +33,8 @@ describe("profile paste methods by platform", () => {
     expect(profilePasteMethodsForOs("macos")).toEqual(["ctrl_v", "none"]);
   });
 
-  it("filters the confirmation-gated external script from Linux profiles", () => {
-    expect(profilePasteMethodsForOs("linux")).toEqual([
+  it("does not offer external scripts on retained platforms", () => {
+    expect(profilePasteMethodsForOs("windows")).toEqual([
       "ctrl_v",
       "direct",
       "none",

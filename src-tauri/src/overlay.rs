@@ -19,12 +19,6 @@ use tauri::WebviewUrl;
 #[cfg(target_os = "macos")]
 use tauri_nspanel::{tauri_panel, CollectionBehavior, PanelBuilder, PanelLevel};
 
-#[cfg(target_os = "linux")]
-use gtk_layer_shell::{Edge, KeyboardMode, Layer, LayerShell};
-
-#[cfg(target_os = "linux")]
-use std::env;
-
 #[cfg(target_os = "macos")]
 tauri_panel! {
     panel!(RecordingOverlayPanel {
@@ -151,82 +145,18 @@ pub fn emit_delivery_confirmation(app: &AppHandle, event: TranscriptDeliveredEve
 
 #[cfg(target_os = "macos")]
 const OVERLAY_TOP_OFFSET: f64 = 46.0;
-#[cfg(any(target_os = "windows", target_os = "linux"))]
+#[cfg(target_os = "windows")]
 const OVERLAY_TOP_OFFSET: f64 = 4.0;
 
 #[cfg(target_os = "macos")]
 const OVERLAY_BOTTOM_OFFSET: f64 = 15.0;
 
-#[cfg(any(target_os = "windows", target_os = "linux"))]
+#[cfg(target_os = "windows")]
 const OVERLAY_BOTTOM_OFFSET: f64 = 40.0;
 
 /// Horizontal margin from the monitor edge for the left/right column anchors
 /// of the #9 reposition grid.
 const OVERLAY_SIDE_OFFSET: f64 = 16.0;
-
-#[cfg(target_os = "linux")]
-fn update_gtk_layer_shell_anchors(overlay_window: &tauri::webview::WebviewWindow) {
-    let window_clone = overlay_window.clone();
-    let _ = overlay_window.run_on_main_thread(move || {
-        // Try to get the GTK window from the Tauri webview
-        if let Ok(gtk_window) = window_clone.gtk_window() {
-            let settings = settings::get_settings(window_clone.app_handle());
-            match settings.overlay_position {
-                OverlayPosition::Top => {
-                    gtk_window.set_anchor(Edge::Top, true);
-                    gtk_window.set_anchor(Edge::Bottom, false);
-                }
-                OverlayPosition::Bottom | OverlayPosition::None => {
-                    gtk_window.set_anchor(Edge::Bottom, true);
-                    gtk_window.set_anchor(Edge::Top, false);
-                }
-            }
-        }
-    });
-}
-
-/// Returns true when the environment variable is set to a truthy value
-/// (e.g. "1", "true", "yes", "on").
-/// "0", "false", "no", "off" and empty string are treated as falsy (case-insensitive).
-/// Returns false when the variable is not set.
-#[cfg(target_os = "linux")]
-fn env_flag_enabled(name: &str) -> bool {
-    match env::var(name) {
-        Ok(v) => !matches!(
-            v.trim().to_ascii_lowercase().as_str(),
-            "" | "0" | "false" | "no" | "off"
-        ),
-        Err(_) => false,
-    }
-}
-
-/// Initializes GTK layer shell for Linux overlay window
-/// Returns true if layer shell was successfully initialized, false otherwise
-#[cfg(target_os = "linux")]
-fn init_gtk_layer_shell(overlay_window: &tauri::webview::WebviewWindow) -> bool {
-    if env_flag_enabled("HANDY_NO_GTK_LAYER_SHELL") {
-        debug!("Skipping GTK layer shell init (HANDY_NO_GTK_LAYER_SHELL is enabled)");
-        return false;
-    }
-
-    if !gtk_layer_shell::is_supported() {
-        return false;
-    }
-
-    // Try to get the GTK window from the Tauri webview
-    if let Ok(gtk_window) = overlay_window.gtk_window() {
-        // Initialize layer shell
-        gtk_window.init_layer_shell();
-        gtk_window.set_layer(Layer::Overlay);
-        gtk_window.set_keyboard_mode(KeyboardMode::None);
-        gtk_window.set_exclusive_zone(0);
-
-        update_gtk_layer_shell_anchors(overlay_window);
-
-        return true;
-    }
-    false
-}
 
 /// Marks the overlay's HWND `WS_EX_NOACTIVATE` (Windows only): the window never
 /// takes the foreground, no matter what generates the click.
@@ -452,7 +382,6 @@ fn calculate_overlay_position(app_handle: &AppHandle) -> Option<(f64, f64)> {
 fn build_recording_overlay(app_handle: &AppHandle) -> Result<(), String> {
     // On Linux (Wayland), monitor detection often fails, but we don't need exact coordinates
     // for Layer Shell as we use anchors. On other platforms, we require a monitor.
-    #[cfg(not(target_os = "linux"))]
     {
         let position = calculate_overlay_position(app_handle);
         if position.is_none() {
@@ -488,16 +417,6 @@ fn build_recording_overlay(app_handle: &AppHandle) -> Result<(), String> {
 
     match builder.build() {
         Ok(window) => {
-            #[cfg(target_os = "linux")]
-            {
-                // Try to initialize GTK layer shell, ignore errors if compositor doesn't support it
-                if init_gtk_layer_shell(&window) {
-                    debug!("GTK layer shell initialized for overlay window");
-                } else {
-                    debug!("GTK layer shell not available, falling back to regular window");
-                }
-            }
-
             #[cfg(target_os = "windows")]
             set_overlay_noactivate(&window);
 
@@ -732,11 +651,6 @@ pub fn show_processing_overlay(app_handle: &AppHandle, raw: bool) {
 /// Updates the overlay window position based on current settings
 pub fn update_overlay_position(app_handle: &AppHandle) {
     if let Some(overlay_window) = app_handle.get_webview_window("recording_overlay") {
-        #[cfg(target_os = "linux")]
-        {
-            update_gtk_layer_shell_anchors(&overlay_window);
-        }
-
         if let Some((x, y)) = calculate_overlay_position(app_handle) {
             let _ = overlay_window
                 .set_position(tauri::Position::Logical(tauri::LogicalPosition { x, y }));

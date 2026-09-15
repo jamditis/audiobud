@@ -50,7 +50,7 @@ pub enum ClipboardHistory {
 impl ClipboardContent {
     /// True when the snapshot holds text and nothing else. Used on Wayland to
     /// route the restore through wl-copy, matching the transcript write path.
-    #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+    #[cfg(test)]
     pub fn is_text_only(&self) -> bool {
         self.text.is_some() && self.html.is_none() && self.image.is_none() && self.files.is_none()
     }
@@ -216,8 +216,6 @@ impl ClipboardBackend for ArboardBackend {
 
     fn read_files(&mut self) -> Option<ClipboardFiles> {
         let paths = self.0.get().file_list().ok().filter(|f| !f.is_empty())?;
-        #[cfg(target_os = "linux")]
-        let paths = paths.into_iter().map(strip_uri_list_cr).collect();
         Some(ClipboardFiles {
             paths,
             #[cfg(windows)]
@@ -325,22 +323,6 @@ impl ClipboardBackend for ArboardBackend {
         self.0
             .clear()
             .map_err(|e| format!("Failed to clear clipboard: {}", e))
-    }
-}
-
-/// arboard 3.6.1 splits `text/uri-list` on `\n` only, so a CRLF-delimited
-/// list (the RFC 2483 form GTK and KDE write) leaves a trailing `\r` on every
-/// path. Writing such a path back fails and would strand the transcript on
-/// the clipboard, so the artifact is stripped at capture time. A real file
-/// name ending in `\r` is indistinguishable from the artifact here; upstream
-/// arboard accepts the same trade-off in its (unreleased) fix.
-#[cfg(target_os = "linux")]
-fn strip_uri_list_cr(path: PathBuf) -> PathBuf {
-    use std::ffi::OsString;
-    use std::os::unix::ffi::{OsStrExt, OsStringExt};
-    match path.as_os_str().as_bytes().strip_suffix(b"\r") {
-        Some(stripped) => PathBuf::from(OsString::from_vec(stripped.to_vec())),
-        None => path,
     }
 }
 
@@ -934,22 +916,6 @@ mod tests {
 
         assert_eq!(clipboard.image_reads, 0);
         assert_eq!(snapshot.image, None);
-    }
-
-    #[cfg(target_os = "linux")]
-    #[test]
-    fn capture_strips_the_uri_list_cr_artifact() {
-        // arboard 3.6.1 leaves the CRLF `\r` on paths parsed from a
-        // CRLF-delimited text/uri-list; restoring `/tmp/a.txt\r` fails and
-        // strands the transcript on the clipboard.
-        assert_eq!(
-            strip_uri_list_cr(PathBuf::from("/tmp/a.txt\r")),
-            PathBuf::from("/tmp/a.txt")
-        );
-        assert_eq!(
-            strip_uri_list_cr(PathBuf::from("/tmp/clean.txt")),
-            PathBuf::from("/tmp/clean.txt")
-        );
     }
 
     #[cfg(windows)]

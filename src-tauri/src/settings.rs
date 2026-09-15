@@ -320,20 +320,13 @@ pub enum KeyboardImplementation {
 
 impl Default for KeyboardImplementation {
     fn default() -> Self {
-        #[cfg(target_os = "linux")]
-        return KeyboardImplementation::Tauri;
-        #[cfg(not(target_os = "linux"))]
-        return KeyboardImplementation::HandyKeys;
+        KeyboardImplementation::HandyKeys
     }
 }
 
 impl Default for PasteMethod {
     fn default() -> Self {
-        // Default to CtrlV for macOS and Windows, Direct for Linux
-        #[cfg(target_os = "linux")]
-        return PasteMethod::Direct;
-        #[cfg(not(target_os = "linux"))]
-        return PasteMethod::CtrlV;
+        PasteMethod::CtrlV
     }
 }
 
@@ -389,6 +382,8 @@ impl SoundTheme {
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, Default, PartialEq, Eq, Type)]
 #[serde(rename_all = "snake_case")]
+// Compatibility-only: keep old settings and generated bindings readable.
+// No retained platform discovers or executes these retired Linux tools.
 pub enum TypingTool {
     #[default]
     Auto,
@@ -692,10 +687,7 @@ fn default_selected_language() -> String {
 }
 
 fn default_overlay_position() -> OverlayPosition {
-    #[cfg(target_os = "linux")]
-    return OverlayPosition::None;
-    #[cfg(not(target_os = "linux"))]
-    return OverlayPosition::Bottom;
+    OverlayPosition::Bottom
 }
 
 fn default_debug_mode() -> bool {
@@ -949,9 +941,7 @@ pub fn get_default_settings() -> AppSettings {
     let default_shortcut = "ctrl+alt+space";
     #[cfg(target_os = "macos")]
     let default_shortcut = "option+space";
-    #[cfg(target_os = "linux")]
-    let default_shortcut = "ctrl+space";
-    #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
     let default_shortcut = "alt+space";
 
     let mut bindings = HashMap::new();
@@ -969,9 +959,7 @@ pub fn get_default_settings() -> AppSettings {
     let default_post_process_shortcut = "ctrl+shift+space";
     #[cfg(target_os = "macos")]
     let default_post_process_shortcut = "option+shift+space";
-    #[cfg(target_os = "linux")]
-    let default_post_process_shortcut = "ctrl+shift+space";
-    #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
     let default_post_process_shortcut = "alt+shift+space";
 
     bindings.insert(
@@ -989,9 +977,7 @@ pub fn get_default_settings() -> AppSettings {
     let default_raw_shortcut = "ctrl+alt+r";
     #[cfg(target_os = "macos")]
     let default_raw_shortcut = "option+shift+r";
-    #[cfg(target_os = "linux")]
-    let default_raw_shortcut = "ctrl+alt+r";
-    #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
     let default_raw_shortcut = "alt+r";
 
     bindings.insert(
@@ -2233,5 +2219,19 @@ mod tests {
             Some(true)
         );
         assert!(settings.update_checks_enabled);
+    }
+}
+
+#[cfg(test)]
+mod platform_retirement_tests {
+    use super::TypingTool;
+
+    #[test]
+    fn legacy_typing_tool_values_round_trip_without_a_platform_backend() {
+        for value in ["auto", "wtype", "kwtype", "dotool", "ydotool", "xdotool"] {
+            let encoded = serde_json::Value::String(value.to_string());
+            let tool: TypingTool = serde_json::from_value(encoded.clone()).unwrap();
+            assert_eq!(serde_json::to_value(tool).unwrap(), encoded);
+        }
     }
 }

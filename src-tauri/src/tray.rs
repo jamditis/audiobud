@@ -47,25 +47,17 @@ pub fn current_tray_state(app: &AppHandle) -> TrayIconState {
 pub enum AppTheme {
     Dark,
     Light,
-    Colored, // Pink/colored theme for Linux
 }
 
-/// Gets the current app theme, with Linux defaulting to Colored theme
+/// Gets the current app theme, using dark artwork when no window exists.
 pub fn get_current_theme(app: &AppHandle) -> AppTheme {
-    if cfg!(target_os = "linux") {
-        // On Linux, always use the colored theme
-        AppTheme::Colored
-    } else {
-        // On other platforms, map system theme to our app theme
-        if let Some(main_window) = app.get_webview_window("main") {
-            match main_window.theme().unwrap_or(Theme::Dark) {
-                Theme::Light => AppTheme::Light,
-                Theme::Dark => AppTheme::Dark,
-                _ => AppTheme::Dark, // Default fallback
-            }
-        } else {
-            AppTheme::Dark
+    if let Some(main_window) = app.get_webview_window("main") {
+        match main_window.theme().unwrap_or(Theme::Dark) {
+            Theme::Light => AppTheme::Light,
+            _ => AppTheme::Dark,
         }
+    } else {
+        AppTheme::Dark
     }
 }
 
@@ -80,10 +72,6 @@ pub fn get_icon_path(theme: AppTheme, state: TrayIconState) -> &'static str {
         (AppTheme::Light, TrayIconState::Idle) => "resources/tray_idle_dark.png",
         (AppTheme::Light, TrayIconState::Recording) => "resources/tray_recording_dark.png",
         (AppTheme::Light, TrayIconState::Transcribing) => "resources/tray_transcribing_dark.png",
-        // Colored theme uses pink icons (for Linux)
-        (AppTheme::Colored, TrayIconState::Idle) => "resources/handy.png",
-        (AppTheme::Colored, TrayIconState::Recording) => "resources/recording.png",
-        (AppTheme::Colored, TrayIconState::Transcribing) => "resources/transcribing.png",
     }
 }
 
@@ -805,5 +793,27 @@ mod tests {
     fn falls_back_to_raw_transcription() {
         let entry = build_entry("raw", None);
         assert_eq!(last_transcript_text(&entry), "raw");
+    }
+}
+
+#[cfg(test)]
+mod platform_retirement_tests {
+    use super::{get_icon_path, AppTheme, TrayIconState};
+
+    #[test]
+    fn retained_tray_states_resolve_existing_audiobud_assets() {
+        for theme in [AppTheme::Dark, AppTheme::Light] {
+            for state in [
+                TrayIconState::Idle,
+                TrayIconState::Recording,
+                TrayIconState::Transcribing,
+            ] {
+                let path = get_icon_path(theme.clone(), state);
+                assert!(path.starts_with("resources/tray_"));
+                assert!(std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                    .join(path)
+                    .is_file());
+            }
+        }
     }
 }

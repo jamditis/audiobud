@@ -132,10 +132,7 @@ pub fn send_paste_ctrl_v(enigo: &mut Enigo) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     let (modifier_key, v_key_code) = (Key::Meta, Key::Other(9));
     #[cfg(target_os = "windows")]
-    let (modifier_key, v_key_code) = (Key::Control, Key::Other(0x56)); // VK_V
-    #[cfg(target_os = "linux")]
-    let (modifier_key, v_key_code) = (Key::Control, Key::Unicode('v'));
-
+    let (modifier_key, v_key_code) = (Key::Control, Key::Other(0x56));
     send_click_chord(
         enigo,
         &[modifier_key],
@@ -152,10 +149,7 @@ pub fn send_paste_ctrl_shift_v(enigo: &mut Enigo) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     let (modifier_key, v_key_code) = (Key::Meta, Key::Other(9)); // Cmd+Shift+V on macOS
     #[cfg(target_os = "windows")]
-    let (modifier_key, v_key_code) = (Key::Control, Key::Other(0x56)); // VK_V
-    #[cfg(target_os = "linux")]
-    let (modifier_key, v_key_code) = (Key::Control, Key::Unicode('v'));
-
+    let (modifier_key, v_key_code) = (Key::Control, Key::Other(0x56));
     send_click_chord(
         enigo,
         &[modifier_key, Key::Shift],
@@ -164,7 +158,7 @@ pub fn send_paste_ctrl_shift_v(enigo: &mut Enigo) -> Result<(), String> {
     )
 }
 
-/// Sends a Shift+Insert paste command (Windows and Linux only).
+/// Sends a Shift+Insert paste command (Windows only).
 /// This is more universal for terminal applications and legacy software.
 /// Note: On Wayland, this may not work - callers should check for Wayland and use alternative methods.
 pub fn send_paste_shift_insert(enigo: &mut Enigo) -> Result<(), String> {

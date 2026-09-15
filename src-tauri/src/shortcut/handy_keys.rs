@@ -559,14 +559,6 @@ pub fn init_shortcuts(app: &AppHandle) -> Result<(), String> {
 
 /// Register the cancel shortcut (called when recording starts)
 pub fn register_cancel_shortcut(app: &AppHandle) {
-    // Disabled on Linux due to instability
-    #[cfg(target_os = "linux")]
-    {
-        let _ = app;
-        return;
-    }
-
-    #[cfg(not(target_os = "linux"))]
     {
         let app_clone = app.clone();
         tauri::async_runtime::spawn(async move {
@@ -586,13 +578,6 @@ pub fn register_cancel_shortcut(app: &AppHandle) {
 
 /// Unregister the cancel shortcut (called when recording stops)
 pub fn unregister_cancel_shortcut(app: &AppHandle) {
-    #[cfg(target_os = "linux")]
-    {
-        let _ = app;
-        return;
-    }
-
-    #[cfg(not(target_os = "linux"))]
     {
         let app_clone = app.clone();
         tauri::async_runtime::spawn(async move {

@@ -1,4 +1,9 @@
 fn main() {
+    // Inspect the compilation target, not the OS running this build script.
+    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("linux") {
+        panic!("AudioBud no longer supports Linux application builds. See docs/platform-support.md. Frontend-only development remains available.");
+    }
+
     #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
     build_apple_intelligence_bridge();
 

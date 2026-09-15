@@ -1,5 +1,10 @@
 # Deferred issues (AudioBud)
 
+> Platform scope update, September 15, 2026: Linux application support and Nix
+> packaging are retired. Apple Silicon macOS remains the active release
+> candidate. The older platform findings below are historical context, not the
+> current support contract. See [platform support](../docs/platform-support.md).
+
 Tracking file for work found but deliberately deferred. The `jamditis/audiobud` repo now
 exists; entries here become GitHub issues as they are scheduled into a milestone, and this
 file stays the working ledger of findings not yet filed. Keep entries action-ready: file,
