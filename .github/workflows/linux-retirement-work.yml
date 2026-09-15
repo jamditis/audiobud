@@ -21,29 +21,42 @@ jobs:
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
         with:
           bun-version: 1.3.14
-      - name: Remove the obsolete Linux overlay warning
+      - name: Inspect and remove obsolete overlay advice in existing locales
         run: |
           python3 - <<'PY'
           from pathlib import Path
-          import json
-          path = Path('src/i18n/locales/lt/translation.json')
-          source = path.read_text()
-          data = json.loads(source)
-          old = data['settings']['advanced']['overlay']['description']
-          assert 'Linux' in old
-          new = 'Rodyti vaizdinį indikatorių įrašymo ir transkripcijos metu.'
-          assert old.startswith(new)
-          assert source.count(json.dumps(old, ensure_ascii=False)) == 1
-          path.write_text(source.replace(json.dumps(old, ensure_ascii=False), json.dumps(new, ensure_ascii=False)))
+          import json, re
+          count = 0
+          for path in sorted(Path('src/i18n/locales').glob('*/translation.json')):
+              source = path.read_text()
+              data = json.loads(source)
+              old = data['settings']['advanced']['overlay']['description']
+              if 'linux' not in old.lower():
+                  continue
+              print(f'Existing obsolete advice: {path}: {old}')
+              sentences = re.split(r'(?<=[.!?。！？])\s*', old)
+              keep = []
+              for sentence in sentences:
+                  if 'linux' in sentence.lower():
+                      break
+                  if sentence:
+                      keep.append(sentence)
+              new = ' '.join(keep)
+              assert new and old.startswith(new), (path, old)
+              assert source.count(json.dumps(old, ensure_ascii=False)) == 1
+              path.write_text(source.replace(json.dumps(old, ensure_ascii=False), json.dumps(new, ensure_ascii=False)))
+              count += 1
+          print(f'Updated locale count: {count}')
+          assert count <= 3, 'Unexpectedly broad translation change'
           PY
       - name: Validate translation and formatting
         run: |
           bun install --frozen-lockfile
           bun run check:translations
-          bunx --no-install prettier --check src/i18n/locales/lt/translation.json
+          bunx --no-install prettier --check src/i18n/locales
           bun run test
           git diff --check
-          git diff -- src/i18n/locales/lt/translation.json
+          git diff
           git diff --binary > /tmp/linux-retirement-follow-up.patch
       - uses: actions/upload-artifact@v4
         with:
@@ -72,6 +85,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          if [ ! -s /tmp/retirement-follow-up/linux-retirement-follow-up.patch ]; then
+            echo 'No remaining Linux overlay advice; no commit needed.'
+            exit 0
+          fi
           git apply --index --check /tmp/retirement-follow-up/linux-retirement-follow-up.patch
           git apply --index /tmp/retirement-follow-up/linux-retirement-follow-up.patch
           python3 - <<'PY'
@@ -80,12 +97,13 @@ jobs:
           base = '070ab7fa27d7fd18dc844b6d24cbc587810f22cf'
           assert subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip() == base
           changed = subprocess.check_output(['git', 'diff', '--cached', '--name-only'], text=True).splitlines()
-          assert changed == ['src/i18n/locales/lt/translation.json'], changed
+          assert 0 < len(changed) <= 3
+          assert all(p.startswith('src/i18n/locales/') and p.endswith('/translation.json') for p in changed)
           def api(endpoint, body):
               response = subprocess.check_output(['gh', 'api', '--method', 'POST', f'repos/jamditis/audiobud/git/{endpoint}', '--input', '-'], input=json.dumps(body), text=True)
               return json.loads(response)
-          tree = api('trees', {'base_tree': '984c98ef2586efc5182552f321e3eb9f4f71e649', 'tree': [{'path': changed[0], 'mode': '100644', 'type': 'blob', 'content': Path(changed[0]).read_text()}]})
-          commit = api('commits', {'message': 'fix: remove retired Linux overlay advice from the Lithuanian translation', 'tree': tree['sha'], 'parents': [base]})
+          tree = api('trees', {'base_tree': '984c98ef2586efc5182552f321e3eb9f4f71e649', 'tree': [{'path': p, 'mode': '100644', 'type': 'blob', 'content': Path(p).read_text()} for p in changed]})
+          commit = api('commits', {'message': 'fix: remove obsolete Linux overlay advice from translations', 'tree': tree['sha'], 'parents': [base]})
           print('VALIDATED_REVIEW_COMMIT=' + commit['sha'])
           print('No branch, tag, release, or default-branch change was performed.')
           PY
