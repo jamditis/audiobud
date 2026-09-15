@@ -7,13 +7,20 @@ AudioBud's maintained scope for the current release. This resolves the Linux
 portion of [#179](https://github.com/jamditis/audiobud/issues/179). It does not
 reverse or expand the macOS work.
 
-| Target | Status |
-| --- | --- |
-| Windows x64 | Validated public target. Keep the signed installers, update feed, and Store work. |
-| Apple Silicon macOS | v0.6.0 release-candidate target. Existing clean-Mac, candidate, signing, and release-asset gates still apply. |
-| Intel macOS | Inherited and unvalidated. No Intel artifact is planned; this decision does not expand its support. |
-| Linux | Not a maintained application target. Remove the inherited application branches and Linux bundles. |
-| Nix | No AudioBud flake, NixOS module, Home Manager module, or generated dependency path is maintained. |
+**Windows x64:** Validated public target. Keep the signed installers, update
+feed, and Store work.
+
+**Apple Silicon macOS:** v0.6.0 release-candidate target. Existing clean-Mac,
+candidate, signing, and release-asset gates still apply.
+
+**Intel macOS:** Inherited and unvalidated. No Intel artifact is planned; this
+decision does not expand its support.
+
+**Linux:** Not a maintained application target. Remove the inherited
+application branches and Linux bundles.
+
+**Nix:** No AudioBud flake, NixOS module, Home Manager module, or generated
+dependency path is maintained.
 
 Frontend development and platform-neutral checks can still run on Linux. A
 Linux-hosted CI job does not imply support for a Linux desktop application.
