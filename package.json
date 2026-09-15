@@ -21,8 +21,7 @@
     "check:rebrand": "bun scripts/check-rebrand.ts",
     "check:translations": "bun scripts/check-translations.ts",
     "bindings:generate": "cd src-tauri && cargo run --features generate-bindings --bin generate-bindings && cd .. && bun scripts/generate-webview-bindings.mjs",
-    "bindings:check": "bun scripts/generate-webview-bindings.mjs --check",
-    "postinstall": "bun scripts/check-nix-deps.ts"
+    "bindings:check": "bun scripts/generate-webview-bindings.mjs --check"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.1.16",
