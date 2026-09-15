@@ -22,7 +22,6 @@ new = 'expect(requirements).toContain(\n      "Intel Mac and Linux builds are no
 change(repr(old), repr(new))
 change("# Verify no existing retained-target unit test was removed.", '''# Remove obsolete implementation commentary without changing retained behavior.
 replace('src/components/settings/general/GeneralSettings.tsx', ' (dynamic shortcut instability)', '')
-replace('src-tauri/src/settings.rs', '// Default to CtrlV for macOS and Windows, Direct for Linux', '// Default to clipboard delivery on both retained platforms.')
 replace('src-tauri/src/clipboard.rs', 'copy belongs in Windows clipboard history. Wayland keeps its wl-copy path\\n/// for non-ASCII compatibility.', 'copy belongs in Windows clipboard history.')
 
 # Verify no existing retained-target unit test was removed.''')
