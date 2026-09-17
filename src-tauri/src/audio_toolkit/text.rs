@@ -140,6 +140,35 @@ fn build_ngram(words: &[&str]) -> String {
         .concat()
 }
 
+/// Collapses runs of three or more repeated ASCII letters for exact dictionary matching.
+///
+/// The caller must use the result only as a match candidate. This keeps ordinary expressive
+/// text such as "ahhhh" unchanged unless its collapsed form is an exact custom word.
+fn collapse_excessive_letter_runs(value: &str) -> Option<String> {
+    let mut characters = value.chars().peekable();
+    let mut collapsed = String::with_capacity(value.len());
+    let mut changed = false;
+
+    while let Some(character) = characters.next() {
+        let mut count = 1;
+        while characters.peek().is_some_and(|next| *next == character) {
+            characters.next();
+            count += 1;
+        }
+
+        collapsed.push(character);
+        if character.is_ascii_alphabetic() && count >= 3 {
+            changed = true;
+        } else {
+            for _ in 1..count {
+                collapsed.push(character);
+            }
+        }
+    }
+
+    changed.then_some(collapsed)
+}
+
 /// Finds the best matching custom word for a candidate string.
 ///
 /// Precision-first: a wrong correction makes dictation feel unsafe, so a fuzzy match is
@@ -153,7 +182,9 @@ fn build_ngram(words: &[&str]) -> String {
 ///   5. two-of-N phonetic/similarity agreement (Metaphone, Double Metaphone, Jaro-Winkler).
 ///
 /// Exact matches (after lowercasing/space-removal) bypass the fuzzy gate and win outright;
-/// this is what recases brands the user dictated correctly (e.g. "codex" -> "Codex").
+/// this is what recases brands the user dictated correctly (e.g. "codex" -> "Codex"). A
+/// candidate with a run of three or more repeated ASCII letters also wins when collapsing the
+/// run produces an exact custom word. The exact-word requirement prevents broad normalization.
 ///
 /// `threshold` is the legacy sensitivity dial: lowering it raises the edit-distance floor
 /// (stricter); it can no longer loosen matching below the per-length floors.
@@ -171,10 +202,18 @@ fn find_best_match<'a>(
         return None;
     }
 
+    if let Some(index) = custom_words_nospace
+        .iter()
+        .position(|target| candidate == target)
+    {
+        return Some((&custom_words[index], 0.0));
+    }
+
     let cand_len = candidate.chars().count();
     let cand_first = first_alnum(candidate);
     let cand_alpha = alpha_only(candidate);
     let cand_is_common = COMMON_WORDS.contains(candidate);
+    let collapsed_candidate = collapse_excessive_letter_runs(candidate);
 
     let mut best_match: Option<&String> = None;
     let mut best_score = f64::MAX;
@@ -184,9 +223,9 @@ fn find_best_match<'a>(
             continue;
         }
 
-        // Exact match (after lowercasing/space-removal): accept immediately, best score.
-        // This is the recasing path (e.g. "codex" -> "Codex") and bypasses every veto.
-        if candidate == target {
+        // Repeated-letter candidates that collapse to an exact custom word bypass every fuzzy
+        // veto. Literal matches were checked first so dictionary order cannot override one.
+        if collapsed_candidate.as_deref() == Some(target.as_str()) {
             return Some((&custom_words[i], 0.0));
         }
 
@@ -2433,6 +2472,37 @@ mod tests {
         let custom_words = vec!["hello".to_string(), "world".to_string()];
         let result = apply_custom_words(text, &custom_words, 0.5);
         assert_eq!(result, "hello world");
+    }
+
+    #[test]
+    fn test_apply_custom_words_recovers_repeated_letter_acronym() {
+        let custom_words = vec!["NJPBS".to_string()];
+
+        assert_eq!(
+            apply_custom_words("the NJPBBBBBBS site", &custom_words, 0.18),
+            "the NJPBS site"
+        );
+        assert_eq!(
+            apply_custom_words("NJPBBBBBBBBBBBS,", &custom_words, 0.18),
+            "NJPBS,"
+        );
+    }
+
+    #[test]
+    fn test_apply_custom_words_preserves_unmatched_repeated_letters() {
+        let custom_words = vec!["NJPBS".to_string()];
+
+        assert_eq!(
+            apply_custom_words("ahhhh, that works", &custom_words, 0.18),
+            "ahhhh, that works"
+        );
+    }
+
+    #[test]
+    fn test_apply_custom_words_prefers_literal_match_over_collapsed_match() {
+        let custom_words = vec!["so".to_string(), "soooo".to_string()];
+
+        assert_eq!(apply_custom_words("soooo", &custom_words, 0.18), "soooo");
     }
 
     #[test]
