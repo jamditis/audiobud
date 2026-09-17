@@ -183,8 +183,9 @@ fn collapse_excessive_letter_runs(value: &str) -> Option<String> {
 ///
 /// Exact matches (after lowercasing/space-removal) bypass the fuzzy gate and win outright;
 /// this is what recases brands the user dictated correctly (e.g. "codex" -> "Codex"). A
-/// candidate with a run of three or more repeated ASCII letters also wins when collapsing the
-/// run produces an exact custom word. The exact-word requirement prevents broad normalization.
+/// single-word candidate with a run of three or more repeated ASCII letters also wins when
+/// collapsing the run produces an exact custom word. The exact-word and single-token requirements
+/// prevent broad normalization and preserve neighboring transcript tokens.
 ///
 /// `threshold` is the legacy sensitivity dial: lowering it raises the edit-distance floor
 /// (stricter); it can no longer loosen matching below the per-length floors.
@@ -213,7 +214,11 @@ fn find_best_match<'a>(
     let cand_first = first_alnum(candidate);
     let cand_alpha = alpha_only(candidate);
     let cand_is_common = COMMON_WORDS.contains(candidate);
-    let collapsed_candidate = collapse_excessive_letter_runs(candidate);
+    let collapsed_candidate = if multiword {
+        None
+    } else {
+        collapse_excessive_letter_runs(candidate)
+    };
 
     let mut best_match: Option<&String> = None;
     let mut best_score = f64::MAX;
@@ -2495,6 +2500,16 @@ mod tests {
         assert_eq!(
             apply_custom_words("ahhhh, that works", &custom_words, 0.18),
             "ahhhh, that works"
+        );
+    }
+
+    #[test]
+    fn test_apply_custom_words_does_not_collapse_across_word_boundaries() {
+        let custom_words = vec!["GPT".to_string()];
+
+        assert_eq!(
+            apply_custom_words("GPT T T", &custom_words, 0.18),
+            "GPT T T"
         );
     }
 
