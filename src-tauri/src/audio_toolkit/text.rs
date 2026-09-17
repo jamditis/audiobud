@@ -184,8 +184,9 @@ fn collapse_excessive_letter_runs(value: &str) -> Option<String> {
 /// Exact matches (after lowercasing/space-removal) bypass the fuzzy gate and win outright;
 /// this is what recases brands the user dictated correctly (e.g. "codex" -> "Codex"). A
 /// single-word candidate with a run of three or more repeated ASCII letters also wins when
-/// collapsing the run produces an exact custom word. The exact-word and single-token requirements
-/// prevent broad normalization and preserve neighboring transcript tokens.
+/// collapsing the run produces an exact custom word, even if the raw token is longer than the
+/// fuzzy length cap. The exact-word and single-token requirements prevent broad normalization
+/// and preserve neighboring transcript tokens.
 ///
 /// `threshold` is the legacy sensitivity dial: lowering it raises the edit-distance floor
 /// (stricter); it can no longer loosen matching below the per-length floors.
@@ -199,7 +200,7 @@ fn find_best_match<'a>(
     threshold: f64,
     multiword: bool,
 ) -> Option<(&'a String, f64)> {
-    if candidate.is_empty() || candidate.chars().count() > 50 {
+    if candidate.is_empty() {
         return None;
     }
 
@@ -210,15 +211,28 @@ fn find_best_match<'a>(
         return Some((&custom_words[index], 0.0));
     }
 
-    let cand_len = candidate.chars().count();
-    let cand_first = first_alnum(candidate);
-    let cand_alpha = alpha_only(candidate);
-    let cand_is_common = COMMON_WORDS.contains(candidate);
     let collapsed_candidate = if multiword {
         None
     } else {
         collapse_excessive_letter_runs(candidate)
     };
+    if let Some(collapsed) = collapsed_candidate.as_deref() {
+        if let Some(index) = custom_words_nospace
+            .iter()
+            .position(|target| collapsed == target)
+        {
+            return Some((&custom_words[index], 0.0));
+        }
+    }
+
+    if candidate.chars().count() > 50 {
+        return None;
+    }
+
+    let cand_len = candidate.chars().count();
+    let cand_first = first_alnum(candidate);
+    let cand_alpha = alpha_only(candidate);
+    let cand_is_common = COMMON_WORDS.contains(candidate);
 
     let mut best_match: Option<&String> = None;
     let mut best_score = f64::MAX;
@@ -226,12 +240,6 @@ fn find_best_match<'a>(
     for (i, target) in custom_words_nospace.iter().enumerate() {
         if target.is_empty() {
             continue;
-        }
-
-        // Repeated-letter candidates that collapse to an exact custom word bypass every fuzzy
-        // veto. Literal matches were checked first so dictionary order cannot override one.
-        if collapsed_candidate.as_deref() == Some(target.as_str()) {
-            return Some((&custom_words[i], 0.0));
         }
 
         let target_len = target.chars().count();
@@ -2491,6 +2499,27 @@ mod tests {
             apply_custom_words("NJPBBBBBBBBBBBS,", &custom_words, 0.18),
             "NJPBS,"
         );
+    }
+
+    #[test]
+    fn test_apply_custom_words_recovers_oversized_repeated_letter_token() {
+        let custom_words = vec!["NJPBS".to_string()];
+        let token = format!("NJP{}S", "B".repeat(50));
+        assert!(token.chars().count() > 50);
+
+        assert_eq!(
+            apply_custom_words(&format!("the {token} site"), &custom_words, 0.18),
+            "the NJPBS site"
+        );
+    }
+
+    #[test]
+    fn test_apply_custom_words_leaves_oversized_unmatched_repetition() {
+        let custom_words = vec!["NJPBS".to_string()];
+        let token = format!("XYZ{}", "Q".repeat(50));
+        assert!(token.chars().count() > 50);
+
+        assert_eq!(apply_custom_words(&token, &custom_words, 0.18), token);
     }
 
     #[test]

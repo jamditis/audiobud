@@ -106,6 +106,13 @@ const CASES: &[Case] = &[
         is_positive: true,
     },
     Case {
+        name: "Parakeet oversized repeated letter: NJP + 50 B + S -> NJPBS",
+        text: "open the NJPBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBS site",
+        custom_words: &["NJPBS"],
+        expected: "open the NJPBS site",
+        is_positive: true,
+    },
+    Case {
         name: "ngram: git hub -> GitHub",
         text: "push to git hub",
         custom_words: &["GitHub"],
