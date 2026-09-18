@@ -726,6 +726,10 @@ fn collapse_stutters(text: &str) -> String {
 /// 2. Collapsing repeated word stutters (e.g., "wh wh wh" -> "wh")
 /// 3. Cleaning up excess whitespace
 ///
+/// A one-letter token followed by a word with the same first letter is left unchanged here.
+/// Text alone cannot distinguish a Parakeet prefix re-emission such as "w wild" from genuine
+/// dictated text such as "d drive". That correction requires the engine's timing evidence.
+///
 /// # Arguments
 /// * `text` - The raw transcription text to filter
 /// * `language` - The effective dictation-output language used to select filler words
@@ -2627,6 +2631,13 @@ mod tests {
         let text = "This is a completely normal sentence.";
         let result = filter_transcription_output(text, "en", &None);
         assert_eq!(result, "This is a completely normal sentence.");
+    }
+
+    #[test]
+    fn test_filter_preserves_prefix_pairs_without_timing_evidence() {
+        for text in ["w wild", "f file", "d drive", "D drive"] {
+            assert_eq!(filter_transcription_output(text, "en", &None), text);
+        }
     }
 
     #[test]
