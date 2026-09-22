@@ -852,11 +852,114 @@ fn default_post_process_models() -> HashMap<String, String> {
 }
 
 fn default_post_process_prompts() -> Vec<LLMPrompt> {
-    vec![LLMPrompt {
-        id: "default_improve_transcriptions".to_string(),
-        name: "Improve Transcriptions".to_string(),
-        prompt: "Clean this transcript:\n1. Fix spelling, capitalization, and punctuation errors\n2. Convert number words to digits (twenty-five → 25, ten percent → 10%, five dollars → $5)\n3. Replace spoken punctuation with symbols (period → ., comma → ,, question mark → ?)\n4. Remove filler words (um, uh, like as filler)\n5. Keep the language in the original version (if it was french, keep it in french for example)\n\nPreserve exact meaning and word order. Do not paraphrase or reorder content.\n\nReturn only the cleaned transcript.\n\nTranscript:\n${output}".to_string(),
-    }]
+    vec![
+        LLMPrompt {
+            id: "default_improve_transcriptions".to_string(),
+            name: "Improve Transcriptions".to_string(),
+            prompt: "Clean this transcript:\n1. Fix spelling, capitalization, and punctuation errors\n2. Convert number words to digits (twenty-five → 25, ten percent → 10%, five dollars → $5)\n3. Replace spoken punctuation with symbols (period → ., comma → ,, question mark → ?)\n4. Remove filler words (um, uh, like as filler)\n5. Keep the language in the original version (if it was french, keep it in french for example)\n\nPreserve exact meaning and word order. Do not paraphrase or reorder content.\n\nReturn only the cleaned transcript.\n\nTranscript:\n${output}".to_string(),
+        },
+        LLMPrompt {
+            id: "default_remove_fillers".to_string(),
+            name: "Remove filler words".to_string(),
+            prompt: r#"Remove filler words from this transcript.
+
+1. Remove um, uh, er, ah, hm
+2. Remove "like", "you know", "I mean", and "sort of" only where they are filler, never where they carry meaning
+3. Remove false starts and repeated words ("the the", "I was I was")
+4. Change nothing else: keep the wording, order, punctuation, and language exactly as they are
+
+Return only the cleaned transcript.
+
+Transcript:
+${output}"#.to_string(),
+        },
+        LLMPrompt {
+            id: "default_format_email".to_string(),
+            name: "Reformat as email".to_string(),
+            prompt: r#"Reformat this dictated text as an email body.
+
+1. Keep a greeting only if one was spoken
+2. Break the text into paragraphs at the natural topic shifts
+3. Fix punctuation and capitalization
+4. Keep the speaker's own words and tone; do not make it more formal than they were
+5. Do not invent a subject line, a sign-off, or any content that was not spoken
+
+Return only the email body.
+
+Transcript:
+${output}"#.to_string(),
+        },
+        LLMPrompt {
+            id: "default_format_chat".to_string(),
+            name: "Reformat as chat message".to_string(),
+            prompt: r#"Reformat this dictated text as a short chat message.
+
+1. Keep it to the point: one short paragraph, or a few lines
+2. Fix punctuation and capitalization
+3. Drop filler and throat-clearing
+4. Keep contractions and the speaker's casual register
+5. Do not add a greeting or a sign-off
+
+Return only the message.
+
+Transcript:
+${output}"#.to_string(),
+        },
+        LLMPrompt {
+            id: "default_tidy_prose".to_string(),
+            name: "Tidy into prose".to_string(),
+            prompt: r#"Tidy this rambling transcript into clean prose.
+
+1. Join fragments into complete sentences
+2. Group related sentences into paragraphs
+3. Remove filler, false starts, and repeated points
+4. Preserve every claim the speaker made and the order they made it in
+5. Do not summarize, paraphrase for style, or add anything that was not said
+
+Return only the tidied text.
+
+Transcript:
+${output}"#.to_string(),
+        },
+    ]
+}
+
+fn merge_new_post_process_prompts(settings: &mut AppSettings, already_migrated: bool) -> bool {
+    if already_migrated {
+        return false;
+    }
+
+    let mut changed = false;
+    // The first prompt predates this migration. Leave a user's edits or deletion alone.
+    for prompt in default_post_process_prompts().into_iter().skip(1) {
+        if settings
+            .post_process_prompts
+            .iter()
+            .any(|p| p.id == prompt.id)
+        {
+            continue;
+        }
+        settings.post_process_prompts.push(prompt);
+        changed = true;
+    }
+    changed
+}
+
+fn migrate_new_post_process_prompts(store: &Store<tauri::Wry>, settings: &mut AppSettings) -> bool {
+    let already_migrated = store
+        .get(POST_PROCESS_PROMPTS_V1_MIGRATION_KEY)
+        .and_then(|value| value.as_bool())
+        .unwrap_or(false);
+    if already_migrated {
+        return false;
+    }
+
+    let changed = merge_new_post_process_prompts(settings, already_migrated);
+    if changed {
+        store.set("settings", serde_json::to_value(&settings).unwrap());
+    }
+    store.set(POST_PROCESS_PROMPTS_V1_MIGRATION_KEY, true);
+    changed
 }
 
 fn default_whisper_gpu_device() -> i32 {
@@ -925,6 +1028,7 @@ fn ensure_post_process_defaults(settings: &mut AppSettings) -> bool {
 
 pub const SETTINGS_STORE_PATH: &str = "settings_store.json";
 const UPDATE_CHECKS_V0_4_2_MIGRATION_KEY: &str = "update_checks_v0_4_2_migrated";
+const POST_PROCESS_PROMPTS_V1_MIGRATION_KEY: &str = "post_process_prompts_v1_migrated";
 
 pub fn get_default_settings() -> AppSettings {
     #[cfg(target_os = "windows")]
@@ -1393,6 +1497,10 @@ pub fn load_or_create_app_settings(app: &AppHandle) -> AppSettings {
         mutated = true;
     }
 
+    if migrate_new_post_process_prompts(&store, &mut settings) {
+        mutated = true;
+    }
+
     if normalize_platform_paste_methods(&mut settings, cfg!(target_os = "macos")) {
         store.set("settings", serde_json::to_value(&settings).unwrap());
         mutated = true;
@@ -1499,6 +1607,10 @@ fn read_settings_from_open_store(store: &Store<tauri::Wry>) -> (AppSettings, boo
 
     if ensure_post_process_defaults(&mut settings) {
         store.set("settings", serde_json::to_value(&settings).unwrap());
+        mutated = true;
+    }
+
+    if migrate_new_post_process_prompts(store, &mut settings) {
         mutated = true;
     }
 
@@ -1622,6 +1734,44 @@ mod tests {
         assert_eq!(settings.paste_method, PasteMethod::default());
         assert!(settings.format_numbers);
         assert!(!settings.personalization.enabled);
+    }
+
+    #[test]
+    fn new_post_process_prompts_reach_existing_users_without_replacing_edits() {
+        let mut settings = get_default_settings();
+        let existing = LLMPrompt {
+            id: "default_format_email".to_string(),
+            name: "My email format".to_string(),
+            prompt: "Keep my signature.\n${output}".to_string(),
+        };
+        settings.post_process_prompts =
+            vec![default_post_process_prompts().remove(0), existing.clone()];
+        settings.post_process_selected_prompt_id = Some(existing.id.clone());
+
+        assert!(merge_new_post_process_prompts(&mut settings, false));
+        assert_eq!(settings.post_process_prompts.len(), 5);
+        assert_eq!(settings.post_process_prompts[1].name, existing.name);
+        assert_eq!(settings.post_process_prompts[1].prompt, existing.prompt);
+        assert_eq!(settings.post_process_selected_prompt_id, Some(existing.id));
+        assert!(!merge_new_post_process_prompts(&mut settings, false));
+
+        settings
+            .post_process_prompts
+            .retain(|prompt| prompt.id != "default_remove_fillers");
+        assert!(!merge_new_post_process_prompts(&mut settings, true));
+        assert_eq!(settings.post_process_prompts.len(), 4);
+    }
+
+    #[test]
+    fn fresh_settings_offer_all_builtin_prompts_without_selecting_one() {
+        let settings = get_default_settings();
+        let prompts = &settings.post_process_prompts;
+        assert_eq!(prompts.len(), 5);
+        assert_eq!(prompts[0].id, "default_improve_transcriptions");
+        assert!(prompts
+            .iter()
+            .all(|prompt| prompt.prompt.ends_with("${output}")));
+        assert_eq!(settings.post_process_selected_prompt_id, None);
     }
 
     #[test]
