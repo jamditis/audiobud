@@ -871,7 +871,7 @@ impl ShortcutAction for TranscribeAction {
                     // Err arm below doesn't double up the toasts.
                     let mut error_already_notified = false;
                     let transcription_result =
-                        match tm.transcribe_with_watchdog(samples, watchdog_timeout) {
+                        match tm.transcribe_with_watchdog(samples, watchdog_timeout).await {
                             WatchdogOutcome::Completed(result) => result,
                             WatchdogOutcome::TimedOut => {
                                 let timeout_secs = watchdog_timeout.as_secs();

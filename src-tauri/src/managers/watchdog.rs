@@ -9,8 +9,8 @@ use log::{error, warn};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
-use std::thread;
 use std::time::Duration;
+use tokio::task::JoinError;
 
 /// Shortest watchdog deadline: even a tiny clip gets this long before the
 /// pipeline gives up on the engine.
@@ -135,22 +135,45 @@ struct WatchdogState {
     timed_out: bool,
 }
 
-/// Run `f` and give up if it does not finish within `timeout` (issue #58).
-/// The caller must treat anything but `Completed` as an error and recover the
-/// UI/state itself.
+/// Run `f` on tokio's blocking pool and give up if it does not finish within
+/// `timeout` (issues #58, #79). The caller must treat anything but
+/// `Completed` as an error and recover the UI/state itself.
 ///
-/// Limitation: a wedged worker thread cannot be killed. On timeout it is left
+/// The wait is async, so the calling task yields its runtime worker instead
+/// of parking it for up to the full deadline. Must be awaited inside a tokio
+/// runtime with the time driver enabled (Tauri's async runtime is one).
+///
+/// Limitation: a wedged blocking task cannot be killed. On timeout it is left
 /// running detached and `wedged_workers` is incremented until it resolves
 /// (its late result is then logged and discarded, and the count decremented).
 /// The counter lets the owner refuse new work while a wedged worker still
 /// holds resources.
-pub(crate) fn run_with_watchdog<T: Send + 'static>(
+///
+/// The wait itself runs as a spawned task, so the wedged-worker accounting
+/// still happens if the caller's future is dropped mid-wait (a cancelled
+/// command, for instance). Otherwise a worker that later wedged would never
+/// be counted, and new engine work could start beside it.
+pub(crate) async fn run_with_watchdog<T: Send + 'static>(
     operation: &'static str,
     timeout: Duration,
     wedged_workers: Arc<AtomicUsize>,
     f: impl FnOnce() -> T + Send + 'static,
 ) -> WatchdogOutcome<T> {
-    let (tx, rx) = std::sync::mpsc::channel();
+    match tokio::spawn(watch(operation, timeout, wedged_workers, f)).await {
+        Ok(outcome) => outcome,
+        Err(_) => {
+            error!("{} watchdog task did not complete", operation);
+            WatchdogOutcome::Panicked
+        }
+    }
+}
+
+async fn watch<T: Send + 'static>(
+    operation: &'static str,
+    timeout: Duration,
+    wedged_workers: Arc<AtomicUsize>,
+    f: impl FnOnce() -> T + Send + 'static,
+) -> WatchdogOutcome<T> {
     let state = Arc::new(Mutex::new(WatchdogState {
         finished: false,
         timed_out: false,
@@ -158,15 +181,9 @@ pub(crate) fn run_with_watchdog<T: Send + 'static>(
 
     let worker_state = Arc::clone(&state);
     let worker_wedged = Arc::clone(&wedged_workers);
-    thread::spawn(move || {
+    let mut worker = tokio::task::spawn_blocking(move || {
         let result = catch_unwind(AssertUnwindSafe(f));
         let panicked = result.is_err();
-        if let Ok(value) = result {
-            // Send before marking finished: once the watchdog observes
-            // `finished`, a successful result is guaranteed to be in the
-            // channel (so an empty channel + finished means a panic).
-            let _ = tx.send(value);
-        }
         let timed_out = {
             let mut st = worker_state.lock().unwrap_or_else(|p| p.into_inner());
             st.finished = true;
@@ -187,35 +204,27 @@ pub(crate) fn run_with_watchdog<T: Send + 'static>(
         if panicked {
             error!("{} worker thread panicked", operation);
         }
-        // tx drops here; a watchdog still waiting sees Disconnected on panic.
+        result.ok()
     });
 
-    match rx.recv_timeout(timeout) {
-        Ok(result) => WatchdogOutcome::Completed(result),
-        Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
-            // The worker panicked. transcribe() catches engine panics itself,
-            // so this is unexpected — but it still must not wedge the pipeline.
-            error!(
-                "{} worker thread panicked before producing a result",
-                operation
-            );
-            WatchdogOutcome::Panicked
-        }
-        Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
-            let mut st = state.lock().unwrap_or_else(|p| p.into_inner());
-            if st.finished {
-                // The worker finished right at the deadline. On success its
-                // result is already in the channel; nothing there means it
-                // panicked.
-                drop(st);
-                match rx.try_recv() {
-                    Ok(result) => WatchdogOutcome::Completed(result),
-                    Err(_) => WatchdogOutcome::Panicked,
+    // Borrow the handle so it survives the timeout: a worker that finished
+    // right at the deadline still has its result in there.
+    match tokio::time::timeout(timeout, &mut worker).await {
+        Ok(joined) => joined_outcome(operation, joined),
+        Err(_elapsed) => {
+            let finished = {
+                let mut st = state.lock().unwrap_or_else(|p| p.into_inner());
+                if !st.finished {
+                    st.timed_out = true;
+                    wedged_workers.fetch_add(1, Ordering::SeqCst);
                 }
+                st.finished
+            };
+            if finished {
+                // The worker finished right at the deadline and is only
+                // returning now, so this await is immediate.
+                joined_outcome(operation, worker.await)
             } else {
-                st.timed_out = true;
-                wedged_workers.fetch_add(1, Ordering::SeqCst);
-                drop(st);
                 error!(
                     "{} watchdog fired after {:?}; the engine appears wedged. The worker \
                      thread cannot be killed and is left running detached; further \
@@ -224,6 +233,33 @@ pub(crate) fn run_with_watchdog<T: Send + 'static>(
                 );
                 WatchdogOutcome::TimedOut
             }
+        }
+    }
+}
+
+/// Map a joined worker to an outcome. `None` means `f` panicked (caught in
+/// the worker); a `JoinError` means the task never ran to completion, for
+/// example because the runtime is shutting down.
+fn joined_outcome<T>(
+    operation: &'static str,
+    joined: Result<Option<T>, JoinError>,
+) -> WatchdogOutcome<T> {
+    match joined {
+        Ok(Some(result)) => WatchdogOutcome::Completed(result),
+        Ok(None) => {
+            // transcribe() catches engine panics itself, so this is
+            // unexpected, but it still must not wedge the pipeline.
+            error!(
+                "{} worker thread panicked before producing a result",
+                operation
+            );
+            WatchdogOutcome::Panicked
+        }
+        Err(e) => {
+            // Not a panic in `f` (that is caught above); usually a runtime
+            // shutdown. Still reported as Panicked: no result exists.
+            error!("{} worker task did not complete: {}", operation, e);
+            WatchdogOutcome::Panicked
         }
     }
 }
@@ -242,13 +278,26 @@ mod tests {
         Arc::new(AtomicUsize::new(0))
     }
 
+    /// Single-threaded runtime with the time driver, which the watchdog needs.
+    /// Tests keep it alive until their last assertion: dropping a runtime
+    /// waits for its blocking tasks, which would hide a still-wedged worker.
+    fn runtime() -> tokio::runtime::Runtime {
+        tokio::runtime::Builder::new_current_thread()
+            .enable_time()
+            .build()
+            .expect("test runtime must build")
+    }
+
     #[test]
     fn watchdog_passes_through_a_result_that_arrives_in_time() {
+        let rt = runtime();
         let wedged = counter();
-        let outcome =
-            run_with_watchdog("test", Duration::from_secs(5), Arc::clone(&wedged), || {
-                "hello".to_string()
-            });
+        let outcome = rt.block_on(run_with_watchdog(
+            "test",
+            Duration::from_secs(5),
+            Arc::clone(&wedged),
+            || "hello".to_string(),
+        ));
         assert!(matches!(outcome, WatchdogOutcome::Completed(ref s) if s == "hello"));
         assert_eq!(wedged.load(Ordering::SeqCst), 0);
     }
@@ -261,10 +310,14 @@ mod tests {
     /// terminates.
     #[test]
     fn watchdog_times_out_on_a_wedged_transcribe_call() {
+        let rt = runtime();
         let start = Instant::now();
-        let outcome = run_with_watchdog("test", Duration::from_millis(100), counter(), || {
-            std::thread::sleep(Duration::from_secs(3));
-        });
+        let outcome = rt.block_on(run_with_watchdog(
+            "test",
+            Duration::from_millis(100),
+            counter(),
+            || std::thread::sleep(Duration::from_secs(3)),
+        ));
         assert!(
             matches!(outcome, WatchdogOutcome::TimedOut),
             "a wedged transcribe call must time out, not produce a result"
@@ -273,6 +326,62 @@ mod tests {
             start.elapsed() < Duration::from_secs(2),
             "the watchdog must fire at its deadline instead of waiting out the wedged call"
         );
+        // Don't make the test wait out the detached sleeper.
+        rt.shutdown_background();
+    }
+
+    /// Issue #79: while the engine call runs, the waiting task must yield its
+    /// runtime worker. On a single-threaded runtime a sibling task can only
+    /// make progress if the watchdog's wait is async; the old blocking
+    /// `recv_timeout` held the thread until the worker finished.
+    #[test]
+    fn watchdog_wait_does_not_block_the_runtime_worker() {
+        let rt = runtime();
+        let start = Instant::now();
+        let (outcome, sibling_done_at) = rt.block_on(async {
+            let sibling = tokio::spawn(async move {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+                start.elapsed()
+            });
+            let outcome = run_with_watchdog("test", Duration::from_secs(5), counter(), || {
+                std::thread::sleep(Duration::from_millis(500));
+            })
+            .await;
+            (outcome, sibling.await.expect("sibling task must not fail"))
+        });
+        assert!(matches!(outcome, WatchdogOutcome::Completed(())));
+        assert!(
+            sibling_done_at < Duration::from_millis(300),
+            "a sibling task must run while the watchdog waits, but it finished after {:?}",
+            sibling_done_at
+        );
+    }
+
+    /// Dropping the caller's future mid-wait must not drop the watchdog: the
+    /// worker still gets counted as wedged when its deadline passes, so the
+    /// owner keeps refusing new engine work beside it.
+    #[test]
+    fn watchdog_still_counts_a_wedged_worker_after_the_caller_is_dropped() {
+        let rt = runtime();
+        let wedged = counter();
+        rt.block_on(async {
+            let caller = run_with_watchdog(
+                "test",
+                Duration::from_millis(50),
+                Arc::clone(&wedged),
+                || std::thread::sleep(Duration::from_millis(400)),
+            );
+            // Give up on the caller before the watchdog deadline.
+            let abandoned = tokio::time::timeout(Duration::from_millis(10), caller).await;
+            assert!(abandoned.is_err(), "the caller must be dropped mid-wait");
+            tokio::time::sleep(Duration::from_millis(150)).await;
+        });
+        assert_eq!(
+            wedged.load(Ordering::SeqCst),
+            1,
+            "a worker whose caller went away must still be counted once its deadline passes"
+        );
+        rt.shutdown_background();
     }
 
     /// A wedged worker is counted while it is still running so the owner can
@@ -280,13 +389,14 @@ mod tests {
     /// count clears when the worker finally resolves.
     #[test]
     fn watchdog_counts_a_wedged_worker_and_clears_it_when_it_resolves() {
+        let rt = runtime();
         let wedged = counter();
-        let outcome = run_with_watchdog(
+        let outcome = rt.block_on(run_with_watchdog(
             "test",
             Duration::from_millis(50),
             Arc::clone(&wedged),
             || std::thread::sleep(Duration::from_millis(400)),
-        );
+        ));
         assert!(matches!(outcome, WatchdogOutcome::TimedOut));
         assert_eq!(
             wedged.load(Ordering::SeqCst),
@@ -309,11 +419,14 @@ mod tests {
     /// "timed out after N seconds", and must not leave a wedged count behind.
     #[test]
     fn watchdog_reports_a_worker_panic_as_panicked_not_timed_out() {
+        let rt = runtime();
         let wedged = counter();
-        let outcome: WatchdogOutcome<()> =
-            run_with_watchdog("test", Duration::from_secs(5), Arc::clone(&wedged), || {
-                panic!("simulated engine panic")
-            });
+        let outcome: WatchdogOutcome<()> = rt.block_on(run_with_watchdog(
+            "test",
+            Duration::from_secs(5),
+            Arc::clone(&wedged),
+            || panic!("simulated engine panic"),
+        ));
         assert!(
             matches!(outcome, WatchdogOutcome::Panicked),
             "a worker panic must surface as Panicked, not TimedOut or Completed"

@@ -92,13 +92,10 @@ pub async fn retry_history_entry_transcription(
     // Watchdog (issue #58): a wedged engine must fail this command instead of
     // leaving the frontend awaiting it forever. The error string surfaces
     // through the command's normal Result path.
-    let tm = Arc::clone(&transcription_manager);
     let watchdog_timeout = transcription_watchdog_timeout(samples.len(), WHISPER_SAMPLE_RATE);
-    let transcribed = match tauri::async_runtime::spawn_blocking(move || {
-        tm.transcribe_with_watchdog(samples, watchdog_timeout)
-    })
-    .await
-    .map_err(|e| format!("Transcription task panicked: {}", e))?
+    let transcribed = match transcription_manager
+        .transcribe_with_watchdog(samples, watchdog_timeout)
+        .await
     {
         WatchdogOutcome::Completed(result) => result.map_err(|e| e.to_string())?,
         WatchdogOutcome::TimedOut => {
