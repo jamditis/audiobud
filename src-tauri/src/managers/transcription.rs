@@ -913,7 +913,7 @@ impl TranscriptionManager {
     /// the same reason (see [`Self::load_model`]). If the wedged worker ever
     /// resolves, the count clears and — when the slot generation is unchanged
     /// — its engine is restored, so the manager recovers without a restart.
-    pub fn transcribe_with_watchdog(
+    pub async fn transcribe_with_watchdog(
         &self,
         audio: Vec<f32>,
         timeout: Duration,
@@ -928,6 +928,7 @@ impl TranscriptionManager {
             Arc::clone(&self.wedged_workers),
             move || manager.transcribe(audio),
         )
+        .await
     }
 }
 

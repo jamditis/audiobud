@@ -61,7 +61,7 @@ impl TranscriptionManager {
 
     /// Mirrors the real manager's watchdog-guarded transcription (issue #58):
     /// the mock transcribe runs under the same shared watchdog.
-    pub fn transcribe_with_watchdog(
+    pub async fn transcribe_with_watchdog(
         &self,
         audio: Vec<f32>,
         timeout: Duration,
@@ -79,6 +79,7 @@ impl TranscriptionManager {
             Arc::clone(&self.wedged_workers),
             move || manager.transcribe(audio),
         )
+        .await
     }
 
     pub fn is_model_loaded(&self) -> bool {
