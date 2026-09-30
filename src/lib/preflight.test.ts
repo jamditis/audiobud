@@ -23,6 +23,7 @@ const goodWindows = (over: Partial<SystemFacts> = {}): SystemFacts => ({
   freeDiskMb: MIN_FREE_DISK_MB * 2,
   webview2Present: true,
   runtimeDllsPresent: true,
+  cpuFmaPresent: true,
   acceleration: "directml",
   ...over,
 });
@@ -150,6 +151,20 @@ describe("soft shortfalls warn but never block", () => {
     expect(accel?.status).toBe("degraded");
     expect(accel?.message).toMatch(/CPU/i);
   });
+
+  it("warns, never blocks, on an x64 CPU without FMA3 (#72)", () => {
+    // The release build compiles ggml without AVX, AVX2, and FMA, so these CPUs
+    // run the app; only the GPU path needs FMA3. A hard block here would lock
+    // out machines the build deliberately supports.
+    const report = evaluatePreflight(goodWindows({ cpuFmaPresent: false }));
+    expect(report.launchable).toBe(true);
+    expect(report.blocking).toHaveLength(0);
+    const fma = report.warnings.find((r) => r.id === "cpu-fma");
+    expect(fma?.severity).toBe("soft");
+    expect(fma?.status).toBe("degraded");
+    expect(fma?.message).toMatch(/FMA3/);
+    expect(fma?.fix).toMatch(/CPU/);
+  });
 });
 
 describe("a fully-capable machine passes clean", () => {
@@ -195,6 +210,14 @@ describe("a failed probe is fail-safe: warn, never block", () => {
     const os = report.results.find((r) => r.id === "windows-version");
     expect(os?.status).toBe("unknown");
     expect(report.warnings.map((r) => r.id)).toContain("windows-version");
+  });
+
+  it("warns when the FMA3 probe could not read the CPU", () => {
+    const report = evaluatePreflight(goodWindows({ cpuFmaPresent: undefined }));
+    expect(report.launchable).toBe(true);
+    const fma = report.results.find((r) => r.id === "cpu-fma");
+    expect(fma?.status).toBe("unknown");
+    expect(report.warnings.map((r) => r.id)).toContain("cpu-fma");
   });
 });
 
