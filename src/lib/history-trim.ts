@@ -33,7 +33,7 @@ export function idsTrimmedByNextRecording(
   historyLimit: number,
   nowSeconds: number,
 ): Set<number> {
-  // The page loads by id; the cleanup ranks by timestamp, so rank by timestamp.
+  // The page loads by id; the cleanup ranks by timestamp, then id, so match it.
   const unsaved = entries
     .filter((entry) => !entry.saved)
     .sort((a, b) => b.timestamp - a.timestamp || b.id - a.id);
