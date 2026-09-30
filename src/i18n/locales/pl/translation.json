@@ -838,6 +838,7 @@
     "targetWindowGone": "Okno, do którego dyktowałeś, zostało zamknięte, zanim AudioBud zdążył wkleić tekst. Twoje bieżące ustawienie przypięcia pozostaje bez zmian.",
     "transcriptionErrorTitle": "Transkrypcja nie powiodła się",
     "transcriptionErrorGeneric": "Nie udało się transkrybować nagrania. Spróbuj ponownie lub wybierz inny model.",
+    "modelStillLoading": "Model wciąż się wczytuje. Poczekaj chwilę i spróbuj ponownie.",
     "transcriptionTimeoutTitle": "Przekroczono czas transkrypcji",
     "transcriptionTimeout": "Silnik nie odpowiedział przez {{seconds}} sekund i mógł się zawiesić. Uruchom AudioBud ponownie, jeśli to się powtarza.",
     "parakeetInputTooLong": "To nagranie ma długość {{duration}}. Parakeet nie może transkrybować nagrań dłuższych niż około 6:30, ponieważ dalszy dźwięk zostałby pominięty bez ostrzeżenia. Do długich nagrań użyj modelu Whisper.",

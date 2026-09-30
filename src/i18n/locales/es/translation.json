@@ -834,6 +834,7 @@
     "targetWindowGone": "La ventana en la que dictaste se cerró antes de que AudioBud pudiera pegar el texto. Tu configuración de fijación actual no ha cambiado.",
     "transcriptionErrorTitle": "La transcripción ha fallado",
     "transcriptionErrorGeneric": "No se pudo transcribir la grabación. Inténtalo de nuevo o elige otro modelo.",
+    "modelStillLoading": "El modelo todavía se está cargando. Espera un momento e inténtalo de nuevo.",
     "transcriptionTimeoutTitle": "Se agotó el tiempo de la transcripción",
     "transcriptionTimeout": "El motor no respondió después de {{seconds}} segundos y puede estar bloqueado. Reinicia AudioBud si esto sigue ocurriendo.",
     "parakeetInputTooLong": "Esta grabación dura {{duration}}. Parakeet no puede transcribir grabaciones de más de unos 6:30 porque omitiría el audio posterior sin avisar. Usa un modelo Whisper para grabaciones largas.",

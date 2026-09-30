@@ -836,6 +836,7 @@
     "targetWindowGone": "החלון שאליו הכתבת נסגר לפני ש-AudioBud הספיק להדביק את הטקסט. הגדרת ההצמדה הנוכחית שלך לא השתנתה.",
     "transcriptionErrorTitle": "התמלול נכשל",
     "transcriptionErrorGeneric": "לא ניתן היה לתמלל את ההקלטה. נסו שוב או בחרו מודל אחר.",
+    "modelStillLoading": "המודל עדיין נטען. המתן רגע ונסה שוב.",
     "transcriptionTimeoutTitle": "התמלול חרג מהזמן",
     "transcriptionTimeout": "המנוע לא הגיב אחרי {{seconds}} שניות וייתכן שהוא תקוע. הפעל מחדש את AudioBud אם זה ממשיך לקרות.",
     "parakeetInputTooLong": "אורך ההקלטה הוא {{duration}}. ‏Parakeet לא יכול לתמלל הקלטות ארוכות מכ־6:30, כי האודיו שבהמשך יושמט ללא התראה. יש להשתמש במודל Whisper להקלטות ארוכות.",

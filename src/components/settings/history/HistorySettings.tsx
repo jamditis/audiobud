@@ -13,6 +13,7 @@ import { historyEntryText } from "@/lib/history-entry-text";
 import {
   parakeetInputTooLongSeconds,
   recordingDurationLabel,
+  isModelStillLoading,
   transcriptionTimeoutSeconds,
 } from "@/lib/transcription-error";
 import { formatDateTime } from "@/utils/dateFormat";
@@ -355,6 +356,10 @@ const HistoryEntryComponent: React.FC<HistoryEntryProps> = ({
           description: t("errors.transcriptionTimeout", {
             seconds: timeoutSeconds,
           }),
+        });
+      } else if (isModelStillLoading(error)) {
+        toast.error(t("settings.history.retranscribeError"), {
+          description: t("errors.modelStillLoading"),
         });
       } else if (parakeetSeconds !== null) {
         toast.error(t("settings.history.retranscribeError"), {

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   classifyTranscriptionError,
+  isModelStillLoading,
   parakeetInputTooLongSeconds,
   recordingDurationLabel,
   transcriptionTimeoutSeconds,
@@ -64,5 +65,24 @@ describe("live transcription error presentation", () => {
       kind: "parakeetInputTooLong",
       seconds: 391,
     });
+  });
+});
+
+describe("model still loading errors", () => {
+  test("recognizes the backend's load-wait code", () => {
+    expect(isModelStillLoading("model_still_loading")).toBe(true);
+    expect(isModelStillLoading(new Error("model_still_loading"))).toBe(true);
+    expect(classifyTranscriptionError("model_still_loading")).toEqual({
+      kind: "modelStillLoading",
+    });
+  });
+
+  test("does not match a stuck engine or other failures", () => {
+    expect(isModelStillLoading("Model is not loaded for transcription.")).toBe(
+      false,
+    );
+    expect(
+      classifyTranscriptionError("Transcription timed out after 120s"),
+    ).toEqual({ kind: "generic" });
   });
 });

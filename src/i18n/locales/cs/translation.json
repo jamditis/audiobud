@@ -836,6 +836,7 @@
     "targetWindowGone": "Okno, do kterého jste diktovali, se zavřelo dřív, než AudioBud stihl vložit text. Vaše nastavení připnutí se nezměnilo.",
     "transcriptionErrorTitle": "Přepis se nezdařil",
     "transcriptionErrorGeneric": "Nahrávku se nepodařilo přepsat. Zkuste to znovu nebo vyberte jiný model.",
+    "modelStillLoading": "Model se stále načítá. Chvíli počkejte a zkuste to znovu.",
     "transcriptionTimeoutTitle": "Vypršel časový limit přepisu",
     "transcriptionTimeout": "Engine neodpověděl ani po {{seconds}} sekundách a možná se zasekl. Pokud se to bude opakovat, restartujte AudioBud.",
     "parakeetInputTooLong": "Tato nahrávka má délku {{duration}}. Parakeet nedokáže přepsat nahrávky delší než přibližně 6:30, protože další zvuk by byl bez upozornění vynechán. Pro dlouhé nahrávky použijte model Whisper.",

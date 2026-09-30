@@ -330,11 +330,13 @@ function App() {
         }
         toast.error(t("errors.transcriptionErrorTitle"), {
           description:
-            presentation.kind === "generic"
-              ? t("errors.transcriptionErrorGeneric")
-              : t("errors.parakeetInputTooLong", {
+            presentation.kind === "parakeetInputTooLong"
+              ? t("errors.parakeetInputTooLong", {
                   duration: recordingDurationLabel(presentation.seconds),
-                }),
+                })
+              : presentation.kind === "modelStillLoading"
+                ? t("errors.modelStillLoading")
+                : t("errors.transcriptionErrorGeneric"),
         });
       },
     );
