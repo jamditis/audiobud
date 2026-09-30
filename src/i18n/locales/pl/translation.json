@@ -830,6 +830,7 @@
     "recordingFailed": "Nie udało się rozpocząć nagrywania: {{error}}",
     "modelLoadFailed": "Nie udało się załadować modelu: {{model}}",
     "modelLoadFailedUnknown": "nieznany model",
+    "whisperModelPathNotUtf8": "Modele Whisper nie mogą zostać wczytane z tego folderu, ponieważ jego ścieżka zawiera znaki, których nie potrafią odczytać. Wybierz model Parakeet albo zainstaluj ponownie AudioBud w trybie przenośnym w folderze takim jak C:\\AudioBud.",
     "pasteFailedTitle": "Nie udało się wkleić tekstu",
     "pasteFailed": "Nie można było wkleić tekstu do aktywnej aplikacji.",
     "targetLockLostTitle": "Przypiętego okna już nie ma",

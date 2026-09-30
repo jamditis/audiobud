@@ -830,6 +830,7 @@
     "recordingFailed": "Не вдалося розпочати запис: {{error}}",
     "modelLoadFailed": "Не вдалося завантажити модель: {{model}}",
     "modelLoadFailedUnknown": "невідома модель",
+    "whisperModelPathNotUtf8": "Моделі Whisper не можуть завантажитися з цієї папки, бо її шлях містить символи, які вони не можуть прочитати. Виберіть модель Parakeet або перевстановіть AudioBud у портативному режимі в папку, наприклад C:\\AudioBud.",
     "pasteFailedTitle": "Не вдалося вставити текст",
     "pasteFailed": "Не вдалося вставити текст до активної програми.",
     "targetLockLostTitle": "Закріплене вікно закрито",

@@ -826,6 +826,7 @@
     "recordingFailed": "Error al iniciar la grabación: {{error}}",
     "modelLoadFailed": "Error al cargar el modelo: {{model}}",
     "modelLoadFailedUnknown": "modelo desconocido",
+    "whisperModelPathNotUtf8": "Los modelos Whisper no pueden cargarse desde esta carpeta porque su ruta tiene caracteres que no pueden leer. Elige un modelo Parakeet o reinstala AudioBud en modo portátil en una carpeta como C:\\AudioBud.",
     "pasteFailedTitle": "Error al pegar el texto",
     "pasteFailed": "No se pudo pegar el texto en la aplicación activa.",
     "targetLockLostTitle": "La ventana fijada ya no existe",

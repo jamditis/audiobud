@@ -87,6 +87,10 @@ where
     })
 }
 
+/// Load-failure code for a Whisper model path that is not valid UTF-8.
+/// `src/lib/model-state-error.ts` maps it to translated copy.
+const WHISPER_MODEL_PATH_NOT_UTF8: &str = "whisper_model_path_not_utf8";
+
 /// Returns the model path to hand to the Whisper engine, or an error when the
 /// engine would panic on it.
 ///
@@ -99,16 +103,14 @@ where
 /// was not reverted, and every recording start tried the load again. This
 /// turns that into an ordinary load error with the usual toast.
 ///
-/// The message says what to do, because the user usually cannot rename the
-/// folder: the bad character is in the Windows user name, and `display()`
-/// shows it as a replacement character. Portable mode keeps models next to the
-/// executable instead of under the profile (`portable.rs`).
+/// The error is a stable code, not prose: the frontend maps it to translated
+/// copy (`errors.whisperModelPathNotUtf8`) that says what to do, because the
+/// user usually cannot rename the folder. The bad character is in the Windows
+/// user name. Portable mode keeps models next to the executable instead of
+/// under the profile (`portable.rs`).
 fn whisper_model_path(model_path: &Path) -> Result<&Path> {
     if model_path.to_str().is_none() {
-        return Err(anyhow::anyhow!(
-            "Whisper models cannot load from this folder because its path has characters they cannot read ({}). Choose a Parakeet model, or reinstall AudioBud in portable mode to a folder such as C:\\AudioBud.",
-            model_path.display()
-        ));
+        return Err(anyhow::anyhow!(WHISPER_MODEL_PATH_NOT_UTF8));
     }
     Ok(model_path)
 }
@@ -398,15 +400,22 @@ impl TranscriptionManager {
         // Create appropriate engine based on model type
         let loaded_engine = match model_info.engine_type {
             EngineType::Whisper => {
-                let engine = whisper_model_path(&model_path)
-                    .and_then(|path| {
-                        WhisperEngine::load(path).map_err(|e| anyhow::anyhow!("{}", e))
-                    })
-                    .map_err(|e| {
-                        let error_msg = format!("Failed to load whisper model {}: {}", model_id, e);
-                        emit_loading_failed(&error_msg);
-                        anyhow::anyhow!(error_msg)
-                    })?;
+                let path = whisper_model_path(&model_path).map_err(|e| {
+                    // The event carries the bare code so the toast can be
+                    // translated; the returned error keeps the path for logs.
+                    emit_loading_failed(WHISPER_MODEL_PATH_NOT_UTF8);
+                    anyhow::anyhow!(
+                        "Failed to load whisper model {}: {} ({})",
+                        model_id,
+                        e,
+                        model_path.display()
+                    )
+                })?;
+                let engine = WhisperEngine::load(path).map_err(|e| {
+                    let error_msg = format!("Failed to load whisper model {}: {}", model_id, e);
+                    emit_loading_failed(&error_msg);
+                    anyhow::anyhow!(error_msg)
+                })?;
                 LoadedEngine::Whisper(engine)
             }
             EngineType::Parakeet => {
@@ -1121,7 +1130,7 @@ mod tests {
         );
 
         let error = whisper_model_path(&path).expect_err("non-UTF-8 path must be refused");
-        assert!(error.to_string().contains("portable mode"), "{error}");
+        assert_eq!(error.to_string(), WHISPER_MODEL_PATH_NOT_UTF8);
     }
 
     fn loading_guard() -> (LoadingGuard, Arc<Mutex<bool>>) {
