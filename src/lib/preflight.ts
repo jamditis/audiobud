@@ -261,10 +261,10 @@ function checkRuntimeDlls(facts: SystemFacts): RequirementResult {
  * FMA3 is soft, not a hard gate (#72). The release build turns off ggml's AVX,
  * AVX2, and FMA CPU paths so the app runs on older x64 CPUs. But ggml's Vulkan
  * backend uses FMA3, so the app skips GPU device detection on a CPU without it
- * (transcription.rs, cached_gpu_devices). A missing FMA3 costs the GPU path, not
- * the app, and only for Whisper: ONNX models on DirectML do not use it. Whisper
- * on Auto still requests the GPU, so the fix points at CPU mode rather than a
- * driver update.
+ * (transcription.rs, cached_gpu_devices). Whisper on Auto still requests the
+ * GPU, so the fix points at CPU mode rather than a driver update. The message
+ * makes no claim about the ONNX engines (Parakeet is the Windows default): no
+ * one has tested their bundled native libraries on a CPU without FMA3 or AVX2.
  */
 function checkCpuFma(facts: SystemFacts): RequirementResult {
   const id = "cpu-fma";
@@ -287,7 +287,7 @@ function checkCpuFma(facts: SystemFacts): RequirementResult {
       status: "degraded",
       message:
         "This processor does not support FMA3, which Whisper GPU transcription needs. AudioBud does not list graphics cards on it, but Whisper on Auto still tries the GPU. A driver update will not change this.",
-      fix: "Set Whisper acceleration to CPU in settings. Parakeet and the other ONNX models do not need FMA3.",
+      fix: "If you use Whisper, set Whisper acceleration to CPU in settings.",
     };
   }
   return ok(
