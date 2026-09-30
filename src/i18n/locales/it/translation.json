@@ -603,7 +603,8 @@
       "retranscribe": "Ri-trascrivere",
       "retranscribeError": "Impossibile ri-trascrivere. Riprova.",
       "transcribing": "Trascrizione in corso...",
-      "transcriptionFailed": "Trascrizione fallita. Puoi ri-trascrivere usando l'icona di ripetizione."
+      "transcriptionFailed": "Trascrizione fallita. Puoi ri-trascrivere usando l'icona di ripetizione.",
+      "removedNextRecording": "Verrà rimossa quando aggiungi la registrazione successiva. Salvala con la stella per conservarla."
     },
     "debug": {
       "title": "Debug",

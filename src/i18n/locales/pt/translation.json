@@ -603,7 +603,8 @@
       "retranscribe": "Re-transcrever",
       "retranscribeError": "Falha ao re-transcrever. Por favor, tente novamente.",
       "transcribing": "Transcrevendo...",
-      "transcriptionFailed": "A transcrição falhou. Você pode re-transcrever usando o ícone de tentar novamente."
+      "transcriptionFailed": "A transcrição falhou. Você pode re-transcrever usando o ícone de tentar novamente.",
+      "removedNextRecording": "Será removida quando sua próxima gravação for adicionada. Salve com a estrela para mantê-la."
     },
     "debug": {
       "title": "Depuração",

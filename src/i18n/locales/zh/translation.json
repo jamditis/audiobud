@@ -603,7 +603,8 @@
       "retranscribe": "重新转录",
       "retranscribeError": "重新转录失败。请重试。",
       "transcribing": "转录中...",
-      "transcriptionFailed": "转录失败。您可以使用重试图标重新转录。"
+      "transcriptionFailed": "转录失败。您可以使用重试图标重新转录。",
+      "removedNextRecording": "将在您添加下一段录音时被移除。点击星标保存即可保留。"
     },
     "debug": {
       "title": "调试",
