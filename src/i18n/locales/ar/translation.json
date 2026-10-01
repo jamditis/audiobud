@@ -843,6 +843,7 @@
     "targetWindowGone": "أُغلقت النافذة التي أمليت إليها قبل أن يتمكن AudioBud من لصق النص. إعداد التثبيت الحالي لم يتغيّر.",
     "transcriptionErrorTitle": "فشل التفريغ",
     "transcriptionErrorGeneric": "تعذر نسخ التسجيل. حاول مرة أخرى أو اختر نموذجًا مختلفًا.",
+    "modelStillLoading": "لا يزال النموذج قيد التحميل. انتظر لحظة ثم حاول مرة أخرى.",
     "transcriptionTimeoutTitle": "انتهت مهلة التفريغ",
     "transcriptionTimeout": "لم يستجب المحرك بعد {{seconds}} ثانية وقد يكون متوقفاً. أعد تشغيل AudioBud إذا استمر هذا.",
     "parakeetInputTooLong": "مدة هذا التسجيل {{duration}}. لا يستطيع Parakeet نسخ تسجيلات أطول من نحو 6:30 لأن الصوت اللاحق سيُحذف بصمت. استخدم نموذج Whisper للتسجيلات الطويلة.",

@@ -87,6 +87,35 @@ where
     })
 }
 
+/// How long a transcription waits for an in-flight model load before it gives
+/// up (issue #90). The load runs in the background from the moment the hotkey
+/// goes down, and a large Whisper model on a slow disk can take minutes. This
+/// budget is separate from the transcription watchdog, so load time never
+/// counts as a stuck engine.
+const MODEL_LOAD_WAIT_BUDGET: Duration = Duration::from_secs(600);
+
+/// Transcription error when a model load is still running: past
+/// [`MODEL_LOAD_WAIT_BUDGET`], or started after the wait ended. A stable code,
+/// not prose:
+/// `src/lib/transcription-error.ts` maps it to translated copy that tells the
+/// user to try again in a moment.
+const MODEL_STILL_LOADING_ERROR: &str = "model_still_loading";
+
+/// Blocks until no model load is in flight or `budget` passes. Returns `true`
+/// when the load has settled (finished or failed; the caller checks the
+/// engine slot), `false` when it is still running at the deadline.
+fn wait_for_model_load(
+    is_loading: &Mutex<bool>,
+    loading_condvar: &Condvar,
+    budget: Duration,
+) -> bool {
+    let is_loading = is_loading.lock().unwrap_or_else(|p| p.into_inner());
+    let (is_loading, _) = loading_condvar
+        .wait_timeout_while(is_loading, budget, |loading| *loading)
+        .unwrap_or_else(|p| p.into_inner());
+    !*is_loading
+}
+
 /// Load-failure code for a Whisper model path that is not valid UTF-8.
 /// `src/lib/model-state-error.ts` maps it to translated copy.
 const WHISPER_MODEL_PATH_NOT_UTF8: &str = "whisper_model_path_not_utf8";
@@ -583,12 +612,13 @@ impl TranscriptionManager {
             });
         }
 
-        // Check if model is loaded, if not try to load it
         {
-            // If the model is loading, wait for it to complete.
-            let mut is_loading = self.is_loading.lock().unwrap();
-            while *is_loading {
-                is_loading = self.loading_condvar.wait(is_loading).unwrap();
+            // `transcribe_with_watchdog` already waited for any load in flight
+            // (issue #90). A load that started since then is not waited on:
+            // this runs inside the watchdog, so waiting here would count load
+            // time against the transcription deadline again.
+            if *self.is_loading.lock().unwrap() {
+                return Err(anyhow::anyhow!(MODEL_STILL_LOADING_ERROR));
             }
 
             if !self.engine.is_occupied() {
@@ -961,6 +991,25 @@ impl TranscriptionManager {
         if self.is_wedged() {
             return WatchdogOutcome::Completed(Err(anyhow::anyhow!(WEDGED_ENGINE_ERROR)));
         }
+        // Issue #90: the hotkey starts the model load in the background, so a
+        // cold start can reach this point mid-load. Wait for it here, before
+        // the watchdog starts timing. Inside the watchdog, a slow load read as
+        // a stuck engine: a false timeout, then the retry was refused.
+        let is_loading = Arc::clone(&self.is_loading);
+        let loading_condvar = Arc::clone(&self.loading_condvar);
+        let load_settled = tokio::task::spawn_blocking(move || {
+            wait_for_model_load(&is_loading, &loading_condvar, MODEL_LOAD_WAIT_BUDGET)
+        })
+        .await
+        .unwrap_or(false);
+        if !load_settled {
+            return WatchdogOutcome::Completed(Err(anyhow::anyhow!(MODEL_STILL_LOADING_ERROR)));
+        }
+        // The wait can be long, and an earlier transcription can time out
+        // during it. Check again so this call never runs beside a wedged one.
+        if self.is_wedged() {
+            return WatchdogOutcome::Completed(Err(anyhow::anyhow!(WEDGED_ENGINE_ERROR)));
+        }
         let manager = self.clone();
         run_with_watchdog(
             "transcription",
@@ -1140,6 +1189,45 @@ mod tests {
             loading_condvar: Arc::new(Condvar::new()),
         };
         (guard, is_loading)
+    }
+
+    #[test]
+    fn wait_for_model_load_returns_at_once_when_nothing_is_loading() {
+        let is_loading = Mutex::new(false);
+        let started = std::time::Instant::now();
+
+        assert!(wait_for_model_load(
+            &is_loading,
+            &Condvar::new(),
+            Duration::from_secs(30)
+        ));
+        assert!(started.elapsed() < Duration::from_secs(5));
+    }
+
+    #[test]
+    fn wait_for_model_load_returns_when_the_load_finishes() {
+        let (guard, is_loading) = loading_guard();
+        let loading_condvar = Arc::clone(&guard.loading_condvar);
+        let load = spawn_model_load_task(guard, || thread::sleep(Duration::from_millis(200)));
+
+        assert!(wait_for_model_load(
+            &is_loading,
+            &loading_condvar,
+            Duration::from_secs(30)
+        ));
+        load.join().expect("model load task must not panic");
+    }
+
+    #[test]
+    fn wait_for_model_load_gives_up_at_the_budget() {
+        let (guard, is_loading) = loading_guard();
+
+        assert!(!wait_for_model_load(
+            &is_loading,
+            &guard.loading_condvar,
+            Duration::from_millis(100)
+        ));
+        assert!(*is_loading.lock().unwrap(), "the load itself keeps running");
     }
 
     #[test]

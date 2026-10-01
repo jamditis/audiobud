@@ -835,6 +835,7 @@
     "targetWindowGone": "The window you dictated to closed before AudioBud could paste the text. Your current lock setting is unchanged.",
     "transcriptionErrorTitle": "Transcription failed",
     "transcriptionErrorGeneric": "The recording could not be transcribed. Try again or choose a different model.",
+    "modelStillLoading": "The model is still loading. Wait a moment, then try again.",
     "transcriptionTimeoutTitle": "Transcription timed out",
     "transcriptionTimeout": "The engine did not respond after {{seconds}} seconds and may be stuck. Restart AudioBud if this keeps happening.",
     "parakeetInputTooLong": "This recording is {{duration}} long. Parakeet cannot transcribe recordings longer than about 6:30 because later audio would be silently omitted. Use a Whisper model for long recordings.",
