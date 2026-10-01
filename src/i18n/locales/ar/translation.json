@@ -834,6 +834,7 @@
     "recordingFailed": "فشل في بدء التسجيل: {{error}}",
     "modelLoadFailed": "فشل في تحميل النموذج: {{model}}",
     "modelLoadFailedUnknown": "نموذج غير معروف",
+    "whisperModelPathNotUtf8": "لا يمكن تحميل نماذج Whisper من هذا المجلد لأن مساره يحتوي على أحرف لا تستطيع قراءتها. اختر نموذج Parakeet، أو أعد تثبيت AudioBud في الوضع المحمول في مجلد مثل C:\\AudioBud.",
     "pasteFailedTitle": "فشل لصق النص",
     "pasteFailed": "تعذر لصق النص في التطبيق النشط.",
     "targetLockLostTitle": "النافذة المثبتة لم تعد موجودة",

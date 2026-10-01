@@ -826,6 +826,7 @@
     "recordingFailed": "Kayıt başlatılamadı: {{error}}",
     "modelLoadFailed": "Model yüklenemedi: {{model}}",
     "modelLoadFailedUnknown": "bilinmeyen model",
+    "whisperModelPathNotUtf8": "Whisper modelleri bu klasörden yüklenemiyor çünkü yolunda okuyamadıkları karakterler var. Bir Parakeet modeli seçin veya AudioBud'u taşınabilir modda C:\\AudioBud gibi bir klasöre yeniden yükleyin.",
     "pasteFailedTitle": "Metin yapıştırılamadı",
     "pasteFailed": "Metin etkin uygulamaya yapıştırılamadı.",
     "targetLockLostTitle": "Kilitlenen pencere yok",

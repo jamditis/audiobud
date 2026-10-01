@@ -826,6 +826,7 @@
     "recordingFailed": "Không thể bắt đầu ghi âm: {{error}}",
     "modelLoadFailed": "Không thể tải mô hình: {{model}}",
     "modelLoadFailedUnknown": "mô hình không xác định",
+    "whisperModelPathNotUtf8": "Không thể tải mô hình Whisper từ thư mục này vì đường dẫn có ký tự mà mô hình không đọc được. Hãy chọn mô hình Parakeet, hoặc cài lại AudioBud ở chế độ di động vào một thư mục như C:\\AudioBud.",
     "pasteFailedTitle": "Không thể dán văn bản",
     "pasteFailed": "Không thể dán văn bản vào ứng dụng đang hoạt động.",
     "targetLockLostTitle": "Cửa sổ đã khóa không còn nữa",

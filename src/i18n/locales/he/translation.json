@@ -828,6 +828,7 @@
     "recordingFailed": "הפעלת ההקלטה נכשלה: {{error}}",
     "modelLoadFailed": "טעינת המודל נכשלה: {{model}}",
     "modelLoadFailedUnknown": "מודל לא ידוע",
+    "whisperModelPathNotUtf8": "מודלי Whisper לא יכולים להיטען מהתיקייה הזו כי הנתיב שלה כולל תווים שהם לא יכולים לקרוא. בחר מודל Parakeet, או התקן מחדש את AudioBud במצב נייד בתיקייה כמו C:\\AudioBud.",
     "pasteFailedTitle": "ההדבקה נכשלה",
     "pasteFailed": "לא ניתן היה להדביק את הטקסט ביישום הפעיל.",
     "targetLockLostTitle": "החלון הנעול נסגר",

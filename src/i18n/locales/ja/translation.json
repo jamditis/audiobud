@@ -826,6 +826,7 @@
     "recordingFailed": "録音の開始に失敗しました: {{error}}",
     "modelLoadFailed": "モデルの読み込みに失敗しました: {{model}}",
     "modelLoadFailedUnknown": "不明なモデル",
+    "whisperModelPathNotUtf8": "このフォルダーのパスに読み取れない文字が含まれているため、Whisper モデルを読み込めません。Parakeet モデルを選ぶか、C:\\AudioBud などのフォルダーにポータブルモードで AudioBud を再インストールしてください。",
     "pasteFailedTitle": "テキストの貼り付けに失敗しました",
     "pasteFailed": "アクティブなアプリケーションにテキストを貼り付けられませんでした。",
     "targetLockLostTitle": "固定したウィンドウがありません",
