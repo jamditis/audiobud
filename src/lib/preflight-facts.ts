@@ -41,6 +41,8 @@ export interface RawProbe {
   webview2Present?: boolean | null;
   /** Whether the VC++ CRT and Vulkan loader are present (#36, #44). Windows-only. */
   runtimeDllsPresent?: boolean | null;
+  /** Whether the x64 CPU supports FMA3 (#72). Windows-only. */
+  cpuFmaPresent?: boolean | null;
   /** The accelerator the app detected, in whatever spelling the probe used. */
   acceleration?: string | null;
 }
@@ -174,6 +176,9 @@ export function buildSystemFacts(raw: RawProbe): SystemFacts {
       raw.runtimeDllsPresent !== undefined
     ) {
       facts.runtimeDllsPresent = raw.runtimeDllsPresent;
+    }
+    if (raw.cpuFmaPresent !== null && raw.cpuFmaPresent !== undefined) {
+      facts.cpuFmaPresent = raw.cpuFmaPresent;
     }
   }
 
