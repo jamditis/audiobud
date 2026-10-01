@@ -77,6 +77,11 @@ release workflow is the source of signed public artifacts. It builds an Apple
 Silicon app and DMG on macOS, NSIS and MSI packages on Windows, and a Windows
 Store candidate when requested.
 
+The binding generator lives in `src-tauri/examples/generate-bindings.rs` and
+runs through `bun run bindings:generate`. Keep this development helper outside
+`src-tauri/src/bin`: Cargo binary targets are included in installer payloads,
+where an unsigned helper fails the packaged-file signature check.
+
 ## Signed macOS release
 
 The protected `artifact-signing` environment stores the Apple certificate and

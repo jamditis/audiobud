@@ -141,7 +141,7 @@ jobs:
       - name: Check generated Rust bindings
         working-directory: src-tauri
         run: |
-          cargo run --locked --features generate-bindings --bin generate-bindings
+          cargo run --locked --features generate-bindings --example generate-bindings
           git diff --exit-code -- ../src/bindings.ts
       - name: Build the unsigned Apple Silicon application
         # No bundle, signing environment, credentials, release writes, or uploads.
