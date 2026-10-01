@@ -15,6 +15,7 @@ use log::{debug, error, info, warn};
 use serde::Serialize;
 use specta::Type;
 use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Condvar, Mutex, OnceLock};
 use std::thread;
@@ -84,6 +85,34 @@ where
         let _loading_guard = loading_guard;
         load()
     })
+}
+
+/// Load-failure code for a Whisper model path that is not valid UTF-8.
+/// `src/lib/model-state-error.ts` maps it to translated copy.
+const WHISPER_MODEL_PATH_NOT_UTF8: &str = "whisper_model_path_not_utf8";
+
+/// Returns the model path to hand to the Whisper engine, or an error when the
+/// engine would panic on it.
+///
+/// Every other engine takes the model as `&Path`. Whisper does not:
+/// transcribe-rs 0.3.8 converts it with `to_str().unwrap()`
+/// (`whisper_cpp/mod.rs:180`) because whisper-rs takes `&str`. On a path that
+/// is not valid UTF-8, such as a Windows profile name with an unpaired
+/// surrogate, the load panicked inside the dependency after `loading_started`
+/// was sent (issue #80). The selector stayed on "loading", a failed selection
+/// was not reverted, and every recording start tried the load again. This
+/// turns that into an ordinary load error with the usual toast.
+///
+/// The error is a stable code, not prose: the frontend maps it to translated
+/// copy (`errors.whisperModelPathNotUtf8`) that says what to do, because the
+/// user usually cannot rename the folder. The bad character is in the Windows
+/// user name. Portable mode keeps models next to the executable instead of
+/// under the profile (`portable.rs`).
+fn whisper_model_path(model_path: &Path) -> Result<&Path> {
+    if model_path.to_str().is_none() {
+        return Err(anyhow::anyhow!(WHISPER_MODEL_PATH_NOT_UTF8));
+    }
+    Ok(model_path)
 }
 
 #[derive(Clone)]
@@ -371,7 +400,18 @@ impl TranscriptionManager {
         // Create appropriate engine based on model type
         let loaded_engine = match model_info.engine_type {
             EngineType::Whisper => {
-                let engine = WhisperEngine::load(&model_path).map_err(|e| {
+                let path = whisper_model_path(&model_path).map_err(|e| {
+                    // The event carries the bare code so the toast can be
+                    // translated; the returned error keeps the path for logs.
+                    emit_loading_failed(WHISPER_MODEL_PATH_NOT_UTF8);
+                    anyhow::anyhow!(
+                        "Failed to load whisper model {}: {} ({})",
+                        model_id,
+                        e,
+                        model_path.display()
+                    )
+                })?;
+                let engine = WhisperEngine::load(path).map_err(|e| {
                     let error_msg = format!("Failed to load whisper model {}: {}", model_id, e);
                     emit_loading_failed(&error_msg);
                     anyhow::anyhow!(error_msg)
@@ -1055,6 +1095,43 @@ impl Drop for TranscriptionManager {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // Valid Unicode (Cyrillic, CJK, accented Latin) must reach the Whisper
+    // engine unchanged; only a path the engine would panic on is refused.
+    #[test]
+    fn whisper_model_path_accepts_unicode_paths() {
+        let path = Path::new(
+            "/models/\u{041f}\u{043e}\u{043b}\u{044c}-\u{7528}\u{6237}-An\u{e7}a/ggml-small.bin",
+        );
+        assert_eq!(whisper_model_path(path).unwrap(), path);
+    }
+
+    // Issue #80: a non-UTF-8 path used to panic inside transcribe-rs. It must
+    // now fail the load with an error that names the cause.
+    #[test]
+    #[cfg(any(unix, windows))]
+    fn whisper_model_path_rejects_non_utf8_paths() {
+        #[cfg(unix)]
+        let name = {
+            use std::os::unix::ffi::OsStringExt;
+            std::ffi::OsString::from_vec(b"audiobud-models-\xff".to_vec())
+        };
+        #[cfg(windows)]
+        let name = {
+            use std::os::windows::ffi::OsStringExt;
+            let mut wide: Vec<u16> = "audiobud-models-".encode_utf16().collect();
+            wide.push(0xD800); // unpaired surrogate: valid in Windows paths, not valid UTF-8
+            std::ffi::OsString::from_wide(&wide)
+        };
+        let path = std::path::PathBuf::from(name).join("ggml-small.bin");
+        assert!(
+            path.to_str().is_none(),
+            "test setup: path must be non-UTF-8"
+        );
+
+        let error = whisper_model_path(&path).expect_err("non-UTF-8 path must be refused");
+        assert_eq!(error.to_string(), WHISPER_MODEL_PATH_NOT_UTF8);
+    }
 
     fn loading_guard() -> (LoadingGuard, Arc<Mutex<bool>>) {
         let is_loading = Arc::new(Mutex::new(true));

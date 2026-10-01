@@ -826,6 +826,7 @@
     "recordingFailed": "Aufnahme konnte nicht gestartet werden: {{error}}",
     "modelLoadFailed": "Modell konnte nicht geladen werden: {{model}}",
     "modelLoadFailedUnknown": "unbekanntes Modell",
+    "whisperModelPathNotUtf8": "Whisper-Modelle können aus diesem Ordner nicht geladen werden, weil sein Pfad Zeichen enthält, die sie nicht lesen können. Wählen Sie ein Parakeet-Modell oder installieren Sie AudioBud im portablen Modus neu, zum Beispiel in C:\\AudioBud.",
     "pasteFailedTitle": "Text konnte nicht eingefügt werden",
     "pasteFailed": "Der Text konnte nicht in die aktive Anwendung eingefügt werden.",
     "targetLockLostTitle": "Fixiertes Fenster ist weg",

@@ -828,6 +828,7 @@
     "recordingFailed": "Nepodařilo se spustit nahrávání: {{error}}",
     "modelLoadFailed": "Nepodařilo se načíst model: {{model}}",
     "modelLoadFailedUnknown": "neznámý model",
+    "whisperModelPathNotUtf8": "Modely Whisper nelze z této složky načíst, protože její cesta obsahuje znaky, které neumí přečíst. Vyberte model Parakeet nebo AudioBud znovu nainstalujte v přenosném režimu do složky, například C:\\AudioBud.",
     "pasteFailedTitle": "Vložení textu se nezdařilo",
     "pasteFailed": "Text nebylo možné vložit do aktivní aplikace.",
     "targetLockLostTitle": "Uzamčené okno už neexistuje",

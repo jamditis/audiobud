@@ -826,6 +826,7 @@
     "recordingFailed": "錄音啟動失敗: {{error}}",
     "modelLoadFailed": "載入模型失敗: {{model}}",
     "modelLoadFailedUnknown": "未知模型",
+    "whisperModelPathNotUtf8": "無法從此資料夾載入 Whisper 模型，因為其路徑包含無法讀取的字元。請選擇 Parakeet 模型，或以可攜模式將 AudioBud 重新安裝到 C:\\AudioBud 等資料夾。",
     "pasteFailedTitle": "貼上文字失敗",
     "pasteFailed": "無法將文字貼上至目前作用中的應用程式。",
     "targetLockLostTitle": "鎖定的視窗已關閉",

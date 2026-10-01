@@ -826,6 +826,7 @@
     "recordingFailed": "Impossibile avviare la registrazione: {{error}}",
     "modelLoadFailed": "Impossibile caricare il modello: {{model}}",
     "modelLoadFailedUnknown": "modello sconosciuto",
+    "whisperModelPathNotUtf8": "I modelli Whisper non possono essere caricati da questa cartella perché il suo percorso contiene caratteri che non riescono a leggere. Scegli un modello Parakeet oppure reinstalla AudioBud in modalità portatile in una cartella come C:\\AudioBud.",
     "pasteFailedTitle": "Impossibile incollare il testo",
     "pasteFailed": "Non è stato possibile incollare il testo nell'applicazione attiva.",
     "targetLockLostTitle": "La finestra bloccata non esiste più",

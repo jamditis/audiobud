@@ -826,6 +826,7 @@
     "recordingFailed": "Failed to start recording: {{error}}",
     "modelLoadFailed": "Failed to load model: {{model}}",
     "modelLoadFailedUnknown": "unknown model",
+    "whisperModelPathNotUtf8": "Whisper models can't load from this folder because its path has characters they can't read. Choose a Parakeet model, or reinstall AudioBud in portable mode to a folder such as C:\\AudioBud.",
     "pasteFailedTitle": "Failed to paste text",
     "pasteFailed": "Text could not be pasted into the active application.",
     "targetLockLostTitle": "Locked window is gone",

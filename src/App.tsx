@@ -29,6 +29,7 @@ import {
   truncateName,
 } from "@/lib/output-target-indicator";
 import { claimPermissionCompletion } from "@/lib/permission-controller";
+import { localizeModelLoadError } from "@/lib/model-state-error";
 
 type OnboardingStep = "accessibility" | "model" | "done";
 const PRODUCT_NAME = "AudioBud";
@@ -353,7 +354,7 @@ function App() {
               event.payload.model_name || t("errors.modelLoadFailedUnknown"),
           }),
           {
-            description: event.payload.error,
+            description: localizeModelLoadError(event.payload.error, t),
           },
         );
       }
