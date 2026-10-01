@@ -15,6 +15,14 @@ const signingScript = readFileSync("scripts/sign-windows.ps1", "utf8");
 const nsisTemplate = readFileSync("src-tauri/nsis/installer.nsi", "utf8");
 const thirdPartyNotices = readFileSync("THIRD_PARTY_NOTICES.md", "utf8");
 
+test("keeps the binding generator out of installer binary targets", () => {
+  expect(existsSync("src-tauri/src/bin/generate-bindings.rs")).toBe(false);
+  expect(existsSync("src-tauri/examples/generate-bindings.rs")).toBe(true);
+  expect(packageJson.scripts["bindings:generate"]).toContain(
+    "--example generate-bindings",
+  );
+});
+
 describe("bundled word-list notices", () => {
   test("carries the pinned SCOWL and VarCon copyright terms", () => {
     expect(thirdPartyNotices).toContain(

@@ -7,6 +7,6 @@ fn main() {
 
 #[cfg(not(feature = "generate-bindings"))]
 fn main() {
-    eprintln!("run with --features generate-bindings");
+    eprintln!("run with --features generate-bindings --example generate-bindings");
     std::process::exit(2);
 }

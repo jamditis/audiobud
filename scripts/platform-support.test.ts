@@ -117,7 +117,7 @@ describe("native platform boundary", () => {
     expect(shared).toContain("name: Rust tests (mock transcription, no GPU)");
     expect(shared).toContain("runs-on: macos-15");
     expect(shared).toContain("cargo test --locked");
-    expect(shared).toContain("--bin generate-bindings");
+    expect(shared).toContain("--example generate-bindings");
     expect(shared).toContain("git diff --exit-code -- ../src/bindings.ts");
     expect(shared).toContain("bun run tauri build --no-bundle --ci");
     expect(shared).not.toContain("transcription_mock.rs");
