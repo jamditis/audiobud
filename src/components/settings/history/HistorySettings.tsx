@@ -1,4 +1,10 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { Check, Copy, FolderOpen, RotateCcw, Star, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -10,12 +16,14 @@ import {
   type HistoryUpdatePayload,
 } from "@/bindings";
 import { historyEntryText } from "@/lib/history-entry-text";
+import { idsTrimmedByNextRecording } from "@/lib/history-trim";
 import {
   parakeetInputTooLongSeconds,
   recordingDurationLabel,
   isModelStillLoading,
   transcriptionTimeoutSeconds,
 } from "@/lib/transcription-error";
+import { useSettings } from "@/hooks/useSettings";
 import { formatDateTime } from "@/utils/dateFormat";
 import { AudioPlayer } from "../../ui/AudioPlayer";
 import { Button } from "../../ui/Button";
@@ -72,6 +80,36 @@ export const HistorySettings: React.FC = () => {
   const sentinelRef = useRef<HTMLDivElement>(null);
   const entriesRef = useRef<HistoryEntry[]>([]);
   const loadingRef = useRef(false);
+  const { getSetting } = useSettings();
+  const retentionPeriod: string =
+    getSetting("recording_retention_period") ?? "never";
+  const historyLimit = getSetting("history_limit") ?? 5;
+  // Time-based marks depend on the clock, so refresh it while the page is open.
+  const [nowSeconds, setNowSeconds] = useState(() =>
+    Math.floor(Date.now() / 1000),
+  );
+  useEffect(() => {
+    const timer = setInterval(
+      () => setNowSeconds(Math.floor(Date.now() / 1000)),
+      60_000,
+    );
+    return () => clearInterval(timer);
+  }, []);
+
+  // Settings changes never delete history; the next recording does (#55).
+  // Mark what it will remove so nobody loses an entry without warning (#76).
+  // The loaded pages run without gaps from the newest entry, so the marks on
+  // them match the full history; older pages get theirs as they load.
+  const trimmedIds = useMemo(
+    () =>
+      idsTrimmedByNextRecording(
+        entries,
+        retentionPeriod,
+        historyLimit,
+        nowSeconds,
+      ),
+    [entries, retentionPeriod, historyLimit, nowSeconds],
+  );
 
   // Keep ref in sync for use in IntersectionObserver callback
   useEffect(() => {
@@ -259,6 +297,7 @@ export const HistorySettings: React.FC = () => {
             <HistoryEntryComponent
               key={entry.id}
               entry={entry}
+              removedNextRecording={trimmedIds.has(entry.id)}
               onToggleSaved={() => toggleSaved(entry.id)}
               onCopyText={() => copyToClipboard(historyEntryText(entry))}
               getAudioUrl={getAudioUrl}
@@ -297,6 +336,7 @@ export const HistorySettings: React.FC = () => {
 
 interface HistoryEntryProps {
   entry: HistoryEntry;
+  removedNextRecording: boolean;
   onToggleSaved: () => void;
   onCopyText: () => void;
   getAudioUrl: (fileName: string) => Promise<string | null>;
@@ -306,6 +346,7 @@ interface HistoryEntryProps {
 
 const HistoryEntryComponent: React.FC<HistoryEntryProps> = ({
   entry,
+  removedNextRecording,
   onToggleSaved,
   onCopyText,
   getAudioUrl,
@@ -435,6 +476,12 @@ const HistoryEntryComponent: React.FC<HistoryEntryProps> = ({
           </IconButton>
         </div>
       </div>
+
+      {removedNextRecording && (
+        <p className="-mt-2 text-xs text-mid-gray">
+          {t("settings.history.removedNextRecording")}
+        </p>
+      )}
 
       <p
         className={`italic text-sm pb-2 ${

@@ -603,7 +603,8 @@
       "retranscribe": "Re-transcribe",
       "retranscribeError": "Failed to re-transcribe. Please try again.",
       "transcribing": "Transcribing...",
-      "transcriptionFailed": "Transcription failed. You can re-transcribe using the retry icon."
+      "transcriptionFailed": "Transcription failed. You can re-transcribe using the retry icon.",
+      "removedNextRecording": "Removed when your next recording is added. Save it with the star to keep it."
     },
     "debug": {
       "title": "Debug",

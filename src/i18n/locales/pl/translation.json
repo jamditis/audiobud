@@ -607,7 +607,8 @@
       "retranscribe": "Transkrybuj ponownie",
       "retranscribeError": "Nie udało się ponownie transkrybować. Spróbuj ponownie.",
       "transcribing": "Transkrybuję...",
-      "transcriptionFailed": "Transkrypcja nie powiodła się. Możesz transkrybować ponownie za pomocą ikony ponowienia."
+      "transcriptionFailed": "Transkrypcja nie powiodła się. Możesz transkrybować ponownie za pomocą ikony ponowienia.",
+      "removedNextRecording": "Zostanie usunięte przy dodaniu kolejnego nagrania. Aby je zachować, zapisz je gwiazdką."
     },
     "debug": {
       "title": "Debugowanie",

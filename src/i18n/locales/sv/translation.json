@@ -603,7 +603,8 @@
       "retranscribe": "Transkribera igen",
       "retranscribeError": "Misslyckades med att transkribera igen. Försök igen.",
       "transcribing": "Transkriberar...",
-      "transcriptionFailed": "Transkribering misslyckades. Du kan transkribera igen med hjälp av ikonen för nytt försök."
+      "transcriptionFailed": "Transkribering misslyckades. Du kan transkribera igen med hjälp av ikonen för nytt försök.",
+      "removedNextRecording": "Tas bort när din nästa inspelning läggs till. Spara den med stjärnan för att behålla den."
     },
     "debug": {
       "title": "Felsökning",

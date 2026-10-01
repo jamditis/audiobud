@@ -348,8 +348,17 @@ impl HistoryManager {
 
         debug!("Saved history entry with id {}", entry.id);
 
-        if cleanup {
-            self.cleanup_old_entries()?;
+        let trimmed_ids = if cleanup {
+            self.cleanup_old_entries()?
+        } else {
+            Vec::new()
+        };
+
+        // A history limit of zero deletes the new row in the same cleanup.
+        // Its Deleted event has already gone out, so an Added event now
+        // would leave a row on the History page that no longer exists.
+        if trimmed_ids.contains(&entry.id) {
+            return Ok(entry);
         }
 
         // Emit typed event for real-time frontend updates
@@ -412,7 +421,8 @@ impl HistoryManager {
         Ok(entry)
     }
 
-    pub fn cleanup_old_entries(&self) -> Result<()> {
+    /// Trims history per the retention settings and returns the deleted ids.
+    pub fn cleanup_old_entries(&self) -> Result<Vec<i64>> {
         let retention_period = crate::settings::get_recording_retention_period(&self.app_handle);
         let history_limit = crate::settings::get_history_limit(&self.app_handle);
         let conn = self.get_connection()?;
@@ -428,13 +438,13 @@ impl HistoryManager {
         // from the Added event without re-fetching). Emit a Deleted event per
         // trimmed row so the UI drops them instead of offering playback and
         // retry on entries that no longer exist.
-        for id in deleted_ids {
+        for &id in &deleted_ids {
             if let Err(e) = (HistoryUpdatePayload::Deleted { id }).emit(&self.app_handle) {
                 error!("Failed to emit history-updated event: {}", e);
             }
         }
 
-        Ok(())
+        Ok(deleted_ids)
     }
 
     /// Core of `cleanup_old_entries`, extracted with an explicit connection +
@@ -577,9 +587,11 @@ impl HistoryManager {
         recordings_dir: &Path,
         limit: usize,
     ) -> Result<Vec<i64>> {
-        // Get all entries that are not saved, ordered by timestamp desc
+        // Get all entries that are not saved, newest first. Timestamps have
+        // one-second resolution, so break ties by id to make the kept set
+        // definite; the History page's trim marker ranks the same way.
         let mut stmt = conn.prepare(
-            "SELECT id, file_name FROM transcription_history WHERE saved = 0 ORDER BY timestamp DESC"
+            "SELECT id, file_name FROM transcription_history WHERE saved = 0 ORDER BY timestamp DESC, id DESC"
         )?;
 
         let rows = stmt.query_map([], |row| {

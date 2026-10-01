@@ -603,7 +603,8 @@
       "retranscribe": "Erneut transkribieren",
       "retranscribeError": "Erneute Transkription fehlgeschlagen. Bitte versuche es erneut.",
       "transcribing": "Transkribiere...",
-      "transcriptionFailed": "Transkription fehlgeschlagen. Du kannst über das Wiederholen-Symbol erneut transkribieren."
+      "transcriptionFailed": "Transkription fehlgeschlagen. Du kannst über das Wiederholen-Symbol erneut transkribieren.",
+      "removedNextRecording": "Wird entfernt, sobald deine nächste Aufnahme hinzukommt. Speichere den Eintrag mit dem Stern, um ihn zu behalten."
     },
     "debug": {
       "title": "Debug",
