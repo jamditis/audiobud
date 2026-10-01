@@ -16,6 +16,7 @@ check uses the same memory and disk limits listed here.
 | Memory (RAM)                      | 4 GB                 | 8 GB                      | Soft — below 4 GB, larger models can run out of memory                  |
 | Free disk                         | 4 GB                 | 8 GB+                     | Soft — covers the app plus at least one model download                  |
 | Acceleration                      | none (CPU)           | Vulkan or DirectML GPU    | Soft — CPU-only works but is slower                                     |
+| CPU FMA3 support                  | not required         | Present                   | Soft — without it, Whisper cannot use the GPU (#72)                     |
 
 **Hard** requirements block launch when missing: the preflight check shows what
 is missing and how to fix it instead of the app failing silently. **Soft**
