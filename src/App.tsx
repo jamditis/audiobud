@@ -29,6 +29,7 @@ import {
   truncateName,
 } from "@/lib/output-target-indicator";
 import { claimPermissionCompletion } from "@/lib/permission-controller";
+import { localizeModelLoadError } from "@/lib/model-state-error";
 
 type OnboardingStep = "accessibility" | "model" | "done";
 const PRODUCT_NAME = "AudioBud";
@@ -330,11 +331,13 @@ function App() {
         }
         toast.error(t("errors.transcriptionErrorTitle"), {
           description:
-            presentation.kind === "generic"
-              ? t("errors.transcriptionErrorGeneric")
-              : t("errors.parakeetInputTooLong", {
+            presentation.kind === "parakeetInputTooLong"
+              ? t("errors.parakeetInputTooLong", {
                   duration: recordingDurationLabel(presentation.seconds),
-                }),
+                })
+              : presentation.kind === "modelStillLoading"
+                ? t("errors.modelStillLoading")
+                : t("errors.transcriptionErrorGeneric"),
         });
       },
     );
@@ -353,7 +356,7 @@ function App() {
               event.payload.model_name || t("errors.modelLoadFailedUnknown"),
           }),
           {
-            description: event.payload.error,
+            description: localizeModelLoadError(event.payload.error, t),
           },
         );
       }

@@ -86,6 +86,7 @@ describe("buildSystemFacts assembles typed facts from a raw probe", () => {
       osVersion: "10.0.22631",
       webview2Present: true,
       runtimeDllsPresent: true,
+      cpuFmaPresent: true,
       acceleration: "DirectML",
     });
     expect(facts).toEqual({
@@ -96,6 +97,7 @@ describe("buildSystemFacts assembles typed facts from a raw probe", () => {
       windowsVersionSupported: true,
       webview2Present: true,
       runtimeDllsPresent: true,
+      cpuFmaPresent: true,
       acceleration: "directml",
     });
   });
@@ -135,14 +137,17 @@ describe("buildSystemFacts assembles typed facts from a raw probe", () => {
       osVersion: "6.1.7601",
       webview2Present: false,
       runtimeDllsPresent: false,
+      cpuFmaPresent: false,
     };
     const mac = buildSystemFacts({ platform: "macos", ...raw });
     expect(mac.windowsVersionSupported).toBeUndefined();
     expect(mac.webview2Present).toBeUndefined();
     expect(mac.runtimeDllsPresent).toBeUndefined();
+    expect(mac.cpuFmaPresent).toBeUndefined();
     const win = buildSystemFacts({ platform: "windows", ...raw });
     expect(win.windowsVersionSupported).toBe(false);
     expect(win.webview2Present).toBe(false);
+    expect(win.cpuFmaPresent).toBe(false);
   });
 });
 
@@ -215,6 +220,7 @@ describe("adapter feeds the decision core and preserves its fail-safe contract",
         osVersion: "10.0.19045",
         webview2Present: true,
         runtimeDllsPresent: true,
+        cpuFmaPresent: true,
         acceleration: "directml",
       }),
     );

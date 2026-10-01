@@ -20,6 +20,7 @@ import { idsTrimmedByNextRecording } from "@/lib/history-trim";
 import {
   parakeetInputTooLongSeconds,
   recordingDurationLabel,
+  isModelStillLoading,
   transcriptionTimeoutSeconds,
 } from "@/lib/transcription-error";
 import { useSettings } from "@/hooks/useSettings";
@@ -396,6 +397,10 @@ const HistoryEntryComponent: React.FC<HistoryEntryProps> = ({
           description: t("errors.transcriptionTimeout", {
             seconds: timeoutSeconds,
           }),
+        });
+      } else if (isModelStillLoading(error)) {
+        toast.error(t("settings.history.retranscribeError"), {
+          description: t("errors.modelStillLoading"),
         });
       } else if (parakeetSeconds !== null) {
         toast.error(t("settings.history.retranscribeError"), {

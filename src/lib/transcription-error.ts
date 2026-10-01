@@ -12,13 +12,28 @@ export function parakeetInputTooLongSeconds(error: unknown): number | null {
   return match ? Number(match[1]) : null;
 }
 
+/**
+ * Backend code when a transcription gave up waiting for a model load that is
+ * still running (issue #90). Not a stuck engine: a retry can succeed.
+ */
+export const MODEL_STILL_LOADING = "model_still_loading";
+
+export function isModelStillLoading(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return message === MODEL_STILL_LOADING;
+}
+
 export type TranscriptionErrorPresentation =
   | { kind: "parakeetInputTooLong"; seconds: number }
+  | { kind: "modelStillLoading" }
   | { kind: "generic" };
 
 export function classifyTranscriptionError(
   error: unknown,
 ): TranscriptionErrorPresentation {
+  if (isModelStillLoading(error)) {
+    return { kind: "modelStillLoading" };
+  }
   const parakeetSeconds = parakeetInputTooLongSeconds(error);
 
   return parakeetSeconds === null
