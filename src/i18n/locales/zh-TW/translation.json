@@ -464,7 +464,8 @@
           "added_other": "已新增 {{count}} 個詞",
           "skippedDuplicates": "{{count}} 個已在您的清單中",
           "skippedCap": "{{count}} 個超過 {{cap}} 個詞的上限",
-          "skippedInvalid": "{{count}} 個過長",
+          "skippedInvalid_one": "{{count}} 個過長",
+          "skippedInvalid_other": "{{count}} 個過長",
           "readError": "無法讀取該檔案"
         }
       },
@@ -495,7 +496,8 @@
           "refresh": "重新整理建議",
           "loading": "正在掃描歷史紀錄...",
           "empty": "目前沒有新的建議。多聽寫一些後再重新整理。",
-          "count": "出現 {{count}} 次",
+          "count_one": "出現 {{count}} 次",
+          "count_other": "出現 {{count}} 次",
           "accept": "新增",
           "dismiss": "忽略",
           "dismissLabel": "忽略建議 {{word}}"

@@ -464,7 +464,9 @@
           "added_other": "{{count}} palavras adicionadas",
           "skippedDuplicates": "{{count}} já na sua lista",
           "skippedCap": "{{count}} acima do limite de {{cap}} palavras",
-          "skippedInvalid": "{{count}} longas demais",
+          "skippedInvalid_one": "{{count}} longa demais",
+          "skippedInvalid_many": "{{count}} longas demais",
+          "skippedInvalid_other": "{{count}} longas demais",
           "readError": "Não foi possível ler esse arquivo"
         }
       },
@@ -495,7 +497,9 @@
           "refresh": "Atualizar sugestões",
           "loading": "Analisando histórico...",
           "empty": "Nenhuma sugestão nova ainda. Dite mais e depois atualize.",
-          "count": "vista {{count}} vezes",
+          "count_one": "vista {{count}} vez",
+          "count_many": "vista {{count}} vezes",
+          "count_other": "vista {{count}} vezes",
           "accept": "Adicionar",
           "dismiss": "Dispensar",
           "dismissLabel": "Dispensar sugestão {{word}}"

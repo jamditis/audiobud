@@ -464,7 +464,8 @@
           "added_other": "Lade till {{count}} ord",
           "skippedDuplicates": "{{count}} finns redan i din lista",
           "skippedCap": "{{count}} över gränsen på {{cap}} ord",
-          "skippedInvalid": "{{count}} för långa",
+          "skippedInvalid_one": "{{count}} för långt",
+          "skippedInvalid_other": "{{count}} för långa",
           "readError": "Kunde inte läsa filen"
         }
       },
@@ -495,7 +496,8 @@
           "refresh": "Uppdatera förslag",
           "loading": "Söker igenom historiken...",
           "empty": "Inga nya förslag än. Diktera mer och uppdatera sedan.",
-          "count": "förekommer {{count}} gånger",
+          "count_one": "förekommer {{count}} gång",
+          "count_other": "förekommer {{count}} gånger",
           "accept": "Lägg till",
           "dismiss": "Avfärda",
           "dismissLabel": "Avfärda förslaget {{word}}"

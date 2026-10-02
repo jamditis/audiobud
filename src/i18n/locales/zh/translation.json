@@ -464,7 +464,8 @@
           "added_other": "已添加 {{count}} 个词",
           "skippedDuplicates": "{{count}} 个已在您的列表中",
           "skippedCap": "{{count}} 个超出 {{cap}} 个词的上限",
-          "skippedInvalid": "{{count}} 个过长",
+          "skippedInvalid_one": "{{count}} 个过长",
+          "skippedInvalid_other": "{{count}} 个过长",
           "readError": "无法读取该文件"
         }
       },
@@ -495,7 +496,8 @@
           "refresh": "刷新推荐",
           "loading": "正在扫描历史记录...",
           "empty": "暂无新推荐。多听写一些，然后刷新。",
-          "count": "出现过 {{count}} 次",
+          "count_one": "出现过 {{count}} 次",
+          "count_other": "出现过 {{count}} 次",
           "accept": "添加",
           "dismiss": "忽略",
           "dismissLabel": "忽略推荐 {{word}}"

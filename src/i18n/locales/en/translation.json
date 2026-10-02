@@ -464,7 +464,8 @@
           "added_other": "Added {{count}} words",
           "skippedDuplicates": "{{count}} already in your list",
           "skippedCap": "{{count}} over the {{cap}}-word limit",
-          "skippedInvalid": "{{count}} too long",
+          "skippedInvalid_one": "{{count}} too long",
+          "skippedInvalid_other": "{{count}} too long",
           "readError": "Couldn't read that file"
         }
       },
@@ -495,7 +496,8 @@
           "refresh": "Refresh suggestions",
           "loading": "Scanning history...",
           "empty": "No new suggestions yet. Dictate more, then refresh.",
-          "count": "seen {{count}} times",
+          "count_one": "seen {{count}} time",
+          "count_other": "seen {{count}} times",
           "accept": "Add",
           "dismiss": "Dismiss",
           "dismissLabel": "Dismiss suggestion {{word}}"

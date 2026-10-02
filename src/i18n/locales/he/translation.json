@@ -465,7 +465,9 @@
           "added_other": "נוספו {{count}} מילים",
           "skippedDuplicates": "{{count}} כבר ברשימה שלך",
           "skippedCap": "{{count}} מעבר למגבלת {{cap}} המילים",
-          "skippedInvalid": "{{count}} ארוכות מדי",
+          "skippedInvalid_one": "{{count}} ארוכה מדי",
+          "skippedInvalid_two": "{{count}} ארוכות מדי",
+          "skippedInvalid_other": "{{count}} ארוכות מדי",
           "readError": "לא הצלחנו לקרוא את הקובץ"
         }
       },
@@ -496,7 +498,9 @@
           "refresh": "רענן הצעות",
           "loading": "סורק היסטוריה...",
           "empty": "עדיין אין הצעות חדשות. הכתב עוד, ואז רענן.",
-          "count": "נראתה {{count}} פעמים",
+          "count_one": "נראתה {{count}} פעם",
+          "count_two": "נראתה {{count}} פעמים",
+          "count_other": "נראתה {{count}} פעמים",
           "accept": "הוסף",
           "dismiss": "דחה",
           "dismissLabel": "דחה את ההצעה {{word}}"

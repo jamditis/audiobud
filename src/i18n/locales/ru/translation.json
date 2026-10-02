@@ -466,7 +466,10 @@
           "added_other": "Добавлено {{count}} слов",
           "skippedDuplicates": "{{count}} уже в вашем списке",
           "skippedCap": "{{count}} сверх лимита в {{cap}} слов",
-          "skippedInvalid": "{{count}} слишком длинных",
+          "skippedInvalid_one": "{{count}} слишком длинная запись",
+          "skippedInvalid_few": "{{count}} слишком длинные записи",
+          "skippedInvalid_many": "{{count}} слишком длинных записей",
+          "skippedInvalid_other": "{{count}} слишком длинных записей",
           "readError": "Не удалось прочитать файл"
         }
       },
@@ -497,7 +500,10 @@
           "refresh": "Обновить предложения",
           "loading": "Сканирование истории...",
           "empty": "Пока нет новых предложений. Продиктуйте больше и обновите.",
-          "count": "встречается {{count}} раз",
+          "count_one": "встречается {{count}} раз",
+          "count_few": "встречается {{count}} раза",
+          "count_many": "встречается {{count}} раз",
+          "count_other": "встречается {{count}} раза",
           "accept": "Добавить",
           "dismiss": "Скрыть",
           "dismissLabel": "Скрыть предложение {{word}}"

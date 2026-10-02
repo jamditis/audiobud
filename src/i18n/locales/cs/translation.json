@@ -465,7 +465,9 @@
           "added_other": "Přidáno {{count}} slov",
           "skippedDuplicates": "{{count}} již ve vašem seznamu",
           "skippedCap": "{{count}} nad limit {{cap}} slov",
-          "skippedInvalid": "{{count}} příliš dlouhých",
+          "skippedInvalid_one": "{{count}} příliš dlouhá položka",
+          "skippedInvalid_few": "{{count}} příliš dlouhé položky",
+          "skippedInvalid_other": "{{count}} příliš dlouhých položek",
           "readError": "Soubor se nepodařilo přečíst"
         }
       },
@@ -496,7 +498,9 @@
           "refresh": "Obnovit návrhy",
           "loading": "Prohledávám historii...",
           "empty": "Zatím žádné nové návrhy. Nadiktujte více textu a obnovte.",
-          "count": "viděno {{count}}×",
+          "count_one": "viděno {{count}}×",
+          "count_few": "viděno {{count}}×",
+          "count_other": "viděno {{count}}×",
           "accept": "Přidat",
           "dismiss": "Odmítnout",
           "dismissLabel": "Odmítnout návrh {{word}}"

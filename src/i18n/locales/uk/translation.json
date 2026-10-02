@@ -466,7 +466,10 @@
           "added_other": "Додано {{count}} слів",
           "skippedDuplicates": "{{count}} вже у вашому списку",
           "skippedCap": "{{count}} понад ліміт у {{cap}} слів",
-          "skippedInvalid": "{{count}} задовгі",
+          "skippedInvalid_one": "{{count}} задовгий запис",
+          "skippedInvalid_few": "{{count}} задовгі записи",
+          "skippedInvalid_many": "{{count}} задовгих записів",
+          "skippedInvalid_other": "{{count}} задовгих записів",
           "readError": "Не вдалося прочитати цей файл"
         }
       },
@@ -497,7 +500,10 @@
           "refresh": "Оновити пропозиції",
           "loading": "Сканування історії...",
           "empty": "Поки що нових пропозицій немає. Продиктуйте більше, потім оновіть.",
-          "count": "зустрічається {{count}} разів",
+          "count_one": "зустрічається {{count}} раз",
+          "count_few": "зустрічається {{count}} рази",
+          "count_many": "зустрічається {{count}} разів",
+          "count_other": "зустрічається {{count}} разу",
           "accept": "Додати",
           "dismiss": "Відхилити",
           "dismissLabel": "Відхилити пропозицію {{word}}"

@@ -464,7 +464,8 @@
           "added_other": "Добавени са {{count}} думи",
           "skippedDuplicates": "{{count}} вече в списъка ви",
           "skippedCap": "{{count}} над лимита от {{cap}} думи",
-          "skippedInvalid": "{{count}} твърде дълги",
+          "skippedInvalid_one": "{{count}} твърде дълга",
+          "skippedInvalid_other": "{{count}} твърде дълги",
           "readError": "Файлът не можа да бъде прочетен"
         }
       },
@@ -495,7 +496,8 @@
           "refresh": "Опресняване на предложенията",
           "loading": "Сканиране на историята...",
           "empty": "Още няма нови предложения. Диктувайте още и опреснете.",
-          "count": "среща се {{count}} пъти",
+          "count_one": "среща се {{count}} път",
+          "count_other": "среща се {{count}} пъти",
           "accept": "Добавяне",
           "dismiss": "Отхвърляне",
           "dismissLabel": "Отхвърляне на предложението {{word}}"
