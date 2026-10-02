@@ -464,7 +464,9 @@
           "added_other": "Aggiunte {{count}} parole",
           "skippedDuplicates": "{{count}} già nel tuo elenco",
           "skippedCap": "{{count}} oltre il limite di {{cap}} parole",
-          "skippedInvalid": "{{count}} troppo lunghe",
+          "skippedInvalid_one": "{{count}} troppo lunga",
+          "skippedInvalid_many": "{{count}} troppo lunghe",
+          "skippedInvalid_other": "{{count}} troppo lunghe",
           "readError": "Impossibile leggere il file"
         }
       },
@@ -495,7 +497,9 @@
           "refresh": "Aggiorna i suggerimenti",
           "loading": "Analisi della cronologia...",
           "empty": "Ancora nessun nuovo suggerimento. Detta ancora un po', poi aggiorna.",
-          "count": "vista {{count}} volte",
+          "count_one": "vista {{count}} volta",
+          "count_many": "vista {{count}} volte",
+          "count_other": "vista {{count}} volte",
           "accept": "Aggiungi",
           "dismiss": "Ignora",
           "dismissLabel": "Ignora il suggerimento {{word}}"

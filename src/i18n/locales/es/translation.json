@@ -464,7 +464,9 @@
           "added_other": "Se agregaron {{count}} palabras",
           "skippedDuplicates": "{{count}} ya están en tu lista",
           "skippedCap": "{{count}} superan el límite de {{cap}} palabras",
-          "skippedInvalid": "{{count}} demasiado largas",
+          "skippedInvalid_one": "{{count}} demasiado larga",
+          "skippedInvalid_many": "{{count}} demasiado largas",
+          "skippedInvalid_other": "{{count}} demasiado largas",
           "readError": "No se pudo leer ese archivo"
         }
       },
@@ -495,7 +497,9 @@
           "refresh": "Actualizar sugerencias",
           "loading": "Analizando el historial...",
           "empty": "Aún no hay sugerencias nuevas. Dicta más y luego actualiza.",
-          "count": "visto {{count}} veces",
+          "count_one": "visto {{count}} vez",
+          "count_many": "visto {{count}} veces",
+          "count_other": "visto {{count}} veces",
           "accept": "Agregar",
           "dismiss": "Descartar",
           "dismissLabel": "Descartar la sugerencia {{word}}"

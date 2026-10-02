@@ -464,7 +464,8 @@
           "added_other": "{{count}} Wörter hinzugefügt",
           "skippedDuplicates": "{{count}} bereits in deiner Liste",
           "skippedCap": "{{count}} über dem Limit von {{cap}} Wörtern",
-          "skippedInvalid": "{{count}} zu lang",
+          "skippedInvalid_one": "{{count}} zu lang",
+          "skippedInvalid_other": "{{count}} zu lang",
           "readError": "Datei konnte nicht gelesen werden"
         }
       },
@@ -495,7 +496,8 @@
           "refresh": "Vorschläge aktualisieren",
           "loading": "Verlauf wird durchsucht...",
           "empty": "Noch keine neuen Vorschläge. Diktiere mehr und aktualisiere dann.",
-          "count": "{{count}}-mal gesehen",
+          "count_one": "{{count}}-mal gesehen",
+          "count_other": "{{count}}-mal gesehen",
           "accept": "Hinzufügen",
           "dismiss": "Verwerfen",
           "dismissLabel": "Vorschlag {{word}} verwerfen"

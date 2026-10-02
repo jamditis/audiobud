@@ -468,7 +468,12 @@
           "added_other": "تمت إضافة {{count}} كلمة",
           "skippedDuplicates": "{{count}} موجودة بالفعل في قائمتك",
           "skippedCap": "{{count}} تتجاوز حد {{cap}} كلمة",
-          "skippedInvalid": "{{count}} طويلة جداً",
+          "skippedInvalid_zero": "عدد الإدخالات الطويلة جداً: {{count}}",
+          "skippedInvalid_one": "عدد الإدخالات الطويلة جداً: {{count}}",
+          "skippedInvalid_two": "عدد الإدخالات الطويلة جداً: {{count}}",
+          "skippedInvalid_few": "عدد الإدخالات الطويلة جداً: {{count}}",
+          "skippedInvalid_many": "عدد الإدخالات الطويلة جداً: {{count}}",
+          "skippedInvalid_other": "عدد الإدخالات الطويلة جداً: {{count}}",
           "readError": "تعذّر قراءة هذا الملف"
         }
       },
@@ -499,7 +504,12 @@
           "refresh": "تحديث الاقتراحات",
           "loading": "جارٍ فحص السجل...",
           "empty": "لا توجد اقتراحات جديدة بعد. استخدم الإملاء أكثر ثم حدّث.",
-          "count": "ظهرت {{count}} مرة",
+          "count_zero": "عدد مرات الظهور: {{count}}",
+          "count_one": "عدد مرات الظهور: {{count}}",
+          "count_two": "عدد مرات الظهور: {{count}}",
+          "count_few": "عدد مرات الظهور: {{count}}",
+          "count_many": "عدد مرات الظهور: {{count}}",
+          "count_other": "عدد مرات الظهور: {{count}}",
           "accept": "إضافة",
           "dismiss": "تجاهل",
           "dismissLabel": "تجاهل اقتراح {{word}}"

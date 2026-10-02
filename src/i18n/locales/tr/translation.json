@@ -464,7 +464,8 @@
           "added_other": "{{count}} kelime eklendi",
           "skippedDuplicates": "{{count}} tanesi listenizde zaten var",
           "skippedCap": "{{count}} tanesi {{cap}} kelimelik sınırın üzerinde",
-          "skippedInvalid": "{{count}} tanesi çok uzun",
+          "skippedInvalid_one": "{{count}} tanesi çok uzun",
+          "skippedInvalid_other": "{{count}} tanesi çok uzun",
           "readError": "Bu dosya okunamadı"
         }
       },
@@ -495,7 +496,8 @@
           "refresh": "Önerileri yenile",
           "loading": "Geçmiş taranıyor...",
           "empty": "Henüz yeni öneri yok. Biraz daha dikte edin, sonra yenileyin.",
-          "count": "{{count}} kez görüldü",
+          "count_one": "{{count}} kez görüldü",
+          "count_other": "{{count}} kez görüldü",
           "accept": "Ekle",
           "dismiss": "Yoksay",
           "dismissLabel": "{{word}} önerisini yoksay"

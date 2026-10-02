@@ -464,7 +464,8 @@
           "added_other": "{{count}}語を追加しました",
           "skippedDuplicates": "{{count}}語はすでにリストにあります",
           "skippedCap": "{{count}}語は{{cap}}語の上限を超えています",
-          "skippedInvalid": "{{count}}語は長すぎます",
+          "skippedInvalid_one": "{{count}}語は長すぎます",
+          "skippedInvalid_other": "{{count}}語は長すぎます",
           "readError": "そのファイルを読み込めませんでした"
         }
       },
@@ -495,7 +496,8 @@
           "refresh": "提案を更新",
           "loading": "履歴をスキャン中...",
           "empty": "まだ新しい提案はありません。もう少し使ってから更新してください。",
-          "count": "{{count}}回検出",
+          "count_one": "{{count}}回検出",
+          "count_other": "{{count}}回検出",
           "accept": "追加",
           "dismiss": "非表示",
           "dismissLabel": "提案「{{word}}」を非表示にする"

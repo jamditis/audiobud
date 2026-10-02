@@ -464,7 +464,8 @@
           "added_other": "Đã thêm {{count}} từ",
           "skippedDuplicates": "{{count}} từ đã có trong danh sách",
           "skippedCap": "{{count}} từ vượt quá giới hạn {{cap}} từ",
-          "skippedInvalid": "{{count}} từ quá dài",
+          "skippedInvalid_one": "{{count}} từ quá dài",
+          "skippedInvalid_other": "{{count}} từ quá dài",
           "readError": "Không đọc được tệp đó"
         }
       },
@@ -495,7 +496,8 @@
           "refresh": "Làm mới gợi ý",
           "loading": "Đang quét lịch sử...",
           "empty": "Chưa có gợi ý mới. Hãy đọc thêm rồi làm mới.",
-          "count": "đã gặp {{count}} lần",
+          "count_one": "đã gặp {{count}} lần",
+          "count_other": "đã gặp {{count}} lần",
           "accept": "Thêm",
           "dismiss": "Bỏ qua",
           "dismissLabel": "Bỏ qua gợi ý {{word}}"

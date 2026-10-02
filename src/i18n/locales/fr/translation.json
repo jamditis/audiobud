@@ -464,7 +464,9 @@
           "added_other": "{{count}} mots ajoutés",
           "skippedDuplicates": "{{count}} déjà dans votre liste",
           "skippedCap": "{{count}} au-delà de la limite de {{cap}} mots",
-          "skippedInvalid": "{{count}} trop longs",
+          "skippedInvalid_one": "{{count}} trop long",
+          "skippedInvalid_many": "{{count}} trop longs",
+          "skippedInvalid_other": "{{count}} trop longs",
           "readError": "Impossible de lire ce fichier"
         }
       },
@@ -495,7 +497,9 @@
           "refresh": "Actualiser les suggestions",
           "loading": "Analyse de l'historique...",
           "empty": "Aucune nouvelle suggestion pour l'instant. Dictez davantage, puis actualisez.",
-          "count": "vu {{count}} fois",
+          "count_one": "vu {{count}} fois",
+          "count_many": "vu {{count}} fois",
+          "count_other": "vu {{count}} fois",
           "accept": "Ajouter",
           "dismiss": "Ignorer",
           "dismissLabel": "Ignorer la suggestion {{word}}"

@@ -464,7 +464,8 @@
           "added_other": "{{count}}개 단어를 추가했습니다",
           "skippedDuplicates": "{{count}}개는 이미 목록에 있습니다",
           "skippedCap": "{{count}}개는 {{cap}}단어 제한을 초과했습니다",
-          "skippedInvalid": "{{count}}개는 너무 깁니다",
+          "skippedInvalid_one": "{{count}}개는 너무 깁니다",
+          "skippedInvalid_other": "{{count}}개는 너무 깁니다",
           "readError": "파일을 읽을 수 없습니다"
         }
       },
@@ -495,7 +496,8 @@
           "refresh": "추천 새로고침",
           "loading": "히스토리 검색 중...",
           "empty": "아직 새 추천이 없습니다. 더 받아쓴 후 새로고침하세요.",
-          "count": "{{count}}회 나타남",
+          "count_one": "{{count}}회 나타남",
+          "count_other": "{{count}}회 나타남",
           "accept": "추가",
           "dismiss": "무시",
           "dismissLabel": "추천 {{word}} 무시"

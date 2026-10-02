@@ -466,7 +466,10 @@
           "added_other": "Dodano {{count}} słów",
           "skippedDuplicates": "{{count}} już na Twojej liście",
           "skippedCap": "{{count}} ponad limit {{cap}} słów",
-          "skippedInvalid": "{{count}} za długich",
+          "skippedInvalid_one": "{{count}} zbyt długi wpis",
+          "skippedInvalid_few": "{{count}} zbyt długie wpisy",
+          "skippedInvalid_many": "{{count}} zbyt długich wpisów",
+          "skippedInvalid_other": "{{count}} zbyt długich wpisów",
           "readError": "Nie udało się odczytać tego pliku"
         }
       },
@@ -497,7 +500,10 @@
           "refresh": "Odśwież propozycje",
           "loading": "Skanowanie historii...",
           "empty": "Brak nowych propozycji. Podyktuj więcej i odśwież.",
-          "count": "widziane {{count}} razy",
+          "count_one": "widziane {{count}} raz",
+          "count_few": "widziane {{count}} razy",
+          "count_many": "widziane {{count}} razy",
+          "count_other": "widziane {{count}} razy",
           "accept": "Dodaj",
           "dismiss": "Odrzuć",
           "dismissLabel": "Odrzuć propozycję {{word}}"
