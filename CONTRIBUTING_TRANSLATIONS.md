@@ -63,6 +63,11 @@ lower numbers appear first, and languages without a priority follow in
 alphabetical order by English name. Set `direction: "rtl"` for a language that
 reads from right to left.
 
+For a regional right-to-left locale, also set `direction: "rtl"` on its base
+language entry. The current [direction lookup](src/lib/utils/rtl.ts) uses the
+lowercase code before the hyphen: `ar-SA` uses `ar`. Add that base metadata entry
+if it is missing, even when only the regional translation file exists.
+
 [index.ts](src/i18n/index.ts) discovers translation files automatically. You do
 not need to add a manual import there. Run `bun run check:translations` before
 you test the language in the app.
