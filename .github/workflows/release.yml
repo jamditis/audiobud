@@ -1571,10 +1571,15 @@ jobs:
             throw "Release tag $env:RELEASE_TAG points to $tagCommit, not $env:GITHUB_SHA"
           }
 
-          $releaseJson = gh api `
-            "repos/$env:GITHUB_REPOSITORY/releases/tags/$env:RELEASE_TAG"
-          if ($LASTEXITCODE -ne 0) {
+          # The release-by-tag REST endpoint only returns published releases.
+          $releaseApiUrl = gh release view $env:RELEASE_TAG `
+            --repo $env:GITHUB_REPOSITORY --json apiUrl --jq '.apiUrl'
+          if ($LASTEXITCODE -ne 0 -or -not $releaseApiUrl) {
             throw "Draft release $env:RELEASE_TAG was not found"
+          }
+          $releaseJson = gh api $releaseApiUrl
+          if ($LASTEXITCODE -ne 0) {
+            throw "Draft release $env:RELEASE_TAG could not be read"
           }
           $release = $releaseJson | ConvertFrom-Json
           if (-not $release.draft) {
