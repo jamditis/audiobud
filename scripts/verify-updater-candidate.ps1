@@ -516,9 +516,19 @@ try {
   if ((Get-Sha256 -Path $modelArchivePath) -cne $modelArchiveSha256) {
     throw "Downloaded model archive hash does not match $modelArchiveSha256"
   }
+  # Select the seven payload files; the archive also contains AppleDouble metadata.
+  $modelPayloadEntries = @(
+    "$modelName/streaming_config.json",
+    "$modelName/encoder.ort",
+    "$modelName/decoder_kv.ort",
+    "$modelName/adapter.ort",
+    "$modelName/cross_kv.ort",
+    "$modelName/frontend.ort",
+    "$modelName/tokenizer.bin"
+  )
   & "$env:SystemRoot\System32\tar.exe" `
     -xzf $modelArchivePath `
-    -C $modelsDirectory
+    -C $modelsDirectory @modelPayloadEntries
   if ($LASTEXITCODE -ne 0) {
     throw "Failed to extract the pinned $modelName model"
   }
