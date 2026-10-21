@@ -1,7 +1,7 @@
 # AudioBud v0.6.5 release notes
 
 This release provides Windows x64 installers and a signed Windows in-app update.
-macOS publication is deferred; the previous Mac release remains available.
+macOS publication is deferred.
 
 The self-contained Windows portable installer updates its bundled WebView2
 runtime from 150.0.4078.105 to Microsoft's signed 155.0.4283.62 release. Fixed
