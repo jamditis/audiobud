@@ -74,10 +74,10 @@ jobs:
       STORE_CANDIDATE: ${{ github.event_name == 'workflow_dispatch' && inputs.store_candidate }}
       VULKAN_RUNTIME_ARCHIVE_SHA256: 7d969f4d7b44e387667d3148f61559497c22d50cbe3d50adc9e5409afbce2df1
       VULKAN_RUNTIME_ARCHIVE_BYTES: 15738272
-      WEBVIEW2_FIXED_VERSION: 150.0.4078.105
-      WEBVIEW2_FIXED_DIRECTORY: Microsoft.WebView2.FixedVersionRuntime.150.0.4078.105.x64
-      WEBVIEW2_FIXED_CAB_SHA256: 26c07cad95615a672cde8c1843a326e18ad25d691f004347544e5e099bff9b92
-      WEBVIEW2_FIXED_CAB_BYTES: 297904860
+      WEBVIEW2_FIXED_VERSION: 155.0.4283.62
+      WEBVIEW2_FIXED_DIRECTORY: Microsoft.WebView2.FixedVersionRuntime.155.0.4283.62.x64
+      WEBVIEW2_FIXED_CAB_SHA256: cf54aa717a0ebd05b40e87620724583cb6eb0a5b8b64764cc11e42822f68bf6c
+      WEBVIEW2_FIXED_CAB_BYTES: 310492238
     steps:
       # whisper-rs-sys cmake builds and the VS toolchain create paths well past
       # the legacy 260-character MAX_PATH limit.
@@ -258,8 +258,8 @@ jobs:
         shell: pwsh
         run: |
           $runtimeName = "Microsoft.WebView2.FixedVersionRuntime.$env:WEBVIEW2_FIXED_VERSION.x64"
-          $archive = Join-Path $env:RUNNER_TEMP "Microsoft.WebView2.FixedVersionRuntime.150.0.4078.105.x64.cab"
-          $url = "https://msedge.sf.dl.delivery.mp.microsoft.com/filestreamingservice/files/b401c036-cfb8-4dc4-a58e-8766441df4ac/Microsoft.WebView2.FixedVersionRuntime.150.0.4078.105.x64.cab"
+          $archive = Join-Path $env:RUNNER_TEMP "Microsoft.WebView2.FixedVersionRuntime.155.0.4283.62.x64.cab"
+          $url = "https://msedge.sf.dl.delivery.mp.microsoft.com/filestreamingservice/files/232cf50b-3980-4531-afbb-779f446d7de1/Microsoft.WebView2.FixedVersionRuntime.155.0.4283.62.x64.cab"
           Invoke-WebRequest -Uri $url -OutFile $archive -MaximumRetryCount 3 -RetryIntervalSec 5
 
           $archiveBytes = (Get-Item -LiteralPath $archive).Length

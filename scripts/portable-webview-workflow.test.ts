@@ -38,7 +38,7 @@ describe("self-contained portable WebView2 artifact", () => {
         windows: {
           webviewInstallMode: {
             type: "fixedRuntime",
-            path: "Microsoft.WebView2.FixedVersionRuntime.150.0.4078.105.x64",
+            path: "Microsoft.WebView2.FixedVersionRuntime.155.0.4283.62.x64",
           },
         },
       },
@@ -49,14 +49,14 @@ describe("self-contained portable WebView2 artifact", () => {
   });
 
   test("downloads and verifies an exact Microsoft runtime", () => {
-    expect(workflow).toContain("WEBVIEW2_FIXED_VERSION: 150.0.4078.105");
+    expect(workflow).toContain("WEBVIEW2_FIXED_VERSION: 155.0.4283.62");
     expect(workflow).toContain(
-      "WEBVIEW2_FIXED_CAB_SHA256: 26c07cad95615a672cde8c1843a326e18ad25d691f004347544e5e099bff9b92",
+      "WEBVIEW2_FIXED_CAB_SHA256: cf54aa717a0ebd05b40e87620724583cb6eb0a5b8b64764cc11e42822f68bf6c",
     );
-    expect(workflow).toContain("WEBVIEW2_FIXED_CAB_BYTES: 297904860");
+    expect(workflow).toContain("WEBVIEW2_FIXED_CAB_BYTES: 310492238");
     const fetch = stepBlock("Fetch fixed WebView2 runtime");
     expect(fetch).toContain(
-      "b401c036-cfb8-4dc4-a58e-8766441df4ac/Microsoft.WebView2.FixedVersionRuntime.150.0.4078.105.x64.cab",
+      "232cf50b-3980-4531-afbb-779f446d7de1/Microsoft.WebView2.FixedVersionRuntime.155.0.4283.62.x64.cab",
     );
     expect(fetch).toContain("Get-FileHash");
     expect(fetch).toContain("Get-AuthenticodeSignature");
@@ -90,7 +90,7 @@ describe("self-contained portable WebView2 artifact", () => {
 
   test("applies each fixed-runtime AppContainer ACL with its own icacls command", () => {
     expect(nsisTemplate).toContain(
-      '!define FIXEDWEBVIEW2DIRECTORY "Microsoft.WebView2.FixedVersionRuntime.150.0.4078.105.x64"',
+      '!define FIXEDWEBVIEW2DIRECTORY "Microsoft.WebView2.FixedVersionRuntime.155.0.4283.62.x64"',
     );
     const aclCommands =
       nsisTemplate.match(/^\s*ExecWait .*icacls\.exe.*$/gm) ?? [];
