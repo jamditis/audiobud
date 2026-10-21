@@ -80,6 +80,14 @@ the evidence as a private Actions artifact. After all release jobs pass, the
 evidence is attested and attached to the joint draft. It does not add a
 candidate manifest to the draft or change the live feed.
 
+The verifier requires an administrator token on a disposable GitHub-hosted
+Windows runner. It temporarily imports only the generated localhost public
+certificate into the machine Root store; the current-user Root import opens
+a consent dialog that blocks a headless job. Cleanup removes the exact
+thumbprint from machine Root, checks its current-user view, and deletes the
+personal certificate with its private key. It does not run on a development
+machine or a persistent self-hosted runner.
+
 If any later release job fails after `verify-updater-candidate` succeeds, use
 GitHub's `Re-run all jobs` action. Do not use `Re-run failed jobs`. A partial
 rerun keeps evidence from the earlier failed attempt, so feed publication will

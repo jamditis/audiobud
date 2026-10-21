@@ -191,7 +191,9 @@ describe("signed updater release artifacts", () => {
     expect(verifier).toContain("Get-FileHash");
     expect(verifier).toContain("https://localhost");
     expect(verifier).toContain("Import-Certificate");
-    expect(verifier).toContain("Cert:\\CurrentUser\\Root");
+    expect(verifier).toContain(
+      "-CertStoreLocation 'Cert:\\LocalMachine\\Root'",
+    );
     expect(verifier).toContain("finally");
     expect(verifier).toContain("--install-update-endpoint");
     expect(verifier).toContain("model_sha256_before");
