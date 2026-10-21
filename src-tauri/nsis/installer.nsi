@@ -65,7 +65,7 @@ ${StrLoc}
 ; Keep this version synchronized with tauri.portable-webview.conf.json and the
 ; pinned download in release.yml. WebView2 fixed runtime 120+ needs explicit
 ; AppContainer read/execute ACLs on Windows 10.
-!define FIXEDWEBVIEW2DIRECTORY "Microsoft.WebView2.FixedVersionRuntime.150.0.4078.105.x64"
+!define FIXEDWEBVIEW2DIRECTORY "Microsoft.WebView2.FixedVersionRuntime.155.0.4283.62.x64"
 !define UNINSTKEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCTNAME}"
 !define MANUKEY "Software\${MANUFACTURER}"
 !define MANUPRODUCTKEY "${MANUKEY}\${PRODUCTNAME}"
