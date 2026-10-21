@@ -37,7 +37,7 @@ jobs:
       - name: Check out the reviewed verifier correction
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          ref: 7cc275469e6546f77fc17cf84e70074a022acee8
+          ref: 1c67315d5136f36f4c4af2289c681fd9590557e3
           path: trust-correction
           fetch-depth: 1
           persist-credentials: false
