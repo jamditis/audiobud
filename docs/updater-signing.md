@@ -68,7 +68,9 @@ while the target release is still a draft. That release trusts the active
 signing key under the planned-rotation procedure below. For v0.6.0, the runner
 installs v0.5.0. The runner verifies the prior installer's Authenticode
 identity, installs it, creates a non-default setting, and installs the pinned
-Moonshine model asset. It applies the private candidate and confirms that the
+Moonshine model asset. It extracts the seven named payload files, excluding
+AppleDouble metadata sidecars, and requires exactly seven files before recording
+their inventory hash. It applies the private candidate and confirms that the
 setting and exact model-file inventory survive. It also verifies the installed
 version, Authenticode identity, updater-process quiescence, candidate uninstall
 registration, and normal uninstall cleanup. The workflow stops and checks the
@@ -79,6 +81,14 @@ on the disposable runner until GitHub destroys it. The workflow first stores
 the evidence as a private Actions artifact. After all release jobs pass, the
 evidence is attested and attached to the joint draft. It does not add a
 candidate manifest to the draft or change the live feed.
+
+The verifier requires an administrator token on a disposable GitHub-hosted
+Windows runner. It temporarily imports only the generated localhost public
+certificate into the machine Root store; the current-user Root import opens
+a consent dialog that blocks a headless job. Cleanup removes the exact
+thumbprint from machine Root, checks its current-user view, and deletes the
+personal certificate with its private key. It does not run on a development
+machine or a persistent self-hosted runner.
 
 If any later release job fails after `verify-updater-candidate` succeeds, use
 GitHub's `Re-run all jobs` action. Do not use `Re-run failed jobs`. A partial

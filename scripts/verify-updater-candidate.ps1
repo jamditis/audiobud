@@ -35,6 +35,19 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+if (
+  $env:GITHUB_ACTIONS -cne 'true' -or
+  $env:RUNNER_ENVIRONMENT -cne 'github-hosted' -or
+  $env:RUNNER_OS -cne 'Windows'
+) {
+  throw 'Updater verification requires a disposable GitHub-hosted Windows runner'
+}
+$identity = [System.Security.Principal.WindowsIdentity]::GetCurrent()
+$principal = [System.Security.Principal.WindowsPrincipal]::new($identity)
+if (-not $principal.IsInRole([System.Security.Principal.WindowsBuiltInRole]::Administrator)) {
+  throw 'Updater verification requires an administrator token on the disposable runner'
+}
+
 function Assert-File {
   param([string]$Path, [string]$Label)
   if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
@@ -377,6 +390,7 @@ try {
   }
   Remove-Item -LiteralPath $readyPath, $pfxPath, $cerPath -Force -ErrorAction SilentlyContinue
 
+  Write-Host 'Preparing temporary localhost certificate'
   $certificate = New-SelfSignedCertificate `
     -DnsName 'localhost' `
     -CertStoreLocation 'Cert:\CurrentUser\My' `
@@ -390,12 +404,22 @@ try {
   $pfxPassword = ConvertTo-SecureString -String $pfxPasswordText -AsPlainText -Force
   Export-PfxCertificate -Cert $certificate -FilePath $pfxPath -Password $pfxPassword | Out-Null
   Export-Certificate -Cert $certificate -FilePath $cerPath -Type CERT | Out-Null
-  $rootCertificate = Import-Certificate `
+  # CurrentUser Root import opens a consent dialog on a headless runner.
+  # Record ownership before import so a partial import is still cleaned up.
+  $rootCertificate = $certificate
+  $importedRoot = Import-Certificate `
     -FilePath $cerPath `
-    -CertStoreLocation 'Cert:\CurrentUser\Root'
+    -CertStoreLocation 'Cert:\LocalMachine\Root'
+  if (
+    $importedRoot.Thumbprint -cne $certificate.Thumbprint -or
+    $importedRoot.HasPrivateKey
+  ) {
+    throw 'Temporary trusted root does not match the generated public certificate'
+  }
 
   $env:AUDIOBUD_CANDIDATE_PFX_PASSWORD = $pfxPasswordText
   $pubDate = (Get-Date).ToUniversalTime().ToString('o')
+  Write-Host 'Starting temporary HTTPS updater server'
   $serverProcess = Start-Process `
     -FilePath 'node' `
     -ArgumentList @(
@@ -445,6 +469,7 @@ try {
   $priorSignature = Assert-AudioBudSignature `
     -Path $PriorInstallerPath `
     -Label "$PriorTag installer"
+  Write-Host "Installing prior stable version $PriorVersion"
   $installProcess = Start-Process `
     -FilePath $PriorInstallerPath `
     -ArgumentList @('/S', "/D=$installDirectory") `
@@ -482,6 +507,7 @@ try {
   $settingsStore | ConvertTo-Json -Depth 100 -Compress |
     Set-Content -LiteralPath $settingsPath -Encoding utf8 -NoNewline
 
+  Write-Host 'Downloading the pinned preservation-test model'
   Invoke-WebRequest `
     -Uri $modelAssetUrl `
     -OutFile $modelArchivePath `
@@ -490,9 +516,19 @@ try {
   if ((Get-Sha256 -Path $modelArchivePath) -cne $modelArchiveSha256) {
     throw "Downloaded model archive hash does not match $modelArchiveSha256"
   }
+  # Select the seven payload files; the archive also contains AppleDouble metadata.
+  $modelPayloadEntries = @(
+    "$modelName/streaming_config.json",
+    "$modelName/encoder.ort",
+    "$modelName/decoder_kv.ort",
+    "$modelName/adapter.ort",
+    "$modelName/cross_kv.ort",
+    "$modelName/frontend.ort",
+    "$modelName/tokenizer.bin"
+  )
   & "$env:SystemRoot\System32\tar.exe" `
     -xzf $modelArchivePath `
-    -C $modelsDirectory
+    -C $modelsDirectory @modelPayloadEntries
   if ($LASTEXITCODE -ne 0) {
     throw "Failed to extract the pinned $modelName model"
   }
@@ -539,6 +575,7 @@ try {
   )
   $updaterDirectoryBaselineRecorded = $true
 
+  Write-Host "Applying candidate version $TargetVersion"
   $updateProcess = Start-Process `
     -FilePath $executable `
     -ArgumentList @(
@@ -624,6 +661,7 @@ try {
 
   $uninstaller = Join-Path $installDirectory 'uninstall.exe'
   Assert-File -Path $uninstaller -Label 'Updated NSIS uninstaller'
+  Write-Host 'Checking updated uninstall and preserved user data'
   $uninstallProcess = Start-Process `
     -FilePath $uninstaller `
     -ArgumentList @('/S') `
@@ -779,13 +817,17 @@ try {
 
   foreach ($trustedCertificate in @($rootCertificate)) {
     if ($null -eq $trustedCertificate) { continue }
-    $trustedPath = "Cert:\CurrentUser\Root\$($trustedCertificate.Thumbprint)"
+    $trustedPath = "Cert:\LocalMachine\Root\$($trustedCertificate.Thumbprint)"
+    $inheritedPath = "Cert:\CurrentUser\Root\$($trustedCertificate.Thumbprint)"
     try {
       if (Test-Path -LiteralPath $trustedPath) {
-        Remove-Item -LiteralPath $trustedPath -Force -ErrorAction Stop
+        Remove-Item -LiteralPath $trustedPath -ErrorAction Stop
       }
       if (Test-Path -LiteralPath $trustedPath) {
         throw "Certificate remains at $trustedPath"
+      }
+      if (Test-Path -LiteralPath $inheritedPath) {
+        throw "Certificate remains in the current-user view at $inheritedPath"
       }
     } catch {
       $cleanupErrors.Add("Trusted root certificate cleanup failed: $($_.Exception.Message)")
@@ -797,7 +839,7 @@ try {
     $personalPath = "Cert:\CurrentUser\My\$($personalCertificate.Thumbprint)"
     try {
       if (Test-Path -LiteralPath $personalPath) {
-        Remove-Item -LiteralPath $personalPath -Force -ErrorAction Stop
+        Remove-Item -LiteralPath $personalPath -DeleteKey -ErrorAction Stop
       }
       if (Test-Path -LiteralPath $personalPath) {
         throw "Certificate remains at $personalPath"

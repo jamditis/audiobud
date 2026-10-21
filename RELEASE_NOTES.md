@@ -1,4 +1,4 @@
-# AudioBud v0.6.3 release notes
+# AudioBud v0.6.4 release notes
 
 The self-contained Windows portable installer updates its bundled WebView2
 runtime from 150.0.4078.105 to Microsoft's signed 155.0.4283.62 release. Fixed
