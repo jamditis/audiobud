@@ -28,7 +28,7 @@ describe("public release state for v0.6.0", () => {
 
   test("dates the changelog and uses public release notes", () => {
     expect(read("CHANGELOG.md")).toContain("## 0.6.0 - 2026-08-31");
-    expect(read("RELEASE_NOTES.md")).toContain(
+    expect(read("docs/releases/v0.6.0.md")).toContain(
       "# AudioBud v0.6.0 release notes",
     );
   });

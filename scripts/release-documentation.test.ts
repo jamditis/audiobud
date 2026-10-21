@@ -6,23 +6,28 @@ const root = join(import.meta.dir, "..");
 const read = (path: string) => readFileSync(join(root, path), "utf8");
 const compact = (value: string) => value.replace(/\s+/g, " ");
 
-describe("v0.6.0 release documentation", () => {
+describe("release documentation", () => {
   it("keeps one dated changelog entry and complete public release notes", () => {
     expect(existsSync(join(root, "RELEASE_NOTES.md"))).toBe(true);
 
     const changelog = compact(read("CHANGELOG.md"));
-    const notes = compact(read("RELEASE_NOTES.md"));
+    const notes = compact(read("docs/releases/v0.6.0.md"));
+    const candidateNotes = compact(read("RELEASE_NOTES.md"));
 
     expect(changelog).toContain("## 0.6.0 - 2026-08-31");
+    expect(changelog).toContain("## 0.6.1 - Unreleased");
+    expect(candidateNotes).toContain("# AudioBud v0.6.1 release notes");
+    expect(candidateNotes).toContain("155.0.4283.62");
+    expect(candidateNotes).toContain("shared Evergreen runtime");
     expect(changelog).toContain("Apple Silicon");
     expect(changelog).toContain("signed and notarized");
     expect(notes).toContain("# AudioBud v0.6.0 release notes");
-    expect(notes).toContain("Apple Silicon Macs running macOS 11 or later");
-    expect(notes).toContain("macOS updates are manual");
-    expect(notes).toContain("Microsoft Store still serves v0.4.4");
-    expect(notes).toContain("AudioBud_<version>_macos_aarch64.dmg");
-    expect(notes).toContain("SHA256SUMS-macos.txt");
-    expect(notes).toContain("No Intel Mac build is included");
+    expect(notes).toContain("Windows x64 GitHub release");
+    expect(notes).toContain("GitHub publication for macOS is deferred");
+    expect(notes).toContain("AudioBud_0.6.0_x64-portable-webview-setup.exe");
+    expect(notes).toContain("SHA256SUMS.txt");
+    expect(notes).toContain("signed Windows updater archive");
+    expect(notes).toContain("macOS GitHub publication is deferred");
 
     const readme = compact(read("README.md"));
     const home = compact(read("docs/index.html"));
@@ -49,14 +54,14 @@ describe("v0.6.0 release documentation", () => {
 
   it("makes the local model recommendation specific to each system", () => {
     const readme = compact(read("README.md"));
-    const notes = compact(read("RELEASE_NOTES.md"));
+    const notes = compact(read("docs/releases/v0.6.0.md"));
     const home = compact(read("docs/index.html"));
 
     expect(readme).toContain(
       "Whisper Turbo is recommended on Apple Silicon Macs",
     );
     expect(readme).toContain("Parakeet V3 remains the Windows default");
-    expect(notes).toContain("Whisper Turbo is the recommended Mac model");
+    expect(notes).toContain("Windows x64 GitHub release");
     expect(home).toMatch(
       /<strong>Parakeet V3<\/strong>[\s\S]*?<span class="tag solid">Windows default<\/span>/,
     );

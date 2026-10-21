@@ -8,6 +8,15 @@ AudioBud is a detached fork of [Handy](https://github.com/cjpais/Handy) by CJ Pa
 restate Handy's own history. AudioBud versions independently of Handy, starting at
 `0.1.0`. Windows releases are code-signed beginning with `0.4.0`.
 
+## 0.6.1 - Unreleased
+
+### Security
+
+- Update the optional self-contained Windows WebView2 runtime to 155.0.4283.62.
+- Verify the new Microsoft CAB's byte count, SHA-256, and Authenticode signature.
+- Retain the standard installer's shared Evergreen runtime and existing
+  portable data, ACL, and old-runtime cleanup rules.
+
 ## 0.6.0 - 2026-08-31
 
 A macOS and reliability release. AudioBud now provides a signed and notarized
