@@ -40,7 +40,7 @@ describe("updater signing key operations", () => {
     expect(runbook).toContain("localhost HTTPS");
     expect(runbook).toContain("installs v0.5.0");
     expect(runbook).toMatch(/private Actions\s+artifact/);
-    expect(runbook).toContain("attached to the joint draft");
+    expect(runbook).toContain("attached to the Windows draft");
     expect(runbook).toMatch(/same\s+tag, commit, archive hash/);
     expect(runbook).toMatch(/restores\s+and verifies the saved manifest/);
     expect(runbook).toMatch(/stops and checks the\s+server process/);

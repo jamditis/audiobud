@@ -79,8 +79,15 @@ temporary certificate entries and files, readiness file, model archive, and the
 exact updater extraction directory from this run. The preserved app data stays
 on the disposable runner until GitHub destroys it. The workflow first stores
 the evidence as a private Actions artifact. After all release jobs pass, the
-evidence is attested and attached to the joint draft. It does not add a
+evidence is attested and attached to the Windows draft. It does not add a
 candidate manifest to the draft or change the live feed.
+
+The separate v0.6.5 Windows maintenance branch excludes the macOS job for that
+exact tag. Its final evidence job depends on both the Windows build and the
+private updater verification. The full run and matching attempt must still
+succeed before the unchanged feed workflow can promote an update. The default
+branch retains its all-platform release workflow; do not merge this maintenance
+branch into it.
 
 The verifier requires an administrator token on a disposable GitHub-hosted
 Windows runner. It temporarily imports only the generated localhost public

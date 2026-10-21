@@ -31,6 +31,7 @@ describe("signed macOS release workflow", () => {
     expect(macOS).toContain("attestations: write");
     expect(macOS).toContain("contents: read");
     expect(macOS).toContain("inputs.store_candidate != true");
+    expect(macOS).toContain("github.ref_name != 'v0.6.5' &&");
     const windows = jobBlock("build-windows");
     expect(windows).toContain("group: release-windows");
     expect(workflow).toMatch(
@@ -190,9 +191,9 @@ describe("signed macOS release workflow", () => {
     expect(generateSbom).toBeGreaterThan(verify);
   });
 
-  test("names, checksums, inventories, attests, and uploads the macOS artifact", () => {
+  test("retains macOS artifact checks and attaches Windows-only updater evidence", () => {
     const macOS = jobBlock("build-macos");
-    const publish = jobBlock("publish-macos-release");
+    const publish = jobBlock("attach-updater-evidence");
 
     expect(macOS).toContain("AudioBud_${VERSION}_macos_aarch64.dmg");
     expect(macOS).toContain("SHA256SUMS-macos.txt");
@@ -208,7 +209,7 @@ describe("signed macOS release workflow", () => {
     );
 
     expect(publish).toContain(
-      "needs: [build-windows, verify-updater-candidate, build-macos]",
+      "needs: [build-windows, verify-updater-candidate]",
     );
     expect(publish).toContain(
       "uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093",
@@ -217,6 +218,14 @@ describe("signed macOS release workflow", () => {
     expect(publish).toContain("--clobber");
     expect(publish).toContain("isDraft");
     expect(publish).toContain("targetCommitish");
+    expect(publish).toContain("RELEASE_TAG: ${{ github.ref_name }}");
+    expect(publish).toContain("github.ref_name == 'v0.6.5'");
+    expect(publish).toContain("updater-prepublication-evidence.json");
+    expect(publish).toContain('"$EVIDENCE" --clobber');
+    expect(publish).not.toContain("needs.build-macos");
+    expect(publish).not.toContain("macos-release/");
+    expect(publish).not.toContain("always()");
+    expect(publish).not.toContain("continue-on-error");
   });
 
   test("rejects macOS SBOM file records with placeholder checksums", () => {

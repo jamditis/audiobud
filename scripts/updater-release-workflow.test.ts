@@ -370,11 +370,11 @@ describe("signed updater release artifacts", () => {
     expect(workflow).toContain("updater-prepublication-evidence.json");
     const attestEvidence = stepPosition("Attest updater verification evidence");
     const uploadDraft = stepPosition(
-      "Upload macOS artifacts to joint draft release",
+      "Upload Windows updater evidence to draft release",
     );
     expect(attestEvidence).toBeLessThan(uploadDraft);
     const draftUpload = stepBlock(
-      "Upload macOS artifacts to joint draft release",
+      "Upload Windows updater evidence to draft release",
     );
     expect(draftUpload).toContain('"$EVIDENCE" --clobber');
     expect(draftUpload).toContain(

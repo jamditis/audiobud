@@ -1,6 +1,8 @@
 # AudioBud signed Windows and macOS release build. The workflow signs and
 # verifies Windows installers and the Apple Silicon app and DMG, then records
 # checksums, SBOMs, and provenance before it uploads any artifact.
+# The separate v0.6.5 maintenance tag publishes Windows assets only. Its final
+# job attests and attaches Windows updater evidence without a macOS dependency.
 #
 #   - workflow_dispatch (make_release: false) builds and signs a CI artifact.
 #   - workflow_dispatch (store_candidate: true) builds and signs a CI artifact
@@ -1799,6 +1801,7 @@ jobs:
   build-macos:
     name: Build, sign, and notarize macOS Apple Silicon
     if: >-
+      github.ref_name != 'v0.6.5' &&
       inputs.store_candidate != true &&
       (
         github.ref == 'refs/heads/main' ||
@@ -2150,12 +2153,12 @@ jobs:
           retention-days: 30
           if-no-files-found: error
 
-  publish-macos-release:
-    name: Add macOS artifacts to the joint draft release
-    needs: [build-windows, verify-updater-candidate, build-macos]
-    if: ${{ inputs.store_candidate != true && github.ref_type == 'tag' && (github.event_name != 'workflow_dispatch' || inputs.make_release) }}
+  attach-updater-evidence:
+    name: Add verified Windows updater evidence to the draft release
+    needs: [build-windows, verify-updater-candidate]
+    if: ${{ github.ref_name == 'v0.6.5' && inputs.store_candidate != true && github.ref_type == 'tag' && (github.event_name != 'workflow_dispatch' || inputs.make_release) }}
     concurrency:
-      group: release-macos-publish
+      group: release-updater-evidence
       cancel-in-progress: false
     runs-on: ubuntu-24.04
     permissions:
@@ -2169,12 +2172,6 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Download verified macOS artifacts
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-        with:
-          name: ${{ needs.build-macos.outputs.artifact-name }}
-          path: macos-release
-
       - name: Download private updater verification evidence
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
@@ -2186,11 +2183,11 @@ jobs:
         with:
           subject-path: updater-evidence/updater-prepublication-evidence.json
 
-      - name: Upload macOS artifacts to joint draft release
+      - name: Upload Windows updater evidence to draft release
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ needs.build-macos.outputs.tag }}
+          RELEASE_TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
           RELEASE_JSON=$(gh release view "$RELEASE_TAG" \
@@ -2212,16 +2209,10 @@ jobs:
             exit 1
           fi
 
-          DMG="macos-release/AudioBud_${{ needs.build-macos.outputs.version }}_macos_aarch64.dmg"
-          SBOM="macos-release/AudioBud_${{ needs.build-macos.outputs.version }}_macos_aarch64_sbom.spdx.json"
-          CHECKSUMS="macos-release/SHA256SUMS-macos.txt"
           EVIDENCE="updater-evidence/updater-prepublication-evidence.json"
-          for FILE_PATH in "$DMG" "$SBOM" "$CHECKSUMS" "$EVIDENCE"; do
-            test -s "$FILE_PATH"
-          done
+          test -s "$EVIDENCE"
 
-          gh release upload "$RELEASE_TAG" \
-            "$DMG" "$SBOM" "$CHECKSUMS" "$EVIDENCE" --clobber
+          gh release upload "$RELEASE_TAG" "$EVIDENCE" --clobber
 
           READBACK_DIRECTORY="$RUNNER_TEMP/updater-evidence-readback"
           mkdir -p "$READBACK_DIRECTORY"
