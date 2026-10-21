@@ -34,6 +34,22 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      - name: Check out the reviewed verifier correction
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: 7cc275469e6546f77fc17cf84e70074a022acee8
+          path: trust-correction
+          fetch-depth: 1
+          persist-credentials: false
+          sparse-checkout: scripts/verify-updater-candidate.ps1
+          sparse-checkout-cone-mode: false
+
+      - name: Apply the correction to the diagnostic verifier
+        shell: pwsh
+        run: |
+          Copy-Item -LiteralPath 'trust-correction/scripts/verify-updater-candidate.ps1' `
+            -Destination 'scripts/verify-updater-candidate.ps1' -ErrorAction Stop
+
       - name: Set up Bun for updater verification
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
