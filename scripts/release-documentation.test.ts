@@ -15,8 +15,8 @@ describe("release documentation", () => {
     const candidateNotes = compact(read("RELEASE_NOTES.md"));
 
     expect(changelog).toContain("## 0.6.0 - 2026-08-31");
-    expect(changelog).toContain("## 0.6.1 - Unreleased");
-    expect(candidateNotes).toContain("# AudioBud v0.6.1 release notes");
+    expect(changelog).toContain("## 0.6.2 - Unreleased");
+    expect(candidateNotes).toContain("# AudioBud v0.6.2 release notes");
     expect(candidateNotes).toContain("155.0.4283.62");
     expect(candidateNotes).toContain("shared Evergreen runtime");
     expect(changelog).toContain("Apple Silicon");

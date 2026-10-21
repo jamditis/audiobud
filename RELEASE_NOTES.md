@@ -1,4 +1,4 @@
-# AudioBud v0.6.1 release notes
+# AudioBud v0.6.2 release notes
 
 The self-contained Windows portable installer updates its bundled WebView2
 runtime from 150.0.4078.105 to Microsoft's signed 155.0.4283.62 release. Fixed
@@ -17,4 +17,4 @@ recommendations and other behavior are unchanged.
 Experimental output targeting remains Windows-only and off by default.
 Windows can refuse to activate the selected window. If that happens, AudioBud
 does not send input to a different window; the transcript stays in history
-and, when copying is enabled, on the clipboard.
+and clipboard (when copying is enabled).

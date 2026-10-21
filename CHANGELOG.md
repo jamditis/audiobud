@@ -8,7 +8,7 @@ AudioBud is a detached fork of [Handy](https://github.com/cjpais/Handy) by CJ Pa
 restate Handy's own history. AudioBud versions independently of Handy, starting at
 `0.1.0`. Windows releases are code-signed beginning with `0.4.0`.
 
-## 0.6.1 - Unreleased
+## 0.6.2 - Unreleased
 
 ### Security
 
