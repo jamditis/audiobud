@@ -157,6 +157,10 @@ describe("signed updater release artifacts", () => {
     expect(verification).not.toContain("dangerousInsecureTransportProtocol");
 
     const metadata = stepBlock("Resolve private updater draft");
+    // GitHub's release-by-tag REST endpoint excludes private draft releases.
+    expect(metadata).not.toContain("releases/tags/");
+    expect(metadata).toContain("gh release view $env:RELEASE_TAG");
+    expect(metadata).toContain("--json apiUrl --jq '.apiUrl'");
     expect(metadata).toContain("releases?per_page=100");
     expect(metadata).toContain("--paginate --slurp");
     expect(metadata).toContain("scripts/select-latest-stable-app-release.mjs");
